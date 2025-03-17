@@ -93,9 +93,9 @@ run_training() {
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=768 \
+        data.train_batch_size=192 \
         data.max_prompt_length=2048 \
-        data.max_response_length=16384 \
+        data.max_response_length=8192 \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
         actor_rollout_ref.actor.optim.lr=2e-6 \
@@ -105,7 +105,7 @@ run_training() {
         actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus)) \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=18432 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=10240 \
         actor_rollout_ref.actor.use_kl_loss=True \
         actor_rollout_ref.actor.kl_loss_coef=0.01 \
         actor_rollout_ref.actor.kl_loss_type="low_var_kl" \
@@ -119,7 +119,7 @@ run_training() {
         actor_rollout_ref.rollout.gpu_memory_utilization=0.8 \
         actor_rollout_ref.rollout.temperature=1.0 \
         +actor_rollout_ref.rollout.val_temperature=0.6 \
-        actor_rollout_ref.rollout.n=8 \
+        actor_rollout_ref.rollout.n=16 \
         +actor_rollout_ref.rollout.n_val=1 \
         algorithm.kl_ctrl.kl_coef=0.001 \
         algorithm.lam=0.95 \
