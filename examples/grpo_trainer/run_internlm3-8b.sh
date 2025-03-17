@@ -28,7 +28,7 @@ setup_proxy() {
     export HTTP_PROXY="${https_proxy}"
     export HTTPS_PROXY="${https_proxy}"
 }
-setup_proxy
+# setup_proxy
 
 # ------------------------------
 # Conda Environment Setup
@@ -53,7 +53,7 @@ setup_path() {
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/hard_case_mixed_v0_0_1_train.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/hard_case_mixed_v0_0_1_test.parquet"
 
-    experiment_name="internlm3-8b_xml_cot-dlc-${HHMMSS}"
+    experiment_name="internlm3-8b_xml_cot-dlc-${YYMMDD}-${HHMMSS}"
     project_name="verl_grpo_xml_cot"
 
     OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/${experiment_name}/${YYMMDD}/${HHMMSS}"
@@ -123,7 +123,7 @@ run_training() {
         +actor_rollout_ref.rollout.n_val=1 \
         algorithm.kl_ctrl.kl_coef=0.001 \
         algorithm.lam=0.95 \
-        trainer.logger='["console"]' \
+        trainer.logger='["console", "wandb"]' \
         trainer.project_name="${project_name}" \
         trainer.experiment_name="${experiment_name}" \
         +trainer.val_before_train=True \

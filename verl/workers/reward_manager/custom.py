@@ -70,9 +70,9 @@ class CustomRewardManager:
 
             # extra_info = data_item.non_tensor_batch.get('extra_info', None)
 
-        score = self.compute_score(
-            solution_str=batch_solution_str,
-            ground_truth=batch_ground_truth,
+        scores = self.compute_score(
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=batch_ground_truth,
         )
 
         for i in range(len(data)):

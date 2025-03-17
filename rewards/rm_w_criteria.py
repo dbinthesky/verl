@@ -3,6 +3,7 @@ import uuid
 import time
 import random
 import requests
+from tqdm import tqdm
 from collections import namedtuple
 import xml.etree.ElementTree as ET
 
@@ -10,6 +11,17 @@ import xml.etree.ElementTree as ET
 URLS = [
     "http://10.130.1.180:5004",
 ]
+
+
+def batchify(iterable, n):
+    batch = []
+    for item in iterable:
+        batch.append(item)
+        if len(batch) == n:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
 
 
 def get_thought(solution_str: str):
@@ -27,11 +39,11 @@ def post_with_retry(urls, data, max_retries=3, retry_delay=1):
     while retries < max_retries:
         try:
             url = random.choice(urls)
-            response = requests.post(f'{url}/reward', json=data)
+            response = requests.post(f'{url}/reward', json=data, timeout=30)
             response.raise_for_status()  # 如果状态码不是 200，抛出异常
             return response.json()
         except requests.RequestException as e:
-            print(f"请求失败，错误信息: {e}，重试第 {retries + 1} 次...")
+            print(f"请求(数据总量={len(data)})失败，错误信息: {e}，重试第 {retries + 1} 次...")
             retries += 1
             if retries < max_retries:
                 time.sleep(retry_delay)
@@ -53,11 +65,13 @@ def compute_score(batch_solution_str, batch_ground_truth):
                 "prompt": ground_truth, "response": conclusion, "id": i
             }
             input_datas.append(input_data)
+            
     if len(input_datas) > 0:
-        output_datas = post_with_retry(URLS, input_datas)
-        for _ in output_datas['reward']:
-            _id = int(_["id"])
-            rewards[_id] = _["rm_score"]
+        for batch in tqdm(batchify(input_datas, n=32), desc='[RM] batchify inference'):
+            output_datas = post_with_retry(URLS, batch)
+            for _ in output_datas['reward']:
+                _id = int(_["id"])
+                rewards[_id] = _["rm_score"]
     final_results = []
     for i in range(len(batch_solution_str)):
         if i in rewards:
@@ -104,22 +118,15 @@ def parse_solution_score(solution_str):
 
 if __name__ == "__main__":
     import json
-    from workspace.exps.prompt_agent.produce.utils import (
-        UnifiedRMJudge,
-    )
 
     TEST_CASE = "/cpfs01/shared/llm_ddd/tongjian/ddm/thought_xml/verify_enhance/xml_verify_enhance_v2.jsonl"
-
-    task = UnifiedRMJudge(
-        field_name="self_improvement", sub_field_qa_name="prompt", domain="inference")
 
     batch_solution_str, batch_ground_truth = [], []
     with open(TEST_CASE, "rt") as f:
         for i, line in enumerate(f):
             example = json.loads(line)
             if "top_response" in example["self_improvement"]:
-                judge_criteria = task.get_judge_criteria(example)
-                prompt = example["self_improvement"]["prompt"] + judge_criteria
+                prompt = example["self_improvement"]["prompt"]
                 response = example["self_improvement"]["top_response"]["response"]
                 batch_solution_str.append(response)
                 batch_ground_truth.append(prompt)
