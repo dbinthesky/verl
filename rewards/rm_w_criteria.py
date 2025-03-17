@@ -9,7 +9,12 @@ import xml.etree.ElementTree as ET
 
 
 URLS = [
-    "http://10.130.1.180:5004",
+    # [he]
+    # "http://10.130.1.180:5004", 
+    # [hc]
+    # "http://10.130.0.15:5001"
+    # [ddd]
+    "http://10.130.1.205:5001"
 ]
 
 
@@ -65,7 +70,7 @@ def compute_score(batch_solution_str, batch_ground_truth):
                 "prompt": ground_truth, "response": conclusion, "id": i
             }
             input_datas.append(input_data)
-            
+
     if len(input_datas) > 0:
         for batch in tqdm(batchify(input_datas, n=32), desc='[RM] batchify inference'):
             output_datas = post_with_retry(URLS, batch)
@@ -81,6 +86,31 @@ def compute_score(batch_solution_str, batch_ground_truth):
             else:
                 final_results.append(rewards[i])
             rewards[i]
+        else:
+            final_results.append(0.)
+
+    return final_results
+
+
+def compute_score_nothink(batch_solution_str, batch_ground_truth):
+    input_datas = []
+    rewards = {}
+    for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+        input_data = {
+            "prompt": ground_truth, "response": solution_str, "id": i
+        }
+        input_datas.append(input_data)
+
+    if len(input_datas) > 0:
+        for batch in tqdm(batchify(input_datas, n=32), desc='[RM] batchify inference'):
+            output_datas = post_with_retry(URLS, batch)
+            for _ in output_datas['reward']:
+                _id = int(_["id"])
+                rewards[_id] = _["rm_score"]
+    final_results = []
+    for i in range(len(batch_solution_str)):
+        if i in rewards:
+            final_results.append(rewards[i])
         else:
             final_results.append(0.)
 

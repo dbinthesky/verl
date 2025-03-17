@@ -49,12 +49,12 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_xml_cot_v19_253_open_source_hf"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_32k_s2_release_0213_refine_v4_hf_1526/DATAREVIEW_SFT_TEST_internlm3_dense8B_32k_s2_release_0213_refine_v4_1526_open_source_hf"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/hard_case_mixed_v0_0_1_train.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/hard_case_mixed_v0_0_1_test.parquet"
 
-    experiment_name="internlm3-8b_xml_cot-dlc-${YYMMDD}-${HHMMSS}"
-    project_name="verl_grpo_xml_cot"
+    experiment_name="internlm3-8b_instruct-dlc-${YYMMDD}-${HHMMSS}"
+    project_name="verl_grpo_instruct"
 
     OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/${experiment_name}/${YYMMDD}/${HHMMSS}"
     mkdir -p "${OUTPUT_DIR}"
@@ -89,38 +89,38 @@ run_training() {
 
     python3 -m verl.trainer.main_ppo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/rm_w_criteria.py" \
-        custom_reward_function.name=compute_score \
+        custom_reward_function.name=compute_score_nothink \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=8 \
-        data.val_batch_size=8 \
-        data.max_prompt_length=1024 \
-        data.max_response_length=8192 \
+        data.train_batch_size=32 \
+        data.max_prompt_length=2048 \
+        data.max_response_length=4096 \
+        data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
         actor_rollout_ref.actor.optim.lr=3e-7 \
         actor_rollout_ref.model.use_remove_padding=False \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=256 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=32 \
         actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus)) \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=10240 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=8192 \
         actor_rollout_ref.actor.use_kl_loss=True \
         actor_rollout_ref.actor.kl_loss_coef=0.01 \
         actor_rollout_ref.actor.kl_loss_type="low_var_kl" \
         actor_rollout_ref.model.enable_gradient_checkpointing=True \
         actor_rollout_ref.actor.fsdp_config.param_offload=True \
-        actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
-        actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
+        actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
+        actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
         actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
         actor_rollout_ref.rollout.name="vllm" \
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
-        actor_rollout_ref.rollout.gpu_memory_utilization=0.8 \
+        actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
         actor_rollout_ref.rollout.temperature=1.0 \
         +actor_rollout_ref.rollout.val_temperature=0.6 \
-        actor_rollout_ref.rollout.n=16 \
+        actor_rollout_ref.rollout.n=8 \
         +actor_rollout_ref.rollout.n_val=1 \
         algorithm.kl_ctrl.kl_coef=0.001 \
         algorithm.lam=0.95 \
@@ -132,7 +132,7 @@ run_training() {
         trainer.nnodes="${world_size}" \
         trainer.save_freq=50 \
         trainer.test_freq=10 \
-        trainer.total_epochs=100000 \
+        trainer.total_epochs=10000 \
         reward_model.reward_manager="custom" "$@"
     local training_status=$?
 
