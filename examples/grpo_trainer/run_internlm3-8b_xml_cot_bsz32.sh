@@ -54,7 +54,7 @@ setup_path() {
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/hard_case_mixed_v0_0_1_test.parquet"
 
     experiment_name="internlm3-8b_xml_cot-dlc-${YYMMDD}-${HHMMSS}"
-    project_name="verl_grpo_xml_cot"
+    project_name="verl_grpo_internlm3_8b_xml_cot"
 
     OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/${experiment_name}/${YYMMDD}/${HHMMSS}"
     mkdir -p "${OUTPUT_DIR}"
@@ -99,25 +99,26 @@ run_training() {
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
-        actor_rollout_ref.actor.optim.lr=2e-6 \
+        actor_rollout_ref.actor.optim.lr=3e-7 \
         actor_rollout_ref.model.use_remove_padding=False \
         actor_rollout_ref.actor.shuffle=True \
         actor_rollout_ref.actor.ppo_mini_batch_size=32 \
         actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus)) \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=8192 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=6144 \
         actor_rollout_ref.actor.use_kl_loss=True \
         actor_rollout_ref.actor.kl_loss_coef=0.01 \
         actor_rollout_ref.actor.kl_loss_type="low_var_kl" \
         actor_rollout_ref.model.enable_gradient_checkpointing=True \
         actor_rollout_ref.actor.fsdp_config.param_offload=True \
+        +actor_rollout_ref.actor.fsdp_config.grad_offload=False \
         actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
         actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
         actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
         actor_rollout_ref.rollout.name="vllm" \
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
-        actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
+        actor_rollout_ref.rollout.gpu_memory_utilization=0.8 \
         actor_rollout_ref.rollout.temperature=1.0 \
         +actor_rollout_ref.rollout.val_temperature=0.6 \
         actor_rollout_ref.rollout.n=8 \
