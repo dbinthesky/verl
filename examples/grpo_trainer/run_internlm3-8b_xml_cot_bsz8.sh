@@ -54,7 +54,7 @@ setup_path() {
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/hard_case_mixed_v0_0_1_test.parquet"
 
     experiment_name="internlm3-8b_xml_cot-dlc-${YYMMDD}-${HHMMSS}"
-    project_name="verl_grpo_xml_cot"
+    project_name="verl_grpo_internlm3_8b_xml_cot"
 
     OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/${experiment_name}/${YYMMDD}/${HHMMSS}"
     mkdir -p "${OUTPUT_DIR}"
@@ -93,7 +93,7 @@ run_training() {
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=8 \
+        data.train_batch_size=32 \
         data.val_batch_size=8 \
         data.max_prompt_length=2048 \
         data.max_response_length=8192 \
@@ -120,7 +120,7 @@ run_training() {
         actor_rollout_ref.rollout.gpu_memory_utilization=0.8 \
         actor_rollout_ref.rollout.temperature=1.0 \
         +actor_rollout_ref.rollout.val_temperature=0.6 \
-        actor_rollout_ref.rollout.n=16 \
+        actor_rollout_ref.rollout.n=8 \
         +actor_rollout_ref.rollout.n_val=1 \
         algorithm.kl_ctrl.kl_coef=0.001 \
         algorithm.lam=0.95 \
