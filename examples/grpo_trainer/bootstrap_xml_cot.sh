@@ -20,7 +20,7 @@ WORKER_GPU="${WORKER_GPU:-"8"}"
 WORKER_CPU="${WORKER_CPU:-"64"}"
 WORKER_MEMORY="${WORKER_MEMORY:-"1024"}"
 WORKER_IMAGE="pjlab-shanghai-acr-registry-vpc.cn-shanghai.cr.aliyuncs.com/pjlab-eflops/lishuaibin:lishuaibin-xpuyu-trainrlhf"
-RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/run_internlm3-8b_xml_cot_bsz32.sh"
+RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/run_internlm3-8b_xml_cot_bsz32_0319.sh"
 
 
 dlcrun_cmd=$(

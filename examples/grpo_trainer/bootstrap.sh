@@ -10,9 +10,9 @@ DLC_CONFIG_PATH="${DLC_CONFIG_PATH:-"/cpfs01/shared/llm_ddd/tongjian/dlc.config"
 # [ddd]
 # WORKSPACE_ID="${WORKSPACE_ID:-"ws1ujefpjyfgqjwp"}"
 # [he]
-# WORKSPACE_ID="${WORKSPACE_ID:-"wso1cah3ytpgmaah"}"
+WORKSPACE_ID="${WORKSPACE_ID:-"wso1cah3ytpgmaah"}"
 # [hc]
-WORKSPACE_ID="${WORKSPACE_ID:-"ws1h2vgufjufr4jj"}"
+# WORKSPACE_ID="${WORKSPACE_ID:-"ws1h2vgufjufr4jj"}"
 DATA_SOURCES="datajrdc07nuo03o,dataui74zr3uig4f,datapcxxjb8czn7k,datajfxq87v3rx9k,data1otmepzybpqr"
 PRIORITY="${PRIORITY:-"4"}"
 WORKER_COUNT="${WORKER_COUNT:-"4"}"
@@ -20,7 +20,7 @@ WORKER_GPU="${WORKER_GPU:-"8"}"
 WORKER_CPU="${WORKER_CPU:-"64"}"
 WORKER_MEMORY="${WORKER_MEMORY:-"1024"}"
 WORKER_IMAGE="pjlab-shanghai-acr-registry-vpc.cn-shanghai.cr.aliyuncs.com/pjlab-eflops/lishuaibin:lishuaibin-xpuyu-trainrlhf"
-RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/run_internlm3-8b_instruct_bsz32.sh"
+RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/run_internlm3-8b_instruct_bsz32_0319.sh"
 
 
 dlcrun_cmd=$(
