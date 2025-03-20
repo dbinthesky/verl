@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 
 URLS = [
     # [he]
-    # "http://10.130.1.180:5004", 
+    # "http://10.130.1.180:5004",
     # [hc]
     # "http://10.130.1.54:5001"
     # [ddd]
@@ -56,10 +56,17 @@ def post_with_retry(urls, data, max_retries=3, retry_delay=1):
     return None
 
 
-def compute_score(batch_solution_str, batch_ground_truth):
+def postprocess_solution(solution_str):
+    if "<|im_end|>" in solution_str:
+        return solution_str[:solution_str.index("<|im_end|>")]
+    return solution_str
+
+
+def compute_score(batch_data_sources, batch_solution_str, batch_ground_truth):
     input_datas = []
     rewards, reward_min_threshold = {}, {}
     for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+        solution_str = postprocess_solution(solution_str)
         reward, min_reward_threshold, conclusion = parse_solution_score(
             solution_str)
         if reward is not None:
@@ -92,10 +99,40 @@ def compute_score(batch_solution_str, batch_ground_truth):
     return final_results
 
 
-def compute_score_nothink(batch_solution_str, batch_ground_truth):
+def fabricate_qa_task_postprocess(solution_str):
+    if "[CONCLUSION BEGIN]" not in solution_str or "[CONCLUSION END]" not in solution_str:
+        return None
+    solution_str = solution_str[solution_str.index(
+        "[CONCLUSION BEGIN]")+len("[CONCLUSION BEGIN]"):solution_str.index("[CONCLUSION END]")]
+
+    if "The constructed question is: " in solution_str:
+        solution_str = solution_str.replace(
+            "The constructed question is: ", "").strip()
+    if solution_str.startswith('\"') and solution_str.endswith('"'):
+        solution_str = solution_str[1:-1].strip()
+    return solution_str.strip()
+
+
+def compute_score_nothink(batch_data_sources, batch_solution_str, batch_ground_truth):
     input_datas = []
     rewards = {}
-    for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+    for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+        solution_str = postprocess_solution(solution_str)
+        if data_source == "fabricate_qa":
+            solution_str = fabricate_qa_task_postprocess(solution_str)
+            if solution_str is None:
+                rewards[i] = -1.
+                continue
+            else:
+                show_ground_truth = ground_truth
+                flag = "# Final Anwer (Authentic Exam)"
+                if flag in show_ground_truth:
+                    show_ground_truth = show_ground_truth[show_ground_truth.index(flag)+len(flag):].strip()
+                
+                print(f"--------------------------------")
+                print(f"Solution: {repr(solution_str)}")
+                print(f"Ground Truth: {repr(show_ground_truth)}")
+
         input_data = {
             "prompt": ground_truth, "response": solution_str, "id": i
         }

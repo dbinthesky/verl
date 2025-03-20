@@ -36,7 +36,7 @@ class CustomRewardManager:
 
         reward_tensor = torch.zeros_like(
             data.batch['responses'], dtype=torch.float32)
-        batch_solution_str, batch_ground_truth = [], []
+        batch_solution_str, batch_ground_truth, batch_data_sources = [], [], []
 
         already_print_data_sources = {}
 
@@ -68,9 +68,12 @@ class CustomRewardManager:
 
             batch_ground_truth.append(ground_truth)
 
+            batch_data_sources.append(data_source)
+
             # extra_info = data_item.non_tensor_batch.get('extra_info', None)
 
         scores = self.compute_score(
+            batch_data_sources=batch_data_sources,
             batch_solution_str=batch_solution_str,
             batch_ground_truth=batch_ground_truth,
         )
