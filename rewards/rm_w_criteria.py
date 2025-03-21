@@ -6,16 +6,26 @@ import requests
 from tqdm import tqdm
 from collections import namedtuple
 import xml.etree.ElementTree as ET
+from functools import partial
 
 
 URLS = [
-    # [he]
-    # "http://10.130.1.180:5004",
-    # [hc]
-    # "http://10.130.1.54:5001"
-    # [ddd]
     "http://10.130.1.205:5001"
 ]
+
+
+def contain_chinese(string):
+    pattern = re.compile(r'[\u4e00-\u9fa5]')
+    if re.search(pattern, string):
+        return True
+    return False
+
+
+def simple_tokenize(s):
+    if contain_chinese(s):
+        return list(s)
+    else:
+        return s.split(" ")
 
 
 def batchify(iterable, n):
@@ -99,6 +109,17 @@ def compute_score(batch_data_sources, batch_solution_str, batch_ground_truth):
     return final_results
 
 
+def length_penalty(solution_str, ground_truth):
+    return -0.05 * min(abs(len(simple_tokenize(solution_str))-len(simple_tokenize(ground_truth))) / len(simple_tokenize(ground_truth)), 5.)
+
+
+def fabricate_qa_format_penalty(solution_str):
+    if solution_str.startswith('"') and solution_str.endswith('"'):
+        return solution_str[1:-1].strip(), 0.
+    else:
+        return solution_str, -0.1
+
+
 def fabricate_qa_task_postprocess(solution_str):
     if "[CONCLUSION BEGIN]" not in solution_str or "[CONCLUSION END]" not in solution_str:
         return None
@@ -108,30 +129,84 @@ def fabricate_qa_task_postprocess(solution_str):
     if "The constructed question is: " in solution_str:
         solution_str = solution_str.replace(
             "The constructed question is: ", "").strip()
-    if solution_str.startswith('\"') and solution_str.endswith('"'):
-        solution_str = solution_str[1:-1].strip()
-    return solution_str.strip()
+
+    solution_str = solution_str.strip()
+    if not solution_str.startswith("**Question:**"):
+        return None
+    solution_str = solution_str.replace("**Question:**", "").strip()
+
+    return solution_str
 
 
 def compute_score_nothink(batch_data_sources, batch_solution_str, batch_ground_truth):
     input_datas = []
     rewards = {}
+    len_penalty, format_penalty = {}, {}
+
+    logs = {}
+
+    for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+        solution_str = postprocess_solution(solution_str)
+        input_data = {
+            "prompt": ground_truth, "response": solution_str, "id": i
+        }
+        input_datas.append(input_data)
+
+    if len(input_datas) > 0:
+        for batch in tqdm(batchify(input_datas, n=32), desc='[RM] batchify inference'):
+            output_datas = post_with_retry(URLS, batch)
+            for _ in output_datas['reward']:
+                _id = int(_["id"])
+                rewards[_id] = _["rm_score"]
+    final_results = []
+    for i in range(len(batch_solution_str)):
+        if i in rewards:
+            _reward = rewards[i]
+            if i in len_penalty:
+                _reward += len_penalty[i]
+            if i in format_penalty:
+                _reward += format_penalty[i]
+            final_results.append(_reward)
+        else:
+            final_results.append(0.)
+
+    return final_results
+
+
+def fabricate_qa_compute_score_nothink(batch_data_sources, batch_solution_str, batch_ground_truth, split="train"):
+    input_datas = []
+    rewards = {}
+    len_penalty, format_penalty = {}, {}
+
+    logs = {}
+
     for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
         solution_str = postprocess_solution(solution_str)
         if data_source == "fabricate_qa":
+            raw_solution_str = solution_str
             solution_str = fabricate_qa_task_postprocess(solution_str)
+
+            show_ground_truth = ground_truth
+            flag = "# Final Anwer (Authentic Exam)"
+            if flag in show_ground_truth:
+                show_ground_truth = show_ground_truth[show_ground_truth.index(
+                    flag)+len(flag):].strip()
+            flag = "## Note"
+            if flag in show_ground_truth:
+                show_ground_truth = show_ground_truth[:show_ground_truth.index(
+                    "## Note")].strip()
+
             if solution_str is None:
                 rewards[i] = -1.
+                logs[i] = (raw_solution_str, show_ground_truth)
                 continue
             else:
-                show_ground_truth = ground_truth
-                flag = "# Final Anwer (Authentic Exam)"
-                if flag in show_ground_truth:
-                    show_ground_truth = show_ground_truth[show_ground_truth.index(flag)+len(flag):].strip()
-                
-                print(f"--------------------------------")
-                print(f"Solution: {repr(solution_str)}")
-                print(f"Ground Truth: {repr(show_ground_truth)}")
+                _len_penalty = length_penalty(solution_str, show_ground_truth)
+                len_penalty[i] = _len_penalty
+                logs[i] = (solution_str, show_ground_truth)
+                solution_str, _format_penalty = fabricate_qa_format_penalty(
+                    solution_str)
+                format_penalty[i] = _format_penalty
 
         input_data = {
             "prompt": ground_truth, "response": solution_str, "id": i
@@ -147,12 +222,24 @@ def compute_score_nothink(batch_data_sources, batch_solution_str, batch_ground_t
     final_results = []
     for i in range(len(batch_solution_str)):
         if i in rewards:
-            final_results.append(rewards[i])
+            _reward = rewards[i]
+            if i in len_penalty:
+                _reward += len_penalty[i]
+                _reward += format_penalty[i]
+            final_results.append(_reward)
+            if split == "valid" and batch_data_sources[i] == "fabricate_qa" and i in logs:
+                print(f"--------------------------------")
+                print(f"【Solution】 `{repr(logs[i][0])}`")
+                print(f"【Ground Truth】 `{repr(logs[i][1])}`")
+                print(
+                    f'Reward={_reward};Length Penalty={len_penalty.get(i, 0.)};Format Penalty={format_penalty.get(i, 0.)}')
         else:
             final_results.append(0.)
 
     return final_results
 
+fabricate_qa_compute_score_nothink_train = partial(fabricate_qa_compute_score_nothink, split="train")
+fabricate_qa_compute_score_nothink_valid = partial(fabricate_qa_compute_score_nothink, split="train")
 
 def parse_solution_score(solution_str):
     try:
@@ -184,20 +271,23 @@ def parse_solution_score(solution_str):
 
 
 if __name__ == "__main__":
-    import json
+    s = '[STEP1 BEGIN]\nTo begin, I need to ensure that the question I construct will comprehensively cover all the provided key points: "Special relativity," "Velocity addition formula," "Applying the velocity addition formula," and "Simplifying algebraic expressions." The required difficulty level is "Novice," which implies the question should be straightforward and accessible, suitable for someone with a solid understanding of the topic at an undergraduate level. Given the responder\'s background and education level, the question should not delve into complex derivations or advanced problem-solving but should still require the application of the velocity addition formula and basic algebraic manipulation.\n\nThe question must be close-ended, meaning it should have a definitive answer. This ensures that there is a clear solution path and outcome, aligning with the examination\'s need for definitive assessment. The question should be designed to test the responder\'s ability to apply the velocity addition formula in a simple context, while also requiring them to perform basic algebraic simplification, thus covering all the specified skills.\n[STEP1 END]\n\n[STEP2 BEGIN]\nConsidering the "Novice" difficulty level, the question should be designed to be easily understandable and solvable by someone with a foundational grasp of special relativity and the velocity addition formula. It should not involve intricate calculations or deep theoretical insights but should still require the responder to demonstrate their understanding of these concepts in a practical scenario.\n\nThe question should be structured in a way that it naturally incorporates all the key points: it must involve the application of the velocity addition formula, necessitating the responder to perform algebraic simplification to arrive at a solution. This ensures that the question is comprehensive and tests the required skills effectively.\n[STEP2 END]\n\n[CONCLUSION BEGIN]\n**Question:**\nIn a thought experiment, two spaceships, A and B, are moving in the same direction relative to an observer on Earth. Spaceship A is moving at a velocity of \\(0.6c\\) (where \\(c\\) is the speed of light) relative to Earth, and spaceship B is moving at a velocity of \\(0.4c\\) relative to spaceship A. Using the velocity addition formula from special relativity, which is given by \\(u = \\frac{u\' + v}{1 + \\frac{u\'v}{c^2}}\\), where \\(u\'\\) is the velocity of the second object relative to the first, and \\(v\\) is the velocity of the first object relative to the observer, calculate the velocity of spaceship B relative to Earth. Express your answer as a fraction of \\(c\\).\n\n**Knowledge and Skills Covered:**\n- **Special relativity**: The question directly applies the principles of special relativity by using the velocity addition formula.\n- **Velocity addition formula**: The question explicitly requires the application of this formula to calculate the relative velocity.\n- **Applying the velocity addition formula**: The responder must use the formula to perform the necessary calculations.\n- **Simplifying algebraic expressions**: The responder needs to simplify the resulting algebraic expression to find the final velocity.\n\n**Difficulty Level: Novice**\n- The question is designed to be straightforward, requiring basic application of a known formula and simple algebraic manipulation, suitable for someone with a solid understanding of the topic at an undergraduate level.\n\n**Solutions:**\n- The velocity addition formula is applied as \\(u = \\frac{0.4c + 0.6c}{1 + \\frac{(0.4c)(0.6c)}{c^2}} = \\frac{1.0c}{1 + 0.24} = \\frac{1.0c}{1.24} = \\frac{100}{124}c = \\frac{25}{31}c\\).\n- The solution involves direct substitution into the formula, basic algebraic simplification, and fraction reduction, ensuring the question is solvable and the process is clear and accessible for a Novice level responder.\n[CONCLUSION END]'
+    print(fabricate_qa_task_postprocess(s))
+    print(length_penalty(s, s))
+    # import json
 
-    TEST_CASE = "/cpfs01/shared/llm_ddd/tongjian/ddm/thought_xml/verify_enhance/xml_verify_enhance_v2.jsonl"
+    # TEST_CASE = "/cpfs01/shared/llm_ddd/tongjian/ddm/thought_xml/verify_enhance/xml_verify_enhance_v2.jsonl"
 
-    batch_solution_str, batch_ground_truth = [], []
-    with open(TEST_CASE, "rt") as f:
-        for i, line in enumerate(f):
-            example = json.loads(line)
-            if "top_response" in example["self_improvement"]:
-                prompt = example["self_improvement"]["prompt"]
-                response = example["self_improvement"]["top_response"]["response"]
-                batch_solution_str.append(response)
-                batch_ground_truth.append(prompt)
-            if i > 100:
-                break
+    # batch_solution_str, batch_ground_truth = [], []
+    # with open(TEST_CASE, "rt") as f:
+    #     for i, line in enumerate(f):
+    #         example = json.loads(line)
+    #         if "top_response" in example["self_improvement"]:
+    #             prompt = example["self_improvement"]["prompt"]
+    #             response = example["self_improvement"]["top_response"]["response"]
+    #             batch_solution_str.append(response)
+    #             batch_ground_truth.append(prompt)
+    #         if i > 100:
+    #             break
 
-    print(compute_score(batch_solution_str, batch_ground_truth))
+    # print(compute_score(batch_solution_str, batch_ground_truth))

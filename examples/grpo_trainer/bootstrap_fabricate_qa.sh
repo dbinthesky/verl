@@ -2,7 +2,7 @@
 
 DLC_PATH="/cpfs01/shared/public/dlc"
 
-JOB_NAME="verl-grpo-qwen2_5-7b_fabricate_qa_2024_0320_train_bsz32"
+JOB_NAME="verl-grpo-qwen2_5-7b_fabricate_qa_2024_0320_train_roll128"
 PYARGS="${@:3}"
 
 NUM_PROCESSES="${NUM_PROCESSES:-4}"
@@ -10,9 +10,9 @@ DLC_CONFIG_PATH="${DLC_CONFIG_PATH:-"/cpfs01/shared/llm_ddd/tongjian/dlc.config"
 # [ddd]
 # WORKSPACE_ID="${WORKSPACE_ID:-"ws1ujefpjyfgqjwp"}"
 # [he]
-WORKSPACE_ID="${WORKSPACE_ID:-"wso1cah3ytpgmaah"}"
+# WORKSPACE_ID="${WORKSPACE_ID:-"wso1cah3ytpgmaah"}"
 # [hc]
-# WORKSPACE_ID="${WORKSPACE_ID:-"ws1h2vgufjufr4jj"}"
+WORKSPACE_ID="${WORKSPACE_ID:-"ws1h2vgufjufr4jj"}"
 # [h2]
 # WORKSPACE_ID="wso1gao759kjyz4p"
 DATA_SOURCES="datajrdc07nuo03o,dataui74zr3uig4f,datapcxxjb8czn7k,datajfxq87v3rx9k,data1otmepzybpqr"
@@ -22,7 +22,7 @@ WORKER_GPU="${WORKER_GPU:-"8"}"
 WORKER_CPU="${WORKER_CPU:-"64"}"
 WORKER_MEMORY="${WORKER_MEMORY:-"1024"}"
 WORKER_IMAGE="pjlab-shanghai-acr-registry-vpc.cn-shanghai.cr.aliyuncs.com/pjlab-eflops/lishuaibin:lishuaibin-xpuyu-trainrlhf"
-RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/run_qwen2_5-7b_fabricate_qa_bsz32_0320.sh"
+RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/run_qwen2_5-7b_fabricate_qa_roll128_0320.sh"
 
 
 dlcrun_cmd=$(
