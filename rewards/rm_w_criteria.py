@@ -173,6 +173,10 @@ def compute_score_nothink(batch_data_sources, batch_solution_str, batch_ground_t
     return final_results
 
 
+# ------------------------------
+# Fabricate QA Reward
+# ------------------------------
+
 def fabricate_qa_compute_score_nothink(batch_data_sources, batch_solution_str, batch_ground_truth, split="train"):
     input_datas = []
     rewards = {}
