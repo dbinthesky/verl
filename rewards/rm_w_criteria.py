@@ -238,8 +238,12 @@ def fabricate_qa_compute_score_nothink(batch_data_sources, batch_solution_str, b
 
     return final_results
 
-fabricate_qa_compute_score_nothink_train = partial(fabricate_qa_compute_score_nothink, split="train")
-fabricate_qa_compute_score_nothink_valid = partial(fabricate_qa_compute_score_nothink, split="train")
+
+fabricate_qa_compute_score_nothink_train = partial(
+    fabricate_qa_compute_score_nothink, split="train")
+fabricate_qa_compute_score_nothink_valid = partial(
+    fabricate_qa_compute_score_nothink, split="train")
+
 
 def parse_solution_score(solution_str):
     try:
