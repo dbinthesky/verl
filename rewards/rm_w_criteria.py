@@ -4,9 +4,9 @@ import time
 import random
 import requests
 from tqdm import tqdm
-from collections import namedtuple
 import xml.etree.ElementTree as ET
 from functools import partial
+from collections import namedtuple, defaultdict
 
 
 URLS = [
@@ -66,15 +66,43 @@ def postprocess_solution(solution_str):
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def compute_score_nothink(batch_data_sources, batch_solution_str, batch_ground_truth, postprocess_solution_fn):
-    input_datas = []
-    rewards = {}
-    len_penalty, format_penalty = {}, {}
+DEFAULT_PARSE_FAILURE_REWARD = -1.
 
-    logs = {}
+
+def compute_score_base(
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        postprocess_solution_fn,
+        format_failure_reward=DEFAULT_PARSE_FAILURE_REWARD,
+        penalty_fn=None,
+        norm_ground_truth_fn=None,
+        split="train"
+):
+
+    input_datas = []
+    rewards, logs = {}, {}
+    penalty = defaultdict(dict)
 
     for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
         solution_str = postprocess_solution_fn(solution_str)
+
+        if solution_str is None:
+            rewards[i] = format_failure_reward
+            continue
+        else:
+            # Normalize Ground Truth
+            # For sake of penalty correctness.
+            if norm_ground_truth_fn is not None:
+                norm_ground_truth = norm_ground_truth_fn(ground_truth)
+            else:
+                norm_ground_truth = ground_truth
+
+            if penalty_fn is not None:
+                for name, fn in penalty_fn.items():
+                    penalty[name][i] = fn(solution_str, norm_ground_truth)
+            logs[i] = (solution_str, norm_ground_truth)
+
         input_data = {
             "prompt": ground_truth, "response": solution_str, "id": i
         }
@@ -90,12 +118,21 @@ def compute_score_nothink(batch_data_sources, batch_solution_str, batch_ground_t
     final_results = []
     for i in range(len(batch_solution_str)):
         if i in rewards:
+            penalty_log = []
             _reward = rewards[i]
-            if i in len_penalty:
-                _reward += len_penalty[i]
-            if i in format_penalty:
-                _reward += format_penalty[i]
+            for name, _penalty in penalty.items():
+                if i in _penalty:
+                    _reward += _penalty[i]
+                    penalty_log.append(f'{name} Penalty={_penalty[i]:.2f}')
+
             final_results.append(_reward)
+
+            if split == "valid" and i in logs:
+                print(f"--------------------------------")
+                print(f"【Solution】 `{repr(logs[i][0])}`")
+                print(f"【Ground Truth】 `{repr(logs[i][1])}`")
+                print(
+                    f'Reward={_reward};{";".join(penalty_log)}')
         else:
             final_results.append(0.)
 
@@ -103,7 +140,31 @@ def compute_score_nothink(batch_data_sources, batch_solution_str, batch_ground_t
 
 
 compute_score_nothink = partial(
-    compute_score_nothink, postprocess_solution_fn=postprocess_solution)
+    compute_score_base, postprocess_solution_fn=postprocess_solution)
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# QwQ LongCoT Reward
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+def qwq_longcot_postprocess_solution(solution_str):
+    solution_str = postprocess_solution(solution_str)
+    try:
+        thought = re.findall(r'<think>.*</think>', solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+
+    conclusion = solution_str.replace(thought, "").strip()
+
+    return conclusion
+
+
+qwq_longcot_compute_score = partial(
+    compute_score_base, postprocess_solution_fn=qwq_longcot_postprocess_solution)
+
+qwq_longcot_compute_score_train = partial(qwq_longcot_compute_score, split="train")
+qwq_longcot_compute_score_valid = partial(qwq_longcot_compute_score, split="valid")
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # XML CoT Reward
@@ -311,4 +372,5 @@ if __name__ == "__main__":
             if i > 100:
                 break
 
-    print(compute_score_nothink([None] * len(batch_solution_str), batch_solution_str, batch_ground_truth))
+    print(qwq_longcot_compute_score_valid(
+        [None] * len(batch_solution_str), batch_solution_str, batch_ground_truth))
