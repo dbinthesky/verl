@@ -159,11 +159,19 @@ def qwq_longcot_postprocess_solution(solution_str):
     return conclusion
 
 
-qwq_longcot_compute_score = partial(
-    compute_score_base, postprocess_solution_fn=qwq_longcot_postprocess_solution)
+def qwq_longcot_length_penalty(solution_str, ground_truth, length_limit=600):
+    return -0.2 * min(max(len(simple_tokenize(solution_str))-length_limit, 0) / length_limit, 5.)
 
-qwq_longcot_compute_score_train = partial(qwq_longcot_compute_score, split="train")
-qwq_longcot_compute_score_valid = partial(qwq_longcot_compute_score, split="valid")
+
+qwq_longcot_compute_score = partial(
+    compute_score_base, postprocess_solution_fn=qwq_longcot_postprocess_solution, penalty_fn={
+        "LENGTH": qwq_longcot_length_penalty
+    })
+
+qwq_longcot_compute_score_train = partial(
+    qwq_longcot_compute_score, split="train")
+qwq_longcot_compute_score_valid = partial(
+    qwq_longcot_compute_score, split="valid")
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
