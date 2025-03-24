@@ -42,6 +42,13 @@ def batchify(iterable, n):
         yield batch
 
 
+def is_subject_question(ground_truth):
+    if "# JUDGE CRITERIA" in ground_truth or "# 评价标准" in ground_truth:
+        return True
+    else:
+        return False
+
+
 def post_with_retry(urls, data, max_retries=3, retry_delay=1):
     retries = 0
     while retries < max_retries:
@@ -83,10 +90,13 @@ def compute_score_base(
 ):
 
     input_datas = []
-    rewards, logs = {}, {}
+    rewards, logs, is_subject = {}, {}, {}
     penalty = defaultdict(dict)
 
     for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+        if is_subject_question(ground_truth):
+            is_subject[i] = True
+
         solution_str = postprocess_solution_fn(solution_str)
         if solution_str is None:
             rewards[i] = format_failure_reward
@@ -120,7 +130,12 @@ def compute_score_base(
     for i in range(len(batch_solution_str)):
         if i in rewards:
             penalty_log = []
-            _reward = min(rewards[i], reward_clip)
+            # Subject Question
+            if is_subject.get(i, False):
+                _reward = rewards[i]
+            else:
+                _reward = min(rewards[i], reward_clip)
+
             for name, _penalty in penalty.items():
                 if i in _penalty:
                     _reward += _penalty[i]
@@ -129,9 +144,14 @@ def compute_score_base(
             final_results.append(_reward)
 
             if split == "valid" and i in logs:
-                print(f"--------------------------------")
+                print(f"----------------[VALID]----------------")
                 print(f"【Solution】 `{repr(logs[i][0])}`")
                 print(f"【Ground Truth】 `{repr(logs[i][1])}`")
+                print(f'Reward={_reward};{";".join(penalty_log)}\n')
+            elif split == "train" and i in logs and random.random() < 0.2:
+                print(f"----------------[TRAIN]----------------")
+                print(f"【Solution】 `{repr(logs[i][0])}`")
+                print(f"【Ground Truth】 (is_subject={is_subject_question(logs[i][1])})`{repr(logs[i][1])}`")
                 print(f'Reward={_reward};{";".join(penalty_log)}\n')
         else:
             final_results.append(0.)
@@ -149,19 +169,20 @@ compute_score_nothink = partial(
 
 def qwq_longcot_postprocess_solution(solution_str):
     solution_str = postprocess_solution(solution_str)
-    return solution_str
-    # FIXME
-    # try:
-    #     thought = re.findall(r'<think>.*</think>', solution_str, re.DOTALL)[0]
-    # except Exception as err:
-    #     return None
+    # return solution_str
+    try:
+        thought = re.findall(r'<think>.*</think>', solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
 
-    # conclusion = solution_str.replace(thought, "").strip()
+    conclusion = solution_str.replace(thought, "").strip()
 
-    # return conclusion
+    return conclusion
 
 
 def qwq_longcot_length_penalty(solution_str, ground_truth, length_limit=600):
+    if is_subject_question(ground_truth):
+        return 0.
     return -0.2 * min(max(len(simple_tokenize(solution_str))-length_limit, 0) / length_limit, 5.)
 
 
