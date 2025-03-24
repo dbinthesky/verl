@@ -13,6 +13,9 @@ URLS = [
     "http://10.130.1.205:5001"
 ]
 
+DEFAULT_PARSE_FAILURE_REWARD = -1.
+DEFAULT_RM_REWARD_CLIP = 0.1
+
 
 def contain_chinese(string):
     pattern = re.compile(r'[\u4e00-\u9fa5]')
@@ -66,8 +69,6 @@ def postprocess_solution(solution_str):
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-DEFAULT_PARSE_FAILURE_REWARD = -1.
-
 
 def compute_score_base(
         batch_data_sources,
@@ -75,6 +76,7 @@ def compute_score_base(
         batch_ground_truth,
         postprocess_solution_fn,
         format_failure_reward=DEFAULT_PARSE_FAILURE_REWARD,
+        reward_clip=DEFAULT_RM_REWARD_CLIP,
         penalty_fn=None,
         norm_ground_truth_fn=None,
         split="train"
@@ -86,7 +88,6 @@ def compute_score_base(
 
     for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
         solution_str = postprocess_solution_fn(solution_str)
-
         if solution_str is None:
             rewards[i] = format_failure_reward
             continue
@@ -119,7 +120,7 @@ def compute_score_base(
     for i in range(len(batch_solution_str)):
         if i in rewards:
             penalty_log = []
-            _reward = rewards[i]
+            _reward = min(rewards[i], reward_clip)
             for name, _penalty in penalty.items():
                 if i in _penalty:
                     _reward += _penalty[i]
@@ -131,8 +132,7 @@ def compute_score_base(
                 print(f"--------------------------------")
                 print(f"【Solution】 `{repr(logs[i][0])}`")
                 print(f"【Ground Truth】 `{repr(logs[i][1])}`")
-                print(
-                    f'Reward={_reward};{";".join(penalty_log)}')
+                print(f'Reward={_reward};{";".join(penalty_log)}\n')
         else:
             final_results.append(0.)
 
@@ -149,14 +149,16 @@ compute_score_nothink = partial(
 
 def qwq_longcot_postprocess_solution(solution_str):
     solution_str = postprocess_solution(solution_str)
-    try:
-        thought = re.findall(r'<think>.*</think>', solution_str, re.DOTALL)[0]
-    except Exception as err:
-        return None
+    return solution_str
+    # FIXME
+    # try:
+    #     thought = re.findall(r'<think>.*</think>', solution_str, re.DOTALL)[0]
+    # except Exception as err:
+    #     return None
 
-    conclusion = solution_str.replace(thought, "").strip()
+    # conclusion = solution_str.replace(thought, "").strip()
 
-    return conclusion
+    # return conclusion
 
 
 def qwq_longcot_length_penalty(solution_str, ground_truth, length_limit=600):
@@ -372,12 +374,23 @@ if __name__ == "__main__":
     with open(TEST_CASE, "rt") as f:
         for i, line in enumerate(f):
             example = json.loads(line)
-            if "top_response" in example["self_improvement"]:
+            try:
                 prompt = example["self_improvement"]["prompt"]
-                response = example["self_improvement"]["top_response"]["response"]
-                batch_solution_str.append(response)
-                batch_ground_truth.append(prompt)
-            if i > 100:
+                corrects = example["self_improvement"]["responses"]
+                wrongs = example["self_improvement"]["wrong_responses"]
+                if len(corrects) > 0 and len(wrongs) > 0:
+                    correct = random.choice(corrects)
+                    wrong = random.choice(wrongs)
+
+                    batch_solution_str.append(correct["conclusion"])
+                    batch_ground_truth.append(
+                        f'{prompt}\n\n\n\nJudge only by determining whether the final answer is correct.\n** Final Answer: {example["self_improvement"]["reference_meta"]["final_answer"]}')
+                    batch_solution_str.append(wrong["conclusion"])
+                    batch_ground_truth.append(
+                        f'{prompt}\n\n\n\nJudge only by determining whether the final answer is correct.\n** Final Answer: {example["self_improvement"]["reference_meta"]["final_answer"]}')
+            except Exception as err:
+                continue
+            if i > 1000:
                 break
 
     print(qwq_longcot_compute_score_valid(
