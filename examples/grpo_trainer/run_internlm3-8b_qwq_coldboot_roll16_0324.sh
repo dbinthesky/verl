@@ -91,7 +91,7 @@ run_training() {
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/rm_w_criteria.py" \
         custom_reward_function.name=qwq_longcot_compute_score_train \
         +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/gpqa.py" \
-        +custom_valid_reward_function.name=compute_score_nothink \
+        +custom_valid_reward_function.name=qwq_longcot_compute_score \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \

@@ -1,4 +1,5 @@
 import re
+from functools import partial
 
 
 def compute_score_single(conclusion, ground_truth):
@@ -50,20 +51,37 @@ def postprocess_solution(solution_str):
     return solution_str
 
 
-def compute_score(batch_data_sources, batch_solution_str, batch_ground_truth):
+def qwq_longcot_postprocess_solution(solution_str):
+    solution_str = postprocess_solution(solution_str)
+    try:
+        thought = re.findall(r'<think>.*</think>', solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+
+    conclusion = solution_str.replace(thought, "").strip()
+
+    return conclusion
+
+
+def compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, postprocess_solution_fn=postprocess_solution):
     rewards = []
     for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
         raw_solution_str = solution_str
         try:
-            solution_str = postprocess_solution(solution_str)
-            conclusion = get_conclusion(solution_str)
+            conclusion = postprocess_solution_fn(solution_str)
+            if conclusion is None:
+                conclusion = raw_solution_str
             rewards.append(
                 compute_score_single(conclusion, ground_truth)
             )
+            print(f"--------------------------------")
+            print(f"Solution: {repr(conclusion)}")
+            print(f"Ground Truth: {repr(ground_truth)}")
+            print(f"Reward: {rewards[-1]}")
         except Exception as err:
             rewards.append(0.)
-        print(f"--------------------------------")
-        print(f"Solution: {repr(raw_solution_str)}")
-        print(f"Ground Truth: {repr(ground_truth)}")
-        print(f"Reward: {rewards[-1]}")
     return rewards
+
+
+qwq_longcot_compute_score = partial(
+    compute_score, postprocess_solution_fn=qwq_longcot_postprocess_solution)
