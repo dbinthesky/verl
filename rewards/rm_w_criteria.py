@@ -39,16 +39,6 @@ def batchify(iterable, n):
         yield batch
 
 
-def get_thought(solution_str: str):
-    thought = re.findall(r'```xml.*```', solution_str, re.DOTALL)[0]
-    return thought
-
-
-def get_conclusion(solution_str: str):
-    thought = get_thought(solution_str)
-    return solution_str[solution_str.index(thought)+len(thought):].strip()
-
-
 def post_with_retry(urls, data, max_retries=3, retry_delay=1):
     retries = 0
     while retries < max_retries:
@@ -72,12 +62,56 @@ def postprocess_solution(solution_str):
     return solution_str
 
 
-def compute_score(batch_data_sources, batch_solution_str, batch_ground_truth):
+# ------------------------------
+# XML CoT Reward
+# ------------------------------
+
+
+def get_thought(solution_str: str):
+    thought = re.findall(r'```xml.*```', solution_str, re.DOTALL)[0]
+    return thought
+
+
+def get_conclusion(solution_str: str):
+    thought = get_thought(solution_str)
+    return solution_str[solution_str.index(thought)+len(thought):].strip()
+
+
+def parse_xml_cot_solution_score(solution_str):
+    try:
+        thought = get_thought(solution_str)
+    except Exception as err:
+        return (-0.1, None, None)
+
+    try:
+        conclusion = get_conclusion(solution_str).strip()
+        if len(conclusion) == 0:
+            return (-0.1, None, None)
+    except Exception as err:
+        return (-0.1, None, None)
+
+    try:
+        thought_content = re.findall(r'```xml(.*)```', thought, re.DOTALL)[0]
+
+    except Exception as err:
+        return (-0.1, None, None)
+
+    thought_content = f'<doc> {thought_content} </doc>'
+    try:
+        root = ET.fromstring(thought_content)
+        min_threshold = -0.05
+    except Exception as err:
+        min_threshold = -0.1
+
+    return (None, min_threshold, conclusion)
+
+
+def xml_cot_compute_score(batch_data_sources, batch_solution_str, batch_ground_truth):
     input_datas = []
     rewards, reward_min_threshold = {}, {}
     for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
         solution_str = postprocess_solution(solution_str)
-        reward, min_reward_threshold, conclusion = parse_solution_score(
+        reward, min_reward_threshold, conclusion = parse_xml_cot_solution_score(
             solution_str)
         if reward is not None:
             rewards[i] = reward
@@ -107,35 +141,6 @@ def compute_score(batch_data_sources, batch_solution_str, batch_ground_truth):
             final_results.append(0.)
 
     return final_results
-
-
-def length_penalty(solution_str, ground_truth):
-    return -0.05 * min(abs(len(simple_tokenize(solution_str))-len(simple_tokenize(ground_truth))) / len(simple_tokenize(ground_truth)), 5.)
-
-
-def fabricate_qa_format_penalty(solution_str):
-    if solution_str.startswith('"') and solution_str.endswith('"'):
-        return solution_str[1:-1].strip(), 0.
-    else:
-        return solution_str, -0.1
-
-
-def fabricate_qa_task_postprocess(solution_str):
-    if "[CONCLUSION BEGIN]" not in solution_str or "[CONCLUSION END]" not in solution_str:
-        return None
-    solution_str = solution_str[solution_str.index(
-        "[CONCLUSION BEGIN]")+len("[CONCLUSION BEGIN]"):solution_str.index("[CONCLUSION END]")]
-
-    if "The constructed question is: " in solution_str:
-        solution_str = solution_str.replace(
-            "The constructed question is: ", "").strip()
-
-    solution_str = solution_str.strip()
-    if not solution_str.startswith("**Question:**"):
-        return None
-    solution_str = solution_str.replace("**Question:**", "").strip()
-
-    return solution_str
 
 
 def compute_score_nothink(batch_data_sources, batch_solution_str, batch_ground_truth):
@@ -176,6 +181,35 @@ def compute_score_nothink(batch_data_sources, batch_solution_str, batch_ground_t
 # ------------------------------
 # Fabricate QA Reward
 # ------------------------------
+
+def length_penalty(solution_str, ground_truth):
+    return -0.05 * min(abs(len(simple_tokenize(solution_str))-len(simple_tokenize(ground_truth))) / len(simple_tokenize(ground_truth)), 5.)
+
+
+def fabricate_qa_format_penalty(solution_str):
+    if solution_str.startswith('"') and solution_str.endswith('"'):
+        return solution_str[1:-1].strip(), 0.
+    else:
+        return solution_str, -0.1
+
+
+def fabricate_qa_task_postprocess(solution_str):
+    if "[CONCLUSION BEGIN]" not in solution_str or "[CONCLUSION END]" not in solution_str:
+        return None
+    solution_str = solution_str[solution_str.index(
+        "[CONCLUSION BEGIN]")+len("[CONCLUSION BEGIN]"):solution_str.index("[CONCLUSION END]")]
+
+    if "The constructed question is: " in solution_str:
+        solution_str = solution_str.replace(
+            "The constructed question is: ", "").strip()
+
+    solution_str = solution_str.strip()
+    if not solution_str.startswith("**Question:**"):
+        return None
+    solution_str = solution_str.replace("**Question:**", "").strip()
+
+    return solution_str
+
 
 def fabricate_qa_compute_score_nothink(batch_data_sources, batch_solution_str, batch_ground_truth, split="train"):
     input_datas = []
@@ -247,35 +281,6 @@ fabricate_qa_compute_score_nothink_train = partial(
     fabricate_qa_compute_score_nothink, split="train")
 fabricate_qa_compute_score_nothink_valid = partial(
     fabricate_qa_compute_score_nothink, split="train")
-
-
-def parse_solution_score(solution_str):
-    try:
-        thought = get_thought(solution_str)
-    except Exception as err:
-        return (-0.1, None, None)
-
-    try:
-        conclusion = get_conclusion(solution_str).strip()
-        if len(conclusion) == 0:
-            return (-0.1, None, None)
-    except Exception as err:
-        return (-0.1, None, None)
-
-    try:
-        thought_content = re.findall(r'```xml(.*)```', thought, re.DOTALL)[0]
-
-    except Exception as err:
-        return (-0.1, None, None)
-
-    thought_content = f'<doc> {thought_content} </doc>'
-    try:
-        root = ET.fromstring(thought_content)
-        min_threshold = -0.05
-    except Exception as err:
-        min_threshold = -0.1
-
-    return (None, min_threshold, conclusion)
 
 
 if __name__ == "__main__":
