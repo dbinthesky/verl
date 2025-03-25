@@ -13,8 +13,9 @@ URLS = [
     "http://10.130.1.205:5001"
 ]
 
-DEFAULT_PARSE_FAILURE_REWARD = -1.
+DEFAULT_PARSE_FAILURE_REWARD = -2.
 DEFAULT_RM_REWARD_CLIP = 0.1
+DEFAULT_RM_REWARD_CLIP_AMPLIFY = 1.0
 
 
 def contain_chinese(string):
@@ -84,6 +85,7 @@ def compute_score_base(
         postprocess_solution_fn,
         format_failure_reward=DEFAULT_PARSE_FAILURE_REWARD,
         reward_clip=DEFAULT_RM_REWARD_CLIP,
+        reward_clip_amplify=DEFAULT_RM_REWARD_CLIP_AMPLIFY,
         penalty_fn=None,
         norm_ground_truth_fn=None,
         split="train"
@@ -97,9 +99,11 @@ def compute_score_base(
         if is_subject_question(ground_truth):
             is_subject[i] = True
 
+        raw_solution_str = solution_str
         solution_str = postprocess_solution_fn(solution_str)
         if solution_str is None:
             rewards[i] = format_failure_reward
+            logs[i] = (raw_solution_str, ground_truth)
             continue
         else:
             # Normalize Ground Truth
@@ -127,6 +131,12 @@ def compute_score_base(
                 rewards[_id] = _["rm_score"]
 
     final_results = []
+
+    def clip_str(s):
+        if len(s) > 2000:
+            return f'{s[:1000]}... ...{s[-1000:]}'
+        return s
+
     for i in range(len(batch_solution_str)):
         if i in rewards:
             penalty_log = []
@@ -134,7 +144,10 @@ def compute_score_base(
             if is_subject.get(i, False):
                 _reward = rewards[i]
             else:
-                _reward = min(rewards[i], reward_clip)
+                if rewards[i] >= reward_clip:
+                    _reward = reward_clip_amplify
+                else:
+                    _reward = rewards[i]
 
             for name, _penalty in penalty.items():
                 if i in _penalty:
@@ -145,13 +158,14 @@ def compute_score_base(
 
             if split == "valid" and i in logs:
                 print(f"----------------[VALID]----------------")
-                print(f"【Solution】 `{repr(logs[i][0])}`")
+                print(f"【Solution】 `{repr(clip_str(logs[i][0]))}`")
                 print(f"【Ground Truth】 `{repr(logs[i][1])}`")
                 print(f'Reward={_reward};{";".join(penalty_log)}\n')
             elif split == "train" and i in logs and random.random() < 0.2:
                 print(f"----------------[TRAIN]----------------")
-                print(f"【Solution】 `{repr(logs[i][0])}`")
-                print(f"【Ground Truth】 (is_subject={is_subject_question(logs[i][1])})`{repr(logs[i][1])}`")
+                print(f"【Solution】 `{repr(clip_str(logs[i][0]))}`")
+                print(
+                    f"【Ground Truth】 (is_subject={is_subject_question(logs[i][1])})`{repr(logs[i][1])}`")
                 print(f'Reward={_reward};{";".join(penalty_log)}\n')
         else:
             final_results.append(0.)
@@ -171,7 +185,8 @@ def qwq_longcot_postprocess_solution(solution_str):
     solution_str = postprocess_solution(solution_str)
     # return solution_str
     try:
-        thought = re.findall(r'<think>.*</think>', solution_str, re.DOTALL)[0]
+        thought = re.findall(r'\[think\].*\[/think\]',
+                             solution_str, re.DOTALL)[0]
     except Exception as err:
         return None
 
@@ -183,7 +198,7 @@ def qwq_longcot_postprocess_solution(solution_str):
 def qwq_longcot_length_penalty(solution_str, ground_truth, length_limit=600):
     if is_subject_question(ground_truth):
         return 0.
-    return -0.2 * min(max(len(simple_tokenize(solution_str))-length_limit, 0) / length_limit, 5.)
+    return -0.05 * min(max(len(simple_tokenize(solution_str))-length_limit, 0) / length_limit, 5.)
 
 
 qwq_longcot_compute_score = partial(
