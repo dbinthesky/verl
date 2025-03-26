@@ -78,6 +78,73 @@ def postprocess_solution(solution_str):
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
+def compute_rm_score(
+        batch_solution_str,
+        batch_ground_truth,
+        postprocess_solution_fn,
+        parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD,
+):
+    input_datas = []
+    rewards = {}
+
+    for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+        solution_str = postprocess_solution_fn(solution_str)
+        if solution_str is None:
+            rewards[i] = parse_result_failure_score
+            continue
+
+        input_data = {
+            "prompt": ground_truth["ground_truth"], "response": solution_str, "id": i
+        }
+        input_datas.append(input_data)
+
+    if len(input_datas) > 0:
+        for batch in tqdm(batchify(input_datas, n=32), desc='[RM] batchify inference'):
+            output_datas = post_with_retry(URLS, batch)
+            for _ in output_datas['reward']:
+                _id = int(_["id"])
+                rewards[_id] = _["rm_score"]
+
+    final_results = []
+    for i in range(len(batch_solution_str)):
+        if i in rewards:
+            final_results.append(rewards[i])
+        else:
+            final_results.append(0.)
+    return final_results
+
+    #         penalty_log = []
+    #         # Subject Question
+    #         if is_subject.get(i, False):
+    #             _reward = rewards[i]
+    #         else:
+    #             if rewards[i] >= reward_clip:
+    #                 _reward = reward_clip_amplify
+    #             else:
+    #                 _reward = rewards[i]
+
+    #         for name, _penalty in penalty.items():
+    #             if i in _penalty:
+    #                 _reward += _penalty[i]
+    #                 penalty_log.append(f'{name} Penalty={_penalty[i]:.2f}')
+
+    #         final_results.append(_reward)
+
+    #         if split == "valid" and i in logs:
+    #             print(f"----------------[VALID]----------------")
+    #             print(f"【Solution】 `{repr(clip_str(logs[i][0]))}`")
+    #             print(f"【Ground Truth】 `{repr(logs[i][1])}`")
+    #             print(f'Reward={_reward};{";".join(penalty_log)}\n')
+    #         elif split == "train" and i in logs and random.random() < 0.2:
+    #             print(f"----------------[TRAIN]----------------")
+    #             print(f"【Solution】 `{repr(clip_str(logs[i][0]))}`")
+    #             print(
+    #                 f"【Ground Truth】 (is_subject={is_subject_question(logs[i][1])})`{repr(logs[i][1])}`")
+    #             print(f'Reward={_reward};{";".join(penalty_log)}\n')
+    #     else:
+    #         final_results.append(0.)
+
+
 def compute_score_base(
         batch_data_sources,
         batch_solution_str,
@@ -96,6 +163,8 @@ def compute_score_base(
     penalty = defaultdict(dict)
 
     for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+        print(ground_truth)
+        raise NotImplementedError
         if is_subject_question(ground_truth):
             is_subject[i] = True
 
@@ -185,7 +254,7 @@ def qwq_longcot_postprocess_solution(solution_str):
     solution_str = postprocess_solution(solution_str)
     # return solution_str
     try:
-        thought = re.findall(r'\[think\].*\[/think\]',
+        thought = re.findall(r'<think>.*</think>',
                              solution_str, re.DOTALL)[0]
     except Exception as err:
         return None
@@ -419,15 +488,35 @@ if __name__ == "__main__":
                     wrong = random.choice(wrongs)
 
                     batch_solution_str.append(correct["conclusion"])
-                    batch_ground_truth.append(
-                        f'{prompt}\n\n\n\nJudge only by determining whether the final answer is correct.\n** Final Answer: {example["self_improvement"]["reference_meta"]["final_answer"]}')
+                    batch_ground_truth.append({
+                        "ground_truth": f'{prompt}\n\n\n\nJudge only by determining whether the final answer is correct.\n** Final Answer: {example["self_improvement"]["reference_meta"]["final_answer"]}',
+                        "extra_info": {
+                            "question_type": "object"
+                        }
+                    })
                     batch_solution_str.append(wrong["conclusion"])
-                    batch_ground_truth.append(
-                        f'{prompt}\n\n\n\nJudge only by determining whether the final answer is correct.\n** Final Answer: {example["self_improvement"]["reference_meta"]["final_answer"]}')
+                    batch_ground_truth.append({
+                        "ground_truth": f'{prompt}\n\n\n\nJudge only by determining whether the final answer is correct.\n** Final Answer: {example["self_improvement"]["reference_meta"]["final_answer"]}',
+                        "extra_info": {
+                            "question_type": "object"
+                        }
+                    })
             except Exception as err:
                 continue
             if i > 1000:
                 break
 
-    print(qwq_longcot_compute_score_valid(
-        [None] * len(batch_solution_str), batch_solution_str, batch_ground_truth))
+    # print(qwq_longcot_compute_score_valid(
+    #     [None] * len(batch_solution_str), batch_solution_str, batch_ground_truth))
+
+    compute_rm_score(
+        batch_solution_str,
+        batch_ground_truth,
+        postprocess_solution
+    )
+
+    # "ground_truth": example["self_improvement"]["prompt"] + criteria,
+    # "extra_info": {
+    #     "uuid": example["uuid"],
+    #     "question_type": question_type
+    # }
