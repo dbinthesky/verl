@@ -477,7 +477,7 @@ if __name__ == "__main__":
     import json
     import numpy as np
 
-    def grid_search_rm_threshold(num=10000, threshold=0.0):
+    def load_data(num):
         TEST_CASE = "/cpfs01/shared/llm_ddd/tongjian/ddm/thought_xml/verify_enhance/xml_verify_enhance_v2.jsonl"
 
         batch_solution_str, batch_ground_truth = [], []
@@ -515,6 +515,11 @@ if __name__ == "__main__":
                     continue
                 if i > num:
                     break
+        return batch_solution_str, batch_ground_truth, correct_indices, wrong_indices
+
+    def grid_search_rm_threshold(num=10000, threshold=0.0):
+        batch_solution_str, batch_ground_truth, correct_indices, wrong_indices = load_data(
+            num)
 
         precision, recall = [], []
         for i, score in enumerate(compute_rm_score(batch_solution_str, batch_ground_truth, postprocess_solution)):
