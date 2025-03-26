@@ -60,7 +60,7 @@ class CustomRewardManager:
             prompt_str = self.tokenizer.decode(valid_prompt_ids)
             response_str = self.tokenizer.decode(valid_response_ids)
 
-            ground_truth = data_item.non_tensor_batch['reward_model']['ground_truth']
+            ground_truth = data_item.non_tensor_batch['reward_model']
 
             data_source = data_item.non_tensor_batch['data_source']
 
@@ -87,15 +87,5 @@ class CustomRewardManager:
             )
 
             reward_tensor[i, valid_response_length - 1] = scores[i]
-
-            # if data_source not in already_print_data_sources:
-            #     already_print_data_sources[data_source] = 0
-
-            # if already_print_data_sources[data_source] < self.num_examine:
-            #     already_print_data_sources[data_source] += 1
-            #     print("[prompt]", prompt_str)
-            #     print("[response]", response_str)
-            #     print("[ground_truth]", ground_truth)
-            #     print("[score]", score)
 
         return reward_tensor

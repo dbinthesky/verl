@@ -106,7 +106,7 @@ run_training() {
         actor_rollout_ref.actor.shuffle=True \
         actor_rollout_ref.actor.ppo_mini_batch_size=128 \
         actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus)) \
-        actor_rollout_ref.actor.ulysses_sequence_parallel_size=8 \
+        actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=32768 \
         actor_rollout_ref.actor.use_kl_loss=True \
