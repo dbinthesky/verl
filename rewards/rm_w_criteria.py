@@ -475,8 +475,9 @@ if __name__ == "__main__":
     # print(qwq_longcot_compute_score_valid(
     #     [None] * len(batch_solution_str), batch_solution_str, batch_ground_truth))
     import json
+    import numpy as np
 
-    def grid_search_rm_threshold(num=1000):
+    def grid_search_rm_threshold(num=10000, threshold=0.0):
         TEST_CASE = "/cpfs01/shared/llm_ddd/tongjian/ddm/thought_xml/verify_enhance/xml_verify_enhance_v2.jsonl"
 
         batch_solution_str, batch_ground_truth = [], []
@@ -515,12 +516,19 @@ if __name__ == "__main__":
                 if i > num:
                     break
 
+        precision, recall = [], []
         for i, score in enumerate(compute_rm_score(batch_solution_str, batch_ground_truth, postprocess_solution)):
-            print(score, i)
-            # "ground_truth": example["self_improvement"]["prompt"] + criteria,
-            # "extra_info": {
-            #     "uuid": example["uuid"],
-            #     "question_type": question_type
-            # }
+            if score >= threshold:
+                if i in correct_indices:
+                    precision.append(1.)
+                else:
+                    precision.append(0.)
+            else:
+                if i in wrong_indices:
+                    recall.append(1.)
+                else:
+                    recall.append(0.)
+        print(f'Precision={np.mean(precision)*100:.2f}% ({len(precision)})')
+        print(f'Recall={np.mean(recall)*100:.2f}% ({len(recall)})')
 
     grid_search_rm_threshold()
