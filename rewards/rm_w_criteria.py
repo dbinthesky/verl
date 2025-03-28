@@ -21,10 +21,13 @@ DEFAULT_RM_REWARD_CLIP_AMPLIFY = 1.0
 
 
 def contain_chinese(string):
-    pattern = re.compile(r'[\u4e00-\u9fa5]')
-    if re.search(pattern, string):
-        return True
-    return False
+    try:
+        pattern = re.compile(r'[\u4e00-\u9fa5]')
+        if re.search(pattern, string):
+            return True
+        return False
+    except Exception as err:
+        return False
 
 
 def simple_tokenize(s):
@@ -96,6 +99,8 @@ class ConclusionTooLongPenalty(Penalty):
 
     def get_penalty(self, solution_str, ground_truth):
         solution_str = self.postprocess_solution_fn(solution_str)
+        if solution_str is None:
+            return 0.
 
         return self.penalty_base * min(max(len(simple_tokenize(solution_str))-self.conclusion_limit, 0) / self.conclusion_limit, 5.)
 
