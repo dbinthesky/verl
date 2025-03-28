@@ -4,6 +4,7 @@ import time
 import random
 import requests
 from tqdm import tqdm
+from abc import abstractmethod
 import xml.etree.ElementTree as ET
 from functools import partial
 from collections import namedtuple, defaultdict
@@ -76,6 +77,26 @@ def postprocess_solution(solution_str):
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+class Penalty(object):
+    @abstractmethod
+    def get_penalty(self, solution_str, ground_truth):
+        raise NotImplementedError
+
+
+class ConclusionTooLongPenalty(Penalty):
+    def __init__(self,
+                 postprocess_solution_fn,
+                 conclusion_limit=600,
+                 penalty_base=-0.1):
+        self.postprocess_solution_fn = postprocess_solution_fn
+        self.conclusion_limit = conclusion_limit
+        self.penalty_base = penalty_base
+
+    def get_penalty(self, solution_str, ground_truth):
+        solution_str = self.postprocess_solution_fn(solution_str)
+
+        return self.penalty_base * min(max(len(simple_tokenize(solution_str))-self.conclusion_limit, 0) / self.conclusion_limit, 5.)
 
 
 def compute_rm_score(
@@ -468,72 +489,15 @@ fabricate_qa_compute_score_nothink_valid = partial(
 
 
 if __name__ == "__main__":
+    pass
     # s = '[STEP1 BEGIN]\nTo begin, I need to ensure that the question I construct will comprehensively cover all the provided key points: "Special relativity," "Velocity addition formula," "Applying the velocity addition formula," and "Simplifying algebraic expressions." The required difficulty level is "Novice," which implies the question should be straightforward and accessible, suitable for someone with a solid understanding of the topic at an undergraduate level. Given the responder\'s background and education level, the question should not delve into complex derivations or advanced problem-solving but should still require the application of the velocity addition formula and basic algebraic manipulation.\n\nThe question must be close-ended, meaning it should have a definitive answer. This ensures that there is a clear solution path and outcome, aligning with the examination\'s need for definitive assessment. The question should be designed to test the responder\'s ability to apply the velocity addition formula in a simple context, while also requiring them to perform basic algebraic simplification, thus covering all the specified skills.\n[STEP1 END]\n\n[STEP2 BEGIN]\nConsidering the "Novice" difficulty level, the question should be designed to be easily understandable and solvable by someone with a foundational grasp of special relativity and the velocity addition formula. It should not involve intricate calculations or deep theoretical insights but should still require the responder to demonstrate their understanding of these concepts in a practical scenario.\n\nThe question should be structured in a way that it naturally incorporates all the key points: it must involve the application of the velocity addition formula, necessitating the responder to perform algebraic simplification to arrive at a solution. This ensures that the question is comprehensive and tests the required skills effectively.\n[STEP2 END]\n\n[CONCLUSION BEGIN]\n**Question:**\nIn a thought experiment, two spaceships, A and B, are moving in the same direction relative to an observer on Earth. Spaceship A is moving at a velocity of \\(0.6c\\) (where \\(c\\) is the speed of light) relative to Earth, and spaceship B is moving at a velocity of \\(0.4c\\) relative to spaceship A. Using the velocity addition formula from special relativity, which is given by \\(u = \\frac{u\' + v}{1 + \\frac{u\'v}{c^2}}\\), where \\(u\'\\) is the velocity of the second object relative to the first, and \\(v\\) is the velocity of the first object relative to the observer, calculate the velocity of spaceship B relative to Earth. Express your answer as a fraction of \\(c\\).\n\n**Knowledge and Skills Covered:**\n- **Special relativity**: The question directly applies the principles of special relativity by using the velocity addition formula.\n- **Velocity addition formula**: The question explicitly requires the application of this formula to calculate the relative velocity.\n- **Applying the velocity addition formula**: The responder must use the formula to perform the necessary calculations.\n- **Simplifying algebraic expressions**: The responder needs to simplify the resulting algebraic expression to find the final velocity.\n\n**Difficulty Level: Novice**\n- The question is designed to be straightforward, requiring basic application of a known formula and simple algebraic manipulation, suitable for someone with a solid understanding of the topic at an undergraduate level.\n\n**Solutions:**\n- The velocity addition formula is applied as \\(u = \\frac{0.4c + 0.6c}{1 + \\frac{(0.4c)(0.6c)}{c^2}} = \\frac{1.0c}{1 + 0.24} = \\frac{1.0c}{1.24} = \\frac{100}{124}c = \\frac{25}{31}c\\).\n- The solution involves direct substitution into the formula, basic algebraic simplification, and fraction reduction, ensuring the question is solvable and the process is clear and accessible for a Novice level responder.\n[CONCLUSION END]'
     # print(fabricate_qa_task_postprocess(s))
     # print(length_penalty(s, s))
 
     # print(qwq_longcot_compute_score_valid(
     #     [None] * len(batch_solution_str), batch_solution_str, batch_ground_truth))
-    import json
-    import numpy as np
 
-    def load_data(num):
-        TEST_CASE = "/cpfs01/shared/llm_ddd/tongjian/ddm/thought_xml/verify_enhance/xml_verify_enhance_v2.jsonl"
 
-        batch_solution_str, batch_ground_truth = [], []
-        correct_indices, wrong_indices = [], []
-        with open(TEST_CASE, "rt") as f:
-            for i, line in enumerate(f):
-                example = json.loads(line)
-                try:
-                    prompt = example["self_improvement"]["prompt"]
-                    corrects = example["self_improvement"]["responses"]
-                    wrongs = example["self_improvement"]["wrong_responses"]
-                    if len(corrects) > 0 and len(wrongs) > 0:
-                        correct = random.choice(corrects)
-                        wrong = random.choice(wrongs)
 
-                        batch_solution_str.append(correct["conclusion"])
-                        batch_ground_truth.append({
-                            "ground_truth": f'{prompt}\n\n\n\nJudge only by determining whether the final answer is correct.\n** Final Answer: {example["self_improvement"]["reference_meta"]["final_answer"]}',
-                            "extra_info": {
-                                "question_type": "object"
-                            }
-                        })
-                        correct_indices.append(len(batch_ground_truth)-1)
 
-                        batch_solution_str.append(wrong["conclusion"])
-                        batch_ground_truth.append({
-                            "ground_truth": f'{prompt}\n\n\n\nJudge only by determining whether the final answer is correct.\n** Final Answer: {example["self_improvement"]["reference_meta"]["final_answer"]}',
-                            "extra_info": {
-                                "question_type": "object"
-                            }
-                        })
-                        wrong_indices.append(len(batch_ground_truth)-1)
-
-                except Exception as err:
-                    continue
-                if i > num:
-                    break
-        return batch_solution_str, batch_ground_truth, correct_indices, wrong_indices
-
-    def grid_search_rm_threshold(num=10000, threshold=0.0):
-        batch_solution_str, batch_ground_truth, correct_indices, wrong_indices = load_data(
-            num)
-
-        precision, recall = [], []
-        for i, score in enumerate(compute_rm_score(batch_solution_str, batch_ground_truth, postprocess_solution)):
-            if score >= threshold:
-                if i in correct_indices:
-                    precision.append(1.)
-                else:
-                    precision.append(0.)
-            else:
-                if i in wrong_indices:
-                    recall.append(1.)
-                else:
-                    recall.append(0.)
-        print(f'Precision={np.mean(precision)*100:.2f}% ({len(precision)})')
-        print(f'Recall={np.mean(recall)*100:.2f}% ({len(recall)})')
-
-    grid_search_rm_threshold()
+    # /cpfs01/shared/llm_ddd/tongjian/rl/eval/GPQA_diamond_0326.parquet
