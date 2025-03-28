@@ -83,7 +83,7 @@ def compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, po
             rewards.append(
                 compute_score_single(conclusion, ground_truth)
             )
-            print(f"-----------------[GPQA VALID]---------------")
+            print(f"-----------------[GPQA TEST]---------------")
             print(f"Solution: {repr(clip_str(conclusion))}")
             print(f"Ground Truth: {repr(ground_truth)}")
             print(
