@@ -5,6 +5,7 @@ import random
 import requests
 from tqdm import tqdm
 from abc import abstractmethod
+from typing import Dict, Any, Callable
 import xml.etree.ElementTree as ET
 from functools import partial
 from collections import namedtuple, defaultdict
@@ -134,36 +135,141 @@ def compute_rm_score(
             final_results.append(0.)
     return final_results
 
-    #         penalty_log = []
-    #         # Subject Question
-    #         if is_subject.get(i, False):
-    #             _reward = rewards[i]
-    #         else:
-    #             if rewards[i] >= reward_clip:
-    #                 _reward = reward_clip_amplify
-    #             else:
-    #                 _reward = rewards[i]
 
-    #         for name, _penalty in penalty.items():
-    #             if i in _penalty:
-    #                 _reward += _penalty[i]
-    #                 penalty_log.append(f'{name} Penalty={_penalty[i]:.2f}')
+class ComputeScoreBase(object):
+    def __init__(self,
+                 split="train",
+                 parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD,
+                 ):
+        self.split = split
+        self.parse_result_failure_score = parse_result_failure_score
 
-    #         final_results.append(_reward)
+    def clip_string(self, s: str):
+        if len(s) > 2000:
+            return f'{s[:1000]}... ...{s[-1000:]}'
+        return s
 
-    #         if split == "valid" and i in logs:
-    #             print(f"----------------[VALID]----------------")
-    #             print(f"【Solution】 `{repr(clip_str(logs[i][0]))}`")
-    #             print(f"【Ground Truth】 `{repr(logs[i][1])}`")
-    #             print(f'Reward={_reward};{";".join(penalty_log)}\n')
-    #         elif split == "train" and i in logs and random.random() < 0.2:
-    #             print(f"----------------[TRAIN]----------------")
-    #             print(f"【Solution】 `{repr(clip_str(logs[i][0]))}`")
-    #             print(
-    #                 f"【Ground Truth】 (is_subject={is_subject_question(logs[i][1])})`{repr(logs[i][1])}`")
-    #             print(f'Reward={_reward};{";".join(penalty_log)}\n')
-    #     else:
-    #         final_results.append(0.)
+    @abstractmethod
+    def get_penalties(self) -> Dict[str, Callable]:
+        raise NotImplementedError
+
+    def get_question_type(self, ground_truth):
+        if "extra_info" in ground_truth and "question_type" in ground_truth["extra_info"]:
+            return ground_truth["extra_info"]["question_type"]
+        else:
+            return "unknown"
+
+    @abstractmethod
+    def postprocess_solution_fn(self, solution_str: str):
+        raise NotImplementedError
+
+    def get_rm_rewards(self,
+                       batch_solution_str,
+                       batch_ground_truth):
+        return compute_rm_score(
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=batch_ground_truth,
+            postprocess_solution_fn=self.postprocess_solution_fn,
+            parse_result_failure_score=self.parse_result_failure_score
+        )
+
+    def log_solution(self, solution):
+        norm = self.postprocess_solution_fn(solution)
+        if norm is None:
+            return self.clip_string(solution)
+        return self.clip_string(norm)
+
+    def log_ground_truth(self, ground_truth):
+        return ground_truth["ground_truth"]
+
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+
+        penalty = defaultdict(dict)
+        for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            for key, fn in self.get_penalties().items():
+                penalty[key][i] = fn(solution_str, ground_truth)
+
+        base_rewards = self.get_rm_rewards(
+            batch_solution_str, batch_ground_truth)
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            penalty_log_str = []
+            _reward = base_rewards[i]
+            for name, _penalty in penalty.items():
+                if i in _penalty:
+                    _reward += _penalty[i]
+                    penalty_log_str.append(f'{name} Penalty={_penalty[i]:.2f}')
+
+            final_results.append(_reward)
+
+            if self.split == "valid":
+                print(
+                    f"--------------------------------[VALID]--------------------------------")
+                print(
+                    f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f"【Ground Truth】({self.get_question_type(batch_ground_truth[i])}) `{self.log_ground_truth(batch_ground_truth[i])}`")
+                print(f'Reward={_reward:.3f};{";".join(penalty_log_str)}\n')
+            elif self.split == "train" and random.random() < 0.2:
+                print(
+                    f"--------------------------------[TRAIN]--------------------------------")
+                print(
+                    f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f"【Ground Truth】({self.get_question_type(batch_ground_truth[i])}) `{self.log_ground_truth(batch_ground_truth[i])}`")
+                print(f'Reward={_reward:.3f};{";".join(penalty_log_str)}\n')
+
+        return final_results
+
+
+class QwQLongCoTComputeScore(ComputeScoreBase):
+    def __init__(self, split="train"):
+        super().__init__(split=split)
+        self.c_length_penalty = ConclusionTooLongPenalty(
+            postprocess_solution_fn=QwQLongCoTComputeScore.postprocess_solution_fn)
+
+    def get_penalties(self) -> Dict[str, Callable]:
+        return {
+            "CONCLUSION_LENGTH": self.c_length_penalty.get_penalty
+        }
+
+    @classmethod
+    def postprocess_solution_fn(cls, solution_str: str):
+        solution_str = postprocess_solution(solution_str)
+        try:
+            thought = re.findall(r'<think>.*</think>',
+                                 solution_str, re.DOTALL)[0]
+        except Exception as err:
+            return None
+
+        conclusion = solution_str.replace(thought, "").strip()
+
+        return conclusion
+
+    def get_rm_rewards(self,
+                       batch_solution_str,
+                       batch_ground_truth):
+        rewards = compute_rm_score(
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=batch_ground_truth,
+            postprocess_solution_fn=self.postprocess_solution_fn,
+            parse_result_failure_score=self.parse_result_failure_score
+        )
+        reshape_rewards = []
+        for reward, ground_truth in zip(rewards, batch_ground_truth):
+            cate = self.get_question_type(ground_truth)
+            if cate == "object":
+                if reward >= 0.115:
+                    reward = 1.0
+                if reward <= 0.0:
+                    reward = -1.0
+            reshape_rewards.append(reward)
+        return reshape_rewards
 
 
 def compute_score_base(
@@ -222,45 +328,40 @@ def compute_score_base(
 
     final_results = []
 
-    def clip_str(s):
-        if len(s) > 2000:
-            return f'{s[:1000]}... ...{s[-1000:]}'
-        return s
+    # for i in range(len(batch_solution_str)):
+    #     if i in rewards:
+    #         penalty_log = []
+    #         # Subject Question
+    #         if is_subject.get(i, False):
+    #             _reward = rewards[i]
+    #         else:
+    #             if rewards[i] >= reward_clip:
+    #                 _reward = reward_clip_amplify
+    #             else:
+    #                 _reward = rewards[i]
 
-    for i in range(len(batch_solution_str)):
-        if i in rewards:
-            penalty_log = []
-            # Subject Question
-            if is_subject.get(i, False):
-                _reward = rewards[i]
-            else:
-                if rewards[i] >= reward_clip:
-                    _reward = reward_clip_amplify
-                else:
-                    _reward = rewards[i]
+    #         for name, _penalty in penalty.items():
+    #             if i in _penalty:
+    #                 _reward += _penalty[i]
+    #                 penalty_log.append(f'{name} Penalty={_penalty[i]:.2f}')
 
-            for name, _penalty in penalty.items():
-                if i in _penalty:
-                    _reward += _penalty[i]
-                    penalty_log.append(f'{name} Penalty={_penalty[i]:.2f}')
+    #         final_results.append(_reward)
 
-            final_results.append(_reward)
+    #         if split == "valid" and i in logs:
+    #             print(f"----------------[VALID]----------------")
+    #             print(f"【Solution】 `{repr(clip_str(logs[i][0]))}`")
+    #             print(f"【Ground Truth】 `{repr(logs[i][1])}`")
+    #             print(f'Reward={_reward};{";".join(penalty_log)}\n')
+    #         elif split == "train" and i in logs and random.random() < 0.2:
+    #             print(f"----------------[TRAIN]----------------")
+    #             print(f"【Solution】 `{repr(clip_str(logs[i][0]))}`")
+    #             print(
+    #                 f"【Ground Truth】 (is_subject={is_subject_question(logs[i][1])})`{repr(logs[i][1])}`")
+    #             print(f'Reward={_reward};{";".join(penalty_log)}\n')
+    #     else:
+    #         final_results.append(0.)
 
-            if split == "valid" and i in logs:
-                print(f"----------------[VALID]----------------")
-                print(f"【Solution】 `{repr(clip_str(logs[i][0]))}`")
-                print(f"【Ground Truth】 `{repr(logs[i][1])}`")
-                print(f'Reward={_reward};{";".join(penalty_log)}\n')
-            elif split == "train" and i in logs and random.random() < 0.2:
-                print(f"----------------[TRAIN]----------------")
-                print(f"【Solution】 `{repr(clip_str(logs[i][0]))}`")
-                print(
-                    f"【Ground Truth】 (is_subject={is_subject_question(logs[i][1])})`{repr(logs[i][1])}`")
-                print(f'Reward={_reward};{";".join(penalty_log)}\n')
-        else:
-            final_results.append(0.)
-
-    return final_results
+    # return final_results
 
 
 compute_score_nothink = partial(

@@ -8,7 +8,8 @@ from rm_w_criteria import (
     postprocess_solution,
     simple_tokenize,
     qwq_longcot_postprocess_solution,
-    ConclusionTooLongPenalty
+    ConclusionTooLongPenalty,
+    QwQLongCoTComputeScore
 )
 
 
@@ -58,16 +59,18 @@ def load_qwq_data(num=100):
     batch_solution_str, batch_ground_truth = [], []
 
     with open(filename, "rt") as f:
-        for line in f:
+        for i, line in enumerate(f):
             example = json.loads(line)
             batch_solution_str.append(
                 example["self_improvement"]["responses"][0]["response"])
             batch_ground_truth.append({
-                "ground_truth": "",
+                "ground_truth": f'{example["self_improvement"]["prompt"]}\n\nFinal Answer: Unknown',
                 "extra_info": {
-                    "question_type": "object"
+                    "question_type": random.choice(["object", "subject"])
                 }
             })
+            if i > num:
+                break
     return batch_solution_str, batch_ground_truth
 
 
@@ -111,27 +114,18 @@ class TestRMReward(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_qwq_data()
 
         for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
-            print(penalty_fn.get_penalty(solution_str, ground_truth))
-        # # client = get_client(model_type="OPENAI")
-        # # print(robust_call_api(client, prompt='你是谁？', model="gpt-4o"))
+            self.assertTrue(penalty_fn.get_penalty(
+                solution_str, ground_truth) <= 0.0)
 
-        # client = get_client(model_type="SELF_DEPLOY", ip=os.getenv(
-        #     "DEFAULT_DEPLOY_BASE_URL").split("/")[-2].split(":")[0])
-        # while True:
-        #     prompt = random.choice([
-        #         "What is the major product of the reaction when 3-methyl-1-butene reacts with HBr in the presence of peroxides?",
-        #         "Ethyl acetate is treated with benzophenone (a photochemical reagent) under UV light, followed by a reducing agent. Determine the final product of this reaction sequence. Show the change in the oxidation state of the carbonyl carbon in ethyl acetate at each step of the reaction."
-        #         "What is the contact angle on the rough surface if the contact angle on the smooth surface is 110°, the roughness \\( r \\) is 1.2, and the rough surface is 80% hydrophobic?"
-        #         "What is the transmissivity of a laser cavity with two highly reflective mirrors, where the optical thickness is 4.6 times the wavelength of the light?"
-        #         "Ethyl acetate is treated with benzophenone (a photochemical reagent) under UV light, followed by a reducing agent. Determine the final product of this reaction sequence. Show the change in the oxidation state of the carbonyl carbon in ethyl acetate at each step of the reaction."
-        #         "Cas9 nuclease and the restriction enzyme EcoRI are produced by the bacterial system. Which of the following statements are true regarding both enzymes?\n I. They are both endonucleases that perform cleavage activity at the specific nucleotide sequence\nII. They both create double-strand breaks in DNA. \nIII. Both Cas9 and EcoRI cut double-stranded DNA forming overhangs in the DNA. \nIV. They are both part of bacterial defense mechanisms against foreign DNA\n\nA. I, II, III\nB. I, III, IV\nC. I, II, III, IV\nD. I, II, IV"
-        #     ])
-        #     print(prompt)
-        #     print('-'*80)
-        #     print(robust_call_api(client, prompt=prompt,
-        #           model=os.getenv("DEFAULT_DEPLOY_MODEL_NAME")).response)
-        #     print("="*80)
-        #     # break
+    def test_qwq_long_cot_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_qwq_data(num=100)
+
+        task = QwQLongCoTComputeScore()
+        task.compute_score(
+            [None] * len(batch_solution_str),
+            batch_solution_str,
+            batch_ground_truth
+        )
 
 
 if __name__ == '__main__':
