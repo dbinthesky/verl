@@ -6,7 +6,9 @@ import numpy as np
 from rm_w_criteria import (
     compute_rm_score,
     postprocess_solution,
-    simple_tokenize
+    simple_tokenize,
+    qwq_longcot_postprocess_solution,
+    ConclusionTooLongPenalty
 )
 
 
@@ -51,6 +53,24 @@ def load_xml_cot_data(num):
         return batch_solution_str, batch_ground_truth, correct_indices, wrong_indices
 
 
+def load_qwq_data(num=100):
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/hard_case_mixed_v0_0_1_aug_v1_finish.jsonl"
+    batch_solution_str, batch_ground_truth = [], []
+
+    with open(filename, "rt") as f:
+        for line in f:
+            example = json.loads(line)
+            batch_solution_str.append(
+                example["self_improvement"]["responses"][0]["response"])
+            batch_ground_truth.append({
+                "ground_truth": "",
+                "extra_info": {
+                    "question_type": "object"
+                }
+            })
+    return batch_solution_str, batch_ground_truth
+
+
 class TestRMReward(unittest.TestCase):
     def test_grid_search_rm_threshold(self):
         num = 10000
@@ -85,10 +105,13 @@ class TestRMReward(unittest.TestCase):
         for _ in (0.85, 0.9, 0.95):
             print(f'{_}% Length={size[int(len(size)*_)]}')
 
-    # grid_search_rm_threshold()
-    # solution_len_analysis()
-    # ConclusionTooLongPenalty()
+    def test_conclusion_too_long_penalty(self):
+        penalty_fn = ConclusionTooLongPenalty(
+            postprocess_solution_fn=qwq_longcot_postprocess_solution)
+        batch_solution_str, batch_ground_truth = load_qwq_data()
 
+        for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
+            print(penalty_fn.get_penalty(solution_str, ground_truth))
         # # client = get_client(model_type="OPENAI")
         # # print(robust_call_api(client, prompt='你是谁？', model="gpt-4o"))
 

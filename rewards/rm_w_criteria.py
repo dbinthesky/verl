@@ -496,8 +496,3 @@ if __name__ == "__main__":
 
     # print(qwq_longcot_compute_score_valid(
     #     [None] * len(batch_solution_str), batch_solution_str, batch_ground_truth))
-
-
-
-
-    # /cpfs01/shared/llm_ddd/tongjian/rl/eval/GPQA_diamond_0326.parquet
