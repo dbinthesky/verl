@@ -7,7 +7,7 @@ from rm_w_criteria import (
     compute_rm_score,
     postprocess_solution,
     simple_tokenize,
-    qwq_longcot_postprocess_solution,
+    qwq_longcot_compute_score_train,
     ConclusionTooLongPenalty,
     QwQLongCoTComputeScore
 )
@@ -110,7 +110,7 @@ class TestRMReward(unittest.TestCase):
 
     def test_conclusion_too_long_penalty(self):
         penalty_fn = ConclusionTooLongPenalty(
-            postprocess_solution_fn=qwq_longcot_postprocess_solution)
+            postprocess_solution_fn=QwQLongCoTComputeScore.postprocess_solution)
         batch_solution_str, batch_ground_truth = load_qwq_data()
 
         for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
@@ -120,8 +120,13 @@ class TestRMReward(unittest.TestCase):
     def test_qwq_long_cot_compute_score(self):
         batch_solution_str, batch_ground_truth = load_qwq_data(num=100)
 
-        task = QwQLongCoTComputeScore()
-        task.compute_score(
+        # task = QwQLongCoTComputeScore()
+        # task.compute_score(
+        #     [None] * len(batch_solution_str),
+        #     batch_solution_str,
+        #     batch_ground_truth
+        # )
+        qwq_longcot_compute_score_train(
             [None] * len(batch_solution_str),
             batch_solution_str,
             batch_ground_truth
