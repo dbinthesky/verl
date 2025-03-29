@@ -181,11 +181,11 @@ class ComputeScoreBase(object):
     def log_solution(self, solution):
         norm = self.postprocess_solution_fn(solution)
         if norm is None:
-            return self.clip_string(solution)
-        return self.clip_string(norm)
+            return repr(self.clip_string(solution))
+        return repr(self.clip_string(norm))
 
     def log_ground_truth(self, ground_truth):
-        return ground_truth["ground_truth"]
+        return repr(ground_truth["ground_truth"])
 
     def compute_score(self,
                       batch_data_sources,
@@ -232,6 +232,10 @@ class ComputeScoreBase(object):
         return final_results
 
 
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# QwQ LongCoT Reward
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
 class QwQLongCoTComputeScore(ComputeScoreBase):
     def __init__(self, split="train"):
         super().__init__(split=split)
@@ -271,15 +275,10 @@ class QwQLongCoTComputeScore(ComputeScoreBase):
             if cate == "object":
                 if reward >= 0.115:
                     reward = 1.0
-                if reward <= 0.0:
+                if reward <= 0.0 and reward >= -1.0:
                     reward = -1.0
             reshape_rewards.append(reward)
         return reshape_rewards
-
-
-# ------------------------------------------------------------------------------------------------------------------------------------------------------
-# QwQ LongCoT Reward
-# ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 _qwq_longcot_compute_score_train = QwQLongCoTComputeScore(split="train")
@@ -369,9 +368,9 @@ def xml_cot_compute_score(batch_data_sources, batch_solution_str, batch_ground_t
     return final_results
 
 
-# ------------------------------
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Fabricate QA Reward
-# ------------------------------
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 def length_penalty(solution_str, ground_truth):
     return -0.05 * min(abs(len(simple_tokenize(solution_str))-len(simple_tokenize(ground_truth))) / len(simple_tokenize(ground_truth)), 5.)
