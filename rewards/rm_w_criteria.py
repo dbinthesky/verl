@@ -421,7 +421,7 @@ class QwQLongCoTFabricateQAComputeScore(ComputeScoreBase):
         except Exception as err:
             return None
         try:
-            conclusion = re.findall(r'<answer>(.*)</answer>',
+            conclusion = re.findall(r'<question>(.*)</question>',
                                     solution_str, re.DOTALL)[0]
         except Exception as err:
             return None
