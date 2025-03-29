@@ -147,20 +147,14 @@ class TestRMReward(unittest.TestCase):
             postprocess_gt_fn=QwQLongCoTFabricateQAComputeScore.extract_gt_question,
         )
         batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data()
-        print(len(batch_solution_str))
         for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
             print(penalty_fn.get_penalty(solution_str, ground_truth))
 
-    def test_qwq_long_cot_compute_score(self):
-        batch_solution_str, batch_ground_truth = load_qwq_data(num=100)
+    def test_qwq_long_cot_fabricate_qa_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(num=100)
 
-        # task = QwQLongCoTComputeScore()
-        # task.compute_score(
-        #     [None] * len(batch_solution_str),
-        #     batch_solution_str,
-        #     batch_ground_truth
-        # )
-        qwq_longcot_compute_score_train(
+        task = QwQLongCoTFabricateQAComputeScore()
+        task.compute_score(
             [None] * len(batch_solution_str),
             batch_solution_str,
             batch_ground_truth

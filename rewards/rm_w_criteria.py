@@ -402,13 +402,15 @@ class FabricateQATooLongPenalty(ConclusionTooLongPenalty):
 class QwQLongCoTFabricateQAComputeScore(ComputeScoreBase):
     def __init__(self, split="train"):
         super().__init__(split=split)
-        # self.c_length_penalty = ConclusionTooLongPenalty(
-        #     postprocess_solution_fn=QwQLongCoTComputeScore.postprocess_solution_fn)
+        self.c_length_penalty = FabricateQATooLongPenalty(
+            postprocess_solution_fn=QwQLongCoTFabricateQAComputeScore.postprocess_solution_fn,
+            postprocess_gt_fn=QwQLongCoTFabricateQAComputeScore.extract_gt_question
+        )
 
-    # def get_penalties(self) -> Dict[str, Callable]:
-    #     return {
-    #         "CONCLUSION_LENGTH": self.c_length_penalty.get_penalty
-    #     }
+    def get_penalties(self) -> Dict[str, Callable]:
+        return {
+            "CONCLUSION_LENGTH": self.c_length_penalty.get_penalty
+        }
 
     @classmethod
     def postprocess_solution_fn(cls, solution_str: str):
@@ -441,26 +443,23 @@ class QwQLongCoTFabricateQAComputeScore(ComputeScoreBase):
     def log_ground_truth(self, ground_truth):
         return repr(self.extract_gt_question(ground_truth))
 
-    # def get_rm_rewards(self,
-    #                    batch_data_sources,
-    #                    batch_solution_str,
-    #                    batch_ground_truth):
-    #     rewards = compute_rm_score(
-    #         batch_solution_str=batch_solution_str,
-    #         batch_ground_truth=batch_ground_truth,
-    #         postprocess_solution_fn=self.postprocess_solution_fn,
-    #         parse_result_failure_score=self.parse_result_failure_score
-    #     )
-    #     reshape_rewards = []
-    #     for reward, ground_truth in zip(rewards, batch_ground_truth):
-    #         cate = self.get_question_type(ground_truth)
-    #         if cate == "object":
-    #             if reward >= 0.115:
-    #                 reward = 1.0
-    #             if reward <= 0.0 and reward >= -1.0:
-    #                 reward = -1.0
-    #         reshape_rewards.append(reward)
-    #     return reshape_rewards
+    def log_solution(self, solution):
+        norm = self.postprocess_solution_fn(solution)
+        if norm is None:
+            return repr(self.clip_string(solution))
+        return repr(self.clip_string(norm))
+
+    def get_rm_rewards(self,
+                       batch_data_sources,
+                       batch_solution_str,
+                       batch_ground_truth):
+        rewards = compute_rm_score(
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=batch_ground_truth,
+            postprocess_solution_fn=self.postprocess_solution_fn,
+            parse_result_failure_score=self.parse_result_failure_score
+        )
+        return rewards
 
 
 def fabricate_qa_compute_score_nothink(batch_data_sources, batch_solution_str, batch_ground_truth, split="train"):
