@@ -374,33 +374,93 @@ def xml_cot_compute_score(batch_data_sources, batch_solution_str, batch_ground_t
 # Fabricate QA Reward
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def length_penalty(solution_str, ground_truth):
-    return -0.05 * min(abs(len(simple_tokenize(solution_str))-len(simple_tokenize(ground_truth))) / len(simple_tokenize(ground_truth)), 5.)
+
+class FabricateQATooLongPenalty(ConclusionTooLongPenalty):
+    def __init__(self,
+                 postprocess_solution_fn,
+                 postprocess_gt_fn,
+                 conclusion_limit=600,
+                 penalty_base=-0.1):
+        super().__init__(
+            postprocess_solution_fn=postprocess_solution_fn,
+            conclusion_limit=conclusion_limit,
+            penalty_base=penalty_base
+        )
+        self.postprocess_gt_fn = postprocess_gt_fn
+
+    def get_penalty(self, solution_str, ground_truth):
+        solution_str = self.postprocess_solution_fn(solution_str)
+        if solution_str is None:
+            return 0.
+
+        limit = len(simple_tokenize(self.postprocess_gt_fn(ground_truth)))
+        solution_size = len(simple_tokenize(solution_str))
+
+        return self.penalty_base * min(max(solution_size-limit, 0) / limit, 5.)
 
 
-def fabricate_qa_format_penalty(solution_str):
-    if solution_str.startswith('"') and solution_str.endswith('"'):
-        return solution_str[1:-1].strip(), 0.
-    else:
-        return solution_str, -0.1
+class QwQLongCoTFabricateQAComputeScore(ComputeScoreBase):
+    def __init__(self, split="train"):
+        super().__init__(split=split)
+        # self.c_length_penalty = ConclusionTooLongPenalty(
+        #     postprocess_solution_fn=QwQLongCoTComputeScore.postprocess_solution_fn)
 
+    # def get_penalties(self) -> Dict[str, Callable]:
+    #     return {
+    #         "CONCLUSION_LENGTH": self.c_length_penalty.get_penalty
+    #     }
 
-def fabricate_qa_task_postprocess(solution_str):
-    if "[CONCLUSION BEGIN]" not in solution_str or "[CONCLUSION END]" not in solution_str:
-        return None
-    solution_str = solution_str[solution_str.index(
-        "[CONCLUSION BEGIN]")+len("[CONCLUSION BEGIN]"):solution_str.index("[CONCLUSION END]")]
+    @classmethod
+    def postprocess_solution_fn(cls, solution_str: str):
+        solution_str = postprocess_solution(solution_str)
+        try:
+            thought = re.findall(r'<think>.*</think>',
+                                 solution_str, re.DOTALL)[0]
+        except Exception as err:
+            return None
+        try:
+            conclusion = re.findall(r'<answer>(.*)</answer>',
+                                    solution_str, re.DOTALL)[0]
+        except Exception as err:
+            return None
 
-    if "The constructed question is: " in solution_str:
-        solution_str = solution_str.replace(
-            "The constructed question is: ", "").strip()
+        return conclusion
 
-    solution_str = solution_str.strip()
-    if not solution_str.startswith("**Question:**"):
-        return None
-    solution_str = solution_str.replace("**Question:**", "").strip()
+    @classmethod
+    def extract_gt_question(cls, ground_truth):
+        ground_truth = ground_truth["ground_truth"]
+        bg_flag = "Your response (the created question) must be the following:"
+        ed_flag = "Respond only with the created question directly"
+        ground_truth = ground_truth[ground_truth.index(bg_flag)+len(bg_flag):]
+        ground_truth = ground_truth[:ground_truth.index(ed_flag)]
 
-    return solution_str
+        conclusion = re.findall(r'```(.*)```',
+                                ground_truth, re.DOTALL)[0].strip()
+        return conclusion
+
+    def log_ground_truth(self, ground_truth):
+        return repr(self.extract_gt_question(ground_truth))
+
+    # def get_rm_rewards(self,
+    #                    batch_data_sources,
+    #                    batch_solution_str,
+    #                    batch_ground_truth):
+    #     rewards = compute_rm_score(
+    #         batch_solution_str=batch_solution_str,
+    #         batch_ground_truth=batch_ground_truth,
+    #         postprocess_solution_fn=self.postprocess_solution_fn,
+    #         parse_result_failure_score=self.parse_result_failure_score
+    #     )
+    #     reshape_rewards = []
+    #     for reward, ground_truth in zip(rewards, batch_ground_truth):
+    #         cate = self.get_question_type(ground_truth)
+    #         if cate == "object":
+    #             if reward >= 0.115:
+    #                 reward = 1.0
+    #             if reward <= 0.0 and reward >= -1.0:
+    #                 reward = -1.0
+    #         reshape_rewards.append(reward)
+    #     return reshape_rewards
 
 
 def fabricate_qa_compute_score_nothink(batch_data_sources, batch_solution_str, batch_ground_truth, split="train"):

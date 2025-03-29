@@ -2,14 +2,18 @@ import os
 import json
 import random
 import unittest
+import string
 import numpy as np
+import pandas as pd
 from rm_w_criteria import (
     compute_rm_score,
     postprocess_solution,
     simple_tokenize,
     qwq_longcot_compute_score_train,
     ConclusionTooLongPenalty,
-    QwQLongCoTComputeScore
+    FabricateQATooLongPenalty,
+    QwQLongCoTComputeScore,
+    QwQLongCoTFabricateQAComputeScore
 )
 
 
@@ -74,6 +78,26 @@ def load_qwq_data(num=100):
     return batch_solution_str, batch_ground_truth
 
 
+def load_qwq_fabricate_qa_data(num=100):
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/authentic_qa_aio_20250115_test_bugfix_0329.parquet"
+    batch_solution_str, batch_ground_truth = [], []
+
+    def generate_random_string(n):
+        all_characters = string.ascii_letters + string.digits
+        return ''.join(random.choice(all_characters) for _ in range(n))
+
+    df = pd.read_parquet(filename)
+    for _, row in df.iterrows():
+        row = row.to_dict()
+        batch_ground_truth.append(row["reward_model"])
+        gt = QwQLongCoTFabricateQAComputeScore.extract_gt_question(
+            row["reward_model"])
+
+        batch_solution_str.append(
+            f'<think>\n{generate_random_string(100)}\n</think>\n\n<answer>{gt}\n{generate_random_string(500)}</answer>')
+    return batch_solution_str, batch_ground_truth
+
+
 class TestRMReward(unittest.TestCase):
     def test_grid_search_rm_threshold(self):
         num = 10000
@@ -116,6 +140,16 @@ class TestRMReward(unittest.TestCase):
         for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
             self.assertTrue(penalty_fn.get_penalty(
                 solution_str, ground_truth) <= 0.0)
+
+    def test_fabricate_qa_too_long_penalty(self):
+        penalty_fn = FabricateQATooLongPenalty(
+            postprocess_solution_fn=QwQLongCoTFabricateQAComputeScore.postprocess_solution_fn,
+            postprocess_gt_fn=QwQLongCoTFabricateQAComputeScore.extract_gt_question,
+        )
+        batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data()
+        print(len(batch_solution_str))
+        for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
+            print(penalty_fn.get_penalty(solution_str, ground_truth))
 
     def test_qwq_long_cot_compute_score(self):
         batch_solution_str, batch_ground_truth = load_qwq_data(num=100)
