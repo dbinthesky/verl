@@ -169,6 +169,7 @@ class ComputeScoreBase(object):
         raise NotImplementedError
 
     def get_rm_rewards(self,
+                       batch_data_sources,
                        batch_solution_str,
                        batch_ground_truth):
         return compute_rm_score(
@@ -199,7 +200,7 @@ class ComputeScoreBase(object):
                 penalty[key][i] = fn(solution_str, ground_truth)
 
         base_rewards = self.get_rm_rewards(
-            batch_solution_str, batch_ground_truth)
+            batch_data_sources, batch_solution_str, batch_ground_truth)
 
         final_results = []
         for i in range(len(batch_solution_str)):
@@ -261,6 +262,7 @@ class QwQLongCoTComputeScore(ComputeScoreBase):
         return conclusion
 
     def get_rm_rewards(self,
+                       batch_data_sources,
                        batch_solution_str,
                        batch_ground_truth):
         rewards = compute_rm_score(
