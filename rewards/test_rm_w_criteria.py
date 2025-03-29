@@ -13,7 +13,8 @@ from rm_w_criteria import (
     ConclusionTooLongPenalty,
     FabricateQATooLongPenalty,
     QwQLongCoTComputeScore,
-    QwQLongCoTFabricateQAComputeScore
+    QwQLongCoTFabricateQAComputeScore,
+    qwq_longcot_fabricate_qa_compute_score_train
 )
 
 
@@ -151,10 +152,16 @@ class TestRMReward(unittest.TestCase):
             print(penalty_fn.get_penalty(solution_str, ground_truth))
 
     def test_qwq_long_cot_fabricate_qa_compute_score(self):
-        batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(num=100)
+        batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
+            num=100)
 
-        task = QwQLongCoTFabricateQAComputeScore()
-        task.compute_score(
+        # task = QwQLongCoTFabricateQAComputeScore()
+        # task.compute_score(
+        #     [None] * len(batch_solution_str),
+        #     batch_solution_str,
+        #     batch_ground_truth
+        # )
+        qwq_longcot_fabricate_qa_compute_score_train(
             [None] * len(batch_solution_str),
             batch_solution_str,
             batch_ground_truth

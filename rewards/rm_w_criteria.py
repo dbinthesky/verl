@@ -462,77 +462,12 @@ class QwQLongCoTFabricateQAComputeScore(ComputeScoreBase):
         return rewards
 
 
-def fabricate_qa_compute_score_nothink(batch_data_sources, batch_solution_str, batch_ground_truth, split="train"):
-    input_datas = []
-    rewards = {}
-    len_penalty, format_penalty = {}, {}
-
-    logs = {}
-
-    for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-        solution_str = postprocess_solution(solution_str)
-        if data_source == "fabricate_qa":
-            raw_solution_str = solution_str
-            solution_str = fabricate_qa_task_postprocess(solution_str)
-
-            show_ground_truth = ground_truth
-            flag = "# Final Anwer (Authentic Exam)"
-            if flag in show_ground_truth:
-                show_ground_truth = show_ground_truth[show_ground_truth.index(
-                    flag)+len(flag):].strip()
-            flag = "## Note"
-            if flag in show_ground_truth:
-                show_ground_truth = show_ground_truth[:show_ground_truth.index(
-                    "## Note")].strip()
-
-            if solution_str is None:
-                rewards[i] = -1.
-                logs[i] = (raw_solution_str, show_ground_truth)
-                continue
-            else:
-                _len_penalty = length_penalty(solution_str, show_ground_truth)
-                len_penalty[i] = _len_penalty
-                logs[i] = (solution_str, show_ground_truth)
-                solution_str, _format_penalty = fabricate_qa_format_penalty(
-                    solution_str)
-                format_penalty[i] = _format_penalty
-
-        input_data = {
-            "prompt": ground_truth, "response": solution_str, "id": i
-        }
-        input_datas.append(input_data)
-
-    if len(input_datas) > 0:
-        for batch in tqdm(batchify(input_datas, n=32), desc='[RM] batchify inference'):
-            output_datas = post_with_retry(URLS, batch)
-            for _ in output_datas['reward']:
-                _id = int(_["id"])
-                rewards[_id] = _["rm_score"]
-    final_results = []
-    for i in range(len(batch_solution_str)):
-        if i in rewards:
-            _reward = rewards[i]
-            if i in len_penalty:
-                _reward += len_penalty[i]
-                _reward += format_penalty[i]
-            final_results.append(_reward)
-            if split == "valid" and batch_data_sources[i] == "fabricate_qa" and i in logs:
-                print(f"--------------------------------")
-                print(f"【Solution】 `{repr(logs[i][0])}`")
-                print(f"【Ground Truth】 `{repr(logs[i][1])}`")
-                print(
-                    f'Reward={_reward};Length Penalty={len_penalty.get(i, 0.)};Format Penalty={format_penalty.get(i, 0.)}')
-        else:
-            final_results.append(0.)
-
-    return final_results
-
-
-fabricate_qa_compute_score_nothink_train = partial(
-    fabricate_qa_compute_score_nothink, split="train")
-fabricate_qa_compute_score_nothink_valid = partial(
-    fabricate_qa_compute_score_nothink, split="train")
-
+_qwq_longcot_fabricate_qa_compute_score_train = QwQLongCoTFabricateQAComputeScore(
+    split="train")
+_qwq_longcot_fabricate_qa_compute_score_valid = QwQLongCoTFabricateQAComputeScore(
+    split="valid")
+qwq_longcot_fabricate_qa_compute_score_train = _qwq_longcot_fabricate_qa_compute_score_train.compute_score
+qwq_longcot_fabricate_qa_compute_score_valid = _qwq_longcot_fabricate_qa_compute_score_valid.compute_score
 
 if __name__ == "__main__":
     pass
