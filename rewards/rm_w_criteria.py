@@ -188,6 +188,12 @@ class ComputeScoreBase(object):
     def log_ground_truth(self, ground_truth):
         return repr(ground_truth["ground_truth"])
 
+    def get_uuid(self, ground_truth):
+        try:
+            return ground_truth["extra_info"]["uuid"]
+        except Exception as err:
+            return ""
+
     def compute_score(self,
                       batch_data_sources,
                       batch_solution_str,
@@ -228,7 +234,8 @@ class ComputeScoreBase(object):
                     f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
                 print(
                     f"【Ground Truth】({self.get_question_type(batch_ground_truth[i])}) `{self.log_ground_truth(batch_ground_truth[i])}`")
-                print(f'Reward={_reward:.3f};{";".join(penalty_log_str)}\n')
+                print(
+                    f'【{self.get_uuid(batch_ground_truth[i])}】Reward={_reward:.3f};{";".join(penalty_log_str)}\n')
 
         return final_results
 
