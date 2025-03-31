@@ -135,7 +135,7 @@ def grade_answer_mathd(given_answer: str, ground_truth: str) -> bool:
     given_answer_normalized_mathd = mathd_normalize_answer(given_answer)
 
     # be at least as lenient as mathd
-    if ground_truth_normalized_mathd == given_answer_normalized_mathd:
+    if ground_truth_normalized_mathd == given_answer_normalized_mathd and ground_truth_normalized_mathd is not None:
         return True
     return False
 
@@ -398,9 +398,9 @@ if __name__ == "__main__":
     print(qwq_longcot_compute_score(
         [None],
         batch_solution_str=[
-            "<think> I am omniscient. </think> The answer is \\boxed{24 + 14*x + (-13)*x^2 - 2*x^3 + x^4}."
+            "<think> I am omniscient. </think> To determine the number of residents of Aimeville who own all four items (diamond ring, set of golf clubs, garden spade, and a bag of candy hearts), we start by noting that each resident owns a bag of candy hearts. Thus, all residents are included in the fourth item. We denote the four items as \\( A \\) (diamond ring), \\( B \\) (golf clubs), \\( C \\) (garden spade), and \\( D \\) (candy hearts). We are given the following information:\n\n- \\( |A| = 195 \\) (diamond ring owners)\n- \\( |B| = 367 \\) (golf clubs owners)\n- \\( |C| = 562 \\) (garden spade owners)\n- All 900 residents own \\( D \\) (bag of candy hearts).\n- Exactly 437 residents own exactly two of these items.\n- Exactly 234 residents own exactly three of these items.\n\nWe need to find the number of residents who own all four items, which is equivalent to the residents who own exactly three of the items \\( A \\), \\( B \\), and \\( C \\).\n\nUsing the inclusion-exclusion principle for three items \\( A \\), \\( B \\), and \\( C \\):\n\n1. Let \\( S_1 = |A \\c... ...+ S_2 + S_3 - 3X = 437\n\\]\n\\[\nX = 234\n\\]\n\nSubstituting \\( X = 234 \\) into the first equation:\n\n\\[\nS_1 + S_2 + S_3 - 3(234) = 437\n\\]\n\\[\nS_1 + S_2 + S_3 = 437 + 3 \\times 234 = 437 + 702 = 1139\n\\]\n\nThe total number of residents who own at least one of the three items \\( A \\), \\( B \\), or \\( C \\) is given by:\n\n\\[\n|A \\cup B \\cup C| = |A| + |B| + |C| - (S_1 + S_2 + S_3) + X\n\\]\n\nSince the total residents owning any of these three items (including all 900 residents due to \\( D \\)):\n\n\\[\n900 = 195 + 367 + 562 - 1139 + 234\n\\]\n\nCalculating the right-hand side:\n\n\\[\n195 + 367 + 562 = 1124\n\\]\n\\[\n900 = 1124 - 1139 + 234 = 219\n\\]\n\nThis apparent inconsistency hints at a misinterpretation of the problem. However, recognizing that the four items effectively reduce to three (since \\( D \\) is universal), the number of residents owning all four items is the same as owning exactly three of the three items \\( A \\), \\( B \\), and \\( C \\). Thus, the number of residents who own all four items is:\n\n\\[\n\\boxed{234}\n\\]"
         ],
         batch_ground_truth=[
-            {"ground_truth": "$x^{4}-2 x^{3}-13 x^{2}+14 x+24$"}
+            {"ground_truth": "073"}
         ]
     ))
