@@ -386,7 +386,7 @@ def compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, po
             print(
                 f'Reward: {rewards[-1]}; Format Checker: <think> in response={"<think>" in solution_str}; </think> in response={"</think>" in solution_str}')
         except Exception as err:
-            print(err)
+            print(f'[EVAL ERROR] {err}')
             rewards.append(0.)
     return rewards
 
