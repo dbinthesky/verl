@@ -54,7 +54,7 @@ setup_path() {
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/eval/aime_2024_0331.parquet"
 
     experiment_name="internlm3-8b_distill_qwq-dlc-${YYMMDD}-${HHMMSS}"
-    project_name="verl_grpo_qwq_coldboot"
+    project_name="verl_grpo_qwq_coldboot_aime"
 
     OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/${experiment_name}/${YYMMDD}/${HHMMSS}"
     mkdir -p "${OUTPUT_DIR}"
