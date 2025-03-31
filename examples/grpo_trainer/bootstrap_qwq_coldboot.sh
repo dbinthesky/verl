@@ -4,7 +4,7 @@ DLC_PATH="/cpfs01/shared/public/dlc"
 
 # JOB_NAME="IDLE_TASK_KILL_IF_NEED_verl-grpo-internlm3-8b_qwq_coldboot_roll16_0324"
 # JOB_NAME="verl-grpo-qwen25_7b_qwq_coldboot_0324"
-JOB_NAME="verl-grpo-internlm3-8b_qwq_coldboot_0324"
+JOB_NAME="verl-grpo-internlm3-8b_qwq_coldboot_0330"
 
 
 PYARGS="${@:3}"
@@ -24,8 +24,8 @@ WORKER_GPU="${WORKER_GPU:-"8"}"
 WORKER_CPU="${WORKER_CPU:-"64"}"
 WORKER_MEMORY="${WORKER_MEMORY:-"1024"}"
 WORKER_IMAGE="pjlab-shanghai-acr-registry-vpc.cn-shanghai.cr.aliyuncs.com/pjlab-eflops/lishuaibin:lishuaibin-xpuyu-trainrlhf"
-RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/run_internlm3-8b_qwq_coldboot_0324.sh"
-# RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/run_qwen25-7b_qwq_coldboot_0324.sh"
+# RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/run_internlm3-8b_qwq_coldboot_0324.sh"
+RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/run_internlm3-8b_qwq_coldboot_aime_0331.sh"
 
 
 dlcrun_cmd=$(
