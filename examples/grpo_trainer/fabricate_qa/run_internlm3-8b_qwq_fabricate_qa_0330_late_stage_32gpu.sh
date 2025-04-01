@@ -95,7 +95,7 @@ run_training() {
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=32 \
+        data.train_batch_size=256 \
         data.max_prompt_length=1024 \
         data.max_response_length=31744 \
         data.filter_overlong_prompts=True \
@@ -121,8 +121,8 @@ run_training() {
         actor_rollout_ref.rollout.name="vllm" \
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.85 \
-        actor_rollout_ref.rollout.temperature=1.2 \
-        actor_rollout_ref.rollout.n=64 \
+        actor_rollout_ref.rollout.temperature=1.0 \
+        actor_rollout_ref.rollout.n=8 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
@@ -134,7 +134,7 @@ run_training() {
         +trainer.val_before_train=True \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
-        trainer.save_freq=5 \
+        trainer.save_freq=10 \
         trainer.test_freq=5 \
         trainer.total_epochs=10000 \
         reward_model.reward_manager="custom" "$@"

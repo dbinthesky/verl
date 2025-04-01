@@ -433,7 +433,7 @@ class QwQLongCoTFabricateQAComputeScore(ComputeScoreBase):
         except Exception as err:
             return None
 
-        return conclusion
+        return conclusion.strip()
 
     @classmethod
     def extract_gt_question(cls, ground_truth):
