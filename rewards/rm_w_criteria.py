@@ -121,6 +121,9 @@ def compute_rm_score(
         if solution_str is None:
             rewards[i] = parse_result_failure_score
             continue
+        if ground_truth is None:
+            rewards[i] = parse_result_failure_score
+            continue
 
         input_data = {
             "prompt": ground_truth["ground_truth"], "response": solution_str, "id": i
@@ -580,15 +583,18 @@ class QwQLongCoTCriteriaEnvolveComputeScore(ComputeScoreBase):
 
             criteria = self.postprocess_solution_fn(sol)
 
-            judge_prompt = f'{prompt}\n\n\n\n{criteria}'
+            if criteria is not None:
+                judge_prompt = {"ground_truth": f'{prompt}\n\n\n\n{criteria}'}
+            else:
+                judge_prompt = None
 
             # Chosen
             new_batch_solution_str.append(chosen)
-            new_batch_ground_truth.append({"ground_truth": judge_prompt})
+            new_batch_ground_truth.append(judge_prompt)
 
             # Rejected
             new_batch_solution_str.append(rejected)
-            new_batch_ground_truth.append({"ground_truth": judge_prompt})
+            new_batch_ground_truth.append(judge_prompt)
 
         def postprocess_solution_fn(x): return x
 
@@ -598,6 +604,7 @@ class QwQLongCoTCriteriaEnvolveComputeScore(ComputeScoreBase):
             postprocess_solution_fn=postprocess_solution_fn,
             parse_result_failure_score=self.parse_result_failure_score
         )
+        print(rewards)
 
         def split_array(arr):
             odd = []
@@ -612,10 +619,13 @@ class QwQLongCoTCriteriaEnvolveComputeScore(ComputeScoreBase):
         rejected_scores, chosen_scores = split_array(rewards)
         acc = []
         for c, r in zip(chosen_scores, rejected_scores):
-            if c > r:
-                acc.append(1.0)
+            if c == self.parse_result_failure_score or r == self.parse_result_failure_score:
+                acc.append(self.parse_result_failure_score)
             else:
-                acc.append(.0)
+                if c > r:
+                    acc.append(1.0)
+                else:
+                    acc.append(.0)
 
         return acc
 
