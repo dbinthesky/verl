@@ -49,12 +49,12 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_distill_qwq_hard_case_mixed_v0_0_1_clip_32k_347_open_source_hf"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/hard_case_mixed_v0_0_2_train_plen512.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/eval/GPQA_diamond_0326.parquet"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/qwen2_5-7b_qwq_fabricate_qa-dlc-2025-04-01-10-30-39_grpo_step_30"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/super_gpqa_aio_noneasy_train.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/super_gpqa_aio_noneasy_test.parquet"
 
-    experiment_name="internlm3-8b_distill_qwq-dlc-${YYMMDD}-${HHMMSS}"
-    project_name="verl_grpo_qwq_coldboot"
+    experiment_name="qwen2_5-7b_qwq_fabricate_qa-dlc-${YYMMDD}-${HHMMSS}"
+    project_name="verl_grpo_qwq_fabricate_qa"
 
     OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/${experiment_name}/${YYMMDD}/${HHMMSS}"
     mkdir -p "${OUTPUT_DIR}"
@@ -89,13 +89,13 @@ run_training() {
 
     python3 -m verl.trainer.main_ppo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/rm_w_criteria.py" \
-        custom_reward_function.name=qwq_longcot_compute_score_train \
-        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/gpqa.py" \
-        +custom_valid_reward_function.name=qwq_longcot_compute_score \
+        custom_reward_function.name=qwq_longcot_fabricate_qa_compute_score_train \
+        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/rm_w_criteria.py" \
+        +custom_valid_reward_function.name=qwq_longcot_fabricate_qa_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=64 \
+        data.train_batch_size=128 \
         data.max_prompt_length=1024 \
         data.max_response_length=31744 \
         data.filter_overlong_prompts=True \
@@ -106,7 +106,7 @@ run_training() {
         actor_rollout_ref.actor.shuffle=True \
         actor_rollout_ref.actor.ppo_mini_batch_size=128 \
         actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus * 4)) \
-        actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
+        actor_rollout_ref.actor.ulysses_sequence_parallel_size=4 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=32768 \
         actor_rollout_ref.actor.use_kl_loss=False \
@@ -121,12 +121,12 @@ run_training() {
         actor_rollout_ref.rollout.name="vllm" \
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.85 \
-        actor_rollout_ref.rollout.temperature=1.1 \
-        actor_rollout_ref.rollout.n=16 \
+        actor_rollout_ref.rollout.temperature=1.0 \
+        actor_rollout_ref.rollout.n=8 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
-        algorithm.kl_ctrl.kl_coef=0.0 \
+        algorithm.kl_ctrl.kl_coef=0.000 \
         algorithm.lam=0.95 \
         trainer.logger='["console", "wandb"]' \
         trainer.project_name="${project_name}" \
@@ -135,7 +135,7 @@ run_training() {
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
         trainer.save_freq=10 \
-        trainer.test_freq=10 \
+        trainer.test_freq=5 \
         trainer.total_epochs=10000 \
         reward_model.reward_manager="custom" "$@"
     local training_status=$?

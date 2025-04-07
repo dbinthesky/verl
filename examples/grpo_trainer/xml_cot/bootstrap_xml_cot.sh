@@ -47,3 +47,4 @@ echo "Executing command:"
 echo "$dlcrun_cmd" | sed 's/\\\s\+/\n  /g'
 
 eval "$dlcrun_cmd"
+

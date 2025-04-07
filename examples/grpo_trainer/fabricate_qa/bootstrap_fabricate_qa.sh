@@ -2,7 +2,7 @@
 
 DLC_PATH="/cpfs01/shared/public/dlc"
 
-JOB_NAME="internlm3-8b_qwq_fabricate_qa_0330"
+JOB_NAME="internlm3-8b_qwq_fabricate_qa_gpqa"
 PYARGS="${@:3}"
 
 NUM_PROCESSES="${NUM_PROCESSES:-4}"
@@ -22,7 +22,8 @@ WORKER_GPU="${WORKER_GPU:-"8"}"
 WORKER_CPU="${WORKER_CPU:-"64"}"
 WORKER_MEMORY="${WORKER_MEMORY:-"1024"}"
 WORKER_IMAGE="pjlab-shanghai-acr-registry-vpc.cn-shanghai.cr.aliyuncs.com/pjlab-eflops/lishuaibin:lishuaibin-xpuyu-trainrlhf"
-RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/fabricate_qa/run_internlm3-8b_qwq_fabricate_qa_0330_late_stage_64gpu.sh"
+# RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/fabricate_qa/run_internlm3-8b_qwq_fabricate_qa_0330_late_stage_64gpu.sh"
+RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/fabricate_qa/run_qwen2_5-7b_qwq_fabricate_qa_0330_late_stage_gpqa.sh"
 
 
 dlcrun_cmd=$(

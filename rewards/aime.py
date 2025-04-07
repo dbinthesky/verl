@@ -404,16 +404,33 @@ qwq_longcot_compute_score = partial(
     compute_score, postprocess_solution_fn=qwq_longcot_postprocess_solution)
 
 if __name__ == "__main__":
-    batch_solution_str, batch_ground_truth = [], []
-    with open("/cpfs01/shared/llm_ddd/tongjian/verl/rewards/math_rewards.jsonl", "rt") as f:
+    # batch_solution_str, batch_ground_truth = [], []
+    # with open("/cpfs01/shared/llm_ddd/tongjian/verl/rewards/math_rewards.jsonl", "rt") as f:
+    #     for line in f:
+    #         example = json.loads(line)
+    #         batch_solution_str.append(example["solution_str"])
+    #         batch_ground_truth.append(
+    #             {"ground_truth": example["ground_truth"]})
+
+    # print(qwq_longcot_compute_score(
+    #     [None] * len(batch_ground_truth),
+    #     batch_solution_str=batch_solution_str,
+    #     batch_ground_truth=batch_ground_truth
+    # ))
+
+    import numpy as np
+    total, parsed = [], []
+    with open("/cpfs01/shared/llm_ddd/tongjian/ddm/autoeval/AIME/aime_2025_internlm3_dense8B_distill_qwq_hard_case_mixed_v0_0_1_aug_v1_filter_v0_0_1_702.jsonl", "rt") as f:
         for line in f:
             example = json.loads(line)
-            batch_solution_str.append(example["solution_str"])
-            batch_ground_truth.append(
-                {"ground_truth": example["ground_truth"]})
-
-    print(qwq_longcot_compute_score(
-        [None] * len(batch_ground_truth),
-        batch_solution_str=batch_solution_str,
-        batch_ground_truth=batch_ground_truth
-    ))
+            response = example["self_improvement"]["responses"][0]["response"]
+            conclusion = qwq_longcot_postprocess_solution(response)
+            if conclusion is None:
+                total.append(0.)
+            else:
+                score = compute_score_single(
+                    conclusion, example["self_improvement"]["answer"])
+                parsed.append(score)
+                total.append(score)
+    print(f'AIME 2025 TOTAL: {np.mean(total)} ({len(total)})')
+    print(f'AIME 2025 FORMAT: {np.mean(parsed)} ({len(parsed)})')
