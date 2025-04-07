@@ -3,6 +3,7 @@ import uuid
 import time
 import random
 import requests
+import numpy as np
 from tqdm import tqdm
 from abc import abstractmethod
 from typing import Dict, Any, Callable
@@ -12,7 +13,8 @@ from collections import namedtuple, defaultdict
 
 
 URLS = [
-    "http://10.130.1.205:5001"
+    "http://10.130.1.205:5001",
+    "http://10.130.1.44:5002"
 ]
 
 DEFAULT_PARSE_FAILURE_REWARD = -2.
@@ -475,6 +477,155 @@ _qwq_longcot_fabricate_qa_compute_score_valid = QwQLongCoTFabricateQAComputeScor
     split="valid")
 qwq_longcot_fabricate_qa_compute_score_train = _qwq_longcot_fabricate_qa_compute_score_train.compute_score
 qwq_longcot_fabricate_qa_compute_score_valid = _qwq_longcot_fabricate_qa_compute_score_valid.compute_score
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# Criteria Envolve Reward
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+class QwQLongCoTCriteriaEnvolveComputeScore(ComputeScoreBase):
+    def __init__(self, split="train"):
+        super().__init__(split=split)
+
+    def get_penalties(self) -> Dict[str, Callable]:
+        return {}
+
+    @classmethod
+    def postprocess_solution_fn(cls, solution_str: str):
+        solution_str = postprocess_solution(solution_str)
+        try:
+            thought = re.findall(r'<think>.*</think>',
+                                 solution_str, re.DOTALL)[0]
+        except Exception as err:
+            return None
+        try:
+            conclusion = solution_str.replace(thought, "")
+            if "# JUDGE CRITERIA" not in conclusion and "# 评价标准" not in conclusion:
+                return None
+            if "# JUDGE CRITERIA" in conclusion:
+                conclusion = conclusion[conclusion.index(
+                    "# JUDGE CRITERIA"):].strip()
+                return conclusion
+            elif "# 评价标准" in conclusion:
+                conclusion = conclusion[conclusion.index("# 评价标准"):].strip()
+                return conclusion
+            else:
+                return None
+        except Exception as err:
+            return None
+
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+
+        penalty = defaultdict(dict)
+        for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            for key, fn in self.get_penalties().items():
+                penalty[key][i] = fn(solution_str, ground_truth)
+
+        base_rewards = self.get_rm_rewards(
+            batch_data_sources, batch_solution_str, batch_ground_truth)
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            penalty_log_str = []
+            _reward = base_rewards[i]
+            for name, _penalty in penalty.items():
+                if i in _penalty:
+                    _reward += _penalty[i]
+                    penalty_log_str.append(f'{name} Penalty={_penalty[i]:.2f}')
+
+            final_results.append(_reward)
+
+            if self.split == "valid":
+                print(
+                    f"--------------------------------[VALID]--------------------------------")
+                print(
+                    f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                print(f'Reward={_reward:.3f}\n')
+            elif self.split == "train" and random.random() < 0.05:
+                print(
+                    f"--------------------------------[TRAIN]--------------------------------")
+                print(
+                    f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                print(
+                    f'Reward={_reward:.3f}\n')
+        return final_results
+
+    def log_ground_truth(self, ground_truth):
+        if "reference" in ground_truth:
+            return repr(ground_truth["reference"])
+        else:
+            return repr("[no reference]")
+
+    def log_solution(self, solution):
+        norm = self.postprocess_solution_fn(solution)
+        if norm is None:
+            return repr(self.clip_string(solution))
+        return repr(self.clip_string(norm))
+
+    def get_rm_rewards(self,
+                       batch_data_sources,
+                       batch_solution_str,
+                       batch_ground_truth):
+
+        new_batch_solution_str, new_batch_ground_truth = [], []
+        for gt, sol in zip(batch_ground_truth, batch_solution_str):
+            prompt, chosen, rejected = gt["prompt"], gt["chosen"], gt["rejected"]
+
+            criteria = self.postprocess_solution_fn(sol)
+
+            judge_prompt = f'{prompt}\n\n\n\n{criteria}'
+
+            # Chosen
+            new_batch_solution_str.append(chosen)
+            new_batch_ground_truth.append({"ground_truth": judge_prompt})
+
+            # Rejected
+            new_batch_solution_str.append(rejected)
+            new_batch_ground_truth.append({"ground_truth": judge_prompt})
+
+        def postprocess_solution_fn(x): return x
+
+        rewards = compute_rm_score(
+            batch_solution_str=new_batch_solution_str,
+            batch_ground_truth=new_batch_ground_truth,
+            postprocess_solution_fn=postprocess_solution_fn,
+            parse_result_failure_score=self.parse_result_failure_score
+        )
+
+        def split_array(arr):
+            odd = []
+            even = []
+            for num, elem in enumerate(arr):
+                if num % 2 == 0:
+                    even.append(elem)
+                else:
+                    odd.append(elem)
+            return odd, even
+
+        rejected_scores, chosen_scores = split_array(rewards)
+        acc = []
+        for c, r in zip(chosen_scores, rejected_scores):
+            if c > r:
+                acc.append(1.0)
+            else:
+                acc.append(.0)
+
+        return acc
+
+
+_qwq_longcot_criteria_envolve_compute_score_train = QwQLongCoTCriteriaEnvolveComputeScore(
+    split="train")
+_qwq_longcot_criteria_envolve_compute_score_valid = QwQLongCoTCriteriaEnvolveComputeScore(
+    split="valid")
+qwq_longcot_criteria_envolve_compute_score_train = _qwq_longcot_criteria_envolve_compute_score_train.compute_score
+qwq_longcot_criteria_envolve_compute_score_valid = _qwq_longcot_criteria_envolve_compute_score_valid.compute_score
 
 if __name__ == "__main__":
     pass

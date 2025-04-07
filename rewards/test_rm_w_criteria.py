@@ -14,6 +14,7 @@ from rm_w_criteria import (
     FabricateQATooLongPenalty,
     QwQLongCoTComputeScore,
     QwQLongCoTFabricateQAComputeScore,
+    QwQLongCoTCriteriaEnvolveComputeScore,
     qwq_longcot_fabricate_qa_compute_score_train
 )
 
@@ -188,8 +189,17 @@ class TestRMReward(unittest.TestCase):
         )
 
     def test_qwq_long_cot_criteria_envolve_compute_score(self):
+        task = QwQLongCoTCriteriaEnvolveComputeScore()
         batch_solution_str, batch_ground_truth = load_qwq_criteria_envolve_data(
             num=100)
+        task.compute_score(
+            [None] * len(batch_solution_str),
+            batch_solution_str,
+            batch_ground_truth
+        )
+        # for _ in batch_solution_str:
+        #     print(task.postprocess_solution_fn(_))
+        #     print("="*80)
 
 
 if __name__ == '__main__':
