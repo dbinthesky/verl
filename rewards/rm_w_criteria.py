@@ -1,6 +1,7 @@
 import re
 import uuid
 import time
+import math
 import random
 import requests
 import numpy as np
@@ -487,8 +488,8 @@ qwq_longcot_fabricate_qa_compute_score_valid = _qwq_longcot_fabricate_qa_compute
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 class QwQLongCoTCriteriaEnvolveComputeScore(ComputeScoreBase):
-    def __init__(self, split="train"):
-        super().__init__(split=split)
+    def __init__(self, split="train", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
+        super().__init__(split=split, parse_result_failure_score=parse_result_failure_score)
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {}
@@ -604,6 +605,7 @@ class QwQLongCoTCriteriaEnvolveComputeScore(ComputeScoreBase):
             postprocess_solution_fn=postprocess_solution_fn,
             parse_result_failure_score=self.parse_result_failure_score
         )
+
         def split_array(arr):
             odd = []
             even = []
@@ -620,18 +622,20 @@ class QwQLongCoTCriteriaEnvolveComputeScore(ComputeScoreBase):
             if c == self.parse_result_failure_score or r == self.parse_result_failure_score:
                 acc.append(self.parse_result_failure_score)
             else:
-                if c > r:
-                    acc.append(1.0)
-                else:
-                    acc.append(.0)
+                # Bradley–Terry
+                acc.append(math.exp(c)/(math.exp(c)+math.exp(r)))
+                # if c > r:
+                #     acc.append(1.0)
+                # else:
+                #     acc.append(.0)
 
         return acc
 
 
 _qwq_longcot_criteria_envolve_compute_score_train = QwQLongCoTCriteriaEnvolveComputeScore(
-    split="train")
+    split="train", parse_result_failure_score=0.)
 _qwq_longcot_criteria_envolve_compute_score_valid = QwQLongCoTCriteriaEnvolveComputeScore(
-    split="valid")
+    split="valid", parse_result_failure_score=0.)
 qwq_longcot_criteria_envolve_compute_score_train = _qwq_longcot_criteria_envolve_compute_score_train.compute_score
 qwq_longcot_criteria_envolve_compute_score_valid = _qwq_longcot_criteria_envolve_compute_score_valid.compute_score
 
