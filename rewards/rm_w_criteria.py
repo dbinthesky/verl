@@ -549,7 +549,7 @@ class QwQLongCoTCriteriaEnvolveComputeScore(ComputeScoreBase):
                 print(
                     f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
                 print(f'Reward={_reward:.3f}\n')
-            elif self.split == "train" and random.random() < 0.05:
+            elif self.split == "train" and random.random() < 0.01:
                 print(
                     f"--------------------------------[TRAIN]--------------------------------")
                 print(
@@ -604,8 +604,6 @@ class QwQLongCoTCriteriaEnvolveComputeScore(ComputeScoreBase):
             postprocess_solution_fn=postprocess_solution_fn,
             parse_result_failure_score=self.parse_result_failure_score
         )
-        print(rewards)
-
         def split_array(arr):
             odd = []
             even = []

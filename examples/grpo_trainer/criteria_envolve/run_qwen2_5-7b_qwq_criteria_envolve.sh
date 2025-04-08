@@ -50,8 +50,9 @@ setup_path() {
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-7B-fabricate_qa_v1"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/reward_data_train_250407"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/reward_data_test_250407.parquet"
+    # BASE_MODEL_PATH="/cpfs01/shared/public/opencompass/models/hf_hub/models--Qwen--Qwen2.5-7B-Instruct/snapshots/bb46c15ee4bb56c5b63245ef50fd7637234d6f75"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/discipline_aio_reward_data_train.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/discipline_aio_reward_data_test.parquet"
 
     experiment_name="qwen2_5-7b_qwq_criteria_envolve-dlc-${YYMMDD}-${HHMMSS}"
     project_name="verl_grpo_qwq_criteria_envolve"
@@ -95,7 +96,7 @@ run_training() {
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=256 \
+        data.train_batch_size=64 \
         data.max_prompt_length=2048 \
         data.max_response_length=30720 \
         data.filter_overlong_prompts=True \
@@ -122,7 +123,7 @@ run_training() {
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.85 \
         actor_rollout_ref.rollout.temperature=1.0 \
-        actor_rollout_ref.rollout.n=4 \
+        actor_rollout_ref.rollout.n=8 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
