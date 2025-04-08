@@ -503,18 +503,10 @@ class QwQLongCoTCriteriaEnvolveComputeScore(ComputeScoreBase):
         except Exception as err:
             return None
         try:
-            conclusion = solution_str.replace(thought, "")
-            if "# JUDGE CRITERIA" not in conclusion and "# 评价标准" not in conclusion:
+            conclusion = solution_str.replace(thought, "").strip()
+            if ("# JUDGE CRITERIA" not in conclusion) and ("# 评价标准" not in conclusion):
                 return None
-            if "# JUDGE CRITERIA" in conclusion:
-                conclusion = conclusion[conclusion.index(
-                    "# JUDGE CRITERIA"):].strip()
-                return conclusion
-            elif "# 评价标准" in conclusion:
-                conclusion = conclusion[conclusion.index("# 评价标准"):].strip()
-                return conclusion
-            else:
-                return None
+            return conclusion
         except Exception as err:
             return None
 

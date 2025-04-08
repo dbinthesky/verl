@@ -49,8 +49,7 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-7B-fabricate_qa_v1"
-    # BASE_MODEL_PATH="/cpfs01/shared/public/opencompass/models/hf_hub/models--Qwen--Qwen2.5-7B-Instruct/snapshots/bb46c15ee4bb56c5b63245ef50fd7637234d6f75"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-7B-criteria_envolve_if_enhance"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/discipline_aio_reward_data_train.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/discipline_aio_reward_data_test.parquet"
 
