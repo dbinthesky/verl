@@ -96,7 +96,7 @@ run_training() {
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=64 \
+        data.train_batch_size=128 \
         data.max_prompt_length=2048 \
         data.max_response_length=30720 \
         data.filter_overlong_prompts=True \
@@ -123,7 +123,7 @@ run_training() {
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.85 \
         actor_rollout_ref.rollout.temperature=1.0 \
-        actor_rollout_ref.rollout.n=8 \
+        actor_rollout_ref.rollout.n=4 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \

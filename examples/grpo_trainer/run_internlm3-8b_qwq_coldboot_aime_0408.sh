@@ -49,9 +49,9 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_distill_qwq_aime_gpqa_aug_v1_250405_4371_open_source_hf/"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_distill_qwq_aime_gpqa_aug_v1_250405_4371_open_source_hf"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/hard_case_mixed/hard_case_mixed_v0_0_2_train_plen512.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/eval/GPQA_diamond_0326.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/eval/aime_2024_0331.parquet"
 
     experiment_name="internlm3-8b_distill_qwq-dlc-${YYMMDD}-${HHMMSS}"
     project_name="verl_grpo_qwq_coldboot"
@@ -90,7 +90,7 @@ run_training() {
     python3 -m verl.trainer.main_ppo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/rm_w_criteria.py" \
         custom_reward_function.name=qwq_longcot_compute_score_train \
-        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/gpqa.py" \
+        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/aime.py" \
         +custom_valid_reward_function.name=qwq_longcot_compute_score \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \

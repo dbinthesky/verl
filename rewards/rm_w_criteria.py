@@ -622,13 +622,14 @@ class QwQLongCoTCriteriaEnvolveComputeScore(ComputeScoreBase):
             if c == self.parse_result_failure_score or r == self.parse_result_failure_score:
                 acc.append(self.parse_result_failure_score)
             else:
-                # Bradley–Terry
-                acc.append(math.exp(c)/(math.exp(c)+math.exp(r)))
-                # if c > r:
-                #     acc.append(1.0)
-                # else:
-                #     acc.append(.0)
-
+                if self.split == "train":
+                    # Bradley–Terry
+                    acc.append(math.exp(c)/(math.exp(c)+math.exp(r)))
+                else:
+                    if c > r:
+                        acc.append(1.0)
+                    else:
+                        acc.append(.0)
         return acc
 
 
