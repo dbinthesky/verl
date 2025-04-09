@@ -49,7 +49,8 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-7B-criteria_envolve_if_enhance"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/qwen2_5-7b_qwq_criteria_envolve-dlc-2025-04-08-07-32-02_grpo_step_40"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-7B-criteria_envolve_if_enhance"
     # BASE_MODEL_PATH="/cpfs01/shared/public/opencompass/models/hf_hub/models--Qwen--Qwen2.5-7B-Instruct/snapshots/bb46c15ee4bb56c5b63245ef50fd7637234d6f75"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/reward_data_train_250407"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/reward_data_test_250407.parquet"
