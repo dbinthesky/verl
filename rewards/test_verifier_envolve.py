@@ -63,6 +63,20 @@ def mock_rollout_and_save():
             for example, (prompt, response), gt in zip(examples, results, batch_ground_truth):
                 if response.startswith("think>"):
                     response = f'<{response}'
+                if "<answer_constraint>" not in response:
+                    response = response.replace(
+                        "</answer_constraint>", "[XXXYYYZZZAAABBBCCC]")
+                    response = response.replace(
+                        "answer_constraint>", "<answer_constraint>")
+                    response = response.replace(
+                        "[XXXYYYZZZAAABBBCCC]", "</answer_constraint>")
+                if "<answer_extraction>" not in response:
+                    response = response.replace(
+                        "</answer_extraction>", "[XXXYYYZZZAAABBBCCC]")
+                    response = response.replace(
+                        "answer_extraction>", "<answer_extraction>")
+                    response = response.replace(
+                        "[XXXYYYZZZAAABBBCCC]", "</answer_extraction>")
                 output = {
                     "solution_str": response,
                     "ground_truth": gt
@@ -80,13 +94,14 @@ class TestVerifierEnvolve(unittest.TestCase):
             batch_solution_str.append(example["solution_str"])
             del example["solution_str"]
             batch_ground_truth.append(example)
+        compute_score([None]*len(batch_solution_str),
+                      batch_solution_str, batch_ground_truth)
 
 
 if __name__ == '__main__':
     # mock_rollout_and_save()
-
-    data = load_mock_data()
-    # unittest.main()
+    # data = load_mock_data()
+    unittest.main()
 
     # class TestAgent(unittest.TestCase):
     #         async def main():

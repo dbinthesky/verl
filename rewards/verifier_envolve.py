@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import time
 import random
@@ -102,9 +103,37 @@ class Agent:
                 return messages, None
 
 
-def compute_score(self,
-                  batch_data_sources,
+def postprocess_solution(solution_str):
+    if "<|im_end|>" in solution_str:
+        return solution_str[:solution_str.index("<|im_end|>")]
+    return solution_str
+
+
+def coarse_format_parse(solution_str):
+    solution_str = postprocess_solution(solution_str)
+    try:
+        thought = re.findall(r'<think>(.*)</think>',
+                             solution_str, re.DOTALL)[0].strip()
+    except Exception as err:
+        return None
+
+    try:
+        answer_constraint = re.findall(r'<answer_constraint>(.*)</answer_constraint>',
+                                       solution_str, re.DOTALL)[0].strip()
+    except Exception as err:
+        return None
+
+    try:
+        answer_extraction = re.findall(r'<answer_extraction>(.*)</answer_extraction>',
+                                       solution_str, re.DOTALL)[0].strip()
+    except Exception as err:
+        return None
+    return thought, answer_constraint, answer_extraction
+
+
+def compute_score(batch_data_sources,
                   batch_solution_str,
                   batch_ground_truth,
                   ):
-    pass
+    for gt, solution_str in zip(batch_ground_truth, batch_solution_str):
+        coarse_format_parse(solution_str)
