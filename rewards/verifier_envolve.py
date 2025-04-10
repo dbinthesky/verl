@@ -293,10 +293,10 @@ def compute_answer_constraint_format_score(
     return base_rewards
 
 
-async def compute_score(batch_data_sources,
-                        batch_solution_str,
-                        batch_ground_truth,
-                        ):
+async def _compute_score(batch_data_sources,
+                         batch_solution_str,
+                         batch_ground_truth,
+                         ):
     base_rewards = [0.0] * len(batch_solution_str)
     parsed_results = []
 
@@ -315,7 +315,16 @@ async def compute_score(batch_data_sources,
     final_rewards = []
     assert len(base_rewards) == len(code_format_rewards)
     assert len(extract_answer_rewards) == len(code_format_rewards)
-    for x, y, z in zip(base_rewards, extract_answer_rewards, code_format_rewards):
-        final_rewards.append(x+y+z)
+    for w, x, y, z in zip(base_rewards, constraint_format_rewards, extract_answer_rewards, code_format_rewards):
+        final_rewards.append(w+x+y+z)
     assert len(final_rewards) == len(batch_solution_str)
     return final_rewards
+
+
+def compute_score(batch_data_sources,
+                  batch_solution_str,
+                  batch_ground_truth,
+                  ):
+    async def main():
+        return await _compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+    return aio.run(main())

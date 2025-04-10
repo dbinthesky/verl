@@ -97,10 +97,12 @@ class TestVerifierEnvolve(unittest.TestCase):
             batch_ground_truth.append(example)
             batch_ground_truth.append(example)
 
-        async def main():
-            await compute_score([None]*len(batch_solution_str),
-                                batch_solution_str, batch_ground_truth)
-        aio.run(main())
+        # async def main():
+        #     await compute_score([None]*len(batch_solution_str),
+        #                         batch_solution_str, batch_ground_truth)
+        # aio.run(main())
+        print(compute_score([None]*len(batch_solution_str),
+                                batch_solution_str, batch_ground_truth))
 
 
 if __name__ == '__main__':
