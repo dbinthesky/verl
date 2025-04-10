@@ -191,7 +191,8 @@ class TestRMReward(unittest.TestCase):
         )
 
     def test_qwq_long_cot_criteria_envolve_compute_score(self):
-        task = QwQLongCoTCriteriaEnvolveComputeScore(parse_result_failure_score=0.)
+        task = QwQLongCoTCriteriaEnvolveComputeScore(
+            parse_result_failure_score=0.)
         batch_solution_str, batch_ground_truth = load_qwq_criteria_envolve_data(
             num=100)
         print(task.compute_score(
