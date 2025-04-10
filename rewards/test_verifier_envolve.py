@@ -92,10 +92,15 @@ class TestVerifierEnvolve(unittest.TestCase):
         batch_solution_str, batch_ground_truth = [], []
         for example in data:
             batch_solution_str.append(example["solution_str"])
+            batch_solution_str.append(example["solution_str"])
             del example["solution_str"]
             batch_ground_truth.append(example)
-        compute_score([None]*len(batch_solution_str),
-                      batch_solution_str, batch_ground_truth)
+            batch_ground_truth.append(example)
+
+        async def main():
+            await compute_score([None]*len(batch_solution_str),
+                                batch_solution_str, batch_ground_truth)
+        aio.run(main())
 
 
 if __name__ == '__main__':

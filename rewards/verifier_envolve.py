@@ -5,6 +5,9 @@ import time
 import random
 import asyncio
 import tqdm.asyncio
+import asyncio as aio
+from collections import defaultdict
+
 
 from time import sleep
 from typing import Any
@@ -113,6 +116,18 @@ class Agent:
                 return messages, None
 
 
+agent = Agent(**{
+    "model": "qwen25_7B_instruct",
+    "base_url": "http://10.130.247.138:8000/v1",
+    "api_keys": "EMPTY",
+    "request_kwargs": {
+        "temperature": 0.7,
+        "timeout": 30,
+        "max_tokens": 2048
+    },
+})
+
+
 def postprocess_solution(solution_str):
     if "<|im_end|>" in solution_str:
         return solution_str[:solution_str.index("<|im_end|>")]
@@ -141,6 +156,123 @@ def coarse_format_parse(solution_str):
     return thought, answer_constraint, answer_extraction
 
 
+async def compute_code_format_score(
+    batch_parsed_results, batch_ground_truth, verify_times=2
+):
+    base_rewards = [0.0] * len(batch_ground_truth)
+    normed_codes = []
+    for i, (parsed, gt) in enumerate(zip(batch_parsed_results, batch_ground_truth)):
+        if parsed is None:
+            normed_codes.append(None)
+        else:
+            _, _, code = parsed
+            code = code.strip()
+            if code.startswith("```python\ndef extract_answer(response: str) -> str:") and code.endswith("```"):
+                base_rewards[i] += 0.1
+                normed_codes.append(code[len("```python"):-len("```")].strip())
+            else:
+                normed_codes.append(None)
+                continue
+
+    valid_indices = []
+    prompt_mapper = defaultdict(list)
+    for i, code in enumerate(normed_codes):
+        if code is not None:
+            valid_indices.append(i)
+            prompt_mapper[batch_ground_truth[i]
+                          ["ground_truth"]["prompt"]].append(i)
+    max_concurrent_requests = 32
+
+    prompts = list(prompt_mapper.keys()) * verify_times
+    results = await agent.run(prompts, max_concurrent_requests, desc="[Code Runnable]", postprocess_fns=[lambda x: x]*len(prompts))
+
+    for prompt, response in results:
+        if response is not None:
+            indices = prompt_mapper[prompt]
+            for index in indices:
+                code = normed_codes[index]
+                try:
+                    exec_code = f'{code}\n\nresponse = {repr(response)}\n_ANSWER = extract_answer(response)'
+                    exec(exec_code)
+                except Exception as err:
+                    continue
+                base_rewards[index] += 0.1
+
+    return base_rewards
+
+
+REFINE_TEMPLATE = """
+# QUESTION
+{question}
+
+# RESPONSE
+{response}
+
+Rewrite the above answer to conform to the following instruction requirements. The rewrite should only meet the format requirements and do not change the main content of the original answer.
+
+# INSRTUCT REQUIREMENT
+{constraint}
+
+# REVISED RESPONSE
+"""
+
+
+async def compute_extract_answer_score(
+    batch_parsed_results, batch_ground_truth
+):
+    base_rewards = [0.0] * len(batch_ground_truth)
+    normed_codes = []
+    constraints = []
+    for i, (parsed, gt) in enumerate(zip(batch_parsed_results, batch_ground_truth)):
+        if parsed is None:
+            normed_codes.append(None)
+            constraints.append(None)
+        else:
+            _, constraint, code = parsed
+            code = code.strip()
+            constraints.append(constraint)
+            if code.startswith("```python\ndef extract_answer(response: str) -> str:") and code.endswith("```"):
+                normed_codes.append(code[len("```python"):-len("```")].strip())
+            else:
+                normed_codes.append(None)
+                continue
+
+    valid_indices = []
+    prompt_mapper = defaultdict(list)
+
+    for i, code in enumerate(normed_codes):
+        if code is not None:
+            valid_indices.append(i)
+            _prompt = REFINE_TEMPLATE.format(
+                question=batch_ground_truth[i]["ground_truth"]["prompt"],
+                response=batch_ground_truth[i]["ground_truth"]["llm_output"],
+                constraint=constraints[i]
+            ).strip()
+            prompt_mapper[_prompt].append(i)
+
+    max_concurrent_requests = 16
+    prompts = list(prompt_mapper.keys())
+    results = await agent.run(prompts, max_concurrent_requests, desc="[Refine Original Response]", postprocess_fns=[lambda x: x]*len(prompts))
+    for prompt, response in results:
+        if response is not None:
+            indices = prompt_mapper[prompt]
+            for index in indices:
+                code = normed_codes[index]
+
+                gt = batch_ground_truth[index]["ground_truth"]["gold_label"].strip(
+                )
+
+                try:
+                    # exec_code = f'{code}\n\nresponse = {repr(response)}\nprint(extract_answer(response))'
+                    exec_code = f'{code}\n\nresponse = {repr(response)}\nassert extract_answer(response).strip() == {repr(gt)}'
+                    # exec_code = f'{code}\n\nresponse = {repr(response)}\nprint(extract_answer(response).strip() == {repr(gt)})'
+                    exec(exec_code)
+                except Exception as err:
+                    continue
+                base_rewards[index] += 0.5
+    return base_rewards
+
+
 def compute_answer_constraint_format_score(
     batch_parsed_results, batch_ground_truth
 ):
@@ -161,10 +293,10 @@ def compute_answer_constraint_format_score(
     return base_rewards
 
 
-def compute_score(batch_data_sources,
-                  batch_solution_str,
-                  batch_ground_truth,
-                  ):
+async def compute_score(batch_data_sources,
+                        batch_solution_str,
+                        batch_ground_truth,
+                        ):
     base_rewards = [0.0] * len(batch_solution_str)
     parsed_results = []
 
@@ -177,5 +309,13 @@ def compute_score(batch_data_sources,
     constraint_format_rewards = compute_answer_constraint_format_score(
         parsed_results, batch_ground_truth)
 
-    print(base_rewards)
-    print(constraint_format_rewards)
+    code_format_rewards = await compute_code_format_score(parsed_results, batch_ground_truth)
+    extract_answer_rewards = await compute_extract_answer_score(parsed_results, batch_ground_truth)
+
+    final_rewards = []
+    assert len(base_rewards) == len(code_format_rewards)
+    assert len(extract_answer_rewards) == len(code_format_rewards)
+    for x, y, z in zip(base_rewards, extract_answer_rewards, code_format_rewards):
+        final_rewards.append(x+y+z)
+    assert len(final_rewards) == len(batch_solution_str)
+    return final_rewards
