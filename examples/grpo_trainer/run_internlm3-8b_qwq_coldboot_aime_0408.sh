@@ -49,12 +49,12 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_distill_qwq_aime_gpqa_aug_v1_250405_4371_open_source_hf"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_distill_qwq_aime_gpqa_aug_v1_250405_10929_open_source_hf"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/hard_case_mixed/hard_case_mixed_v0_0_2_train_plen512.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/eval/aime_2024_0331.parquet"
 
     experiment_name="internlm3-8b_distill_qwq-dlc-${YYMMDD}-${HHMMSS}"
-    project_name="verl_grpo_qwq_coldboot"
+    project_name="verl_grpo_qwq_coldboot_aime"
 
     OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/${experiment_name}/${YYMMDD}/${HHMMSS}"
     mkdir -p "${OUTPUT_DIR}"
@@ -106,7 +106,7 @@ run_training() {
         actor_rollout_ref.actor.shuffle=True \
         actor_rollout_ref.actor.ppo_mini_batch_size=128 \
         actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus * 4)) \
-        actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
+        actor_rollout_ref.actor.ulysses_sequence_parallel_size=4 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=32768 \
         actor_rollout_ref.actor.use_kl_loss=False \
