@@ -17,6 +17,16 @@ RATE_LIMIT_RETRY_ATTEMPTS = 10
 WORKFLOW_AGENT_LOGFILE = os.getenv("WORKFLOW_AGENT_LOGFILE", None)
 
 
+def contain_chinese(string):
+    try:
+        pattern = re.compile(r'[\u4e00-\u9fa5]')
+        if re.search(pattern, string):
+            return True
+        return False
+    except Exception as err:
+        return False
+
+
 class APIError(Exception):
     pass
 
@@ -131,9 +141,41 @@ def coarse_format_parse(solution_str):
     return thought, answer_constraint, answer_extraction
 
 
+def compute_answer_constraint_format_score(
+    batch_parsed_results, batch_ground_truth
+):
+    base_rewards = [0.0] * len(batch_ground_truth)
+    for i, (parsed, gt) in enumerate(zip(batch_parsed_results, batch_ground_truth)):
+        if parsed is None:
+            pass
+        else:
+            _, constraint, _ = parsed
+            if contain_chinese(gt["ground_truth"]["prompt"]):  # zh
+                if contain_chinese(constraint):
+                    base_rewards[i] += 0.1
+            else:  # en
+                if contain_chinese(constraint):
+                    pass
+                else:
+                    base_rewards[i] += 0.1
+    return base_rewards
+
+
 def compute_score(batch_data_sources,
                   batch_solution_str,
                   batch_ground_truth,
                   ):
-    for gt, solution_str in zip(batch_ground_truth, batch_solution_str):
-        coarse_format_parse(solution_str)
+    base_rewards = [0.0] * len(batch_solution_str)
+    parsed_results = []
+
+    for i, (gt, solution_str) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+        parsed = coarse_format_parse(solution_str)
+        if parsed is not None:
+            base_rewards[i] += 0.1
+        parsed_results.append(parsed)
+
+    constraint_format_rewards = compute_answer_constraint_format_score(
+        parsed_results, batch_ground_truth)
+
+    print(base_rewards)
+    print(constraint_format_rewards)
