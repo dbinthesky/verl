@@ -100,3 +100,11 @@ class Agent:
                 return messages, result
             except Exception as err:
                 return messages, None
+
+
+def compute_score(self,
+                  batch_data_sources,
+                  batch_solution_str,
+                  batch_ground_truth,
+                  ):
+    pass

@@ -9,7 +9,8 @@ import string
 import numpy as np
 import pandas as pd
 from verifier_envolve import (
-    Agent
+    Agent,
+    compute_score
 )
 
 
@@ -71,9 +72,16 @@ def mock_rollout_and_save():
     aio.run(main())
 
 
-# class TestRMReward(unittest.TestCase):
-#     def test_grid_search_rm_threshold(self):
-#         pass
+class TestVerifierEnvolve(unittest.TestCase):
+    def test_compute_score(self):
+        data = load_mock_data()
+        batch_solution_str, batch_ground_truth = [], []
+        for example in data:
+            batch_solution_str.append(example["solution_str"])
+            del example["solution_str"]
+            batch_ground_truth.append(example)
+
+
 if __name__ == '__main__':
     # mock_rollout_and_save()
 
