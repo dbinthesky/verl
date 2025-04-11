@@ -6,6 +6,7 @@ import random
 import asyncio
 import tqdm.asyncio
 import asyncio as aio
+from functools import partial
 from collections import defaultdict
 
 
@@ -179,8 +180,7 @@ async def compute_code_format_score(
     for i, code in enumerate(normed_codes):
         if code is not None:
             valid_indices.append(i)
-            prompt_mapper[batch_ground_truth[i]
-                          ["ground_truth"]["prompt"]].append(i)
+            prompt_mapper[batch_ground_truth[i]["prompt"]].append(i)
     max_concurrent_requests = 32
 
     prompts = list(prompt_mapper.keys()) * verify_times
@@ -202,23 +202,24 @@ async def compute_code_format_score(
 
 
 REFINE_TEMPLATE = """
+Rewrite the above answer to conform to the following instruction requirements. The rewrite should only meet the format requirements and do not change the main content of the original answer.
+
 # QUESTION
 {question}
 
 # RESPONSE
 {response}
 
-Rewrite the above answer to conform to the following instruction requirements. The rewrite should only meet the format requirements and do not change the main content of the original answer.
+# QUESTION
+{question}
+[Format Requirement] {constraint}
 
-# INSRTUCT REQUIREMENT
-{constraint}
-
-# REVISED RESPONSE
+# RESPONSE
 """
 
 
 async def compute_extract_answer_score(
-    batch_parsed_results, batch_ground_truth
+    batch_parsed_results, batch_ground_truth, split
 ):
     base_rewards = [0.0] * len(batch_ground_truth)
     normed_codes = []
@@ -244,8 +245,8 @@ async def compute_extract_answer_score(
         if code is not None:
             valid_indices.append(i)
             _prompt = REFINE_TEMPLATE.format(
-                question=batch_ground_truth[i]["ground_truth"]["prompt"],
-                response=batch_ground_truth[i]["ground_truth"]["llm_output"],
+                question=batch_ground_truth[i]["prompt"],
+                response=batch_ground_truth[i]["llm_output"],
                 constraint=constraints[i]
             ).strip()
             prompt_mapper[_prompt].append(i)
@@ -259,17 +260,33 @@ async def compute_extract_answer_score(
             for index in indices:
                 code = normed_codes[index]
 
-                gt = batch_ground_truth[index]["ground_truth"]["gold_label"].strip(
+                gt = batch_ground_truth[index]["gold_label"].strip(
                 )
 
+                success = False
                 try:
                     # exec_code = f'{code}\n\nresponse = {repr(response)}\nprint(extract_answer(response))'
                     exec_code = f'{code}\n\nresponse = {repr(response)}\nassert extract_answer(response).strip() == {repr(gt)}'
                     # exec_code = f'{code}\n\nresponse = {repr(response)}\nprint(extract_answer(response).strip() == {repr(gt)})'
                     exec(exec_code)
+                    success = True
                 except Exception as err:
-                    continue
-                base_rewards[index] += 0.5
+                    pass
+                if success:
+                    base_rewards[index] += 0.5
+                if split == "valid" and random.random() < 1.0:
+                    print(
+                        f"--------------------------------[VALID]--------------------------------")
+                    print(
+                        f'【Question】`{repr(batch_ground_truth[index]["prompt"])}`')
+                    print(
+                        f'【Response】`{repr(batch_ground_truth[index]["llm_output"])}`')
+                    print(
+                        f"【Solution Constraint】 `{repr(constraints[index])}`")
+                    print(
+                        f'【Modified Response】`{repr(response)}`')
+                    print(f"【Solution Code】 `{repr(normed_codes[index])}`")
+                    print(f'Reward={1.0 if success else 0.}')
     return base_rewards
 
 
@@ -282,7 +299,7 @@ def compute_answer_constraint_format_score(
             pass
         else:
             _, constraint, _ = parsed
-            if contain_chinese(gt["ground_truth"]["prompt"]):  # zh
+            if contain_chinese(gt["prompt"]):  # zh
                 if contain_chinese(constraint):
                     base_rewards[i] += 0.1
             else:  # en
@@ -296,6 +313,7 @@ def compute_answer_constraint_format_score(
 async def _compute_score(batch_data_sources,
                          batch_solution_str,
                          batch_ground_truth,
+                         split
                          ):
     base_rewards = [0.0] * len(batch_solution_str)
     parsed_results = []
@@ -310,7 +328,7 @@ async def _compute_score(batch_data_sources,
         parsed_results, batch_ground_truth)
 
     code_format_rewards = await compute_code_format_score(parsed_results, batch_ground_truth)
-    extract_answer_rewards = await compute_extract_answer_score(parsed_results, batch_ground_truth)
+    extract_answer_rewards = await compute_extract_answer_score(parsed_results, batch_ground_truth, split)
 
     final_rewards = []
     assert len(base_rewards) == len(code_format_rewards)
@@ -318,13 +336,19 @@ async def _compute_score(batch_data_sources,
     for w, x, y, z in zip(base_rewards, constraint_format_rewards, extract_answer_rewards, code_format_rewards):
         final_rewards.append(w+x+y+z)
     assert len(final_rewards) == len(batch_solution_str)
+
     return final_rewards
 
 
 def compute_score(batch_data_sources,
                   batch_solution_str,
                   batch_ground_truth,
+                  split="train"
                   ):
     async def main():
-        return await _compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+        return await _compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, split)
     return aio.run(main())
+
+
+compute_score_train = partial(compute_score, split="train")
+compute_score_valid = partial(compute_score, split="valid")

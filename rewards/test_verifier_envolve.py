@@ -10,7 +10,8 @@ import numpy as np
 import pandas as pd
 from verifier_envolve import (
     Agent,
-    compute_score
+    compute_score,
+    compute_score_valid
 )
 
 
@@ -79,7 +80,6 @@ def mock_rollout_and_save():
                         "[XXXYYYZZZAAABBBCCC]", "</answer_extraction>")
                 output = {
                     "solution_str": response,
-                    "ground_truth": gt
                 }
                 f.write(f'{json.dumps(output, ensure_ascii=False)}\n')
 
@@ -88,27 +88,26 @@ def mock_rollout_and_save():
 
 class TestVerifierEnvolve(unittest.TestCase):
     def test_compute_score(self):
+        # load_test_data()
+
         data = load_mock_data()
         batch_solution_str, batch_ground_truth = [], []
         for example in data:
             batch_solution_str.append(example["solution_str"])
             batch_solution_str.append(example["solution_str"])
             del example["solution_str"]
-            batch_ground_truth.append(example)
-            batch_ground_truth.append(example)
+            batch_ground_truth.append(example["ground_truth"])
+            batch_ground_truth.append(example["ground_truth"])
 
-        # async def main():
-        #     await compute_score([None]*len(batch_solution_str),
-        #                         batch_solution_str, batch_ground_truth)
-        # aio.run(main())
-        print(compute_score([None]*len(batch_solution_str),
+        print(compute_score_valid([None]*len(batch_solution_str),
                                 batch_solution_str, batch_ground_truth))
 
 
 if __name__ == '__main__':
+    load_test_data()
     # mock_rollout_and_save()
     # data = load_mock_data()
-    unittest.main()
+    # unittest.main()
 
     # class TestAgent(unittest.TestCase):
     #         async def main():
