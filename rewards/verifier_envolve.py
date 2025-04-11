@@ -7,6 +7,7 @@ import asyncio
 import tqdm.asyncio
 import asyncio as aio
 from functools import partial
+from typing import Sequence
 from collections import defaultdict
 
 
@@ -19,6 +20,56 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 RATE_LIMIT_RETRY_DELAY = 60
 RATE_LIMIT_RETRY_ATTEMPTS = 10
 WORKFLOW_AGENT_LOGFILE = os.getenv("WORKFLOW_AGENT_LOGFILE", None)
+
+
+def parse_json(text: str, best_effort: str | None = None) -> dict | Sequence[dict]:
+    raw = text[:]
+
+    def json_recovery(s):
+        bg = s.index("{")
+        ed = len(s) - 1 - s[::-1].index("}")
+        s = s[bg:ed+1]
+        if s.count("}") < s.count("{"):
+            return s + "}"
+        return s
+
+    try:
+        if "```json" in text:
+            contents = re.findall(r'```json(.*?)```', raw, re.DOTALL)
+            contents = [json_recovery(_.strip()) for _ in contents]
+
+            results = []
+            for content in contents:
+                try:
+                    result = json.loads(
+                        content,
+                        strict=False,
+                    )
+                    results.append(result)
+                except Exception as err:
+                    continue
+            if len(results) == 0:
+                raise ValueError(f"```json exists but format corrupt")
+            if len(results) == 1:
+                return results[0]
+            return results
+        else:
+            text = "{" + \
+                text.split("{", 1)[-1].strip().rsplit("}", 1)[0].strip() + "}"
+            text = json_recovery(text)
+            result = json.loads(
+                text,
+                strict=False,
+            )
+            return result
+    except Exception as e:
+        if best_effort:
+            extract = raw[raw.index(best_effort):]
+            if "True" in extract:
+                return {best_effort: True}
+            else:
+                return {best_effort: False}
+        raise ValueError(f"Failed to parse JSON: “{repr(raw)}”") from e
 
 
 def contain_chinese(string):
@@ -201,7 +252,7 @@ async def compute_code_format_score(
     return base_rewards
 
 
-REFINE_TEMPLATE = """
+REVISE_RESPONSE_TEMPLATE = """
 Rewrite the above answer to conform to the following instruction requirements. The rewrite should only meet the format requirements and do not change the main content of the original answer.
 
 # QUESTION
@@ -244,7 +295,7 @@ async def compute_extract_answer_score(
     for i, code in enumerate(normed_codes):
         if code is not None:
             valid_indices.append(i)
-            _prompt = REFINE_TEMPLATE.format(
+            _prompt = REVISE_RESPONSE_TEMPLATE.format(
                 question=batch_ground_truth[i]["prompt"],
                 response=batch_ground_truth[i]["llm_output"],
                 constraint=constraints[i]
@@ -288,10 +339,35 @@ async def compute_extract_answer_score(
     return base_rewards
 
 
-def compute_answer_constraint_format_score(
+CONSTRAINT_VERIFY_TEMPLATE = """
+你需要判断下面的这段话是否一个“指令格式约束条件”，且不包含关于答案的信息（比如泄漏或者暗示正确答案是什么）
+
+说明：指令格式约束条件指的是对于一个问题的补充，约束回答时需要满足的格式要求等
+
+# INSTRUCT CONSTRAINT
+{constraint}
+
+参考下面样子返回标准json格式的回答
+# 注意
+# 1. 约束不应该透露或者暗示答案的具体内容，只应当针对答案格式进行限制
+# 2. 这里提供的是指令限制或者约束，而没有提供问题本身，你不需要关心原问题是什么
+# 3. 这里的判断需要检查约束是否包含题目信息，如果包含则不被允许，需要判断valid=False
+
+```json
+{{
+  "reason": ***,
+  "valid": True/False
+}}
+``
+"""
+
+
+async def compute_answer_constraint_format_score(
     batch_parsed_results, batch_ground_truth
 ):
     base_rewards = [0.0] * len(batch_ground_truth)
+
+    prompt_mapper = defaultdict(list)
     for i, (parsed, gt) in enumerate(zip(batch_parsed_results, batch_ground_truth)):
         if parsed is None:
             pass
@@ -305,7 +381,31 @@ def compute_answer_constraint_format_score(
                     pass
                 else:
                     base_rewards[i] += 0.1
+            constraint_verify_prompt = CONSTRAINT_VERIFY_TEMPLATE.format(
+                constraint=constraint).strip()
+            prompt_mapper[constraint_verify_prompt].append(i)
 
+    max_concurrent_requests = 16
+    prompts = list(prompt_mapper.keys())
+
+    results = await agent.run(prompts, max_concurrent_requests, desc="[Verify Constraint]", postprocess_fns=[partial(parse_json, best_effort="valid")]*len(prompts))
+    for prompt, response in results:
+        if response is not None:
+            indices = prompt_mapper[prompt]
+            for index in indices:
+                try:
+                    if isinstance(response["valid"], bool):
+                        if response["valid"]:
+                            base_rewards[index] += 1.0
+                        else:
+                            base_rewards[index] -= 1.0
+                    elif isinstance(response["valid"], str):
+                        if response["valid"] == "True":
+                            base_rewards[index] += 1.0
+                        else:
+                            base_rewards[index] -= 1.0
+                except Exception as err:
+                    continue
     return base_rewards
 
 
@@ -323,7 +423,7 @@ async def _compute_score(batch_data_sources,
             base_rewards[i] += 0.1
         parsed_results.append(parsed)
 
-    constraint_format_rewards = compute_answer_constraint_format_score(
+    constraint_format_rewards = await compute_answer_constraint_format_score(
         parsed_results, batch_ground_truth)
 
     code_format_rewards = await compute_code_format_score(parsed_results, batch_ground_truth)
