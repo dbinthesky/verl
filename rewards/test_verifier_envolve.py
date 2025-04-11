@@ -60,8 +60,12 @@ def mock_rollout_and_save():
         max_concurrent_requests = 32
         results = await agent.run(prompts, max_concurrent_requests, desc="unittest", postprocess_fns=[lambda x: x]*len(prompts))
 
+        mapper = {p: i for i, p in enumerate(prompts)}
+
         with open("verifier_envolve_mock.jsonl", "wt") as f:
-            for example, (prompt, response), gt in zip(examples, results, batch_ground_truth):
+            for prompt, response in results:
+                index = mapper[prompt]
+
                 if response.startswith("think>"):
                     response = f'<{response}'
                 if "<answer_constraint>" not in response:
@@ -80,6 +84,7 @@ def mock_rollout_and_save():
                         "[XXXYYYZZZAAABBBCCC]", "</answer_extraction>")
                 output = {
                     "solution_str": response,
+                    "ground_truth": batch_ground_truth[index]
                 }
                 f.write(f'{json.dumps(output, ensure_ascii=False)}\n')
 
@@ -89,7 +94,7 @@ def mock_rollout_and_save():
 class TestVerifierEnvolve(unittest.TestCase):
     def test_compute_score(self):
         # load_test_data()
-
+        # mock_rollout_and_save()
         data = load_mock_data()
         batch_solution_str, batch_ground_truth = [], []
         for example in data:
@@ -100,7 +105,7 @@ class TestVerifierEnvolve(unittest.TestCase):
             batch_ground_truth.append(example["ground_truth"])
 
         print(compute_score_valid([None]*len(batch_solution_str),
-                                batch_solution_str, batch_ground_truth))
+                                  batch_solution_str, batch_ground_truth))
 
 
 if __name__ == '__main__':

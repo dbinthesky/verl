@@ -278,11 +278,9 @@ async def compute_extract_answer_score(
                     print(
                         f"--------------------------------[VALID]--------------------------------")
                     print(
-                        f'【Question】`{repr(batch_ground_truth[index]["prompt"])}`')
+                        f'【Question】({repr(constraints[index])})`{repr(batch_ground_truth[index]["prompt"])}`')
                     print(
                         f'【Response】`{repr(batch_ground_truth[index]["llm_output"])}`')
-                    print(
-                        f"【Solution Constraint】 `{repr(constraints[index])}`")
                     print(
                         f'【Modified Response】`{repr(response)}`')
                     print(f"【Solution Code】 `{repr(normed_codes[index])}`")
@@ -307,6 +305,7 @@ def compute_answer_constraint_format_score(
                     pass
                 else:
                     base_rewards[i] += 0.1
+
     return base_rewards
 
 
