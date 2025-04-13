@@ -86,13 +86,13 @@ def postprocess_solution(solution_str):
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-class Penalty(object):
+class PenaltyOrReward(object):
     @abstractmethod
     def get_penalty(self, solution_str, ground_truth):
         raise NotImplementedError
 
 
-class ConclusionTooLongPenalty(Penalty):
+class ConclusionTooLongPenalty(PenaltyOrReward):
     def __init__(self,
                  postprocess_solution_fn,
                  conclusion_limit=600,
