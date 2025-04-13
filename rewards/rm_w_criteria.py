@@ -16,8 +16,7 @@ from collections import namedtuple, defaultdict
 
 
 URLS = [
-    "http://10.130.1.205:5001",
-    "http://10.130.1.44:5002"
+    "http://10.130.1.101:5001",
 ]
 
 DEFAULT_PARSE_FAILURE_REWARD = -2.
