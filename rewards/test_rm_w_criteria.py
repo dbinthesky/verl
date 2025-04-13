@@ -12,6 +12,7 @@ from rm_w_criteria import (
     qwq_longcot_compute_score_train,
     ConclusionTooLongPenalty,
     FabricateQATooLongPenalty,
+    FabricateQALengthPenalty,
     QwQLongCoTComputeScore,
     QwQLongCoTFabricateQAComputeScore,
     QwQLongCoTCriteriaEnvolveComputeScore,
@@ -85,7 +86,7 @@ def load_qwq_fabricate_qa_data(num=100):
     batch_solution_str, batch_ground_truth = [], []
 
     def generate_random_string(n):
-        all_characters = string.ascii_letters + string.digits
+        all_characters = string.ascii_letters + string.digits + ' '
         return ''.join(random.choice(all_characters) for _ in range(n))
 
     df = pd.read_parquet(filename)
@@ -96,7 +97,7 @@ def load_qwq_fabricate_qa_data(num=100):
             row["reward_model"])
 
         batch_solution_str.append(
-            f'<think>\n{generate_random_string(100)}\n</think>\n\n<answer>{gt}\n{generate_random_string(500)}</answer>')
+            f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>{gt}\n{generate_random_string(2000)}</question>')
     return batch_solution_str, batch_ground_truth
 
 
@@ -219,6 +220,15 @@ class TestRMReward(unittest.TestCase):
         # for _ in batch_solution_str:
         #     print(task.postprocess_solution_fn(_))
         #     print("="*80)
+
+    def test_fabricate_qa_length_penalty(self):
+        penalty_fn = FabricateQALengthPenalty(
+            postprocess_solution_fn=QwQLongCoTFabricateQAComputeScore.postprocess_solution_fn,
+            postprocess_gt_fn=QwQLongCoTFabricateQAComputeScore.extract_gt_question,
+        )
+        batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data()
+        for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
+            print(penalty_fn.get_penalty(solution_str, ground_truth))
 
 
 if __name__ == '__main__':

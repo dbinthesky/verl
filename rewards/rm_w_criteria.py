@@ -2,6 +2,7 @@ import re
 import uuid
 import time
 import math
+import jieba
 import random
 import requests
 import numpy as np
@@ -35,9 +36,9 @@ def contain_chinese(string):
 
 def simple_tokenize(s):
     if contain_chinese(s):
-        return list(s)
+        return list(jieba.cut(s.lower()))
     else:
-        return s.split(" ")
+        return s.lower().strip().split(" ")
 
 
 def batchify(iterable, n):
@@ -393,12 +394,15 @@ class FabricateQATooLongPenalty(ConclusionTooLongPenalty):
                  postprocess_solution_fn,
                  postprocess_gt_fn,
                  conclusion_limit=600,
-                 penalty_base=-0.1):
+                 penalty_base=-0.1,
+                 no_penalty_range=0.2,
+                 ):
         super().__init__(
             postprocess_solution_fn=postprocess_solution_fn,
             conclusion_limit=conclusion_limit,
             penalty_base=penalty_base
         )
+        self.no_penalty_range = no_penalty_range
         self.postprocess_gt_fn = postprocess_gt_fn
 
     def get_penalty(self, solution_str, ground_truth):
@@ -631,6 +635,91 @@ _qwq_longcot_criteria_envolve_compute_score_valid = QwQLongCoTCriteriaEnvolveCom
     split="valid", parse_result_failure_score=0.)
 qwq_longcot_criteria_envolve_compute_score_train = _qwq_longcot_criteria_envolve_compute_score_train.compute_score
 qwq_longcot_criteria_envolve_compute_score_valid = _qwq_longcot_criteria_envolve_compute_score_valid.compute_score
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# Fabricate QA Reward V2
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+class FabricateQALengthPenalty(ConclusionTooLongPenalty):
+    def __init__(self,
+                 postprocess_solution_fn,
+                 postprocess_gt_fn,
+                 conclusion_limit=600,
+                 penalty_base=-0.5):
+        super().__init__(
+            postprocess_solution_fn=postprocess_solution_fn,
+            conclusion_limit=conclusion_limit,
+            penalty_base=penalty_base
+        )
+        self.postprocess_gt_fn = postprocess_gt_fn
+
+    def get_penalty(self, solution_str, ground_truth):
+        solution_str = self.postprocess_solution_fn(solution_str)
+        if solution_str is None:
+            return 0.
+
+        gt = self.postprocess_gt_fn(ground_truth)
+
+        gt_size = len(simple_tokenize(gt))
+        solution_size = len(simple_tokenize(solution_str))
+
+        if abs(solution_size-gt_size)/gt_size < 0.2:
+            return 0.
+
+        return self.penalty_base * min(abs(solution_size-gt_size) / gt_size, 5.)
+
+
+# class QwQLongCoTComputeScore(ComputeScoreBase):
+#     def __init__(self, split="train"):
+#         super().__init__(split=split)
+#         self.c_length_penalty = ConclusionTooLongPenalty(
+#             postprocess_solution_fn=QwQLongCoTComputeScore.postprocess_solution_fn)
+
+#     def get_penalties(self) -> Dict[str, Callable]:
+#         return {
+#             "CONCLUSION_LENGTH": self.c_length_penalty.get_penalty
+#         }
+
+#     @classmethod
+#     def postprocess_solution_fn(cls, solution_str: str):
+#         solution_str = postprocess_solution(solution_str)
+#         try:
+#             thought = re.findall(r'<think>.*</think>',
+#                                  solution_str, re.DOTALL)[0]
+#         except Exception as err:
+#             return None
+
+#         conclusion = solution_str.replace(thought, "").strip()
+
+#         return conclusion
+
+#     def get_rm_rewards(self,
+#                        batch_data_sources,
+#                        batch_solution_str,
+#                        batch_ground_truth):
+#         rewards = compute_rm_score(
+#             batch_solution_str=batch_solution_str,
+#             batch_ground_truth=batch_ground_truth,
+#             postprocess_solution_fn=self.postprocess_solution_fn,
+#             parse_result_failure_score=self.parse_result_failure_score
+#         )
+#         reshape_rewards = []
+#         for reward, ground_truth in zip(rewards, batch_ground_truth):
+#             cate = self.get_question_type(ground_truth)
+#             if cate == "object":
+#                 if reward >= 0.115:
+#                     reward = 1.0
+#                 if reward <= 0.0 and reward >= -1.0:
+#                     reward = -1.0
+#             reshape_rewards.append(reward)
+#         return reshape_rewards
+
+
+# _qwq_longcot_compute_score_train = QwQLongCoTComputeScore(split="train")
+# _qwq_longcot_compute_score_valid = QwQLongCoTComputeScore(split="valid")
+# qwq_longcot_compute_score_train = _qwq_longcot_compute_score_train.compute_score
+# qwq_longcot_compute_score_valid = _qwq_longcot_compute_score_valid.compute_score
 
 if __name__ == "__main__":
     pass
