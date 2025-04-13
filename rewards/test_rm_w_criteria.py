@@ -14,6 +14,7 @@ from rm_w_criteria import (
     FabricateQATooLongPenalty,
     FabricateQALengthPenalty,
     QwQLongCoTComputeScore,
+    BleuSimilarity,
     QwQLongCoTFabricateQAComputeScore,
     QwQLongCoTCriteriaEnvolveComputeScore,
     qwq_longcot_fabricate_qa_compute_score_train
@@ -163,7 +164,7 @@ class TestRMReward(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_qwq_data()
 
         for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
-            self.assertTrue(penalty_fn.get_penalty(
+            self.assertTrue(penalty_fn.get_penalty_or_reward(
                 solution_str, ground_truth) <= 0.0)
 
     def test_fabricate_qa_too_long_penalty(self):
@@ -173,7 +174,7 @@ class TestRMReward(unittest.TestCase):
         )
         batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data()
         for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
-            print(penalty_fn.get_penalty(solution_str, ground_truth))
+            print(penalty_fn.get_penalty_or_reward(solution_str, ground_truth))
 
     def test_qwq_long_cot_fabricate_qa_compute_score(self):
         batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
@@ -228,7 +229,16 @@ class TestRMReward(unittest.TestCase):
         )
         batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data()
         for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
-            print(penalty_fn.get_penalty(solution_str, ground_truth))
+            print(penalty_fn.get_penalty_or_reward(solution_str, ground_truth))
+
+    def test_fabricate_qa_bleu_similarity(self):
+        penalty_fn = BleuSimilarity(
+            postprocess_solution_fn=QwQLongCoTFabricateQAComputeScore.postprocess_solution_fn,
+            postprocess_gt_fn=QwQLongCoTFabricateQAComputeScore.extract_gt_question,
+        )
+        batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data()
+        for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
+            print(penalty_fn.get_penalty_or_reward(solution_str, ground_truth))
 
 
 if __name__ == '__main__':

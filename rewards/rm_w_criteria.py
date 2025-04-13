@@ -5,6 +5,7 @@ import math
 import jieba
 import random
 import requests
+import sacrebleu
 import numpy as np
 from tqdm import tqdm
 from abc import abstractmethod
@@ -88,7 +89,7 @@ def postprocess_solution(solution_str):
 
 class PenaltyOrReward(object):
     @abstractmethod
-    def get_penalty(self, solution_str, ground_truth):
+    def get_penalty_or_reward(self, solution_str, ground_truth):
         raise NotImplementedError
 
 
@@ -101,7 +102,7 @@ class ConclusionTooLongPenalty(PenaltyOrReward):
         self.conclusion_limit = conclusion_limit
         self.penalty_base = penalty_base
 
-    def get_penalty(self, solution_str, ground_truth):
+    def get_penalty_or_reward(self, solution_str, ground_truth):
         solution_str = self.postprocess_solution_fn(solution_str)
         if solution_str is None:
             return 0.
@@ -259,7 +260,7 @@ class QwQLongCoTComputeScore(ComputeScoreBase):
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
-            "CONCLUSION_LENGTH": self.c_length_penalty.get_penalty
+            "CONCLUSION_LENGTH": self.c_length_penalty.get_penalty_or_reward
         }
 
     @classmethod
@@ -405,7 +406,7 @@ class FabricateQATooLongPenalty(ConclusionTooLongPenalty):
         self.no_penalty_range = no_penalty_range
         self.postprocess_gt_fn = postprocess_gt_fn
 
-    def get_penalty(self, solution_str, ground_truth):
+    def get_penalty_or_reward(self, solution_str, ground_truth):
         solution_str = self.postprocess_solution_fn(solution_str)
         if solution_str is None:
             return 0.
@@ -426,7 +427,7 @@ class QwQLongCoTFabricateQAComputeScore(ComputeScoreBase):
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
-            "CONCLUSION_LENGTH": self.c_length_penalty.get_penalty
+            "CONCLUSION_LENGTH": self.c_length_penalty.get_penalty_or_reward
         }
 
     @classmethod
@@ -654,7 +655,7 @@ class FabricateQALengthPenalty(ConclusionTooLongPenalty):
         )
         self.postprocess_gt_fn = postprocess_gt_fn
 
-    def get_penalty(self, solution_str, ground_truth):
+    def get_penalty_or_reward(self, solution_str, ground_truth):
         solution_str = self.postprocess_solution_fn(solution_str)
         if solution_str is None:
             return 0.
@@ -670,6 +671,28 @@ class FabricateQALengthPenalty(ConclusionTooLongPenalty):
         return self.penalty_base * min(abs(solution_size-gt_size) / gt_size, 5.)
 
 
+class BleuSimilarity(PenaltyOrReward):
+    def __init__(self,
+                 postprocess_solution_fn,
+                 postprocess_gt_fn):
+        self.postprocess_solution_fn = postprocess_solution_fn
+        self.postprocess_gt_fn = postprocess_gt_fn
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        try:
+            solution_str = self.postprocess_solution_fn(solution_str)
+            if solution_str is None:
+                return 0.
+
+            gt = self.postprocess_gt_fn(ground_truth)
+            gt_tokens = " ".join(simple_tokenize(gt))
+            sl_tokens = " ".join(simple_tokenize(solution_str))
+            bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
+            return bleu / 100
+        except Exception as err:
+            return 0.
+
+
 # class QwQLongCoTComputeScore(ComputeScoreBase):
 #     def __init__(self, split="train"):
 #         super().__init__(split=split)
@@ -678,7 +701,7 @@ class FabricateQALengthPenalty(ConclusionTooLongPenalty):
 
 #     def get_penalties(self) -> Dict[str, Callable]:
 #         return {
-#             "CONCLUSION_LENGTH": self.c_length_penalty.get_penalty
+#             "CONCLUSION_LENGTH": self.c_length_penalty.get_penalty_or_reward
 #         }
 
 #     @classmethod
@@ -693,7 +716,6 @@ class FabricateQALengthPenalty(ConclusionTooLongPenalty):
 #         conclusion = solution_str.replace(thought, "").strip()
 
 #         return conclusion
-
 #     def get_rm_rewards(self,
 #                        batch_data_sources,
 #                        batch_solution_str,
@@ -714,12 +736,9 @@ class FabricateQALengthPenalty(ConclusionTooLongPenalty):
 #                     reward = -1.0
 #             reshape_rewards.append(reward)
 #         return reshape_rewards
-
-
 # _qwq_longcot_compute_score_train = QwQLongCoTComputeScore(split="train")
 # _qwq_longcot_compute_score_valid = QwQLongCoTComputeScore(split="valid")
 # qwq_longcot_compute_score_train = _qwq_longcot_compute_score_train.compute_score
 # qwq_longcot_compute_score_valid = _qwq_longcot_compute_score_valid.compute_score
-
 if __name__ == "__main__":
     pass
