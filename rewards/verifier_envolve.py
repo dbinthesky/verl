@@ -274,14 +274,16 @@ async def compute_extract_answer_score(
 ):
     base_rewards = [0.0] * len(batch_ground_truth)
     normed_codes = []
-    constraints = []
+    thoughts, constraints = [], []
     for i, (parsed, gt) in enumerate(zip(batch_parsed_results, batch_ground_truth)):
         if parsed is None:
             normed_codes.append(None)
             constraints.append(None)
+            thoughts.append(None)
         else:
-            _, constraint, code = parsed
+            thought, constraint, code = parsed
             code = code.strip()
+            thoughts.append(thought)
             constraints.append(constraint)
             if code.startswith("```python\ndef extract_answer(response: str) -> str:") and code.endswith("```"):
                 normed_codes.append(code[len("```python"):-len("```")].strip())
@@ -328,6 +330,8 @@ async def compute_extract_answer_score(
                 if split == "valid" and random.random() < 1.0:
                     print(
                         f"--------------------------------[VALID]--------------------------------")
+                    print(
+                        f'【Thought】`{repr(thoughts[index])}`')
                     print(
                         f'【Question】({repr(constraints[index])})`{repr(batch_ground_truth[index]["prompt"])}`')
                     print(
@@ -433,7 +437,13 @@ async def _compute_score(batch_data_sources,
     assert len(base_rewards) == len(code_format_rewards)
     assert len(extract_answer_rewards) == len(code_format_rewards)
     for w, x, y, z in zip(base_rewards, constraint_format_rewards, extract_answer_rewards, code_format_rewards):
-        final_rewards.append(w+x+y+z)
+        if split == "train":
+            if x > 0:
+                final_rewards.append(w+x+y+z)
+            else:
+                final_rewards.append(w+x)
+        else:
+            final_rewards.append(y * 2)
     assert len(final_rewards) == len(batch_solution_str)
 
     return final_rewards
