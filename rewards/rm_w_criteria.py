@@ -820,29 +820,20 @@ class QwQLongCoTFabricateQAComputeScoreV2(QwQLongCoTFabricateQAComputeScore):
 
     def __init__(self, split="train"):
         super().__init__(split=split)
-        # self.c_length_penalty = FabricateQATooLongPenalty(
-        #     postprocess_solution_fn=QwQLongCoTFabricateQAComputeScore.postprocess_solution_fn,
-        #     postprocess_gt_fn=QwQLongCoTFabricateQAComputeScore.extract_gt_question
-        # )
+        self.length_penalty = FabricateQALengthPenalty(
+            postprocess_solution_fn=QwQLongCoTFabricateQAComputeScoreV2.postprocess_solution_fn,
+            postprocess_gt_fn=QwQLongCoTFabricateQAComputeScoreV2.extract_gt_question
+        )
+        self.bleu_similarity = BleuSimilarity(
+            postprocess_solution_fn=QwQLongCoTFabricateQAComputeScoreV2.postprocess_solution_fn,
+            postprocess_gt_fn=QwQLongCoTFabricateQAComputeScoreV2.extract_gt_question
+        )
 
     def get_penalties(self) -> Dict[str, Callable]:
-        return {}
-
-#     @classmethod
-#     def postprocess_solution_fn(cls, solution_str: str):
-#         solution_str = postprocess_solution(solution_str)
-#         try:
-#             thought = re.findall(r'<think>.*</think>',
-#                                  solution_str, re.DOTALL)[0]
-#         except Exception as err:
-#             return None
-#         try:
-#             conclusion = solution_str.replace(thought, "").strip()
-#             if ("# JUDGE CRITERIA" not in conclusion) and ("# 评价标准" not in conclusion):
-#                 return None
-#             return conclusion
-#         except Exception as err:
-#             return None
+        return {
+            "LengthPenalty": self.length_penalty.get_penalty_or_reward,
+            "BLEU": self.bleu_similarity.
+        }
 
     def parse_llm_judge_sim_result(self, result):
         if "[CONCLUSION START]" in result and "[CONCLUSION END]" in result:
@@ -863,11 +854,11 @@ class QwQLongCoTFabricateQAComputeScoreV2(QwQLongCoTFabricateQAComputeScore):
             raise PostprocessError(
                 f'`[CONCLUSION START]` or `[CONCLUSION END]` flag not found.')
 
-    async def compute_score(self,
-                            batch_data_sources,
-                            batch_solution_str,
-                            batch_ground_truth,
-                            ):
+    async def llm_judge_similarity(self,
+                                   batch_data_sources,
+                                   batch_solution_str,
+                                   batch_ground_truth,
+                                   ):
 
         base_rewards = [0.0] * len(batch_ground_truth)
 
@@ -896,170 +887,169 @@ class QwQLongCoTFabricateQAComputeScoreV2(QwQLongCoTFabricateQAComputeScore):
                 for index in indices:
                     try:
                         score = response
-                        base_rewards[index] += score / 4.0 
+                        base_rewards[index] += score / 4.0
 
                     except Exception as err:
                         continue
-        print()
         return base_rewards
 
-    pass
-    # penalty = defaultdict(dict)
-    # for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-    #     for key, fn in self.get_penalties().items():
-    #         penalty[key][i] = fn(solution_str, ground_truth)
+    async def compute_score(self,
+                            batch_data_sources,
+                            batch_solution_str,
+                            batch_ground_truth,
+                            ):
+        penalty = defaultdict(dict)
+        # for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+        #     for key, fn in self.get_penalties().items():
+        #         penalty[key][i] = fn(solution_str, ground_truth)
 
-    # base_rewards = self.get_rm_rewards(
-    #     batch_data_sources, batch_solution_str, batch_ground_truth)
-    # final_results = []
-    # for i in range(len(batch_solution_str)):
-    #     penalty_log_str = []
-    #     _reward = base_rewards[i]
-    #     for name, _penalty in penalty.items():
-    #         if i in _penalty:
-    #             _reward += _penalty[i]
-    #             penalty_log_str.append(f'{name} Penalty={_penalty[i]:.2f}')
+        # base_rewards = self.get_rm_rewards(
+        #     batch_data_sources, batch_solution_str, batch_ground_truth)
+        # final_results = []
+        # for i in range(len(batch_solution_str)):
+        #     penalty_log_str = []
+        #     _reward = base_rewards[i]
+        #     for name, _penalty in penalty.items():
+        #         if i in _penalty:
+        #             _reward += _penalty[i]
+        #             penalty_log_str.append(f'{name} Penalty={_penalty[i]:.2f}')
 
-    #     final_results.append(_reward)
+        #     final_results.append(_reward)
 
-    #     if self.split == "valid":
-    #         print(
-    #             f"--------------------------------[VALID]--------------------------------")
-    #         print(
-    #             f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
-    #         print(
-    #             f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
-    #         print(f'Reward={_reward:.3f}\n')
-    #     elif self.split == "train" and random.random() < 0.01:
-    #         print(
-    #             f"--------------------------------[TRAIN]--------------------------------")
-    #         print(
-    #             f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
-    #         print(
-    #             f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
-    #         print(
-    #             f'Reward={_reward:.3f}\n')
-    # return final_results
+        #     if self.split == "valid":
+        #         print(
+        #             f"--------------------------------[VALID]--------------------------------")
+        #         print(
+        #             f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
+        #         print(
+        #             f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
+        #         print(f'Reward={_reward:.3f}\n')
+        #     elif self.split == "train" and random.random() < 0.01:
+        #         print(
+        #             f"--------------------------------[TRAIN]--------------------------------")
+        #         print(
+        #             f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
+        #         print(
+        #             f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
+        #         print(
+        #             f'Reward={_reward:.3f}\n')
+        # return final_results
 
+        # class QuestionSimilarityJudgeByLLM(PenaltyOrReward):
 
-# class QuestionSimilarityJudgeByLLM(PenaltyOrReward):
+        #     def __init__(self,
+        #                  postprocess_solution_fn,
+        #                  postprocess_gt_fn):
+        #         self.postprocess_solution_fn = postprocess_solution_fn
+        #         self.postprocess_gt_fn = postprocess_gt_fn
 
+        #     def get_penalty_or_reward(self, solution_str, ground_truth):
+        #         try:
+        #             solution_str = self.postprocess_solution_fn(solution_str)
+        #             if solution_str is None:
+        #                 return 0.
 
-#     def __init__(self,
-#                  postprocess_solution_fn,
-#                  postprocess_gt_fn):
-#         self.postprocess_solution_fn = postprocess_solution_fn
-#         self.postprocess_gt_fn = postprocess_gt_fn
+        #             gt = self.postprocess_gt_fn(ground_truth)
+        #             print(solution_str)
+        #             print(gt)
+        #             # gt = self.postprocess_gt_fn(ground_truth)
+        #             # gt_tokens = " ".join(simple_tokenize(gt))
+        #             # sl_tokens = " ".join(simple_tokenize(solution_str))
+        #             # bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
+        #             # return bleu / 100
+        #         except Exception as err:
+        #             return 0.
 
-#     def get_penalty_or_reward(self, solution_str, ground_truth):
-#         try:
-#             solution_str = self.postprocess_solution_fn(solution_str)
-#             if solution_str is None:
-#                 return 0.
+        # async def compute_answer_constraint_format_score(
+        #     batch_parsed_results, batch_ground_truth
+        # ):
+        #     base_rewards = [0.0] * len(batch_ground_truth)
 
-#             gt = self.postprocess_gt_fn(ground_truth)
-#             print(solution_str)
-#             print(gt)
-#             # gt = self.postprocess_gt_fn(ground_truth)
-#             # gt_tokens = " ".join(simple_tokenize(gt))
-#             # sl_tokens = " ".join(simple_tokenize(solution_str))
-#             # bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
-#             # return bleu / 100
-#         except Exception as err:
-#             return 0.
+        #     prompt_mapper = defaultdict(list)
+        #     for i, (parsed, gt) in enumerate(zip(batch_parsed_results, batch_ground_truth)):
+        #         if parsed is None:
+        #             pass
+        #         else:
+        #             _, constraint, _ = parsed
+        #             if contain_chinese(gt["prompt"]):  # zh
+        #                 if contain_chinese(constraint):
+        #                     base_rewards[i] += 0.1
+        #             else:  # en
+        #                 if contain_chinese(constraint):
+        #                     pass
+        #                 else:
+        #                     base_rewards[i] += 0.1
+        #             constraint_verify_prompt = CONSTRAINT_VERIFY_TEMPLATE.format(
+        #                 constraint=constraint).strip()
+        #             prompt_mapper[constraint_verify_prompt].append(i)
 
+        #     max_concurrent_requests = 16
+        #     prompts = list(prompt_mapper.keys())
 
-# async def compute_answer_constraint_format_score(
-#     batch_parsed_results, batch_ground_truth
-# ):
-#     base_rewards = [0.0] * len(batch_ground_truth)
+        #     results = await agent.run(prompts, max_concurrent_requests, desc="[Verify Constraint]", postprocess_fns=[partial(parse_json, best_effort="valid")]*len(prompts))
+        #     for prompt, response in results:
+        #         if response is not None:
+        #             indices = prompt_mapper[prompt]
+        #             for index in indices:
+        #                 try:
+        #                     if isinstance(response["valid"], bool):
+        #                         if response["valid"]:
+        #                             base_rewards[index] += 1.0
+        #                         else:
+        #                             base_rewards[index] -= 1.0
+        #                     elif isinstance(response["valid"], str):
+        #                         if response["valid"] == "True":
+        #                             base_rewards[index] += 1.0
+        #                         else:
+        #                             base_rewards[index] -= 1.0
+        #                 except Exception as err:
+        #                     continue
+        #     return base_rewards
 
-#     prompt_mapper = defaultdict(list)
-#     for i, (parsed, gt) in enumerate(zip(batch_parsed_results, batch_ground_truth)):
-#         if parsed is None:
-#             pass
-#         else:
-#             _, constraint, _ = parsed
-#             if contain_chinese(gt["prompt"]):  # zh
-#                 if contain_chinese(constraint):
-#                     base_rewards[i] += 0.1
-#             else:  # en
-#                 if contain_chinese(constraint):
-#                     pass
-#                 else:
-#                     base_rewards[i] += 0.1
-#             constraint_verify_prompt = CONSTRAINT_VERIFY_TEMPLATE.format(
-#                 constraint=constraint).strip()
-#             prompt_mapper[constraint_verify_prompt].append(i)
+        # class QwQLongCoTComputeScore(ComputeScoreBase):
+        #     def __init__(self, split="train"):
+        #         super().__init__(split=split)
+        #         self.c_length_penalty = ConclusionTooLongPenalty(
+        #             postprocess_solution_fn=QwQLongCoTComputeScore.postprocess_solution_fn)
 
-#     max_concurrent_requests = 16
-#     prompts = list(prompt_mapper.keys())
+        #     def get_penalties(self) -> Dict[str, Callable]:
+        #         return {
+        #             "CONCLUSION_LENGTH": self.c_length_penalty.get_penalty_or_reward
+        #         }
 
-#     results = await agent.run(prompts, max_concurrent_requests, desc="[Verify Constraint]", postprocess_fns=[partial(parse_json, best_effort="valid")]*len(prompts))
-#     for prompt, response in results:
-#         if response is not None:
-#             indices = prompt_mapper[prompt]
-#             for index in indices:
-#                 try:
-#                     if isinstance(response["valid"], bool):
-#                         if response["valid"]:
-#                             base_rewards[index] += 1.0
-#                         else:
-#                             base_rewards[index] -= 1.0
-#                     elif isinstance(response["valid"], str):
-#                         if response["valid"] == "True":
-#                             base_rewards[index] += 1.0
-#                         else:
-#                             base_rewards[index] -= 1.0
-#                 except Exception as err:
-#                     continue
-#     return base_rewards
-
-
-# class QwQLongCoTComputeScore(ComputeScoreBase):
-#     def __init__(self, split="train"):
-#         super().__init__(split=split)
-#         self.c_length_penalty = ConclusionTooLongPenalty(
-#             postprocess_solution_fn=QwQLongCoTComputeScore.postprocess_solution_fn)
-
-#     def get_penalties(self) -> Dict[str, Callable]:
-#         return {
-#             "CONCLUSION_LENGTH": self.c_length_penalty.get_penalty_or_reward
-#         }
-
-#     @classmethod
-#     def postprocess_solution_fn(cls, solution_str: str):
-#         solution_str = postprocess_solution(solution_str)
-#         try:
-#             thought = re.findall(r'<think>.*</think>',
-#                                  solution_str, re.DOTALL)[0]
-#         except Exception as err:
-#             return None
-#         conclusion = solution_str.replace(thought, "").strip()
-#         return conclusion
-#     def get_rm_rewards(self,
-#                        batch_data_sources,
-#                        batch_solution_str,
-#                        batch_ground_truth):
-#         rewards = compute_rm_score(
-#             batch_solution_str=batch_solution_str,
-#             batch_ground_truth=batch_ground_truth,
-#             postprocess_solution_fn=self.postprocess_solution_fn,
-#             parse_result_failure_score=self.parse_result_failure_score
-#         )
-#         reshape_rewards = []
-#         for reward, ground_truth in zip(rewards, batch_ground_truth):
-#             cate = self.get_question_type(ground_truth)
-#             if cate == "object":
-#                 if reward >= 0.115:
-#                     reward = 1.0
-#                 if reward <= 0.0 and reward >= -1.0:
-#                     reward = -1.0
-#             reshape_rewards.append(reward)
-#         return reshape_rewards
-# _qwq_longcot_compute_score_train = QwQLongCoTComputeScore(split="train")
-# _qwq_longcot_compute_score_valid = QwQLongCoTComputeScore(split="valid")
-# qwq_longcot_compute_score_train = _qwq_longcot_compute_score_train.compute_score
-# qwq_longcot_compute_score_valid = _qwq_longcot_compute_score_valid.compute_score
+        #     @classmethod
+        #     def postprocess_solution_fn(cls, solution_str: str):
+        #         solution_str = postprocess_solution(solution_str)
+        #         try:
+        #             thought = re.findall(r'<think>.*</think>',
+        #                                  solution_str, re.DOTALL)[0]
+        #         except Exception as err:
+        #             return None
+        #         conclusion = solution_str.replace(thought, "").strip()
+        #         return conclusion
+        #     def get_rm_rewards(self,
+        #                        batch_data_sources,
+        #                        batch_solution_str,
+        #                        batch_ground_truth):
+        #         rewards = compute_rm_score(
+        #             batch_solution_str=batch_solution_str,
+        #             batch_ground_truth=batch_ground_truth,
+        #             postprocess_solution_fn=self.postprocess_solution_fn,
+        #             parse_result_failure_score=self.parse_result_failure_score
+        #         )
+        #         reshape_rewards = []
+        #         for reward, ground_truth in zip(rewards, batch_ground_truth):
+        #             cate = self.get_question_type(ground_truth)
+        #             if cate == "object":
+        #                 if reward >= 0.115:
+        #                     reward = 1.0
+        #                 if reward <= 0.0 and reward >= -1.0:
+        #                     reward = -1.0
+        #             reshape_rewards.append(reward)
+        #         return reshape_rewards
+        # _qwq_longcot_compute_score_train = QwQLongCoTComputeScore(split="train")
+        # _qwq_longcot_compute_score_valid = QwQLongCoTComputeScore(split="valid")
+        # qwq_longcot_compute_score_train = _qwq_longcot_compute_score_train.compute_score
+        # qwq_longcot_compute_score_valid = _qwq_longcot_compute_score_valid.compute_score
 if __name__ == "__main__":
     pass
