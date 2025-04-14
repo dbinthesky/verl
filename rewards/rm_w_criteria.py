@@ -953,12 +953,12 @@ class QwQLongCoTFabricateQAComputeScoreV2(QwQLongCoTFabricateQAComputeScore):
         return aio.run(main())
 
 
-_qwq_longcot_compute_score_v2_train = QwQLongCoTFabricateQAComputeScoreV2(
+_qwq_longcot_fabricate_qa_compute_score_v2_train = QwQLongCoTFabricateQAComputeScoreV2(
     split="train")
-_qwq_longcot_compute_score_v2_valid = QwQLongCoTFabricateQAComputeScoreV2(
+_qwq_longcot_fabricate_qa_compute_score_v2_valid = QwQLongCoTFabricateQAComputeScoreV2(
     split="valid")
-qwq_longcot_compute_score_v2_train = _qwq_longcot_compute_score_v2_train.compute_score
-qwq_longcot_compute_score_v2_valid = _qwq_longcot_compute_score_v2_valid.compute_score
+qwq_longcot_fabricate_qa_compute_score_v2_train = _qwq_longcot_fabricate_qa_compute_score_v2_train.compute_score
+qwq_longcot_fabricate_qa_compute_score_v2_valid = _qwq_longcot_fabricate_qa_compute_score_v2_valid.compute_score
 
 if __name__ == "__main__":
     pass
