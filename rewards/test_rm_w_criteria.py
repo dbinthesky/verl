@@ -19,7 +19,8 @@ from rm_w_criteria import (
     QwQLongCoTFabricateQAComputeScore,
     QwQLongCoTFabricateQAComputeScoreV2,
     QwQLongCoTCriteriaEnvolveComputeScore,
-    qwq_longcot_fabricate_qa_compute_score_train
+    qwq_longcot_fabricate_qa_compute_score_train,
+    qwq_longcot_compute_score_v2_valid
 )
 
 
@@ -238,15 +239,21 @@ class TestRMReward(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
             num=100)
 
-        async def main():
-            task = QwQLongCoTFabricateQAComputeScoreV2()
-            await task.compute_score(
-                [None] * len(batch_solution_str),
-                batch_solution_str,
-                batch_ground_truth
-            )
+        # async def main():
+        # task = QwQLongCoTFabricateQAComputeScoreV2()
+        # await task.compute_score(
+        #     [None] * len(batch_solution_str),
+        #     batch_solution_str,
+        #     batch_ground_truth
+        # )
+        # qwq_longcot_compute_score_v2_valid
 
-        aio.run(main())
+        # aio.run(main())
+        qwq_longcot_compute_score_v2_valid(
+            [None] * len(batch_solution_str),
+            batch_solution_str,
+            batch_ground_truth
+        )
 
 
 if __name__ == '__main__':
