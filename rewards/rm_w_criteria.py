@@ -555,6 +555,9 @@ class QwQLongCoTFabricateQAComputeScore(ComputeScoreBase):
         except Exception as err:
             return None
 
+        if ("<question>" in conclusion) or ("</question>" in conclusion):
+            return None
+
         return conclusion.strip()
 
     @classmethod
@@ -862,6 +865,7 @@ class QwQLongCoTFabricateQAComputeScoreV2(QwQLongCoTFabricateQAComputeScore):
         base_rewards = [0.0] * len(batch_ground_truth)
 
         prompt_mapper = defaultdict(list)
+        logs = []
         for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
             solution_str = self.postprocess_solution_fn(solution_str)
             if solution_str is None:
@@ -873,11 +877,21 @@ class QwQLongCoTFabricateQAComputeScoreV2(QwQLongCoTFabricateQAComputeScore):
                 authentic_question=gt,
                 fabricate_question=solution_str,
             ).strip()
+            logs.append(
+                self.JUDGE_QUESTION_SIMILARITY_TEMPLATE.format(
+                    authentic_question=gt,
+                    fabricate_question=solution_str).strip()
+            )
 
             prompt_mapper[sim_judge_prompt].append(i)
 
             max_concurrent_requests = 48
             prompts = list(prompt_mapper.keys())
+
+        if len(logs) > 0:
+            print("="*40 + "[Judge Prompt Display]" + "="*40)
+            print(repr(random.choice(logs)))
+            print("="*40 + "[Judge Prompt Display]" + "="*40)
 
         results = await agent.run(prompts, max_concurrent_requests, desc="[Judge QA Similarity]", postprocess_fns=[self.parse_llm_judge_sim_result]*len(prompts))
         for prompt, response in results:
@@ -908,18 +922,47 @@ class QwQLongCoTFabricateQAComputeScoreV2(QwQLongCoTFabricateQAComputeScore):
         llm_judge_sim_rewards = await self.llm_judge_similarity(batch_solution_str, batch_ground_truth)
 
         final_results = []
+
+        normed_score1, normed_score2 = [], []
+        normed_penalty = defaultdict(dict)
         for i in range(len(batch_solution_str)):
             penalty_log_str = []
-            score1 = llm_judge_sim_rewards[i]
-            score2 = rm_rewards[i]
 
-            score = score1 + score2
+            normed_score1.append(llm_judge_sim_rewards[i])
+            normed_score2.append(rm_rewards[i])
 
             for name, _penalty in penalty.items():
                 if i in _penalty:
-                    score += _penalty[i]
+                    normed_penalty[name][i] = _penalty[i]
                     penalty_log_str.append(
                         f'{name}={_penalty[i]:.2f}')
+
+        for i in range(len(batch_solution_str)):
+            if np.std(normed_score1) != 0:
+                score1 = (
+                    normed_score1[i] - np.mean(normed_score1))/np.std(normed_score1)
+            else:
+                score1 = normed_score1[i]
+            if np.std(normed_score2) != 0:
+                score2 = (
+                    normed_score2[i] - np.mean(normed_score2))/np.std(normed_score2)
+            else:
+                score2 = normed_score2[i]
+
+            score = score1 + score2
+
+            for name, _penalty in normed_penalty.items():
+                if name == "LengthPenalty":
+                    score += _penalty[i]
+                elif name == "BLEU":
+                    bleu_score = _penalty[i]
+                    if np.std(list(_penalty.values())) != 0:
+                        norm_bleu = (
+                            bleu_score-np.mean(list(_penalty.values()))) / np.std(list(_penalty.values()))
+                        score += norm_bleu
+                    else:
+                        norm_bleu = bleu_score
+                        score += norm_bleu
 
             final_results.append(score)
 
@@ -931,7 +974,7 @@ class QwQLongCoTFabricateQAComputeScoreV2(QwQLongCoTFabricateQAComputeScore):
                 print(
                     f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
                 print(
-                    f'[TOTAL={score:.3f}] | RM={score2:.3f} | LLM={score1:.3f} | {" | ".join(penalty_log_str)}\n')
+                    f'[TOTAL={score:.3f}] | RM={normed_score2[i]:.3f} | LLM={normed_score1[i]:.3f} | {" | ".join(penalty_log_str)}\n')
             elif self.split == "train" and random.random() < 0.01:
                 print(
                     f"--------------------------------[TRAIN]--------------------------------")
@@ -940,7 +983,7 @@ class QwQLongCoTFabricateQAComputeScoreV2(QwQLongCoTFabricateQAComputeScore):
                 print(
                     f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
                 print(
-                    f'[TOTAL={score:.3f}] | RM={score2:.3f} | LLM={score1:.3f} | {" | ".join(penalty_log_str)}\n')
+                    f'[TOTAL={score:.3f}] | RM={normed_score2[i]:.3f} | LLM={normed_score1[i]:.3f} | {" | ".join(penalty_log_str)}\n')
         return final_results
 
     def compute_score(self,

@@ -121,8 +121,8 @@ run_training() {
         actor_rollout_ref.rollout.name="vllm" \
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.85 \
-        actor_rollout_ref.rollout.temperature=1.0 \
-        actor_rollout_ref.rollout.n=8 \
+        actor_rollout_ref.rollout.temperature=1.1 \
+        actor_rollout_ref.rollout.n=16 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
