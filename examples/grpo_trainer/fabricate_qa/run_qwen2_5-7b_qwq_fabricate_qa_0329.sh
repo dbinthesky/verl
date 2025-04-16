@@ -56,7 +56,7 @@ setup_path() {
     experiment_name="qwen2_5-7b_qwq_fabricate_qa-dlc-${YYMMDD}-${HHMMSS}"
     project_name="verl_grpo_qwq_fabricate_qa"
 
-    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/${experiment_name}/${YYMMDD}/${HHMMSS}"
+    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/qwen2_5-7b_qwq_fabricate_qa/${experiment_name}/${YYMMDD}/${HHMMSS}"
     mkdir -p "${OUTPUT_DIR}"
 }
 setup_path
