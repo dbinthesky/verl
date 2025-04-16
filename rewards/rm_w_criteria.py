@@ -26,8 +26,12 @@ RATE_LIMIT_RETRY_DELAY = 60
 RATE_LIMIT_RETRY_ATTEMPTS = 10
 WORKFLOW_AGENT_LOGFILE = os.getenv("WORKFLOW_AGENT_LOGFILE", None)
 
-URLS = [
+RM_URLS = [
     "http://10.130.1.101:5001",
+]
+
+BT_REWARD_URLS = [
+    "http://10.130.1.123:5000"
 ]
 
 
@@ -153,6 +157,17 @@ def simple_tokenize(s):
         return s.lower().strip().split(" ")
 
 
+def split_array(arr):
+    odd = []
+    even = []
+    for num, elem in enumerate(arr):
+        if num % 2 == 0:
+            even.append(elem)
+        else:
+            odd.append(elem)
+    return odd, even
+
+
 def batchify(iterable, n):
     batch = []
     for item in iterable:
@@ -171,12 +186,12 @@ def is_subject_question(ground_truth):
         return False
 
 
-def post_with_retry(urls, data, max_retries=3, retry_delay=1):
+def post_with_retry(RM_URLS, data, max_retries=3, retry_delay=1, suffix="/reward"):
     retries = 0
     while retries < max_retries:
         try:
-            url = random.choice(urls)
-            response = requests.post(f'{url}/reward', json=data, timeout=30)
+            url = random.choice(RM_URLS)
+            response = requests.post(f'{url}{suffix}', json=data, timeout=30)
             response.raise_for_status()  # 如果状态码不是 200，抛出异常
             return response.json()
         except requests.RequestException as e:
@@ -246,7 +261,7 @@ def compute_rm_score(
 
     if len(input_datas) > 0:
         for batch in tqdm_nonasync(batchify(input_datas, n=32), desc='[RM] batchify inference'):
-            output_datas = post_with_retry(URLS, batch)
+            output_datas = post_with_retry(RM_URLS, batch)
             for _ in output_datas['reward']:
                 _id = int(_["id"])
                 rewards[_id] = _["rm_score"]
@@ -477,7 +492,7 @@ def xml_cot_compute_score(batch_data_sources, batch_solution_str, batch_ground_t
 
     if len(input_datas) > 0:
         for batch in tqdm_nonasync(batchify(input_datas, n=32), desc='[RM] batchify inference'):
-            output_datas = post_with_retry(URLS, batch)
+            output_datas = post_with_retry(RM_URLS, batch)
             for _ in output_datas['reward']:
                 _id = int(_["id"])
                 rewards[_id] = _["rm_score"]
@@ -1002,6 +1017,157 @@ _qwq_longcot_fabricate_qa_compute_score_v2_valid = QwQLongCoTFabricateQAComputeS
     split="valid")
 qwq_longcot_fabricate_qa_compute_score_v2_train = _qwq_longcot_fabricate_qa_compute_score_v2_train.compute_score
 qwq_longcot_fabricate_qa_compute_score_v2_valid = _qwq_longcot_fabricate_qa_compute_score_v2_valid.compute_score
+
+
+class QwQLongCoTBackTranslationComputeScore(ComputeScoreBase):
+    def __init__(self, split="train", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
+        super().__init__(split=split, parse_result_failure_score=parse_result_failure_score)
+        print(self.parse_result_failure_score)
+
+    def get_penalties(self) -> Dict[str, Callable]:
+        return {}
+
+    @classmethod
+    def postprocess_solution_fn(cls, solution_str: str):
+        solution_str = postprocess_solution(solution_str)
+        try:
+            thought = re.findall(r'<think>.*</think>',
+                                 solution_str, re.DOTALL)[0]
+        except Exception as err:
+            return None
+        try:
+            conclusion = solution_str.replace(thought, "").strip()
+            if ("[PROMPT]" not in conclusion):
+                return None
+            return conclusion[conclusion.index("[PROMPT]")+len("[PROMPT]"):].strip()
+        except Exception as err:
+            return None
+
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+
+        penalty = defaultdict(dict)
+        for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            for key, fn in self.get_penalties().items():
+                penalty[key][i] = fn(solution_str, ground_truth)
+
+        base_rewards = self.get_bt_rewards(
+            batch_data_sources, batch_solution_str, batch_ground_truth)
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            penalty_log_str = []
+            _reward = base_rewards[i]
+            for name, _penalty in penalty.items():
+                if i in _penalty:
+                    _reward += _penalty[i]
+                    penalty_log_str.append(f'{name} Penalty={_penalty[i]:.2f}')
+
+            final_results.append(_reward)
+
+            if self.split == "valid":
+                print(
+                    f"--------------------------------[VALID]--------------------------------")
+                print(
+                    f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
+                print(f'Reward={_reward:.3f}\n')
+            elif self.split == "train" and random.random() < 0.01:
+                print(
+                    f"--------------------------------[TRAIN]--------------------------------")
+                print(
+                    f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f'Reward={_reward:.3f}\n')
+        return final_results
+
+    def compute_bt_reward(
+            self,
+            batch_solution_str,
+            batch_ground_truth,
+    ):
+        input_datas = []
+        rewards = {}
+
+        for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            if solution_str is not None:
+                solution_str = self.postprocess_solution_fn(solution_str)
+                if solution_str is None:
+                    rewards[i] = self.parse_result_failure_score
+                    continue
+                if ground_truth is None:
+                    rewards[i] = parse_result_failure_score
+                    continue
+
+            if solution_str is None:
+                input_data = {
+                    "completion": ground_truth, "id": i
+                }
+            else:
+                input_data = {
+                    "prompt": solution_str, "response": ground_truth, "id": i
+                }
+            input_datas.append(input_data)
+
+        if len(input_datas) > 0:
+            for batch in tqdm_nonasync(batchify(input_datas, n=32), desc='[BT Reward] batchify inference'):
+                output_datas = post_with_retry(
+                    BT_REWARD_URLS, batch, suffix="/bt_reward")
+                for _ in output_datas['reward']:
+                    _id = int(_["id"])
+                    rewards[_id] = _["info"]
+            final_results = []
+            for i in range(len(batch_solution_str)):
+                if i in rewards:
+                    final_results.append(rewards[i])
+                else:
+                    final_results.append(0.)
+            return final_results
+
+    def log_solution(self, solution):
+        norm = self.postprocess_solution_fn(solution)
+        if norm is None:
+            return repr(self.clip_string(solution))
+        return repr(self.clip_string(norm))
+
+    def get_bt_rewards(self,
+                       batch_data_sources,
+                       batch_solution_str,
+                       batch_ground_truth):
+
+        new_batch_solution_str, new_batch_ground_truth = [], []
+        for gt, sol in zip(batch_ground_truth, batch_solution_str):
+            # w/o Response
+            gt_content = gt["content"]
+            new_batch_solution_str.append("<think></think>\n[PROMPT]\n")
+            new_batch_ground_truth.append(gt_content)
+
+            # w Response
+            new_batch_solution_str.append(sol)
+            new_batch_ground_truth.append(gt_content)
+
+        rewards = self.compute_bt_reward(
+            batch_solution_str=new_batch_solution_str,
+            batch_ground_truth=new_batch_ground_truth,
+        )
+
+        odd, even = split_array(rewards)
+        w_resp, wo_resp = odd, even
+        w_bt, wo_bt = w_resp, wo_resp
+
+        scores = []
+        for w, wo in zip(w_bt, wo_bt):
+            score = w / wo
+            if wo != 0.0:
+                score = w / wo
+            else:
+                score = 0.0
+            if w == self.parse_result_failure_score:
+                score = self.parse_result_failure_score
+            scores.append(score)
+        return scores
+
 
 if __name__ == "__main__":
     pass

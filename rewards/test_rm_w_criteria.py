@@ -19,9 +19,15 @@ from rm_w_criteria import (
     QwQLongCoTFabricateQAComputeScore,
     QwQLongCoTFabricateQAComputeScoreV2,
     QwQLongCoTCriteriaEnvolveComputeScore,
+    QwQLongCoTBackTranslationComputeScore,
     qwq_longcot_fabricate_qa_compute_score_train,
     qwq_longcot_fabricate_qa_compute_score_v2_valid
 )
+
+
+def generate_random_string(n):
+    all_characters = string.ascii_letters + string.digits
+    return ''.join(random.choice(all_characters) for _ in range(n))
 
 
 def load_xml_cot_data(num):
@@ -89,10 +95,6 @@ def load_qwq_fabricate_qa_data(num=100):
     filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/authentic_qa_aio_20250115_test_bugfix_0329.parquet"
     batch_solution_str, batch_ground_truth = [], []
 
-    def generate_random_string(n):
-        all_characters = string.ascii_letters + string.digits + ' '
-        return ''.join(random.choice(all_characters) for _ in range(n))
-
     df = pd.read_parquet(filename)
     for _, row in df.iterrows():
         row = row.to_dict()
@@ -106,12 +108,8 @@ def load_qwq_fabricate_qa_data(num=100):
 
 
 def load_qwq_criteria_envolve_data(num=100):
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/reward_data_test_250407.parquet"
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_bt/bt_seed_discipline_250426_4k_test/part_0.parquet"
     batch_solution_str, batch_ground_truth = [], []
-
-    def generate_random_string(n):
-        all_characters = string.ascii_letters + string.digits
-        return ''.join(random.choice(all_characters) for _ in range(n))
 
     df = pd.read_parquet(filename)
     for _, row in df.iterrows():
@@ -124,6 +122,22 @@ def load_qwq_criteria_envolve_data(num=100):
         #     f'<think>\n{generate_random_string(500)}\n</think>\n\n{row["reward_model"]["reference"]}')
         batch_solution_str.append(
             f'<think>\n{generate_random_string(500)}\n</think>\n\n{row["reward_model"]["reference"]}')
+    return batch_solution_str, batch_ground_truth
+
+
+def load_qwq_pretrain_back_translation_data(num=100):
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_bt/bt_seed_discipline_250426_4k_test/part_0.parquet"
+    batch_solution_str, batch_ground_truth = [], []
+
+    df = pd.read_parquet(filename)
+    for _, row in df.iterrows():
+        row = row.to_dict()
+        batch_ground_truth.append(row["reward_model"])
+
+        batch_solution_str.append(
+            f'<think>\n{generate_random_string(500)}\n</think>\n\n[PROMPT]\n写一篇文档')
+        # batch_solution_str.append(
+        #     f'<think>\n{generate_random_string(500)}\n</think>\n\n\n写一篇文档')
     return batch_solution_str, batch_ground_truth
 
 
@@ -194,6 +208,17 @@ class TestRMReward(unittest.TestCase):
             batch_solution_str,
             batch_ground_truth
         )
+
+    def test_qwq_long_cot_back_translation_compute_score(self):
+        task = QwQLongCoTBackTranslationComputeScore(
+            parse_result_failure_score=-2, split="valid"
+        )
+        batch_solution_str, batch_ground_truth = load_qwq_pretrain_back_translation_data()
+        print(task.compute_score(
+            [None] * len(batch_solution_str),
+            batch_solution_str,
+            batch_ground_truth
+        ))
 
     def test_qwq_long_cot_criteria_envolve_compute_score(self):
         task = QwQLongCoTCriteriaEnvolveComputeScore(
