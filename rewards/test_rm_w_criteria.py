@@ -19,7 +19,8 @@ from rm_w_criteria import (
     QwQLongCoTFabricateQAComputeScore,
     QwQLongCoTFabricateQAComputeScoreV2,
     QwQLongCoTCriteriaEnvolveComputeScore,
-    QwQLongCoTBackTranslationComputeScore,
+    QwQLongCoTPretrainBackTranslationComputeScore,
+    QwQLongCoTSFTBackTranslationComputeScore,
     qwq_longcot_fabricate_qa_compute_score_train,
     qwq_longcot_fabricate_qa_compute_score_v2_valid
 )
@@ -125,8 +126,12 @@ def load_qwq_criteria_envolve_data(num=100):
     return batch_solution_str, batch_ground_truth
 
 
-def load_qwq_pretrain_back_translation_data(num=100):
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_bt/bt_seed_discipline_250426_4k_test/part_0.parquet"
+def load_qwq_back_translation_data(num=100, mode="pretrain"):
+    if mode == "pretrain":
+        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_bt/bt_seed_discipline_250428_4k_train/part_18.parquet"
+    else:
+        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/sft_bt/internlm3_s2_release_0213_8k_sample100_test/part_0.parquet"
+
     batch_solution_str, batch_ground_truth = [], []
 
     df = pd.read_parquet(filename)
@@ -135,7 +140,9 @@ def load_qwq_pretrain_back_translation_data(num=100):
         batch_ground_truth.append(row["reward_model"])
 
         batch_solution_str.append(
-            f'<think>\n{generate_random_string(500)}\n</think>\n\n[PROMPT]\n写一篇文档')
+            f'<think>\n{generate_random_string(500)}\n</think>\n\n[PROMPT]\n# INSTRUCTION\n写一篇文档\n# INPUT')
+        # batch_solution_str.append(
+        #     f'<think>\n{generate_random_string(500)}\n</think>\n\n[PROMPT]\n# INSTRUCTION\{row["reward_model"]["ground_truth"]}\n# INPUT')
         # batch_solution_str.append(
         #     f'<think>\n{generate_random_string(500)}\n</think>\n\n\n写一篇文档')
     return batch_solution_str, batch_ground_truth
@@ -209,11 +216,23 @@ class TestRMReward(unittest.TestCase):
             batch_ground_truth
         )
 
-    def test_qwq_long_cot_back_translation_compute_score(self):
-        task = QwQLongCoTBackTranslationComputeScore(
+    def test_qwq_long_cot_pretrain_back_translation_compute_score(self):
+        task = QwQLongCoTPretrainBackTranslationComputeScore(
             parse_result_failure_score=-2, split="valid"
         )
-        batch_solution_str, batch_ground_truth = load_qwq_pretrain_back_translation_data()
+        batch_solution_str, batch_ground_truth = load_qwq_back_translation_data()
+        print(task.compute_score(
+            [None] * len(batch_solution_str),
+            batch_solution_str,
+            batch_ground_truth
+        ))
+
+    def test_qwq_long_cot_sft_back_translation_compute_score(self):
+        task = QwQLongCoTSFTBackTranslationComputeScore(
+            parse_result_failure_score=-2, split="valid"
+        )
+        batch_solution_str, batch_ground_truth = load_qwq_back_translation_data(
+            mode="sft")
         print(task.compute_score(
             [None] * len(batch_solution_str),
             batch_solution_str,

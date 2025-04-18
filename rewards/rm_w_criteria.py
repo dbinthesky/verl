@@ -31,7 +31,8 @@ RM_URLS = [
 ]
 
 BT_REWARD_URLS = [
-    "http://10.130.1.123:5000"
+    # "http://10.130.1.105:5005"
+    "http://10.130.1.10:5004"
 ]
 
 
@@ -134,7 +135,7 @@ agent = Agent(**{
     "api_keys": "EMPTY",
     "request_kwargs": {
         "temperature": 0.7,
-        "timeout": 30,
+        "timeout": 180,
         "max_tokens": 2048
     },
 })
@@ -191,7 +192,7 @@ def post_with_retry(RM_URLS, data, max_retries=3, retry_delay=1, suffix="/reward
     while retries < max_retries:
         try:
             url = random.choice(RM_URLS)
-            response = requests.post(f'{url}{suffix}', json=data, timeout=30)
+            response = requests.post(f'{url}{suffix}', json=data, timeout=600)
             response.raise_for_status()  # 如果状态码不是 200，抛出异常
             return response.json()
         except requests.RequestException as e:
@@ -260,7 +261,7 @@ def compute_rm_score(
         input_datas.append(input_data)
 
     if len(input_datas) > 0:
-        for batch in tqdm_nonasync(batchify(input_datas, n=32), desc='[RM] batchify inference'):
+        for batch in tqdm_nonasync(batchify(input_datas, n=256), desc='[RM] batchify inference'):
             output_datas = post_with_retry(RM_URLS, batch)
             for _ in output_datas['reward']:
                 _id = int(_["id"])
@@ -285,7 +286,7 @@ class ComputeScoreBase(object):
 
     def clip_string(self, s: str):
         if len(s) > 2000:
-            return f'{s[:1000]}... ...{s[-1000:]}'
+            return f'{s[:1000]}... [省略] ...{s[-1000:]}'
         return s
 
     @abstractmethod
@@ -491,7 +492,7 @@ def xml_cot_compute_score(batch_data_sources, batch_solution_str, batch_ground_t
             input_datas.append(input_data)
 
     if len(input_datas) > 0:
-        for batch in tqdm_nonasync(batchify(input_datas, n=32), desc='[RM] batchify inference'):
+        for batch in tqdm_nonasync(batchify(input_datas, n=256), desc='[RM] batchify inference'):
             output_datas = post_with_retry(RM_URLS, batch)
             for _ in output_datas['reward']:
                 _id = int(_["id"])
@@ -814,6 +815,7 @@ class BleuSimilarity(PenaltyOrReward):
                 return 0.
 
             gt = self.postprocess_gt_fn(ground_truth)
+
             gt_tokens = " ".join(simple_tokenize(gt))
             sl_tokens = " ".join(simple_tokenize(solution_str))
             bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
@@ -1019,13 +1021,58 @@ qwq_longcot_fabricate_qa_compute_score_v2_train = _qwq_longcot_fabricate_qa_comp
 qwq_longcot_fabricate_qa_compute_score_v2_valid = _qwq_longcot_fabricate_qa_compute_score_v2_valid.compute_score
 
 
-class QwQLongCoTBackTranslationComputeScore(ComputeScoreBase):
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# Pretrain Back-Translation
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+class LanguageInconsistencyPenalty(PenaltyOrReward):
+    def __init__(self,
+                 postprocess_solution_fn,
+                 penalty_base=-1.0,
+                 key="content"):
+        self.penalty_base = penalty_base
+        self.postprocess_solution_fn = postprocess_solution_fn
+        self.key = key
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        solution_str = self.postprocess_solution_fn(solution_str)
+        if solution_str is None:
+            return 0.
+
+        penalty = 0
+        if contain_chinese(ground_truth[self.key]):
+            if not contain_chinese(solution_str):
+                return self.penalty_base
+        else:
+            if contain_chinese(solution_str):
+                return self.penalty_base
+        return penalty
+
+
+class FormatPenalty(PenaltyOrReward):
+    def __init__(self,
+                 postprocess_solution_fn):
+        self.postprocess_solution_fn = postprocess_solution_fn
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        solution_str = self.postprocess_solution_fn(solution_str)
+        if solution_str is None:
+            return -1.0
+
+        if "# INSTRUCTION" not in solution_str or "# INPUT" not in solution_str:
+            return -1.0
+        return 0.
+
+
+class QwQLongCoTPretrainBackTranslationComputeScore(ComputeScoreBase):
     def __init__(self, split="train", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
         super().__init__(split=split, parse_result_failure_score=parse_result_failure_score)
-        print(self.parse_result_failure_score)
 
     def get_penalties(self) -> Dict[str, Callable]:
-        return {}
+        return {
+            "LanguageInconsistency": LanguageInconsistencyPenalty(postprocess_solution_fn=self.postprocess_solution_fn).get_penalty_or_reward,
+            "FormatPenalty": FormatPenalty(postprocess_solution_fn=self.postprocess_solution_fn).get_penalty_or_reward,
+        }
 
     @classmethod
     def postprocess_solution_fn(cls, solution_str: str):
@@ -1063,7 +1110,11 @@ class QwQLongCoTBackTranslationComputeScore(ComputeScoreBase):
             for name, _penalty in penalty.items():
                 if i in _penalty:
                     _reward += _penalty[i]
-                    penalty_log_str.append(f'{name} Penalty={_penalty[i]:.2f}')
+                    try:
+                        penalty_log_str.append(
+                            f'{name} Penalty={_penalty[i]:.2f}')
+                    except Exception as _:
+                        pass
 
             final_results.append(_reward)
 
@@ -1072,15 +1123,23 @@ class QwQLongCoTBackTranslationComputeScore(ComputeScoreBase):
                     f"--------------------------------[VALID]--------------------------------")
                 print(
                     f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
-                print(f'Reward={_reward:.3f}\n')
+                print(
+                    f"【Corpus】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                print(
+                    f'Reward={_reward:.3f} | {" | ".join(penalty_log_str)}\n')
             elif self.split == "train" and random.random() < 0.01:
                 print(
                     f"--------------------------------[TRAIN]--------------------------------")
                 print(
                     f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
                 print(
-                    f'Reward={_reward:.3f}\n')
+                    f"【Corpus】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                print(
+                    f'Reward={_reward:.3f} | {" | ".join(penalty_log_str)}\n')
         return final_results
+
+    def log_ground_truth(self, ground_truth):
+        return repr(self.clip_string(ground_truth["content"]))
 
     def compute_bt_reward(
             self,
@@ -1111,7 +1170,8 @@ class QwQLongCoTBackTranslationComputeScore(ComputeScoreBase):
             input_datas.append(input_data)
 
         if len(input_datas) > 0:
-            for batch in tqdm_nonasync(batchify(input_datas, n=32), desc='[BT Reward] batchify inference'):
+            batch_size = 512
+            for batch in tqdm_nonasync(batchify(input_datas, n=batch_size), desc=f'[BT Reward] batchify({batch_size}) inference'):
                 output_datas = post_with_retry(
                     BT_REWARD_URLS, batch, suffix="/bt_reward")
                 for _ in output_datas['reward']:
@@ -1130,6 +1190,11 @@ class QwQLongCoTBackTranslationComputeScore(ComputeScoreBase):
         if norm is None:
             return repr(self.clip_string(solution))
         return repr(self.clip_string(norm))
+
+    def clip_string(self, s: str):
+        if len(s) > 1500:
+            return f'{s[:700]}... [省略] ...{s[-800:]}'
+        return s
 
     def get_bt_rewards(self,
                        batch_data_sources,
@@ -1158,9 +1223,8 @@ class QwQLongCoTBackTranslationComputeScore(ComputeScoreBase):
 
         scores = []
         for w, wo in zip(w_bt, wo_bt):
-            score = w / wo
-            if wo != 0.0:
-                score = w / wo
+            if w != 0.0:
+                score = wo / w
             else:
                 score = 0.0
             if w == self.parse_result_failure_score:
@@ -1168,6 +1232,97 @@ class QwQLongCoTBackTranslationComputeScore(ComputeScoreBase):
             scores.append(score)
         return scores
 
+
+_qwq_longcot_pretrain_back_translation_compute_score_train = QwQLongCoTPretrainBackTranslationComputeScore(
+    split="train")
+_qwq_longcot_pretrain_back_translation_compute_score_valid = QwQLongCoTPretrainBackTranslationComputeScore(
+    split="valid")
+qwq_longcot_pretrain_back_translation_compute_score_train = _qwq_longcot_pretrain_back_translation_compute_score_train.compute_score
+qwq_longcot_pretrain_back_translation_compute_score_valid = _qwq_longcot_pretrain_back_translation_compute_score_valid.compute_score
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# SFT Back-Translation
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+class QwQLongCoTSFTBackTranslationComputeScore(QwQLongCoTPretrainBackTranslationComputeScore):
+    def __init__(self, split="train", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
+        super().__init__(split=split, parse_result_failure_score=parse_result_failure_score)
+
+        self.bleu_similarity = BleuSimilarity(
+            postprocess_solution_fn=QwQLongCoTSFTBackTranslationComputeScore.postprocess_solution_fn,
+            postprocess_gt_fn=self.extract_gt_question
+        )
+
+    @classmethod
+    def extract_gt_question(cls, ground_truth):
+        ground_truth = ground_truth["ground_truth"]
+        return ground_truth
+
+    def log_ground_truth(self, ground_truth):
+        return repr(self.clip_string(ground_truth["ground_truth"]))
+
+    def get_penalties(self) -> Dict[str, Callable]:
+        return {
+            "LanguageInconsistency": LanguageInconsistencyPenalty(postprocess_solution_fn=self.postprocess_solution_fn, key="ground_truth").get_penalty_or_reward,
+            "FormatPenalty": FormatPenalty(postprocess_solution_fn=self.postprocess_solution_fn).get_penalty_or_reward,
+            "BLEU": self.bleu_similarity.get_penalty_or_reward,
+        }
+
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+
+        penalty = defaultdict(dict)
+        for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            for key, fn in self.get_penalties().items():
+                penalty[key][i] = fn(solution_str, ground_truth)
+
+        final_results = []
+
+        for i in range(len(batch_solution_str)):
+            penalty_log_str = []
+            _reward = 0.0
+            for name, _penalty in penalty.items():
+                if i in _penalty:
+                    _reward += _penalty[i]
+                    try:
+                        penalty_log_str.append(
+                            f'{name} Penalty={_penalty[i]:.2f}')
+                    except Exception as _:
+                        pass
+
+            final_results.append(_reward)
+
+            if self.split == "valid":
+                print(
+                    f"--------------------------------[VALID]--------------------------------")
+                print(
+                    f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                print(
+                    f'Reward={_reward:.3f} | {" | ".join(penalty_log_str)}\n')
+            elif self.split == "train" and random.random() < 0.01:
+                print(
+                    f"--------------------------------[TRAIN]--------------------------------")
+                print(
+                    f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                print(
+                    f'Reward={_reward:.3f} | {" | ".join(penalty_log_str)}\n')
+        return final_results
+
+
+_qwq_longcot_sft_back_translation_compute_score_train = QwQLongCoTSFTBackTranslationComputeScore(
+    split="train", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD)
+_qwq_longcot_sft_back_translation_compute_score_valid = QwQLongCoTSFTBackTranslationComputeScore(
+    split="valid", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD)
+qwq_longcot_sft_back_translation_compute_score_train = _qwq_longcot_sft_back_translation_compute_score_train.compute_score
+qwq_longcot_sft_back_translation_compute_score_valid = _qwq_longcot_sft_back_translation_compute_score_valid.compute_score
 
 if __name__ == "__main__":
     pass
