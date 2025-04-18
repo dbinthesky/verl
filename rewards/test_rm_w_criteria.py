@@ -5,8 +5,10 @@ import unittest
 import string
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 import asyncio as aio
 from rm_w_criteria import (
+    batchify,
     compute_rm_score,
     postprocess_solution,
     simple_tokenize,
@@ -126,11 +128,12 @@ def load_qwq_criteria_envolve_data(num=100):
     return batch_solution_str, batch_ground_truth
 
 
-def load_qwq_back_translation_data(num=100, mode="pretrain"):
-    if mode == "pretrain":
-        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_bt/bt_seed_discipline_250428_4k_train/part_18.parquet"
-    else:
-        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/sft_bt/internlm3_s2_release_0213_8k_sample100_test/part_0.parquet"
+def load_qwq_back_translation_data(num=100, mode="pretrain", filename=None):
+    if filename is None:
+        if mode == "pretrain":
+            filename = "/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_bt/bt_seed_discipline_250428_4k_train/part_18.parquet"
+        else:
+            filename = "/cpfs01/shared/llm_ddd/tongjian/rl/sft_bt/internlm3_s2_release_0213_8k_sample100_test/part_0.parquet"
 
     batch_solution_str, batch_ground_truth = [], []
 
@@ -221,6 +224,8 @@ class TestRMReward(unittest.TestCase):
             parse_result_failure_score=-2, split="valid"
         )
         batch_solution_str, batch_ground_truth = load_qwq_back_translation_data()
+        batch_solution_str, batch_ground_truth = batch_solution_str[:100], batch_ground_truth[:100]
+        
         print(task.compute_score(
             [None] * len(batch_solution_str),
             batch_solution_str,
@@ -239,11 +244,30 @@ class TestRMReward(unittest.TestCase):
             batch_ground_truth
         ))
 
+    def test_qwq_long_cot_back_translation_stats(self):
+        task = QwQLongCoTPretrainBackTranslationComputeScore(
+            parse_result_failure_score=-2, split="valid"
+        )
+        batch_solution_str, batch_ground_truth = load_qwq_back_translation_data(
+            filename="/cpfs01/shared/llm_ddd/tongjian/rl/sft_bt/internlm2_5_s2_release_8k_train/part_0.parquet")
+        pbar = tqdm(total=len(batch_solution_str))
+        info_of_prompt = []
+        for batch in batchify(batch_ground_truth, 128):
+            _batch_ground_truth = [_["ground_truth"] for _ in batch]
+            info_of_prompt.extend(task.compute_bt_reward(
+                [None] * len(_batch_ground_truth),
+                _batch_ground_truth
+            ))
+            print(np.mean(info_of_prompt))
+            pbar.update(len(_batch_ground_truth))
+        print(np.mean(info_of_prompt))
+
     def test_qwq_long_cot_criteria_envolve_compute_score(self):
         task = QwQLongCoTCriteriaEnvolveComputeScore(
             parse_result_failure_score=0.)
         batch_solution_str, batch_ground_truth = load_qwq_criteria_envolve_data(
             num=100)
+
         print(task.compute_score(
             [None] * len(batch_solution_str),
             batch_solution_str,

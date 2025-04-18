@@ -1103,6 +1103,7 @@ class QwQLongCoTPretrainBackTranslationComputeScore(ComputeScoreBase):
 
         base_rewards = self.get_bt_rewards(
             batch_data_sources, batch_solution_str, batch_ground_truth)
+
         final_results = []
         for i in range(len(batch_solution_str)):
             penalty_log_str = []
@@ -1170,7 +1171,7 @@ class QwQLongCoTPretrainBackTranslationComputeScore(ComputeScoreBase):
             input_datas.append(input_data)
 
         if len(input_datas) > 0:
-            batch_size = 512
+            batch_size = 128
             for batch in tqdm_nonasync(batchify(input_datas, n=batch_size), desc=f'[BT Reward] batchify({batch_size}) inference'):
                 output_datas = post_with_retry(
                     BT_REWARD_URLS, batch, suffix="/bt_reward")
@@ -1203,33 +1204,42 @@ class QwQLongCoTPretrainBackTranslationComputeScore(ComputeScoreBase):
 
         new_batch_solution_str, new_batch_ground_truth = [], []
         for gt, sol in zip(batch_ground_truth, batch_solution_str):
-            # w/o Response
+            # H(Y)
             gt_content = gt["content"]
             new_batch_solution_str.append("<think></think>\n[PROMPT]\n")
             new_batch_ground_truth.append(gt_content)
 
-            # w Response
+            # H(X,Y)
             new_batch_solution_str.append(sol)
             new_batch_ground_truth.append(gt_content)
+
+            # H(X)
+            new_batch_solution_str.append(sol)
+            new_batch_ground_truth.append("")
 
         rewards = self.compute_bt_reward(
             batch_solution_str=new_batch_solution_str,
             batch_ground_truth=new_batch_ground_truth,
         )
 
-        odd, even = split_array(rewards)
-        w_resp, wo_resp = odd, even
-        w_bt, wo_bt = w_resp, wo_resp
+        def split_array(arr):
+            first, second, third = [], [], []
+            for num, elem in enumerate(arr):
+                if num % 3 == 0:
+                    first.append(elem)
+                elif num % 3 == 1:
+                    second.append(elem)
+                else:
+                    third.append(elem)
+            return first, second, third
 
         scores = []
-        for w, wo in zip(w_bt, wo_bt):
-            if w != 0.0:
-                score = wo / w
-            else:
-                score = 0.0
-            if w == self.parse_result_failure_score:
-                score = self.parse_result_failure_score
-            scores.append(score)
+
+        MIN_H_X_CLIP = 1900
+        first, second, third = split_array(rewards)
+        for h_y, h_x_y, h_x in zip(first, second, third):
+            scores.append((h_y+h_x-h_x_y) / max(h_x, MIN_H_X_CLIP))
+
         return scores
 
 
