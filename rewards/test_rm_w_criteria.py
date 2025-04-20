@@ -225,7 +225,7 @@ class TestRMReward(unittest.TestCase):
         )
         batch_solution_str, batch_ground_truth = load_qwq_back_translation_data()
         batch_solution_str, batch_ground_truth = batch_solution_str[:100], batch_ground_truth[:100]
-        
+
         print(task.compute_score(
             [None] * len(batch_solution_str),
             batch_solution_str,

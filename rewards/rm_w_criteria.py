@@ -1172,19 +1172,20 @@ class QwQLongCoTPretrainBackTranslationComputeScore(ComputeScoreBase):
 
         if len(input_datas) > 0:
             batch_size = 128
-            for batch in tqdm_nonasync(batchify(input_datas, n=batch_size), desc=f'[BT Reward] batchify({batch_size}) inference'):
+            for batch in tqdm_nonasync(batchify(input_datas, n=batch_size), desc=f'[BT Reward] batchify ({batch_size}) inference'):
                 output_datas = post_with_retry(
                     BT_REWARD_URLS, batch, suffix="/bt_reward")
                 for _ in output_datas['reward']:
                     _id = int(_["id"])
                     rewards[_id] = _["info"]
-            final_results = []
-            for i in range(len(batch_solution_str)):
-                if i in rewards:
-                    final_results.append(rewards[i])
-                else:
-                    final_results.append(0.)
-            return final_results
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            if i in rewards:
+                final_results.append(rewards[i])
+            else:
+                final_results.append(0.)
+        return final_results
 
     def log_solution(self, solution):
         norm = self.postprocess_solution_fn(solution)
@@ -1238,8 +1239,10 @@ class QwQLongCoTPretrainBackTranslationComputeScore(ComputeScoreBase):
         MIN_H_X_CLIP = 1900
         first, second, third = split_array(rewards)
         for h_y, h_x_y, h_x in zip(first, second, third):
-            scores.append((h_y+h_x-h_x_y) / max(h_x, MIN_H_X_CLIP))
-
+            if any(_ == self.parse_result_failure_score for _ in (h_y, h_x_y, h_x)):
+                scores.append(self.parse_result_failure_score)
+            else:
+                scores.append((h_y+h_x-h_x_y) / max(h_x, MIN_H_X_CLIP))
         return scores
 
 

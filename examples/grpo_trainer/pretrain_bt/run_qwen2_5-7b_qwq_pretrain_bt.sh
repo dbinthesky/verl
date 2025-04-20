@@ -49,7 +49,7 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/qwen2_5-7b_sft_bt-dlc-2025-04-17-04-50-43_grpo_step_20"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/qwen2_5-7b_pretrain_bt-dlc-2025-04-18-04-44-25_grpo_step_20"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_bt/bt_seed_discipline_250428_4k_train"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_bt/bt_seed_discipline_250428_4k_test"
 
