@@ -804,15 +804,18 @@ class FabricateQALengthPenalty(ConclusionTooLongPenalty):
 class BleuSimilarity(PenaltyOrReward):
     def __init__(self,
                  postprocess_solution_fn,
-                 postprocess_gt_fn):
+                 postprocess_gt_fn,
+                 parse_result_failure_score=0.
+                 ):
         self.postprocess_solution_fn = postprocess_solution_fn
         self.postprocess_gt_fn = postprocess_gt_fn
+        self.parse_result_failure_score = parse_result_failure_score
 
     def get_penalty_or_reward(self, solution_str, ground_truth):
         try:
             solution_str = self.postprocess_solution_fn(solution_str)
             if solution_str is None:
-                return 0.
+                return self.parse_result_failure_score
 
             gt = self.postprocess_gt_fn(ground_truth)
 
@@ -821,7 +824,7 @@ class BleuSimilarity(PenaltyOrReward):
             bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
             return bleu / 100
         except Exception as err:
-            return 0.
+            return self.parse_result_failure_score
 
 
 class QwQLongCoTFabricateQAComputeScoreV2(QwQLongCoTFabricateQAComputeScore):
@@ -1336,6 +1339,109 @@ _qwq_longcot_sft_back_translation_compute_score_valid = QwQLongCoTSFTBackTransla
     split="valid", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD)
 qwq_longcot_sft_back_translation_compute_score_train = _qwq_longcot_sft_back_translation_compute_score_train.compute_score
 qwq_longcot_sft_back_translation_compute_score_valid = _qwq_longcot_sft_back_translation_compute_score_valid.compute_score
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# Pretrain RL
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+class CoTPretrainRLComputeScore(ComputeScoreBase):
+    def __init__(self, split="train", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
+        super().__init__(split=split, parse_result_failure_score=parse_result_failure_score)
+
+        self.bleu_similarity = BleuSimilarity(
+            postprocess_solution_fn=CoTPretrainRLComputeScore.postprocess_solution_fn,
+            postprocess_gt_fn=lambda x: x["ground_truth"],
+            parse_result_failure_score=self.parse_result_failure_score
+        )
+
+    def get_penalties(self) -> Dict[str, Callable]:
+        return {
+            "BLEU": self.bleu_similarity.get_penalty_or_reward
+        }
+
+    @classmethod
+    def postprocess_solution_fn(cls, solution_str: str):
+        solution_str = postprocess_solution(solution_str)
+        try:
+            thought = re.findall(r'<chain-of-thought>.*</chain-of-thought>',
+                                 solution_str, re.DOTALL)[0]
+        except Exception as err:
+            return None
+        try:
+            corpus = re.findall(r'<corpus>(.*)</corpus>',
+                                solution_str, re.DOTALL)[0].strip()
+        except Exception as err:
+            return None
+        return corpus
+
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+
+        penalty = defaultdict(dict)
+        for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            for key, fn in self.get_penalties().items():
+                penalty[key][i] = fn(solution_str, ground_truth)
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            penalty_log_str = []
+            _reward = 0.0
+            for name, _penalty in penalty.items():
+                if i in _penalty:
+                    _reward += _penalty[i]
+                    try:
+                        penalty_log_str.append(
+                            f'{name} Penalty={_penalty[i]:.2f}')
+                    except Exception as _:
+                        pass
+
+            final_results.append(_reward)
+
+            if self.split == "valid":
+                print(
+                    f"--------------------------------[VALID]--------------------------------")
+                print(
+                    f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f"【Corpus】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                print(
+                    f'Reward={_reward:.3f} | {" | ".join(penalty_log_str)}\n')
+            elif self.split == "train" and random.random() < 0.01:
+                print(
+                    f"--------------------------------[TRAIN]--------------------------------")
+                print(
+                    f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f"【Corpus】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                print(
+                    f'Reward={_reward:.3f} | {" | ".join(penalty_log_str)}\n')
+        return final_results
+
+    def log_ground_truth(self, ground_truth):
+        return repr(self.clip_string(ground_truth["ground_truth"]))
+
+    def log_solution(self, solution):
+        norm = self.postprocess_solution_fn(solution)
+        if norm is None:
+            return repr(self.clip_string(solution))
+        return repr(self.clip_string(norm))
+
+    def clip_string(self, s: str):
+        if len(s) > 1500:
+            return f'{s[:700]}... [省略] ...{s[-800:]}'
+        return s
+
+
+_cot_pretrain_rl_compute_score_train = CoTPretrainRLComputeScore(
+    split="train", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD)
+_cot_pretrain_rl_compute_score_valid = CoTPretrainRLComputeScore(
+    split="valid", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD)
+cot_pretrain_rl_compute_score_train = _cot_pretrain_rl_compute_score_train.compute_score
+cot_pretrain_rl_compute_score_valid = _cot_pretrain_rl_compute_score_valid.compute_score
 
 if __name__ == "__main__":
     pass
