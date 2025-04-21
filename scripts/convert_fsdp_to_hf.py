@@ -21,17 +21,19 @@ def main(fsdp_checkpoint_path, huggingface_model_path, output_path):
     for key in state_dict:
         state_dict[key] = torch.cat(state_dict[key], dim=0)
 
-    config = AutoConfig.from_pretrained(huggingface_model_path, trust_remote_code=True)
+    config = AutoConfig.from_pretrained(
+        huggingface_model_path, trust_remote_code=True)
     model = AutoModelForCausalLM.from_config(config, trust_remote_code=True)
     model.load_state_dict(state_dict)
 
-    #for filepath in glob(f'{fsdp_checkpoint_path}/model_*.pt'):
+    # for filepath in glob(f'{fsdp_checkpoint_path}/model_*.pt'):
     #    part_state_dict = torch.load(filepath)
     #    model.load_state_dict(part_state_dict)
 
     model.save_pretrained(output_path, max_shard_size="10GB")
 
-    tokenizer = AutoTokenizer.from_pretrained(huggingface_model_path, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(
+        huggingface_model_path, trust_remote_code=True)
     tokenizer.save_pretrained(output_path)
 
 

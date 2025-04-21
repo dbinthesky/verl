@@ -27,12 +27,11 @@ RATE_LIMIT_RETRY_ATTEMPTS = 10
 WORKFLOW_AGENT_LOGFILE = os.getenv("WORKFLOW_AGENT_LOGFILE", None)
 
 RM_URLS = [
-    "http://10.130.1.101:5001",
+    "http://10.130.1.54:5001",
 ]
 
 BT_REWARD_URLS = [
-    # "http://10.130.1.105:5005"
-    "http://10.130.1.10:5004"
+    "http://10.130.1.101:5000"
 ]
 
 
@@ -242,6 +241,7 @@ def compute_rm_score(
         batch_ground_truth,
         postprocess_solution_fn,
         parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD,
+        judge_prompt_key="ground_truth"
 ):
     input_datas = []
     rewards = {}
@@ -256,12 +256,12 @@ def compute_rm_score(
             continue
 
         input_data = {
-            "prompt": ground_truth["ground_truth"], "response": solution_str, "id": i
+            "prompt": ground_truth[judge_prompt_key], "response": solution_str, "id": i
         }
         input_datas.append(input_data)
 
     if len(input_datas) > 0:
-        for batch in tqdm_nonasync(batchify(input_datas, n=256), desc='[RM] batchify inference'):
+        for batch in tqdm_nonasync(batchify(input_datas, n=256), desc=f'[RM] batchify inference (batch=256)'):
             output_datas = post_with_retry(RM_URLS, batch)
             for _ in output_datas['reward']:
                 _id = int(_["id"])
@@ -1062,8 +1062,9 @@ class FormatPenalty(PenaltyOrReward):
         if solution_str is None:
             return -1.0
 
-        if "# INSTRUCTION" not in solution_str or "# INPUT" not in solution_str:
-            return -1.0
+        if len(solution_str.strip()) < 10:
+            return -2.0
+
         return 0.
 
 
@@ -1086,10 +1087,9 @@ class QwQLongCoTPretrainBackTranslationComputeScore(ComputeScoreBase):
         except Exception as err:
             return None
         try:
-            conclusion = solution_str.replace(thought, "").strip()
-            if ("[PROMPT]" not in conclusion):
-                return None
-            return conclusion[conclusion.index("[PROMPT]")+len("[PROMPT]"):].strip()
+            conclusion = re.findall(r'<instruction>(.*)</instruction>',
+                                    solution_str, re.DOTALL)[0].strip()
+            return conclusion
         except Exception as err:
             return None
 
@@ -1210,7 +1210,8 @@ class QwQLongCoTPretrainBackTranslationComputeScore(ComputeScoreBase):
         for gt, sol in zip(batch_ground_truth, batch_solution_str):
             # H(Y)
             gt_content = gt["content"]
-            new_batch_solution_str.append("<think></think>\n[PROMPT]\n")
+            new_batch_solution_str.append(
+                "<think></think>\n<instruction></instruction>\n")
             new_batch_ground_truth.append(gt_content)
 
             # H(X,Y)
@@ -1239,7 +1240,7 @@ class QwQLongCoTPretrainBackTranslationComputeScore(ComputeScoreBase):
 
         scores = []
 
-        MIN_H_X_CLIP = 1900
+        MIN_H_X_CLIP = 4000
         first, second, third = split_array(rewards)
         for h_y, h_x_y, h_x in zip(first, second, third):
             if any(_ == self.parse_result_failure_score for _ in (h_y, h_x_y, h_x)):
@@ -1345,6 +1346,25 @@ qwq_longcot_sft_back_translation_compute_score_valid = _qwq_longcot_sft_back_tra
 # Pretrain RL
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+class CorpusLengthPenalty(PenaltyOrReward):
+    def __init__(self,
+                 postprocess_solution_fn,
+                 postprocess_gt_fn,
+                 penalty_base=-0.4):
+        self.postprocess_solution_fn = postprocess_solution_fn
+        self.penalty_base = penalty_base
+        self.postprocess_gt_fn = postprocess_gt_fn
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        solution_str = self.postprocess_solution_fn(solution_str)
+        if solution_str is None:
+            return 0.
+
+        gt = self.postprocess_gt_fn(ground_truth)
+        gt_token_size = len(simple_tokenize(gt))
+        return self.penalty_base * min(abs(len(simple_tokenize(solution_str))-gt_token_size) / gt_token_size, 5.)
+
+
 class CoTPretrainRLComputeScore(ComputeScoreBase):
     def __init__(self, split="train", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
         super().__init__(split=split, parse_result_failure_score=parse_result_failure_score)
@@ -1354,10 +1374,15 @@ class CoTPretrainRLComputeScore(ComputeScoreBase):
             postprocess_gt_fn=lambda x: x["ground_truth"],
             parse_result_failure_score=self.parse_result_failure_score
         )
+        self.length_penalty = CorpusLengthPenalty(
+            postprocess_solution_fn=CoTPretrainRLComputeScore.postprocess_solution_fn,
+            postprocess_gt_fn=lambda x: x["ground_truth"],
+        )
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
-            "BLEU": self.bleu_similarity.get_penalty_or_reward
+            "BLEU": self.bleu_similarity.get_penalty_or_reward,
+            "LengthPenalty": self.length_penalty.get_penalty_or_reward,
         }
 
     @classmethod
@@ -1369,11 +1394,32 @@ class CoTPretrainRLComputeScore(ComputeScoreBase):
         except Exception as err:
             return None
         try:
-            corpus = re.findall(r'<corpus>(.*)</corpus>',
+            corpus = re.findall(r'<doc>(.*)</doc>',
                                 solution_str, re.DOTALL)[0].strip()
         except Exception as err:
             return None
         return corpus
+
+    def get_thought(self, solution_str: str):
+        solution_str = postprocess_solution(solution_str)
+        try:
+            thought = re.findall(r'<chain-of-thought>(.*)</chain-of-thought>',
+                                 solution_str, re.DOTALL)[0]
+        except Exception as err:
+            return f"<FORMAT CORRUPT>"
+        return thought
+
+    def get_rm_rewards(self,
+                       batch_data_sources,
+                       batch_solution_str,
+                       batch_ground_truth):
+        return compute_rm_score(
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=batch_ground_truth,
+            postprocess_solution_fn=self.postprocess_solution_fn,
+            parse_result_failure_score=self.parse_result_failure_score,
+            judge_prompt_key="judge_criteria"
+        )
 
     def compute_score(self,
                       batch_data_sources,
@@ -1386,39 +1432,72 @@ class CoTPretrainRLComputeScore(ComputeScoreBase):
             for key, fn in self.get_penalties().items():
                 penalty[key][i] = fn(solution_str, ground_truth)
 
+        base_rewards = self.get_rm_rewards(
+            batch_data_sources, batch_solution_str, batch_ground_truth)
+        norm_base_score = []
+
+        for i in range(len(batch_solution_str)):
+            if np.std(base_rewards) != 0:
+                norm_score = (
+                    base_rewards[i] - np.mean(base_rewards))/np.std(base_rewards)
+            else:
+                norm_score = base_rewards[i]
+
+            for name, _penalty in penalty.items():
+                if name == "LengthPenalty":
+                    norm_score += _penalty[i]
+                elif name == "BLEU":
+                    bleu_score = _penalty[i]
+                    if np.std(list(_penalty.values())) != 0:
+                        _norm_bleu = (
+                            bleu_score-np.mean(list(_penalty.values()))) / np.std(list(_penalty.values()))
+                        norm_score += _norm_bleu
+                    else:
+                        _norm_bleu = bleu_score
+                        norm_score += _norm_bleu
+
+            norm_base_score.append(norm_score)
+
         final_results = []
         for i in range(len(batch_solution_str)):
             penalty_log_str = []
-            _reward = 0.0
+            final_results.append(norm_base_score[i])
             for name, _penalty in penalty.items():
                 if i in _penalty:
-                    _reward += _penalty[i]
                     try:
                         penalty_log_str.append(
-                            f'{name} Penalty={_penalty[i]:.2f}')
+                            f'{name}={_penalty[i]:.2f}')
                     except Exception as _:
                         pass
 
-            final_results.append(_reward)
+            thought = self.get_thought(batch_solution_str[i])
 
             if self.split == "valid":
                 print(
                     f"--------------------------------[VALID]--------------------------------")
                 print(
+                    f'【Prompt】`{repr(self.clip_string(batch_ground_truth[i]["prompt"]))}`')
+                print(
+                    f"【Thought】`{repr(self.clip_string(thought))}`")
+                print(
                     f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
                 print(
-                    f"【Corpus】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                    f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
                 print(
-                    f'Reward={_reward:.3f} | {" | ".join(penalty_log_str)}\n')
+                    f'Reward={norm_base_score[i]:.3f} | {" | ".join(penalty_log_str)}\n')
             elif self.split == "train" and random.random() < 0.01:
                 print(
                     f"--------------------------------[TRAIN]--------------------------------")
                 print(
+                    f'【Prompt】`{repr(self.clip_string(batch_ground_truth[i]["prompt"]))}`')
+                print(
+                    f"【Thought】`{repr(self.clip_string(thought))}`")
+                print(
                     f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
                 print(
-                    f"【Corpus】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                    f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
                 print(
-                    f'Reward={_reward:.3f} | {" | ".join(penalty_log_str)}\n')
+                    f'Reward={norm_base_score[i]:.3f} | {" | ".join(penalty_log_str)}\n')
         return final_results
 
     def log_ground_truth(self, ground_truth):

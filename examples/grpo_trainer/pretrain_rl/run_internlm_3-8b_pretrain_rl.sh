@@ -49,14 +49,14 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/qwen2_5-7b_pretrain_bt-dlc-2025-04-18-04-44-25_grpo_step_20"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_bt/pdf_2025_v1_zh_en_4k_train"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_bt/pdf_2025_v1_zh_en_4k_test"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_distill_qwq_aime_gpqa_aug_v1_250409_16401_open_source_hf"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/pretrain_rl_250419_4k_finish_0420"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/eval/mmlu_stem_0418.parquet"
 
-    experiment_name="qwen2_5-7b_pretrain_bt-dlc-${YYMMDD}-${HHMMSS}"
-    project_name="verl_grpo_qwq_pretrain_bt"
+    experiment_name="internlm3-8b_pretrain_rl_v1-dlc-${YYMMDD}-${HHMMSS}"
+    project_name="verl_grpo_internlm_pretrain_rl"
 
-    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/qwen2_5-7b_qwq_pretrain_bt/${experiment_name}/${YYMMDD}/${HHMMSS}"
+    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/internlm_3-8b_pretrain_rl/${experiment_name}/${YYMMDD}/${HHMMSS}"
     mkdir -p "${OUTPUT_DIR}"
 }
 setup_path
@@ -89,23 +89,23 @@ run_training() {
 
     python3 -m verl.trainer.main_ppo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/rm_w_criteria.py" \
-        custom_reward_function.name=qwq_longcot_pretrain_back_translation_compute_score_train \
-        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/rm_w_criteria.py" \
-        +custom_valid_reward_function.name=qwq_longcot_pretrain_back_translation_compute_score_valid \
+        custom_reward_function.name=cot_pretrain_rl_compute_score_train \
+        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/mmlu.py" \
+        +custom_valid_reward_function.name=compute_score \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=1024 \
-        data.max_prompt_length=8192 \
-        data.max_response_length=8192 \
+        data.train_batch_size=256 \
+        data.max_prompt_length=2048 \
+        data.max_response_length=14336 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
-        actor_rollout_ref.actor.optim.lr=5e-7 \
+        actor_rollout_ref.actor.optim.lr=1e-6 \
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=1024 \
-        actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus * 16)) \
+        actor_rollout_ref.actor.ppo_mini_batch_size=512 \
+        actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus * 4)) \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=16384 \
@@ -134,7 +134,7 @@ run_training() {
         +trainer.val_before_train=True \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
-        trainer.save_freq=10 \
+        trainer.save_freq=20 \
         trainer.test_freq=5 \
         trainer.total_epochs=10000 \
         reward_model.reward_manager="custom" "$@"

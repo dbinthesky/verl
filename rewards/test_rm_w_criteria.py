@@ -30,7 +30,7 @@ from rm_w_criteria import (
 
 
 def generate_random_string(n):
-    all_characters = string.ascii_letters + string.digits
+    all_characters = string.ascii_letters + string.digits + " "
     return ''.join(random.choice(all_characters) for _ in range(n))
 
 
@@ -112,7 +112,7 @@ def load_qwq_fabricate_qa_data(num=100):
 
 
 def load_cot_pretrain_rl(num=100):
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/pretrain_rl_250419_4k_finish_0420/part_0.parquet"
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/pretrain_rl_pdf_knowledge_4k_finish_0421/part_0.parquet"
     batch_solution_str, batch_ground_truth = [], []
 
     df = pd.read_parquet(filename)
@@ -123,7 +123,7 @@ def load_cot_pretrain_rl(num=100):
         batch_ground_truth.append(row["reward_model"])
         gt = row["reward_model"]["ground_truth"]
         batch_solution_str.append(
-            f'<chain-of-thought>\n{generate_random_string(100)}\n</chain-of-thought>\n\n<corpus>{gt}\n{generate_random_string(2000)}</corpus>')
+            f'<chain-of-thought>\n{generate_random_string(100)}\n</chain-of-thought>\n\n<doc>\n{gt}\n</doc>')
     return batch_solution_str, batch_ground_truth
 
 
@@ -148,7 +148,7 @@ def load_qwq_criteria_envolve_data(num=100):
 def load_qwq_back_translation_data(num=100, mode="pretrain", filename=None):
     if filename is None:
         if mode == "pretrain":
-            filename = "/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_bt/bt_seed_discipline_250428_4k_train/part_18.parquet"
+            filename = "/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_bt/pdf_2025_v1_zh_en_4k_test/part_0.parquet"
         else:
             filename = "/cpfs01/shared/llm_ddd/tongjian/rl/sft_bt/internlm3_s2_release_0213_8k_sample100_test/part_0.parquet"
 
@@ -160,7 +160,7 @@ def load_qwq_back_translation_data(num=100, mode="pretrain", filename=None):
         batch_ground_truth.append(row["reward_model"])
 
         batch_solution_str.append(
-            f'<think>\n{generate_random_string(500)}\n</think>\n\n[PROMPT]\n# INSTRUCTION\n写一篇文档\n# INPUT')
+            f'<think>\n{generate_random_string(500)}\n</think>\n\n<instruction>\n写一篇文档\n</instruction>')
         # batch_solution_str.append(
         #     f'<think>\n{generate_random_string(500)}\n</think>\n\n[PROMPT]\n# INSTRUCTION\{row["reward_model"]["ground_truth"]}\n# INPUT')
         # batch_solution_str.append(
@@ -343,7 +343,7 @@ class TestRMReward(unittest.TestCase):
     def test_cot_pretrain_rl_compute_score(self):
         batch_solution_str, batch_ground_truth = load_cot_pretrain_rl(
             num=100)
-        task = CoTPretrainRLComputeScore()
+        task = CoTPretrainRLComputeScore(split="valid")
         task.compute_score(
             [None] * len(batch_solution_str),
             batch_solution_str,
