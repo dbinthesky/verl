@@ -16,6 +16,7 @@ from typing import Dict, Any, Callable
 from tqdm import tqdm as tqdm_nonasync
 import xml.etree.ElementTree as ET
 from functools import partial
+from rouge_score import rouge_scorer
 from collections import namedtuple, defaultdict
 
 
@@ -31,7 +32,7 @@ RM_URLS = [
 ]
 
 BT_REWARD_URLS = [
-    "http://10.130.1.101:5000"
+    "http://10.130.0.60:5000"
 ]
 
 
@@ -152,9 +153,17 @@ def contain_chinese(string):
 
 def simple_tokenize(s):
     if contain_chinese(s):
-        return list(jieba.cut(s.lower()))
+        return simple_zh_tokenize(s)
     else:
-        return s.lower().strip().split(" ")
+        return simple_en_tokenize(s)
+
+
+def simple_zh_tokenize(s):
+    return list(jieba.cut(s.lower()))
+
+
+def simple_en_tokenize(s):
+    return s.lower().strip().split(" ")
 
 
 def split_array(arr):
@@ -1147,29 +1156,30 @@ class QwQLongCoTPretrainBackTranslationComputeScore(ComputeScoreBase):
 
     def compute_bt_reward(
             self,
-            batch_solution_str,
-            batch_ground_truth,
+            leadings,
+            trailings,
     ):
         input_datas = []
         rewards = {}
 
-        for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-            if solution_str is not None:
-                solution_str = self.postprocess_solution_fn(solution_str)
-                if solution_str is None:
+        for i, (leading, trailing) in enumerate(zip(leadings, trailings)):
+            if leading is not None:
+                leading = self.postprocess_solution_fn(leading)
+
+                if leading is None:
                     rewards[i] = self.parse_result_failure_score
                     continue
-                if ground_truth is None:
+                if trailing is None:
                     rewards[i] = parse_result_failure_score
                     continue
 
-            if solution_str is None:
+            if leading is None:
                 input_data = {
-                    "completion": ground_truth, "id": i
+                    "completion": trailing, "id": i
                 }
             else:
                 input_data = {
-                    "prompt": solution_str, "response": ground_truth, "id": i
+                    "prompt": leading, "response": trailing, "id": i
                 }
             input_datas.append(input_data)
 
@@ -1183,7 +1193,7 @@ class QwQLongCoTPretrainBackTranslationComputeScore(ComputeScoreBase):
                     rewards[_id] = _["info"]
 
         final_results = []
-        for i in range(len(batch_solution_str)):
+        for i in range(len(trailings)):
             if i in rewards:
                 final_results.append(rewards[i])
             else:
@@ -1361,8 +1371,13 @@ class CorpusLengthPenalty(PenaltyOrReward):
             return 0.
 
         gt = self.postprocess_gt_fn(ground_truth)
-        gt_token_size = len(simple_tokenize(gt))
-        return self.penalty_base * min(abs(len(simple_tokenize(solution_str))-gt_token_size) / gt_token_size, 5.)
+        if contain_chinese(gt):
+            gt_token_size = len(simple_zh_tokenize(gt))
+            sol_token_size = len(simple_zh_tokenize(solution_str))
+        else:
+            gt_token_size = len(simple_en_tokenize(gt))
+            sol_token_size = len(simple_en_tokenize(solution_str))
+        return self.penalty_base * min(abs(sol_token_size-gt_token_size) / gt_token_size, 5.)
 
 
 class CoTPretrainRLComputeScore(ComputeScoreBase):
@@ -1476,85 +1491,6 @@ class CoTPretrainRLComputeScore(ComputeScoreBase):
                     f'Reward={score:.3f} | {" | ".join(penalty_log_str)}\n')
         return final_results
 
-    # def compute_score(self,
-    #                   batch_data_sources,
-    #                   batch_solution_str,
-    #                   batch_ground_truth,
-    #                   ):
-
-    #     penalty = defaultdict(dict)
-    #     for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-    #         for key, fn in self.get_penalties().items():
-    #             penalty[key][i] = fn(solution_str, ground_truth)
-
-    #     base_rewards = self.get_rm_rewards(
-    #         batch_data_sources, batch_solution_str, batch_ground_truth)
-    #     norm_base_score = []
-
-    #     for i in range(len(batch_solution_str)):
-    #         if np.std(base_rewards) != 0:
-    #             norm_score = (
-    #                 base_rewards[i] - np.mean(base_rewards))/np.std(base_rewards)
-    #         else:
-    #             norm_score = base_rewards[i]
-
-    #         for name, _penalty in penalty.items():
-    #             if name == "LengthPenalty":
-    #                 norm_score += _penalty[i]
-    #             elif name == "BLEU":
-    #                 bleu_score = _penalty[i]
-    #                 if np.std(list(_penalty.values())) != 0:
-    #                     _norm_bleu = (
-    #                         bleu_score-np.mean(list(_penalty.values()))) / np.std(list(_penalty.values()))
-    #                     norm_score += _norm_bleu
-    #                 else:
-    #                     _norm_bleu = bleu_score
-    #                     norm_score += _norm_bleu
-
-    #         norm_base_score.append(norm_score)
-
-    #     final_results = []
-    #     for i in range(len(batch_solution_str)):
-    #         penalty_log_str = []
-    #         final_results.append(norm_base_score[i])
-    #         for name, _penalty in penalty.items():
-    #             if i in _penalty:
-    #                 try:
-    #                     penalty_log_str.append(
-    #                         f'{name}={_penalty[i]:.2f}')
-    #                 except Exception as _:
-    #                     pass
-
-    #         thought = self.get_thought(batch_solution_str[i])
-
-    #         if self.split == "valid":
-    #             print(
-    #                 f"--------------------------------[VALID]--------------------------------")
-    #             print(
-    #                 f'【Prompt】`{repr(self.clip_string(batch_ground_truth[i]["prompt"]))}`')
-    #             print(
-    #                 f"【Thought】`{repr(self.clip_string(thought))}`")
-    #             print(
-    #                 f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
-    #             print(
-    #                 f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
-    #             print(
-    #                 f'Reward={norm_base_score[i]:.3f} | {" | ".join(penalty_log_str)}\n')
-    #         elif self.split == "train" and random.random() < 0.01:
-    #             print(
-    #                 f"--------------------------------[TRAIN]--------------------------------")
-    #             print(
-    #                 f'【Prompt】`{repr(self.clip_string(batch_ground_truth[i]["prompt"]))}`')
-    #             print(
-    #                 f"【Thought】`{repr(self.clip_string(thought))}`")
-    #             print(
-    #                 f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
-    #             print(
-    #                 f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
-    #             print(
-    #                 f'Reward={norm_base_score[i]:.3f} | {" | ".join(penalty_log_str)}\n')
-    #     return final_results
-
     def log_ground_truth(self, ground_truth):
         return repr(self.clip_string(ground_truth["ground_truth"]))
 
@@ -1576,6 +1512,229 @@ _cot_pretrain_rl_compute_score_valid = CoTPretrainRLComputeScore(
     split="valid", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD)
 cot_pretrain_rl_compute_score_train = _cot_pretrain_rl_compute_score_train.compute_score
 cot_pretrain_rl_compute_score_valid = _cot_pretrain_rl_compute_score_valid.compute_score
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# Pretrain Refinement
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+class ROUGEScorer(PenaltyOrReward):
+    def __init__(self,
+                 postprocess_solution_fn,
+                 parse_result_failure_score=0.
+                 ):
+        self.scorer = rouge_scorer.RougeScorer(
+            ['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
+        self.parse_result_failure_score = parse_result_failure_score
+        self.postprocess_solution_fn = postprocess_solution_fn
+
+    def get_thought(self, solution_str: str):
+        solution_str = postprocess_solution(solution_str)
+        try:
+            thought = re.findall(r'<chain-of-thought>(.*)</chain-of-thought>',
+                                 solution_str, re.DOTALL)[0]
+        except Exception as err:
+            return f"<FORMAT CORRUPT>"
+        return thought
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        try:
+            solution_str = self.postprocess_solution_fn(solution_str)
+            if solution_str is None:
+                return self.parse_result_failure_score
+
+            if contain_chinese(ground_truth["ground_truth"]):
+                gt_tokens = " ".join(simple_zh_tokenize(
+                    ground_truth["ground_truth"]))
+                sl_tokens = " ".join(simple_zh_tokenize(solution_str))
+            else:
+                gt_tokens = " ".join(simple_en_tokenize(
+                    ground_truth["ground_truth"]))
+                sl_tokens = " ".join(simple_en_tokenize(solution_str))
+
+            score = self.scorer.score(gt_tokens, sl_tokens)
+            final_score = []
+            for k, s in score.items():
+                final_score.append(s.recall)
+            return np.mean(final_score)
+        except Exception as err:
+            return self.parse_result_failure_score
+
+
+class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScore):
+    def __init__(self, split="train", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD, rouge_coef=2.):
+        super().__init__(split=split, parse_result_failure_score=parse_result_failure_score)
+        self.rouge_coef = rouge_coef
+
+        self.rouge = ROUGEScorer(
+            postprocess_solution_fn=CoTPretrainRefineComputeScore.postprocess_for_rouge,
+            parse_result_failure_score=0.0
+        )
+        self.length_penalty = CorpusLengthPenalty(
+            postprocess_solution_fn=CoTPretrainRLComputeScore.postprocess_solution_fn,
+            postprocess_gt_fn=lambda x: x["ground_truth"],
+            penalty_base=-1.0
+        )
+
+    def get_penalties(self) -> Dict[str, Callable]:
+        return {
+            "ROUGE": self.rouge.get_penalty_or_reward,
+            "LengthPenalty": self.length_penalty.get_penalty_or_reward,
+        }
+
+    @classmethod
+    def find_notes(cls, solution_str: str):
+        document = cls.postprocess_solution_fn(solution_str)
+        # return re.findall(r'> \[Note\].*?\[/Note\]', document, re.DOTALL)
+        return re.findall(r'> 【注】.*?【/注】', document, re.DOTALL)
+
+    @classmethod
+    def postprocess_for_rouge(cls, solution_str: str):
+        document = cls.postprocess_solution_fn(solution_str)
+        document = re.sub(r'> \[Note\].*?\[/Note\]', "", document)
+        document = re.sub(r'> 【注】.*?【/注】', "", document)
+        return document
+
+    @classmethod
+    def postprocess_solution_fn(cls, solution_str: str):
+        solution_str = postprocess_solution(solution_str)
+        try:
+            thought = re.findall(r'<chain-of-thought>.*</chain-of-thought>',
+                                 solution_str, re.DOTALL)[0]
+        except Exception as err:
+            return None
+        try:
+            document = re.findall(r'<doc>(.*)</doc>',
+                                  solution_str, re.DOTALL)[0].strip()
+        except Exception as err:
+            return None
+
+        if any(_ in document for _ in ("<chain-of-thought>", "</chain-of-thought>", "<doc>", "</doc>")):
+            return None
+        return document
+
+    def get_thought(self, solution_str: str):
+        solution_str = postprocess_solution(solution_str)
+        try:
+            thought = re.findall(r'<chain-of-thought>(.*)</chain-of-thought>',
+                                 solution_str, re.DOTALL)[0]
+        except Exception as err:
+            return f"<FORMAT CORRUPT>"
+        return thought
+
+    def get_bt_rewards(self,
+                       batch_data_sources,
+                       batch_solution_str,
+                       batch_ground_truth):
+
+        new_batch_solution_str, new_batch_ground_truth = [], []
+        for gt, sol in zip(batch_ground_truth, batch_solution_str):
+            # H修改前
+            gt_content = gt["ground_truth"]
+            new_batch_solution_str.append(
+                "<chain-of-thought></chain-of-thought>\n<doc></doc>\n")
+            new_batch_ground_truth.append(gt_content)
+
+            # H修改后
+            new_batch_solution_str.append(
+                "<chain-of-thought></chain-of-thought>\n<doc></doc>\n")
+            new_batch_ground_truth.append(self.postprocess_solution_fn(sol))
+
+        rewards = self.compute_bt_reward(
+            leadings=new_batch_solution_str,
+            trailings=new_batch_ground_truth,
+        )
+
+        def split_array(arr):
+            first, second = [], []
+            for num, elem in enumerate(arr):
+                if num % 2 == 0:
+                    first.append(elem)
+                else:
+                    second.append(elem)
+            return first, second
+
+        scores = []
+
+        first, second = split_array(rewards)
+        for before, after in zip(first, second):
+            if any(_ == self.parse_result_failure_score for _ in (before, after)):
+                scores.append(self.parse_result_failure_score)
+            else:
+                scores.append((before-after) / before)
+        return scores
+
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+
+        penalty = defaultdict(dict)
+        for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            for key, fn in self.get_penalties().items():
+                penalty[key][i] = fn(solution_str, ground_truth)
+
+        base_rewards = self.get_bt_rewards(
+            batch_data_sources, batch_solution_str, batch_ground_truth)
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            penalty_log_str = []
+            _reward = base_rewards[i]
+            for name, _penalty in penalty.items():
+                if i in _penalty:
+                    if name == "ROUGE":
+                        _reward += _penalty[i] * self.rouge_coef
+                    else:
+                        _reward += _penalty[i]
+                    try:
+                        penalty_log_str.append(
+                            f'{name}={_penalty[i]:.2f}')
+                    except Exception as _:
+                        pass
+
+            final_results.append(_reward)
+            thought = self.get_thought(batch_solution_str[i])
+
+            if self.split == "valid":
+                print(
+                    f"--------------------------------[VALID]--------------------------------")
+                print(
+                    f"【Thought】`{repr(self.clip_string(thought))}`")
+                print(
+                    f"【Raw】 `{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f"【Refine】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                print(
+                    f'Reward(rouge_coef={self.rouge_coef})={_reward:.3f}| info={base_rewards[i]:.3f} | {" | ".join(penalty_log_str)}\n')
+            elif self.split == "train" and random.random() < 0.01:
+                print(
+                    f"--------------------------------[TRAIN]--------------------------------")
+                print(
+                    f"【Thought】`{repr(self.clip_string(thought))}`")
+                print(
+                    f"【Raw】`{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f"【Refine】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                print(
+                    f'Reward(rouge_coef={self.rouge_coef})={_reward:.3f} | info={base_rewards[i]:.3f} | {" | ".join(penalty_log_str)}\n')
+        return final_results
+
+    def log_ground_truth(self, ground_truth):
+        return repr(self.clip_string(ground_truth["ground_truth"]))
+
+    def log_solution(self, solution):
+        norm = self.postprocess_solution_fn(solution)
+        if norm is None:
+            return repr(self.clip_string(solution))
+        return repr(self.clip_string(norm))
+
+    def clip_string(self, s: str):
+        if len(s) > 1500:
+            return f'{s[:700]}... [省略] ...{s[-800:]}'
+        return s
+
 
 if __name__ == "__main__":
     pass

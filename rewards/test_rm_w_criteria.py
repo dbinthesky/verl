@@ -23,7 +23,10 @@ from rm_w_criteria import (
     QwQLongCoTCriteriaEnvolveComputeScore,
     QwQLongCoTPretrainBackTranslationComputeScore,
     QwQLongCoTSFTBackTranslationComputeScore,
+    CoTPretrainRefineComputeScore,
     CoTPretrainRLComputeScore,
+    ROUGEScorer,
+    CorpusLengthPenalty,
     qwq_longcot_fabricate_qa_compute_score_train,
     qwq_longcot_fabricate_qa_compute_score_v2_valid
 )
@@ -124,6 +127,24 @@ def load_cot_pretrain_rl(num=100):
         gt = row["reward_model"]["ground_truth"]
         batch_solution_str.append(
             f'<chain-of-thought>\n{generate_random_string(100)}\n</chain-of-thought>\n\n<doc>\n{gt}\n</doc>')
+    return batch_solution_str, batch_ground_truth
+
+
+def load_pretrain_refinement(num=100):
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/nv-nemotron-cc-medium_100w/part_0.parquet"
+    batch_solution_str, batch_ground_truth = [], []
+
+    df = pd.read_parquet(filename)
+    for _, row in df.iterrows():
+        row = row.to_dict()
+        if _ > 100:
+            break
+        batch_ground_truth.append(row["reward_model"])
+        gt = row["reward_model"]["ground_truth"]
+        # batch_solution_str.append(
+        #     f'<chain-of-thought>\n{generate_random_string(100)}\n</chain-of-thought>\n\n<doc>\n{gt}\n> [Note] xxxx \n>\n> xxx [/Note]\n{gt}\n</doc>')
+        batch_solution_str.append(
+            f'<chain-of-thought>\n{generate_random_string(100)}\n</chain-of-thought>\n\n<doc>\n{gt}\n> 【注】 xxxx \n>\n> xxx 【/注】\n{gt}\n</doc>')
     return batch_solution_str, batch_ground_truth
 
 
@@ -344,6 +365,27 @@ class TestRMReward(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_cot_pretrain_rl(
             num=100)
         task = CoTPretrainRLComputeScore(split="valid")
+        task.compute_score(
+            [None] * len(batch_solution_str),
+            batch_solution_str,
+            batch_ground_truth
+        )
+
+    def test_cot_pretrain_refinement_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_pretrain_refinement(
+            num=100)
+
+        task = CoTPretrainRefineComputeScore(split="valid")
+        scorer = ROUGEScorer(
+            postprocess_solution_fn=task.postprocess_for_rouge)
+        len_penalty = CorpusLengthPenalty(
+            postprocess_solution_fn=task.postprocess_for_rouge, postprocess_gt_fn=lambda x: x["ground_truth"])
+
+        # for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
+        #     # print(task.find_notes(solution_str))
+        #     print(scorer.get_penalty_or_reward(solution_str, gt))
+        #     print(len_penalty.get_penalty_or_reward(solution_str, gt))
+        #     break
         task.compute_score(
             [None] * len(batch_solution_str),
             batch_solution_str,
