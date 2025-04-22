@@ -1432,43 +1432,19 @@ class CoTPretrainRLComputeScore(ComputeScoreBase):
             for key, fn in self.get_penalties().items():
                 penalty[key][i] = fn(solution_str, ground_truth)
 
-        base_rewards = self.get_rm_rewards(
-            batch_data_sources, batch_solution_str, batch_ground_truth)
-        norm_base_score = []
-
-        for i in range(len(batch_solution_str)):
-            if np.std(base_rewards) != 0:
-                norm_score = (
-                    base_rewards[i] - np.mean(base_rewards))/np.std(base_rewards)
-            else:
-                norm_score = base_rewards[i]
-
-            for name, _penalty in penalty.items():
-                if name == "LengthPenalty":
-                    norm_score += _penalty[i]
-                elif name == "BLEU":
-                    bleu_score = _penalty[i]
-                    if np.std(list(_penalty.values())) != 0:
-                        _norm_bleu = (
-                            bleu_score-np.mean(list(_penalty.values()))) / np.std(list(_penalty.values()))
-                        norm_score += _norm_bleu
-                    else:
-                        _norm_bleu = bleu_score
-                        norm_score += _norm_bleu
-
-            norm_base_score.append(norm_score)
-
         final_results = []
         for i in range(len(batch_solution_str)):
+            score = 0.0
             penalty_log_str = []
-            final_results.append(norm_base_score[i])
             for name, _penalty in penalty.items():
                 if i in _penalty:
                     try:
+                        score += _penalty[i]
                         penalty_log_str.append(
                             f'{name}={_penalty[i]:.2f}')
                     except Exception as _:
                         pass
+            final_results.append(score)
 
             thought = self.get_thought(batch_solution_str[i])
 
@@ -1484,7 +1460,7 @@ class CoTPretrainRLComputeScore(ComputeScoreBase):
                 print(
                     f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
                 print(
-                    f'Reward={norm_base_score[i]:.3f} | {" | ".join(penalty_log_str)}\n')
+                    f'Reward={score:.3f} | {" | ".join(penalty_log_str)}\n')
             elif self.split == "train" and random.random() < 0.01:
                 print(
                     f"--------------------------------[TRAIN]--------------------------------")
@@ -1497,8 +1473,87 @@ class CoTPretrainRLComputeScore(ComputeScoreBase):
                 print(
                     f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
                 print(
-                    f'Reward={norm_base_score[i]:.3f} | {" | ".join(penalty_log_str)}\n')
+                    f'Reward={score:.3f} | {" | ".join(penalty_log_str)}\n')
         return final_results
+
+    # def compute_score(self,
+    #                   batch_data_sources,
+    #                   batch_solution_str,
+    #                   batch_ground_truth,
+    #                   ):
+
+    #     penalty = defaultdict(dict)
+    #     for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+    #         for key, fn in self.get_penalties().items():
+    #             penalty[key][i] = fn(solution_str, ground_truth)
+
+    #     base_rewards = self.get_rm_rewards(
+    #         batch_data_sources, batch_solution_str, batch_ground_truth)
+    #     norm_base_score = []
+
+    #     for i in range(len(batch_solution_str)):
+    #         if np.std(base_rewards) != 0:
+    #             norm_score = (
+    #                 base_rewards[i] - np.mean(base_rewards))/np.std(base_rewards)
+    #         else:
+    #             norm_score = base_rewards[i]
+
+    #         for name, _penalty in penalty.items():
+    #             if name == "LengthPenalty":
+    #                 norm_score += _penalty[i]
+    #             elif name == "BLEU":
+    #                 bleu_score = _penalty[i]
+    #                 if np.std(list(_penalty.values())) != 0:
+    #                     _norm_bleu = (
+    #                         bleu_score-np.mean(list(_penalty.values()))) / np.std(list(_penalty.values()))
+    #                     norm_score += _norm_bleu
+    #                 else:
+    #                     _norm_bleu = bleu_score
+    #                     norm_score += _norm_bleu
+
+    #         norm_base_score.append(norm_score)
+
+    #     final_results = []
+    #     for i in range(len(batch_solution_str)):
+    #         penalty_log_str = []
+    #         final_results.append(norm_base_score[i])
+    #         for name, _penalty in penalty.items():
+    #             if i in _penalty:
+    #                 try:
+    #                     penalty_log_str.append(
+    #                         f'{name}={_penalty[i]:.2f}')
+    #                 except Exception as _:
+    #                     pass
+
+    #         thought = self.get_thought(batch_solution_str[i])
+
+    #         if self.split == "valid":
+    #             print(
+    #                 f"--------------------------------[VALID]--------------------------------")
+    #             print(
+    #                 f'【Prompt】`{repr(self.clip_string(batch_ground_truth[i]["prompt"]))}`')
+    #             print(
+    #                 f"【Thought】`{repr(self.clip_string(thought))}`")
+    #             print(
+    #                 f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
+    #             print(
+    #                 f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
+    #             print(
+    #                 f'Reward={norm_base_score[i]:.3f} | {" | ".join(penalty_log_str)}\n')
+    #         elif self.split == "train" and random.random() < 0.01:
+    #             print(
+    #                 f"--------------------------------[TRAIN]--------------------------------")
+    #             print(
+    #                 f'【Prompt】`{repr(self.clip_string(batch_ground_truth[i]["prompt"]))}`')
+    #             print(
+    #                 f"【Thought】`{repr(self.clip_string(thought))}`")
+    #             print(
+    #                 f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
+    #             print(
+    #                 f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
+    #             print(
+    #                 f'Reward={norm_base_score[i]:.3f} | {" | ".join(penalty_log_str)}\n')
+    #     return final_results
 
     def log_ground_truth(self, ground_truth):
         return repr(self.clip_string(ground_truth["ground_truth"]))

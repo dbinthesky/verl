@@ -50,7 +50,7 @@ setup_path() {
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_distill_qwq_aime_gpqa_aug_v1_250409_16401_open_source_hf"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/pretrain_rl_250419_4k_finish_0420"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/pretrain_rl_pdf_knowledge_4k_finish_0421"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/eval/mmlu_stem_0418.parquet"
 
     experiment_name="internlm3-8b_pretrain_rl_v1-dlc-${YYMMDD}-${HHMMSS}"
@@ -134,7 +134,7 @@ run_training() {
         +trainer.val_before_train=True \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
-        trainer.save_freq=20 \
+        trainer.save_freq=10 \
         trainer.test_freq=5 \
         trainer.total_epochs=10000 \
         reward_model.reward_manager="custom" "$@"
