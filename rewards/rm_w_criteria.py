@@ -1736,5 +1736,12 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
         return s
 
 
+_cot_pretrain_refine_compute_score_train = CoTPretrainRefineComputeScore(
+    split="train", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD)
+_cot_pretrain_refine_compute_score_valid = CoTPretrainRefineComputeScore(
+    split="valid", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD)
+cot_pretrain_refine_compute_score_train = _cot_pretrain_refine_compute_score_train.compute_score
+cot_pretrain_refine_compute_score_valid = _cot_pretrain_refine_compute_score_valid.compute_score
+
 if __name__ == "__main__":
     pass
