@@ -12,6 +12,7 @@ import numpy as np
 import tqdm.asyncio
 import asyncio as aio
 from abc import abstractmethod
+from collections import Counter
 from typing import Dict, Any, Callable
 from tqdm import tqdm as tqdm_nonasync
 import xml.etree.ElementTree as ET
@@ -32,7 +33,9 @@ RM_URLS = [
 ]
 
 BT_REWARD_URLS = [
-    "http://10.130.0.60:5000"
+    # "http://10.130.0.60:5002"
+    # "http://10.130.0.60:5000"
+    "http://10.130.1.200:5004"
 ]
 
 
@@ -1170,7 +1173,7 @@ class QwQLongCoTPretrainBackTranslationComputeScore(ComputeScoreBase):
                     rewards[i] = self.parse_result_failure_score
                     continue
                 if trailing is None:
-                    rewards[i] = parse_result_failure_score
+                    rewards[i] = self.parse_result_failure_score
                     continue
 
             if leading is None:
@@ -1537,43 +1540,83 @@ class ROUGEScorer(PenaltyOrReward):
             return f"<FORMAT CORRUPT>"
         return thought
 
+    def zh_ignore_words(self):
+        return ['`', 'latex', 'textbf', '【', '】', '$', 'begin', 'figure', 'h', 'centering', 'includegraphics', 'width', 'textwidth', 'caption', 'description', 'end', 'section', '*', '/',
+                'png', '%',  'the', 'file',  'diagram', 'for', 'variant', 'label', 'fig', 'documentclass', 'article', 'usepackage', 'amsmath', 'geometry', 'chemfig', 'document', 'noindent', 'center', 'jpg',
+                '####', 'column', 'center', 'mathit', 'subsection', 'section'
+                ]
+
     def get_penalty_or_reward(self, solution_str, ground_truth):
+        def remove_latex_format(text):
+            # 移除LaTeX命令
+            text = re.sub(r'\\[a-zA-Z]+(\{[^\}]+\})?', '', text)
+            # 移除LaTeX环境
+            text = re.sub(
+                r'\\begin\{[a-zA-Z]+\}(.*?)\\end\{[a-zA-Z]+\}', r'\1', text, flags=re.DOTALL)
+            # 移除LaTeX特殊字符
+            text = re.sub(r'[\$#%&_{}]', '', text)
+            return text
+
         try:
             solution_str = self.postprocess_solution_fn(solution_str)
             if solution_str is None:
                 return self.parse_result_failure_score
 
-            if contain_chinese(ground_truth["ground_truth"]):
-                gt_tokens = " ".join(simple_zh_tokenize(
-                    ground_truth["ground_truth"]))
-                sl_tokens = " ".join(simple_zh_tokenize(solution_str))
-            else:
-                gt_tokens = " ".join(simple_en_tokenize(
-                    ground_truth["ground_truth"]))
-                sl_tokens = " ".join(simple_en_tokenize(solution_str))
+            gt = remove_latex_format(ground_truth["ground_truth"])
+            solution_str = remove_latex_format(solution_str)
 
+            if contain_chinese(gt):
+                gt_tokens = simple_zh_tokenize(gt)
+                sl_tokens = simple_zh_tokenize(solution_str)
+
+                gt_tokens = [
+                    _ for _ in gt_tokens if _ not in self.zh_ignore_words()]
+                sl_tokens = [
+                    _ for _ in sl_tokens if _ not in self.zh_ignore_words()]
+            else:
+                gt_tokens = simple_en_tokenize(gt)
+                sl_tokens = simple_en_tokenize(solution_str)
+
+            top_freq_work = set([token for token, _ in Counter(gt_tokens).most_common(
+                10)] + [token for token, _ in Counter(sl_tokens).most_common(10)])
+
+            gt_tokens = " ".join(
+                [_ for _ in gt_tokens])
+            sl_tokens = " ".join([_ for _ in sl_tokens])
             score = self.scorer.score(gt_tokens, sl_tokens)
-            final_score = []
-            for k, s in score.items():
-                final_score.append(s.recall)
-            return np.mean(final_score)
+
+            rouge_recall = score["rouge1"].recall
+
+            # reward分段奖励
+            if rouge_recall >= 0.7:
+                return 1.0
+            elif rouge_recall >= 0.5:
+                return rouge_recall
+            else:
+                return rouge_recall / 2.0
+
+            # final_score = []
+            # for k, s in score.items():
+            #     final_score.append(s.recall)
+            # return np.mean(final_score)
         except Exception as err:
             return self.parse_result_failure_score
 
 
 class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScore):
-    def __init__(self, split="train", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD, rouge_coef=2.):
+    def __init__(self, split="train", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD, rouge_coef=0.8, info_coef=1.0):
         super().__init__(split=split, parse_result_failure_score=parse_result_failure_score)
         self.rouge_coef = rouge_coef
+        self.info_coef = info_coef
 
         self.rouge = ROUGEScorer(
             postprocess_solution_fn=CoTPretrainRefineComputeScore.postprocess_for_rouge,
             parse_result_failure_score=0.0
         )
         self.length_penalty = CorpusLengthPenalty(
-            postprocess_solution_fn=CoTPretrainRLComputeScore.postprocess_solution_fn,
+            postprocess_solution_fn=CoTPretrainRefineComputeScore.postprocess_for_rouge,
             postprocess_gt_fn=lambda x: x["ground_truth"],
-            penalty_base=-1.0
+            penalty_base=-0.1
         )
 
     def get_penalties(self) -> Dict[str, Callable]:
@@ -1586,13 +1629,15 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
     def find_notes(cls, solution_str: str):
         document = cls.postprocess_solution_fn(solution_str)
         # return re.findall(r'> \[Note\].*?\[/Note\]', document, re.DOTALL)
-        return re.findall(r'> 【注】.*?【/注】', document, re.DOTALL)
+        return re.findall(r'【注】.*?【/注】', document, re.DOTALL)
 
     @classmethod
     def postprocess_for_rouge(cls, solution_str: str):
         document = cls.postprocess_solution_fn(solution_str)
-        document = re.sub(r'> \[Note\].*?\[/Note\]', "", document)
-        document = re.sub(r'> 【注】.*?【/注】', "", document)
+        if not isinstance(document, str):
+            return None
+        document = re.sub(r'\[Note\].*?\[/Note\]', "", document)
+        document = re.sub(r'【注】.*?【/注】', "", document)
         return document
 
     @classmethod
@@ -1632,12 +1677,12 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
             # H修改前
             gt_content = gt["ground_truth"]
             new_batch_solution_str.append(
-                "<chain-of-thought></chain-of-thought>\n<doc></doc>\n")
+                "<chain-of-thought></chain-of-thought>\n<doc>文档内容包含注解，注解格式为“【注】... ...【/注】”或者“[Note] ... ...[/Note] ”</doc>\n")
             new_batch_ground_truth.append(gt_content)
 
             # H修改后
             new_batch_solution_str.append(
-                "<chain-of-thought></chain-of-thought>\n<doc></doc>\n")
+                "<chain-of-thought></chain-of-thought>\n<doc>文档内容包含注解，注解格式为“【注】... ...【/注】”或者“[Note] ... ...[/Note] ”</doc>\n")
             new_batch_ground_truth.append(self.postprocess_solution_fn(sol))
 
         rewards = self.compute_bt_reward(
@@ -1660,8 +1705,10 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
         for before, after in zip(first, second):
             if any(_ == self.parse_result_failure_score for _ in (before, after)):
                 scores.append(self.parse_result_failure_score)
+            elif before == 0:
+                scores.append(0.)
             else:
-                scores.append((before-after) / before)
+                scores.append(max((before-after), -0.05) / before)
         return scores
 
     def compute_score(self,
@@ -1681,7 +1728,8 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
         final_results = []
         for i in range(len(batch_solution_str)):
             penalty_log_str = []
-            _reward = base_rewards[i]
+            _reward = self.info_coef * base_rewards[i]
+
             for name, _penalty in penalty.items():
                 if i in _penalty:
                     if name == "ROUGE":
@@ -1703,22 +1751,22 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
                 print(
                     f"【Thought】`{repr(self.clip_string(thought))}`")
                 print(
-                    f"【Raw】 `{self.log_solution(batch_solution_str[i])}`")
+                    f"【Refine】 `{self.log_solution(batch_solution_str[i])}`")
                 print(
-                    f"【Refine】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                    f"【Raw】`{self.log_ground_truth(batch_ground_truth[i])}`")
                 print(
-                    f'Reward(rouge_coef={self.rouge_coef})={_reward:.3f}| info={base_rewards[i]:.3f} | {" | ".join(penalty_log_str)}\n')
+                    f'Reward (rouge_coef={self.rouge_coef}; info_coef={self.info_coef})={_reward:.3f} | info={base_rewards[i]:.3f} | {" | ".join(penalty_log_str)}\n')
             elif self.split == "train" and random.random() < 0.01:
                 print(
                     f"--------------------------------[TRAIN]--------------------------------")
                 print(
                     f"【Thought】`{repr(self.clip_string(thought))}`")
                 print(
-                    f"【Raw】`{self.log_solution(batch_solution_str[i])}`")
+                    f"【Refine】`{self.log_solution(batch_solution_str[i])}`")
                 print(
-                    f"【Refine】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                    f"【Raw】`{self.log_ground_truth(batch_ground_truth[i])}`")
                 print(
-                    f'Reward(rouge_coef={self.rouge_coef})={_reward:.3f} | info={base_rewards[i]:.3f} | {" | ".join(penalty_log_str)}\n')
+                    f'Reward (rouge_coef={self.rouge_coef}; info_coef={self.info_coef})={_reward:.3f} | info={base_rewards[i]:.3f} | {" | ".join(penalty_log_str)}\n')
         return final_results
 
     def log_ground_truth(self, ground_truth):

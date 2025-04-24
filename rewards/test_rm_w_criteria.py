@@ -144,7 +144,7 @@ def load_pretrain_refinement(num=100):
         # batch_solution_str.append(
         #     f'<chain-of-thought>\n{generate_random_string(100)}\n</chain-of-thought>\n\n<doc>\n{gt}\n> [Note] xxxx \n>\n> xxx [/Note]\n{gt}\n</doc>')
         batch_solution_str.append(
-            f'<chain-of-thought>\n{generate_random_string(100)}\n</chain-of-thought>\n\n<doc>\n{gt}\n> 【注】 xxxx \n>\n> xxx 【/注】\n{gt}\n</doc>')
+            f'<chain-of-thought>\n{generate_random_string(100)}\n</chain-of-thought>\n\n<doc>\n{gt[:1000]}\n> 【注】 xxxx \n>\n> xxx 【/注】\n</doc>')
     return batch_solution_str, batch_ground_truth
 
 
@@ -391,6 +391,49 @@ class TestRMReward(unittest.TestCase):
             batch_solution_str,
             batch_ground_truth
         )
+        # from tqdm import tqdm
+        # pbar = tqdm(total=10589)
+        # with open("/cpfs01/shared/llm_ddd/tongjian/pretrain/log_all", "rt") as f:
+        #     with open("/cpfs01/shared/llm_ddd/tongjian/pretrain/x_log_all", "wt") as g:
+        #         data = []
+        #         for line in f:
+        #             example = json.loads(line)
+        #             data.append(example)
+
+        #         for batch in batchify(data, n=128):
+        #             batch_solution_str = []
+        #             batch_ground_truth = []
+
+        #             for _ in batch:
+        #                 pbar.update(1)
+        #                 example = _
+        #                 if "self_improvement" not in _:
+        #                     continue
+        #                 if len(example["self_improvement"].get("responses", [])) == 0:
+        #                     continue
+        #                 responses = example["self_improvement"]["responses"]
+        #                 for response in responses:
+        #                     batch_solution_str.append(response["response"])
+        #                     batch_ground_truth.append({"ground_truth": _["content"]})
+        #             print(len(batch_solution_str), len(batch_ground_truth))
+        #             scores = task.get_bt_rewards([None]*len(batch_solution_str), batch_solution_str, batch_ground_truth)
+        #             scores = {x:y for x, y in zip(batch_solution_str, scores)}
+        #             for _ in batch:
+        #                 for response in _["self_improvement"]["responses"]:
+        #                     score = scores[response["response"]]
+        #                     response["bt_score"] = score
+        #                 g.write(f'{json.dumps(_, ensure_ascii=False)}\n')
+        #         raise NotImplementedError
+
+        #             # example["self_improvement"]["responses"] = new_responses
+        #             # g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
+        #         # print(len(responses))
+
+        # #     gt = row["reward_model"]["ground_truth"]
+        # # # batch_solution_str.append(
+        # # #     f'<chain-of-thought>\n{generate_random_string(100)}\n</chain-of-thought>\n\n<doc>\n{gt}\n> [Note] xxxx \n>\n> xxx [/Note]\n{gt}\n</doc>')
+        # # batch_solution_str.append(
+        # #     f'<chain-of-thought>\n{generate_random_string(100)}\n</chain-of-thought>\n\n<doc>\n{gt}\n> 【注】 xxxx \n>\n> xxx 【/注】\n{gt}\n</doc>')
 
 
 if __name__ == '__main__':
