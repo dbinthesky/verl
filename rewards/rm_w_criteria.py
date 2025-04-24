@@ -35,7 +35,9 @@ RM_URLS = [
 BT_REWARD_URLS = [
     # "http://10.130.0.60:5002"
     # "http://10.130.0.60:5000"
-    "http://10.130.1.200:5004"
+    # "http://10.130.1.200:5004"
+    "http://10.130.1.105:5003"
+    # "http://10.130.1.200:5003"
 ]
 
 
@@ -1363,10 +1365,13 @@ class CorpusLengthPenalty(PenaltyOrReward):
     def __init__(self,
                  postprocess_solution_fn,
                  postprocess_gt_fn,
-                 penalty_base=-0.4):
+                 penalty_base=-0.4,
+                 mode="lt_gt"
+                 ):
         self.postprocess_solution_fn = postprocess_solution_fn
         self.penalty_base = penalty_base
         self.postprocess_gt_fn = postprocess_gt_fn
+        self.mode = mode
 
     def get_penalty_or_reward(self, solution_str, ground_truth):
         solution_str = self.postprocess_solution_fn(solution_str)
@@ -1380,7 +1385,11 @@ class CorpusLengthPenalty(PenaltyOrReward):
         else:
             gt_token_size = len(simple_en_tokenize(gt))
             sol_token_size = len(simple_en_tokenize(solution_str))
-        return self.penalty_base * min(abs(sol_token_size-gt_token_size) / gt_token_size, 5.)
+
+        if self.mode == "lt_gt":
+            return self.penalty_base * min(max((gt_token_size-sol_token_size), 0) / gt_token_size, 5.)
+        else:
+            return self.penalty_base * min(abs(sol_token_size-gt_token_size) / gt_token_size, 5.)
 
 
 class CoTPretrainRLComputeScore(ComputeScoreBase):
@@ -1521,6 +1530,36 @@ cot_pretrain_rl_compute_score_valid = _cot_pretrain_rl_compute_score_valid.compu
 # Pretrain Refinement
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+class CoTPretrainRefineFormatReward(PenaltyOrReward):
+    def __init__(self,
+                 postprocess_solution_fn,
+                 postprocess_gt_fn):
+        self.postprocess_solution_fn = postprocess_solution_fn
+        self.postprocess_gt_fn = postprocess_gt_fn
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        solution_str = self.postprocess_solution_fn(solution_str)
+        if solution_str is None:
+            return 0.
+
+        gt = self.postprocess_gt_fn(ground_truth)
+
+        if not contain_chinese(gt):
+            if "【注】" in solution_str or "【/注】" in solution_str:
+                return -0.5
+
+        try:
+            max_shaped_reward = 0.15
+            reward_per_note = 0.01
+            en_notes = re.findall(
+                r'\[Note\].*?\[/Note\]', solution_str, re.DOTALL)
+            zh_notes = re.findall(r'【注】.*?【/注】', solution_str, re.DOTALL)
+            num_notes = len(en_notes) + len(zh_notes)
+            return min(num_notes * reward_per_note, max_shaped_reward)
+        except Exception as err:
+            return 0.
+
+
 class ROUGEScorer(PenaltyOrReward):
     def __init__(self,
                  postprocess_solution_fn,
@@ -1618,11 +1657,16 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
             postprocess_gt_fn=lambda x: x["ground_truth"],
             penalty_base=-0.1
         )
+        self.format_penalty = CoTPretrainRefineFormatReward(
+            postprocess_solution_fn=CoTPretrainRefineComputeScore.postprocess_solution_fn,
+            postprocess_gt_fn=lambda x: x["ground_truth"],
+        )
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
             "ROUGE": self.rouge.get_penalty_or_reward,
             "LengthPenalty": self.length_penalty.get_penalty_or_reward,
+            "Format": self.format_penalty.get_penalty_or_reward
         }
 
     @classmethod
@@ -1708,7 +1752,7 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
             elif before == 0:
                 scores.append(0.)
             else:
-                scores.append(max((before-after), -0.05) / before)
+                scores.append(max(((before-after)/before), -0.05))
         return scores
 
     def compute_score(self,
@@ -1738,7 +1782,7 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
                         _reward += _penalty[i]
                     try:
                         penalty_log_str.append(
-                            f'{name}={_penalty[i]:.2f}')
+                            f'{name}={_penalty[i]:.3f}')
                     except Exception as _:
                         pass
 
@@ -1749,22 +1793,22 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
                 print(
                     f"--------------------------------[VALID]--------------------------------")
                 print(
-                    f"【Thought】`{repr(self.clip_string(thought))}`")
+                    f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
                 print(
-                    f"【Refine】 `{self.log_solution(batch_solution_str[i])}`")
+                    f"【Refine】({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`")
                 print(
-                    f"【Raw】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                    f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})``{self.log_ground_truth(batch_ground_truth[i])}`')
                 print(
                     f'Reward (rouge_coef={self.rouge_coef}; info_coef={self.info_coef})={_reward:.3f} | info={base_rewards[i]:.3f} | {" | ".join(penalty_log_str)}\n')
             elif self.split == "train" and random.random() < 0.01:
                 print(
                     f"--------------------------------[TRAIN]--------------------------------")
                 print(
-                    f"【Thought】`{repr(self.clip_string(thought))}`")
+                    f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
                 print(
-                    f"【Refine】`{self.log_solution(batch_solution_str[i])}`")
+                    f"【Refine】({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`")
                 print(
-                    f"【Raw】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                    f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})`{self.log_ground_truth(batch_ground_truth[i])}`')
                 print(
                     f'Reward (rouge_coef={self.rouge_coef}; info_coef={self.info_coef})={_reward:.3f} | info={base_rewards[i]:.3f} | {" | ".join(penalty_log_str)}\n')
         return final_results
@@ -1777,6 +1821,12 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
         if norm is None:
             return repr(self.clip_string(solution))
         return repr(self.clip_string(norm))
+
+    def get_document_len(self, solution):
+        norm = self.postprocess_solution_fn(solution)
+        if norm is None:
+            return 0
+        return len(norm)
 
     def clip_string(self, s: str):
         if len(s) > 1500:
