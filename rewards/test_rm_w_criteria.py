@@ -101,7 +101,8 @@ def load_qwq_data(num=100):
 
 
 def load_qwq_fabricate_qa_data(num=100):
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/authentic_qa_aio_20250115_test_bugfix_0329.parquet"
+    # filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/authentic_qa_aio_20250115_test_bugfix_0329.parquet"
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/sandbox_fabricate/sandbox_data_fabricate_qa_valid.parquet"
     batch_solution_str, batch_ground_truth = [], []
 
     df = pd.read_parquet(filename)
@@ -396,22 +397,27 @@ class TestRMReward(unittest.TestCase):
             batch_ground_truth
         )
 
-    def test_cot_pretrain_annotation_compute_score(self):
-        batch_solution_str, batch_ground_truth = load_pretrain_refinement(
-            num=100)
+    # def test_cot_pretrain_annotation_compute_score(self):
+    #     gt = "# 5SBF\n#### PanDDA analysis group deposition of ground-state model of SARS-CoV-2 NendoU\nChanges made to a PDB entry after its initial release are considered to be either “major” or “minor”. The latest minor version of each major version is available as a file download. More information about the PDB versioning is available.\n| Version Number | Version Date | Version Type/Reason | Version Change | Revised CIF Category |  |\n|---|---|---|---|---|---|\n| 1.0 | 2022-02-09 | Initial release |  |  |  |\n| 1.1 | 2023-05-10 |  | Database references | citation, citation_author |  |\n| 1.2 | 2023-06-21 |  | Database references | citation |  |\n| 1.3 | 2024-05-22 |  | Data collection | chem_comp_atom, chem_comp_bond | Download |"
+    #     solution = ""
+    #     with open("/cpfs01/shared/llm_ddd/tongjian/verl/rewards/solution.txt", "rt") as f:
+    #         for line in f:
+    #             solution += line
+    #     # batch_solution_str, batch_ground_truth = load_pretrain_refinement(
+    #     #     num=100)
 
-        task = CoTPretrainAnnotationComputeScore(split="valid")
-        scorer = ROUGEScorerForPretrainAnnotation(
-            postprocess_solution_fn=task.postprocess_for_rouge)
+    #     task = CoTPretrainAnnotationComputeScore(split="valid")
+    #     # scorer = ROUGEScorerForPretrainAnnotation(
+    #     #     postprocess_solution_fn=task.postprocess_for_rouge)
 
-        # for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
-        #     print(scorer.get_penalty_or_reward(solution_str, gt))
-        #     break
-        task.compute_score(
-            [None] * len(batch_solution_str),
-            batch_solution_str,
-            batch_ground_truth
-        )
+    #     # # for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
+    #     # #     print(scorer.get_penalty_or_reward(solution_str, gt))
+    #     # #     break
+    #     task.compute_score(
+    #         [None],
+    #         [solution],
+    #         [{"ground_truth": gt}]
+    #     )
 
 
 if __name__ == '__main__':

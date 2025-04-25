@@ -29,14 +29,15 @@ RATE_LIMIT_RETRY_ATTEMPTS = 10
 WORKFLOW_AGENT_LOGFILE = os.getenv("WORKFLOW_AGENT_LOGFILE", None)
 
 RM_URLS = [
-    "http://10.130.1.54:5001",
+    "http://10.130.3.206:5001",
 ]
 
 BT_REWARD_URLS = [
     # "http://10.130.0.60:5002"
     # "http://10.130.0.60:5000"
     # "http://10.130.1.200:5004"
-    "http://10.130.3.206:5003"
+    # "http://10.130.3.206:5003"
+    "http://10.130.1.200:5004"
     # "http://10.130.1.200:5003"
 ]
 
@@ -341,7 +342,7 @@ class ComputeScoreBase(object):
         try:
             return ground_truth["extra_info"]["uuid"]
         except Exception as err:
-            return ""
+            return "NO RECORD"
 
     def compute_score(self,
                       batch_data_sources,
@@ -593,8 +594,11 @@ class QwQLongCoTFabricateQAComputeScore(ComputeScoreBase):
     @classmethod
     def extract_gt_question(cls, ground_truth):
         ground_truth = ground_truth["ground_truth"]
-        bg_flag = "Your response (the created question) must be the following:"
-        ed_flag = "Respond only with the created question directly"
+        # bg_flag = "Your response (the created question) must be the following:"
+        # ed_flag = "Respond only with the created question directly"
+        bg_flag = " 你的回答（构造的指令/问题）必须是下面这个："
+        ed_flag = "2. 回答必须直接返回问题/指令，"
+
         ground_truth = ground_truth[ground_truth.index(bg_flag)+len(bg_flag):]
         ground_truth = ground_truth[:ground_truth.index(ed_flag)]
 
@@ -1720,8 +1724,14 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
                        min_clip=-0.05
                        ):
 
+        def postprocess_sol(sol):
+            # 取出[Note][/Note]等标志符
+            return sol.replace("[Note]", "").replace("[/Note]", "").replace("【注】", "").replace("【/注】", "")
+
         new_batch_solution_str, new_batch_ground_truth = [], []
         for gt, sol in zip(batch_ground_truth, batch_solution_str):
+            sol = postprocess_sol(sol)
+
             # H修改前
             gt_content = gt["ground_truth"]
             new_batch_solution_str.append(
