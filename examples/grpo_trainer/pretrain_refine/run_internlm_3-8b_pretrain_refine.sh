@@ -95,7 +95,7 @@ run_training() {
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=256 \
+        data.train_batch_size=512 \
         data.max_prompt_length=16384 \
         data.max_response_length=16384 \
         data.filter_overlong_prompts=True \

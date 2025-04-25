@@ -29,7 +29,9 @@ RATE_LIMIT_RETRY_ATTEMPTS = 10
 WORKFLOW_AGENT_LOGFILE = os.getenv("WORKFLOW_AGENT_LOGFILE", None)
 
 RM_URLS = [
-    "http://10.130.3.206:5001",
+    # "http://10.130.3.206:5004",
+    # "http://10.130.3.206:5001"
+    "http://10.130.1.128:5004"
 ]
 
 BT_REWARD_URLS = [
@@ -271,7 +273,7 @@ def compute_rm_score(
         input_datas.append(input_data)
 
     if len(input_datas) > 0:
-        for batch in tqdm_nonasync(batchify(input_datas, n=256), desc=f'[RM] batchify inference (batch=256)'):
+        for batch in tqdm_nonasync(batchify(input_datas, n=128), desc=f'[RM][{RM_URLS}] batchify inference (batch=128)'):
             output_datas = post_with_retry(RM_URLS, batch)
             for _ in output_datas['reward']:
                 _id = int(_["id"])
@@ -1791,7 +1793,7 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
         self.length_penalty = CorpusLengthPenalty(
             postprocess_solution_fn=CoTPretrainRefineComputeScore.postprocess_solution_fn,
             postprocess_gt_fn=lambda x: x["ground_truth"],
-            penalty_base=-0.1,
+            penalty_base=-0.2,
             mode="both"
         )
         self.format_penalty = CoTPretrainRefineFormatReward(
@@ -1901,12 +1903,15 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
                        batch_data_sources,
                        batch_solution_str,
                        batch_ground_truth):
+
+        new_batch_ground_truth = []
         for _ in batch_ground_truth:
-            _["raw_ground_truth"] = _["ground_truth"]
-            _["ground_truth"] = f'你是一名专精于大模型数据治理的专家。你的任务目标是给定一个提供的预训练语料，处理成一个高质量训练数据。\n\n[Raw Corpus]\n{_["ground_truth"]}\n\n\n# 评价标准\n{self.JUDGE_CRITERIA}'
+            new_batch_ground_truth.append({
+                "ground_truth": f'你是一名专精于大模型数据治理的专家。你的任务目标是给定一个提供的预训练语料，处理成一个高质量训练数据。\n\n[Raw Corpus]\n{_["ground_truth"]}\n\n\n# 评价标准\n{self.JUDGE_CRITERIA}'
+            })
         rewards = compute_rm_score(
             batch_solution_str=batch_solution_str,
-            batch_ground_truth=batch_ground_truth,
+            batch_ground_truth=new_batch_ground_truth,
             postprocess_solution_fn=self.postprocess_solution_fn,
             parse_result_failure_score=self.parse_result_failure_score
         )
@@ -1927,7 +1932,6 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
             batch_solution_str,
             batch_ground_truth
         )
-
         final_results = []
         for i in range(len(batch_solution_str)):
             penalty_log_str = []
@@ -1948,7 +1952,6 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
             final_results.append(_reward)
             thought = self.get_thought(batch_solution_str[i])
 
-            batch_ground_truth[i]["ground_truth"] = batch_ground_truth[i]["raw_ground_truth"]
             if self.split == "valid":
                 print(
                     f"--------------------------------[VALID]--------------------------------")
