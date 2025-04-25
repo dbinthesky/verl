@@ -33,12 +33,7 @@ RM_URLS = [
 ]
 
 BT_REWARD_URLS = [
-    # "http://10.130.0.60:5002"
-    # "http://10.130.0.60:5000"
-    # "http://10.130.1.200:5004"
-    # "http://10.130.3.206:5003"
-    "http://10.130.1.200:5004"
-    # "http://10.130.1.200:5003"
+    "http://10.130.3.206:5003"
 ]
 
 
@@ -1630,10 +1625,11 @@ class ROUGEScorer(PenaltyOrReward):
             sl_tokens = " ".join([_ for _ in sl_tokens])
             score = self.scorer.score(gt_tokens, sl_tokens)
 
-            rouge_recall = score["rouge1"].recall
+            rouge_recall = (score["rouge1"].recall +
+                            score["rouge2"].recall) / 2.0
 
             # reward分段奖励
-            if rouge_recall >= 0.7:
+            if rouge_recall >= 0.75:
                 return 1.0
             elif rouge_recall >= 0.5:
                 return rouge_recall
@@ -1772,6 +1768,7 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
             for key, fn in self.get_penalties().items():
                 penalty[key][i] = fn(solution_str, ground_truth)
+        raise NotImplementedError
 
         base_rewards = self.get_bt_rewards(
             batch_data_sources, batch_solution_str, batch_ground_truth)

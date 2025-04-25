@@ -28,6 +28,7 @@ from rm_w_criteria import (
     CoTPretrainAnnotationComputeScore,
     ROUGEScorer,
     ROUGEScorerForPretrainAnnotation,
+    CoTPretrainRefineFormatReward,
     CorpusLengthPenalty,
     qwq_longcot_fabricate_qa_compute_score_train,
     qwq_longcot_fabricate_qa_compute_score_v2_valid
@@ -362,8 +363,12 @@ class TestRMReward(unittest.TestCase):
         task = CoTPretrainRefineComputeScore(split="valid")
         scorer = ROUGEScorerForPretrainAnnotation(
             postprocess_solution_fn=task.postprocess_for_rouge)
-        with open("/cpfs01/shared/llm_ddd/tongjian/pretrain/shit", "rt") as f:
-            with open("/cpfs01/shared/llm_ddd/tongjian/pretrain/_shit", "wt") as g:
+        format_scorer = CoTPretrainRefineFormatReward(
+            postprocess_solution_fn=task.postprocess_solution_fn,
+            postprocess_gt_fn=lambda x: x["ground_truth"],
+        )
+        with open("/cpfs01/shared/llm_ddd/tongjian/pretrain/pretrain_refine_e2e_v1_0_1.jsonl", "rt") as f:
+            with open("/cpfs01/shared/llm_ddd/tongjian/pretrain/_pretrain_refine_e2e_v1_0_1.jsonl", "wt") as g:
                 data = []
                 for line in f:
                     example = json.loads(line)
@@ -373,56 +378,54 @@ class TestRMReward(unittest.TestCase):
                         continue
                     responses = example["self_improvement"]["responses"]
                     new_responses = []
-                    for response in responses:
-                        rouge_score = scorer.get_penalty_or_reward(
-                            response, {"ground_truth": example["content"]})
-                        if rouge_score < 0.5:
+                    # for response in responses:
+                    #     rouge_score = scorer.get_penalty_or_reward(
+                    #         response, {"ground_truth": example["content"]})
+                    #     if rouge_score < 0.5:
+                    #         continue
+                    #     new_responses.append({
+                    #         "response": response,
+                    #         "rouge": rouge_score
+                    #     })
+                    # if len(new_responses) == 0:
+                    #     continue
+                    # example["self_improvement"]["responses"] = new_responses
+                    # g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
+                    # for response in responses:
+                    #     format_score = format_scorer.get_penalty_or_reward(
+                    #         response["response"], {"ground_truth": example["content"]})
+                    #     if format_score < -0.49999:
+                    #         continue
+                    #     new_responses.append(response)
+                    # if len(new_responses) == 0:
+                    #     continue
+                    # example["self_improvement"]["responses"] = new_responses
+                    # g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
+
+                for batch in batchify(data, n=128):
+                    batch_solution_str = []
+                    batch_ground_truth = []
+
+                    for _ in batch:
+                        pbar.update(1)
+                        example = _
+                        if "self_improvement" not in _:
                             continue
-                        new_responses.append({
-                            "response": response,
-                            "rouge": rouge_score
-                        })
-                    if len(new_responses) == 0:
-                        continue
-                    example["self_improvement"]["responses"] = new_responses
-                    g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
-
-                # for batch in batchify(data, n=128):
-                #     batch_solution_str = []
-                #     batch_ground_truth = []
-
-                #     for _ in batch:
-                #         pbar.update(1)
-                #         example = _
-                #         if "self_improvement" not in _:
-                #             continue
-                #         if len(example["self_improvement"].get("responses", [])) == 0:
-                #             continue
-                #         responses = example["self_improvement"]["responses"]
-                #         for response in responses:
-                #             batch_solution_str.append(response)
-                #             batch_ground_truth.append(
-                #                 {"ground_truth": _["content"]})
-                #     print(len(batch_solution_str), len(batch_ground_truth))
-                #     scores = task.get_bt_rewards(
-                #         [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth)
-                #     scores = {x: y for x, y in zip(batch_solution_str, scores)}
-                #     for _ in batch:
-                #         for response in _["self_improvement"]["responses"]:
-                #             score = scores[response["response"]]
-                #             response["bt_score"] = score
-                #         g.write(f'{json.dumps(_, ensure_ascii=False)}\n')
-                # raise NotImplementedError
-
-                # example["self_improvement"]["responses"] = new_responses
-                # g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
-                # print(len(responses))
-
-        #     gt = row["reward_model"]["ground_truth"]
-        # # batch_solution_str.append(
-        # #     f'<chain-of-thought>\n{generate_random_string(100)}\n</chain-of-thought>\n\n<doc>\n{gt}\n> [Note] xxxx \n>\n> xxx [/Note]\n{gt}\n</doc>')
-        # batch_solution_str.append(
-        #     f'<chain-of-thought>\n{generate_random_string(100)}\n</chain-of-thought>\n\n<doc>\n{gt}\n> 【注】 xxxx \n>\n> xxx 【/注】\n{gt}\n</doc>')
+                        if len(example["self_improvement"].get("responses", [])) == 0:
+                            continue
+                        responses = example["self_improvement"]["responses"]
+                        for response in responses:
+                            batch_solution_str.append(response["response"])
+                            batch_ground_truth.append(
+                                {"ground_truth": _["content"]})
+                    scores = task.get_bt_rewards(
+                        [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth, None)
+                    scores = {x: y for x, y in zip(batch_solution_str, scores)}
+                    for _ in batch:
+                        for response in _["self_improvement"]["responses"]:
+                            score = scores[response["response"]]
+                            response["bt_score"] = score
+                        g.write(f'{json.dumps(_, ensure_ascii=False)}\n')
 
 
 if __name__ == '__main__':
