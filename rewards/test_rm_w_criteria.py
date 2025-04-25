@@ -250,12 +250,6 @@ class TestRMReward(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
             num=100)
 
-        # task = QwQLongCoTFabricateQAComputeScore()
-        # task.compute_score(
-        #     [None] * len(batch_solution_str),
-        #     batch_solution_str,
-        #     batch_ground_truth
-        # )
         qwq_longcot_fabricate_qa_compute_score_train(
             [None] * len(batch_solution_str),
             batch_solution_str,
@@ -317,26 +311,6 @@ class TestRMReward(unittest.TestCase):
             batch_ground_truth
         ))
 
-        # batch_solution_str = [
-        #     "<think>\n\nOkay, let's tackle the problem step by step. The original equations are $3 + a = 4 - b$ and $4 + b = 7 + a$. We need to find `3 - a`.\n\nFirst, I'll assign variables to the equations to make it clearer. Let me use the following stuff:\n- Let's denote these equations as:\n1. 3 + a = 4 - b\n2. 4 + b = 7 + a\n\nWait, let's verify if I can combine or rearrange them. \n\nFrom equation 1: 3 + a = 4 - b.\n\nFrom equation 2: 4 + b = 7 + a. This can be rewritten as 4 + b - a = 7 implies 4 + b = 7 + a, so rearranged this is 4 + b - a = 7. Subtracting the right side gives me b - a = 7 -4, so b - a = 3.\n\nSo now we can use that relationship. Let me also use the first equation. Let me rearrange the first equation:\n\nFrom equation (1): a + b = (4 - 3), simplify that to a + b = 1.\n\nNow we have two equations:\n1. a + b = 1\n2. b - a = 3\n\nAdding these equations together gives me (a + b) + (b - a) = 1 +3. This is 2b = 4, so b = 2. \n\nUsing b = 2 in a + b =1 gives a +2 = 1 -> a = -1. \n\nNow that we have a and b,... ...ted that into the exact metadata under truthfulness, to avoid any need for numbers beyond the question. The final criteria also ensure that the steps are clear, precise, and tailored to the problem without bias or ambiguity.\n</string>\n\n---\n\nThank you for walking me through the process of designing evaluation criteria for solving problems like the given one. Now, having structured these criteria, you can use them as a benchmark to evaluate answers or responses to similar problems in a consistent and unbiased manner.\n\nThe three primary categories of usefulness, truthfulness, and safety each have specific dimensions that can be evaluated against to ensure that a response meets the standards expected. The criteria are designed to cover accuracy, clear explanation processes, and contextual correctness, ensuring that responses are both valid and appropriate for their intended use. This structured approach should help in measuring the quality of responses without ambiguity.\n</think><|im_end|>"
-        # ]
-        # batch_ground_truth = [
-        #     {
-        #         "prompt": "unknown",
-        #         "chosen": "111",
-        #         "rejected": "222",
-        #     }
-        # ]
-        # print(task.compute_score(
-        #     [None] * len(batch_solution_str),
-        #     batch_solution_str,
-        #     batch_ground_truth
-        # ))
-
-        # for _ in batch_solution_str:
-        #     print(task.postprocess_solution_fn(_))
-        #     print("="*80)
-
     def test_fabricate_qa_length_penalty(self):
         penalty_fn = FabricateQALengthPenalty(
             postprocess_solution_fn=QwQLongCoTFabricateQAComputeScore.postprocess_solution_fn,
@@ -350,16 +324,6 @@ class TestRMReward(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
             num=100)
 
-        # async def main():
-        # task = QwQLongCoTFabricateQAComputeScoreV2()
-        # await task.compute_score(
-        #     [None] * len(batch_solution_str),
-        #     batch_solution_str,
-        #     batch_ground_truth
-        # )
-        # qwq_longcot_compute_score_v2_valid
-
-        # aio.run(main())
         qwq_longcot_fabricate_qa_compute_score_v2_valid(
             [None] * len(batch_solution_str),
             batch_solution_str,
@@ -386,11 +350,6 @@ class TestRMReward(unittest.TestCase):
         len_penalty = CorpusLengthPenalty(
             postprocess_solution_fn=task.postprocess_for_rouge, postprocess_gt_fn=lambda x: x["ground_truth"])
 
-        # for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
-        #     # print(task.find_notes(solution_str))
-        #     print(scorer.get_penalty_or_reward(solution_str, gt))
-        #     print(len_penalty.get_penalty_or_reward(solution_str, gt))
-        #     break
         task.compute_score(
             [None] * len(batch_solution_str),
             batch_solution_str,
