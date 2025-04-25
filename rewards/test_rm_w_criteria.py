@@ -146,7 +146,7 @@ def load_pretrain_refinement(num=100):
         batch_ground_truth.append(row["reward_model"])
         gt = row["reward_model"]["ground_truth"]
         batch_solution_str.append(
-            f'<chain-of-thought>\n{generate_random_string(100)}\n</chain-of-thought>\n\n<doc>\n{gt}\n> [Note] xxxx \n>\n> xxx [/Note]\n</doc>')
+            f'<chain-of-thought>\n{generate_random_string(100)}\n</chain-of-thought>\n\n<doc>\n{gt}\n> [Note] xxxx \n>\n> xxx [/Note]{gt}\n</doc>')
         # batch_solution_str.append(
         #     f'<chain-of-thought>\n{generate_random_string(100)}\n</chain-of-thought>\n\n<doc>\n{gt}\n> [Note] xxxx \n>\n> xxx [/Note]\n{gt}\n</doc>')
         # batch_solution_str.append(

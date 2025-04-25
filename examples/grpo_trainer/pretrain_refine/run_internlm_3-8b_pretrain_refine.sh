@@ -49,7 +49,7 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_pretrain_refine_e2e_v1_0_0_73_open_source_hf"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_pretrain_refine_e2e_v1_0_1_80_open_source_hf"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/nv-nemotron-cc-medium_100w_v3"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/bt_seed_discipline_250426_4k_e2e_refine_test"
 
@@ -95,9 +95,9 @@ run_training() {
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=512 \
-        data.max_prompt_length=6144 \
-        data.max_response_length=10240 \
+        data.train_batch_size=256 \
+        data.max_prompt_length=16384 \
+        data.max_response_length=16384 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
@@ -108,7 +108,7 @@ run_training() {
         actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus * 4)) \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=16384 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=32768 \
         actor_rollout_ref.actor.use_kl_loss=False \
         actor_rollout_ref.actor.kl_loss_coef=0.0 \
         actor_rollout_ref.actor.entropy_coeff=0.001 \
@@ -122,7 +122,7 @@ run_training() {
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.85 \
         actor_rollout_ref.rollout.temperature=1.0 \
-        actor_rollout_ref.rollout.n=16 \
+        actor_rollout_ref.rollout.n=4 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
