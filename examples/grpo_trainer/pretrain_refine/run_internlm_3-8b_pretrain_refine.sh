@@ -50,7 +50,7 @@ setup_path() {
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_pretrain_refine_e2e_v1_0_1_80_open_source_hf"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/nv-nemotron-cc-medium_100w_v3"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/nv-nemotron-cc-medium_100w_v4"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/bt_seed_discipline_250426_4k_e2e_refine_test"
 
     experiment_name="internlm3-8b_pretrain_e2e_refine_v1-dlc-${YYMMDD}-${HHMMSS}"

@@ -12,9 +12,9 @@ DLC_CONFIG_PATH="${DLC_CONFIG_PATH:-"/cpfs01/shared/llm_ddd/tongjian/dlc.config"
 # [new_ddd]
 # WORKSPACE_ID="${WORKSPACE_ID:-"wssp4wsoiyvfp6ww"}"
 # [he]
-# WORKSPACE_ID="${WORKSPACE_ID:-"wso1cah3ytpgmaah"}"
+WORKSPACE_ID="${WORKSPACE_ID:-"wso1cah3ytpgmaah"}"
 # [hc]
-WORKSPACE_ID="${WORKSPACE_ID:-"ws1h2vgufjufr4jj"}"
+# WORKSPACE_ID="${WORKSPACE_ID:-"ws1h2vgufjufr4jj"}"
 # [h2]
 # WORKSPACE_ID="wso1gao759kjyz4p"
 DATA_SOURCES="datajrdc07nuo03o,dataui74zr3uig4f,datapcxxjb8czn7k,datajfxq87v3rx9k,data1otmepzybpqr"
