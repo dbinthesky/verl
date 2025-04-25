@@ -1553,7 +1553,7 @@ class CoTPretrainRefineFormatReward(PenaltyOrReward):
                 return -0.5
 
         try:
-            max_shaped_reward = 0.15
+            max_shaped_reward = 0.1
             reward_per_note = 0.01
             en_notes = re.findall(
                 r'\[Note\].*?\[/Note\]', solution_str, re.DOTALL)
@@ -1640,10 +1640,6 @@ class ROUGEScorer(PenaltyOrReward):
             else:
                 return rouge_recall / 2.0
 
-            # final_score = []
-            # for k, s in score.items():
-            #     final_score.append(s.recall)
-            # return np.mean(final_score)
         except Exception as err:
             return self.parse_result_failure_score
 
@@ -1674,12 +1670,6 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
             "LengthPenalty": self.length_penalty.get_penalty_or_reward,
             "Format": self.format_penalty.get_penalty_or_reward
         }
-
-    @classmethod
-    def find_notes(cls, solution_str: str):
-        document = cls.postprocess_solution_fn(solution_str)
-        # return re.findall(r'> \[Note\].*?\[/Note\]', document, re.DOTALL)
-        return re.findall(r'【注】.*?【/注】', document, re.DOTALL)
 
     @classmethod
     def postprocess_for_rouge(cls, solution_str: str):

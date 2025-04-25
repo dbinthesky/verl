@@ -356,27 +356,73 @@ class TestRMReward(unittest.TestCase):
             batch_ground_truth
         )
 
-    # def test_cot_pretrain_annotation_compute_score(self):
-    #     gt = "# 5SBF\n#### PanDDA analysis group deposition of ground-state model of SARS-CoV-2 NendoU\nChanges made to a PDB entry after its initial release are considered to be either “major” or “minor”. The latest minor version of each major version is available as a file download. More information about the PDB versioning is available.\n| Version Number | Version Date | Version Type/Reason | Version Change | Revised CIF Category |  |\n|---|---|---|---|---|---|\n| 1.0 | 2022-02-09 | Initial release |  |  |  |\n| 1.1 | 2023-05-10 |  | Database references | citation, citation_author |  |\n| 1.2 | 2023-06-21 |  | Database references | citation |  |\n| 1.3 | 2024-05-22 |  | Data collection | chem_comp_atom, chem_comp_bond | Download |"
-    #     solution = ""
-    #     with open("/cpfs01/shared/llm_ddd/tongjian/verl/rewards/solution.txt", "rt") as f:
-    #         for line in f:
-    #             solution += line
-    #     # batch_solution_str, batch_ground_truth = load_pretrain_refinement(
-    #     #     num=100)
+    def test_cot_pretrain_refinement_rft(self):
+        from tqdm import tqdm
+        pbar = tqdm(total=12000)
+        task = CoTPretrainRefineComputeScore(split="valid")
+        scorer = ROUGEScorerForPretrainAnnotation(
+            postprocess_solution_fn=task.postprocess_for_rouge)
+        with open("/cpfs01/shared/llm_ddd/tongjian/pretrain/shit", "rt") as f:
+            with open("/cpfs01/shared/llm_ddd/tongjian/pretrain/_shit", "wt") as g:
+                data = []
+                for line in f:
+                    example = json.loads(line)
+                    data.append(example)
+                    pbar.update(1)
+                    if "self_improvement" not in example or len(example["self_improvement"].get("responses", [])) == 0:
+                        continue
+                    responses = example["self_improvement"]["responses"]
+                    new_responses = []
+                    for response in responses:
+                        rouge_score = scorer.get_penalty_or_reward(
+                            response, {"ground_truth": example["content"]})
+                        if rouge_score < 0.5:
+                            continue
+                        new_responses.append({
+                            "response": response,
+                            "rouge": rouge_score
+                        })
+                    if len(new_responses) == 0:
+                        continue
+                    example["self_improvement"]["responses"] = new_responses
+                    g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
 
-    #     task = CoTPretrainAnnotationComputeScore(split="valid")
-    #     # scorer = ROUGEScorerForPretrainAnnotation(
-    #     #     postprocess_solution_fn=task.postprocess_for_rouge)
+                # for batch in batchify(data, n=128):
+                #     batch_solution_str = []
+                #     batch_ground_truth = []
 
-    #     # # for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
-    #     # #     print(scorer.get_penalty_or_reward(solution_str, gt))
-    #     # #     break
-    #     task.compute_score(
-    #         [None],
-    #         [solution],
-    #         [{"ground_truth": gt}]
-    #     )
+                #     for _ in batch:
+                #         pbar.update(1)
+                #         example = _
+                #         if "self_improvement" not in _:
+                #             continue
+                #         if len(example["self_improvement"].get("responses", [])) == 0:
+                #             continue
+                #         responses = example["self_improvement"]["responses"]
+                #         for response in responses:
+                #             batch_solution_str.append(response)
+                #             batch_ground_truth.append(
+                #                 {"ground_truth": _["content"]})
+                #     print(len(batch_solution_str), len(batch_ground_truth))
+                #     scores = task.get_bt_rewards(
+                #         [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth)
+                #     scores = {x: y for x, y in zip(batch_solution_str, scores)}
+                #     for _ in batch:
+                #         for response in _["self_improvement"]["responses"]:
+                #             score = scores[response["response"]]
+                #             response["bt_score"] = score
+                #         g.write(f'{json.dumps(_, ensure_ascii=False)}\n')
+                # raise NotImplementedError
+
+                # example["self_improvement"]["responses"] = new_responses
+                # g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
+                # print(len(responses))
+
+        #     gt = row["reward_model"]["ground_truth"]
+        # # batch_solution_str.append(
+        # #     f'<chain-of-thought>\n{generate_random_string(100)}\n</chain-of-thought>\n\n<doc>\n{gt}\n> [Note] xxxx \n>\n> xxx [/Note]\n{gt}\n</doc>')
+        # batch_solution_str.append(
+        #     f'<chain-of-thought>\n{generate_random_string(100)}\n</chain-of-thought>\n\n<doc>\n{gt}\n> 【注】 xxxx \n>\n> xxx 【/注】\n{gt}\n</doc>')
 
 
 if __name__ == '__main__':
