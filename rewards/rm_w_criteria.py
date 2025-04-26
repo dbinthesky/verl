@@ -29,9 +29,7 @@ RATE_LIMIT_RETRY_ATTEMPTS = 10
 WORKFLOW_AGENT_LOGFILE = os.getenv("WORKFLOW_AGENT_LOGFILE", None)
 
 RM_URLS = [
-    # "http://10.130.3.206:5004",
-    # "http://10.130.3.206:5001"
-    "http://10.130.1.128:5004"
+    "http://10.130.3.206:5003"
 ]
 
 BT_REWARD_URLS = [
@@ -1362,6 +1360,17 @@ qwq_longcot_sft_back_translation_compute_score_valid = _qwq_longcot_sft_back_tra
 # Pretrain RL
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+def remove_latex_format(text):
+    # 移除LaTeX命令
+    text = re.sub(r'\\[a-zA-Z]+(\{[^\}]+\})?', '', text)
+    # 移除LaTeX环境
+    text = re.sub(
+        r'\\begin\{[a-zA-Z]+\}(.*?)\\end\{[a-zA-Z]+\}', r'\1', text, flags=re.DOTALL)
+    # 移除LaTeX特殊字符
+    text = re.sub(r'[\$#%&_{}]', '', text)
+    return text
+
+
 class CorpusLengthPenalty(PenaltyOrReward):
     def __init__(self,
                  postprocess_solution_fn,
@@ -1380,12 +1389,11 @@ class CorpusLengthPenalty(PenaltyOrReward):
             return 0.
 
         gt = self.postprocess_gt_fn(ground_truth)
-        if contain_chinese(gt):
-            gt_token_size = len(simple_zh_tokenize(gt))
-            sol_token_size = len(simple_zh_tokenize(solution_str))
-        else:
-            gt_token_size = len(simple_en_tokenize(gt))
-            sol_token_size = len(simple_en_tokenize(solution_str))
+        gt = remove_latex_format(gt)
+        solution_str = remove_latex_format(solution_str)
+
+        gt_token_size = len(gt)
+        sol_token_size = len(solution_str)
 
         if self.mode == "lt_gt":
             return self.penalty_base * min(max((gt_token_size-sol_token_size), 0) / gt_token_size, 5.)
@@ -1548,6 +1556,11 @@ class CoTPretrainRefineFormatReward(PenaltyOrReward):
         if not contain_chinese(gt):
             if "【注】" in solution_str or "【/注】" in solution_str:
                 return -0.5
+
+        wo_notes = re.sub(r'\[Note\].*?\[/Note\]', "", solution_str)
+        wo_notes = re.sub(r'【注】.*?【/注】', "", wo_notes)
+        if any(_ in wo_notes for _ in ("【注】", "【/注】", "[Note]", "[/Note]")):
+            return -0.5
 
         try:
             max_shaped_reward = 0.1
@@ -1793,7 +1806,7 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
         self.length_penalty = CorpusLengthPenalty(
             postprocess_solution_fn=CoTPretrainRefineComputeScore.postprocess_solution_fn,
             postprocess_gt_fn=lambda x: x["ground_truth"],
-            penalty_base=-0.2,
+            penalty_base=-0.10,
             mode="both"
         )
         self.format_penalty = CoTPretrainRefineFormatReward(

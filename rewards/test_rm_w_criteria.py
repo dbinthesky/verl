@@ -135,7 +135,7 @@ def load_cot_pretrain_rl(num=100):
 
 
 def load_pretrain_refinement(num=100):
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/nv-nemotron-cc-medium_100w/part_0.parquet"
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/reason_pretrain_v1_4k_train/part_0.parquet"
     batch_solution_str, batch_ground_truth = [], []
 
     df = pd.read_parquet(filename)
