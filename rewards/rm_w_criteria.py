@@ -29,7 +29,7 @@ RATE_LIMIT_RETRY_ATTEMPTS = 10
 WORKFLOW_AGENT_LOGFILE = os.getenv("WORKFLOW_AGENT_LOGFILE", None)
 
 RM_URLS = [
-    "http://10.130.3.206:5003"
+    "http://10.130.3.206:5002"
 ]
 
 BT_REWARD_URLS = [
@@ -1644,9 +1644,9 @@ class ROUGEScorer(PenaltyOrReward):
                             score["rouge2"].recall) / 2.0
 
             # reward分段奖励
-            if rouge_recall >= 0.70:
+            if rouge_recall >= 0.6:
                 return 1.0
-            elif rouge_recall >= 0.5:
+            elif rouge_recall >= 0.4:
                 return rouge_recall
             else:
                 return rouge_recall / 2.0
@@ -1806,7 +1806,7 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
         self.length_penalty = CorpusLengthPenalty(
             postprocess_solution_fn=CoTPretrainRefineComputeScore.postprocess_solution_fn,
             postprocess_gt_fn=lambda x: x["ground_truth"],
-            penalty_base=-0.10,
+            penalty_base=-0.05,
             mode="both"
         )
         self.format_penalty = CoTPretrainRefineFormatReward(
