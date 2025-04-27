@@ -1552,16 +1552,12 @@ class CoTPretrainRefineFormatReward(PenaltyOrReward):
     def get_penalty_or_reward(self, solution_str, ground_truth):
         solution_str = self.postprocess_solution_fn(solution_str)
         if solution_str is None:
-            print(1)
-            raise NotImplementedError
             return 0.
 
         gt = self.postprocess_gt_fn(ground_truth)
 
         if not contain_chinese(gt):
             if "【注】" in solution_str or "【/注】" in solution_str:
-                print(2)
-                raise NotImplementedError
                 return -0.5
 
         # 禁止嵌套式[Note][/Note]
@@ -1601,7 +1597,7 @@ class ROUGEScorer(PenaltyOrReward):
                  remove_latex_format=True
                  ):
         self.scorer = rouge_scorer.RougeScorer(
-            ['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
+            ['rouge1', 'rouge2'], use_stemmer=True)
         self.parse_result_failure_score = parse_result_failure_score
         self.postprocess_solution_fn = postprocess_solution_fn
         self.remove_latex_format = remove_latex_format
@@ -1762,6 +1758,69 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
 5. **语种混杂未修复**：中英句子混杂（如“Let’s 开始分析数据”未处理）。  
 6. **内容重复未修复**：包含大量内容意思重复的段落/句子/表述
 """
+    JUDGE_CRITERIA_THINK = """
+### 内容新增治理之“思考过程”专项评价标准
+
+#### 一、结构规范性（基础硬性指标）
+1. **标签使用准确性**  
+   - 是否根据文本语言类型正确使用标记：中文场景使用“【注】...【/注】”，非中文场景使用“[Note]...[/Note]”，代码场景在注释区域添加  
+   - 标签内是否严格遵循“Q: 问题描述 A: 思考内容”的自问自答格式，禁止出现无设问的纯叙述性思考  
+
+2. **位置合理性**  
+   - 思考过程是否出现在需要解释的内容**之前**，确保问题导向性（如先提出“如何证明勾股定理？”再展开证明过程）  
+   - 避免在无关位置插入思考（如在结论后补充问题，或在段落中间突兀插入不相关思考）  
+
+#### 二、内容相关性（核心逻辑指标）  
+1. **问题-内容强绑定性**  
+   - 提出的问题是否与后续原文内容构成“问题-答案”直接映射关系（例：问题“如何计算两个集合的交集大小？”对应后续集合运算推导过程）  
+   - 禁止出现“泛泛而问”（如“这里该怎么想？”），问题需精准指向具体内容的核心矛盾或关键步骤  
+
+2. **知识衔接度**  
+   - 思考过程是否补全原文隐含的逻辑断层（如数学题中省略的辅助线构造思路、跨学科概念引用时的理论铺垫）  
+   - 是否对专业术语、特殊符号（如LaTeX公式、代码语法）进行必要的原理性解释（例：在出现“∇f”时，补充“表示函数f的梯度，即各变量偏导数组成的向量”）  
+
+#### 三、思考深度（认知价值指标）  
+1. **步骤显性化程度**  
+   - 复杂逻辑是否拆解为可追溯的子步骤（例：将“通过极大似然估计求解参数”拆解为“1. 构建似然函数；2. 取对数简化运算；3. 求导并令导数为零”）  
+   - 是否包含对“为什么这样做”的解释（如算法设计中说明选择某种数据结构的原因：“使用哈希表是为了实现O(1)时间复杂度的查找”）  
+
+2. **批判性思维体现**  
+   - 是否提示潜在逻辑漏洞或假设条件（例：在经济学模型中补充“本推导假设完全竞争市场，忽略垄断因素影响”）  
+   - 对多解问题是否说明方法选择依据（如“选择动态规划而非暴力枚举，因为后者时间复杂度为O(2ⁿ)，无法处理n>20的场景”）  
+
+#### 四、场景多样性（应用拓展指标）  
+1. **领域覆盖广度**  
+   - 是否涵盖至少3种以上不同场景（教育解题/科研方法/创作构思/跨文化翻译/历史分析等），避免单一化“解题思维”  
+   - 示例参考：  
+     - 教育场景：揭示题目考察的核心知识点（如“本题重点测试等差数列前n项和公式的逆应用”）  
+     - 创作场景：说明角色设定逻辑（如“让反派具有双重身份，是为了制造剧情反转张力”）  
+     - 翻译场景：解释文化特有的隐喻转换（如“将‘画蛇添足’译为‘gild the lily’，因两者均表达‘多余修饰’的语义”）  
+
+2. **思维维度丰富性**  
+   - 是否包含以下至少2种思维类型：  
+     - 推导型（数学证明、代码逻辑）  
+     - 解释型（概念定义、原理类比）  
+     - 评估型（方法优劣对比、假设条件分析）  
+     - 创作型（叙事结构设计、意象符号选择）  
+
+#### 五、语言表达规范性  
+1. **人称与引导话术**  
+   - 中文是否使用第一人称引导（如“我们需要先确定...”, “这里的关键是...”），英文是否采用“Let's consider...”, “To solve this, we first...”等学术化思考口吻  
+   - 禁止使用碎片化表达（如“首先，这样做。然后，那样做。”），需保持句子完整性和逻辑连贯性  
+
+2. **专业术语准确性**  
+   - 技术领域思考是否正确使用专业术语（如计算机科学中准确区分“算法复杂度”与“数据结构”，生物学中正确表述“基因表达”与“蛋白质合成”的关系）  
+   - 跨领域解释是否避免知识性错误（如在解释物理学概念时，不混淆“惯性”与“惯性定律”的定义）  
+
+#### 六、价值附加性（高阶质量指标）  
+1. **认知脚手架构建**  
+   - 是否为复杂内容搭建“理解阶梯”（例：对量子力学“叠加态”概念，先类比“硬币同时正反朝上的虚拟状态”，再引入数学表达）  
+   - 是否预判读者可能的困惑点并提前解答（如在公式推导中插入“此处交换积分顺序的依据是富比尼定理，适用条件为积分绝对收敛”）  
+
+2. **元认知引导**  
+   - 是否显性化思考策略（如“遇到多变量问题时，常用控制变量法逐一分析”）  
+   - 是否提示学习方法（如“记忆三角函数公式时，可通过单位圆辅助理解各象限符号规律”）  
+"""
 
     def __init__(self, split="train", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD, rouge_coef=1.0, info_coef=1.5):
         super().__init__(split=split, parse_result_failure_score=parse_result_failure_score)
@@ -1890,17 +1949,32 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
                        batch_solution_str,
                        batch_ground_truth):
 
-        new_batch_ground_truth = []
+        refine_judges = []
         for _ in batch_ground_truth:
-            new_batch_ground_truth.append({
+            refine_judges.append({
                 "ground_truth": f'你是一名专精于大模型数据改写的治理专家。目标是给定一篇从网页爬取或者PDF解析出来的文档，改写成一篇优质的大语言模型预训练语料。\n\n[Raw Corpus]\n{_["ground_truth"]}\n\n\n# 评价标准\n{self.JUDGE_CRITERIA_REFINE}'
             })
-        rewards = compute_rm_score(
+        rewards1 = compute_rm_score(
             batch_solution_str=batch_solution_str,
-            batch_ground_truth=new_batch_ground_truth,
+            batch_ground_truth=refine_judges,
             postprocess_solution_fn=self.postprocess_for_rouge,
             parse_result_failure_score=self.parse_result_failure_score
         )
+
+        addition_judge = []
+        for _ in batch_ground_truth:
+            addition_judge.append({
+                "ground_truth": f'你是一名专精于大模型数据改写的治理专家。目标是给定一篇从网页爬取或者PDF解析出来的文档增加注释（思考过程）。好的新增思考过程应当满足下面的标准\n\n# 评价标准\n{self.JUDGE_CRITERIA_THINK}'
+            })
+        rewards2 = compute_rm_score(
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=addition_judge,
+            postprocess_solution_fn=self.postprocess_solution_fn,
+            parse_result_failure_score=self.parse_result_failure_score
+        )
+        rewards = []
+        for x, y in zip(rewards1, rewards2):
+            rewards.append(x+y)
         return rewards
 
     def compute_score(self,
