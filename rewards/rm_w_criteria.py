@@ -29,7 +29,7 @@ RATE_LIMIT_RETRY_ATTEMPTS = 10
 WORKFLOW_AGENT_LOGFILE = os.getenv("WORKFLOW_AGENT_LOGFILE", None)
 
 RM_URLS = [
-    "http://10.130.3.206:5002"
+    "http://10.130.0.222:5003"
 ]
 
 BT_REWARD_URLS = [
@@ -1542,34 +1542,54 @@ cot_pretrain_rl_compute_score_valid = _cot_pretrain_rl_compute_score_valid.compu
 class CoTPretrainRefineFormatReward(PenaltyOrReward):
     def __init__(self,
                  postprocess_solution_fn,
-                 postprocess_gt_fn):
+                 postprocess_gt_fn,
+                 get_thought_fn,
+                 ):
         self.postprocess_solution_fn = postprocess_solution_fn
         self.postprocess_gt_fn = postprocess_gt_fn
+        self.get_thought_fn = get_thought_fn
 
     def get_penalty_or_reward(self, solution_str, ground_truth):
         solution_str = self.postprocess_solution_fn(solution_str)
         if solution_str is None:
+            print(1)
+            raise NotImplementedError
             return 0.
 
         gt = self.postprocess_gt_fn(ground_truth)
 
         if not contain_chinese(gt):
             if "【注】" in solution_str or "【/注】" in solution_str:
+                print(2)
+                raise NotImplementedError
                 return -0.5
 
-        wo_notes = re.sub(r'\[Note\].*?\[/Note\]', "", solution_str)
-        wo_notes = re.sub(r'【注】.*?【/注】', "", wo_notes)
+        # 禁止嵌套式[Note][/Note]
+        wo_notes = re.sub(r'\[Note\][\s\S]*?\[/Note\]',
+                          "", solution_str, flags=re.DOTALL)
+        wo_notes = re.sub(r'【注】[\s\S]*?【/注】', "", wo_notes, flags=re.DOTALL)
         if any(_ in wo_notes for _ in ("【注】", "【/注】", "[Note]", "[/Note]")):
             return -0.5
 
+        # 思考过程和原文档不一致 扣0.2
+        thinking_lang_penalty = 0.0
+        thought = self.get_thought_fn(solution_str=solution_str)
+        if not contain_chinese(gt) and contain_chinese(thought):
+            thinking_lang_penalty = -0.2
+
+        # 思考过程奖励
         try:
             max_shaped_reward = 0.1
             reward_per_note = 0.01
             en_notes = re.findall(
                 r'\[Note\].*?\[/Note\]', solution_str, re.DOTALL)
             zh_notes = re.findall(r'【注】.*?【/注】', solution_str, re.DOTALL)
-            num_notes = len(en_notes) + len(zh_notes)
-            return min(num_notes * reward_per_note, max_shaped_reward)
+            all_notes = en_notes + zh_notes
+            all_notes = [_ for _ in all_notes if (
+                ("Q:" in _ and "A:" in _) or ("Q：" in _ and "A：" in _))]
+
+            num_notes = len(all_notes)
+            return thinking_lang_penalty + min(num_notes * reward_per_note, max_shaped_reward)
         except Exception as err:
             return 0.
 
@@ -1656,11 +1676,11 @@ class ROUGEScorer(PenaltyOrReward):
 
 
 class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScore):
-    JUDGE_CRITERIA = """
-以下是深度整合 **内容删除治理、内容改写治理、注释治理** 及 **多语料场景化要求** 后的 **完整大模型数据治理评价标准（Criteria）**，形成“清洗-修复-注释-场景适配”四阶评估体系，覆盖20+语料类型与全治理流程：
+    JUDGE_CRITERIA_REFINE = """
+以下是深度整合 **内容删除治理、内容改写治理** 后的 **完整大模型数据治理评价标准（Criteria）**：
 
 
-### **一、内容纯净度（删除治理核心，30%权重）**  
+### **一、内容纯净度（删除治理核心，25%权重）**  
 #### ▶ 核心要求：剔除污染性/无价值信息，实现“零违规、低噪声、高质量”  
 - **违规内容彻底清除（一票否决）**：  
   - **绝对禁止项**：色情暗示、赌博诱导、广告营销（含链接/二维码/品牌硬广）、政治敏感、仇恨言论、暴力描述等显性/隐性违规内容（如“扫码领红包”“XX领导人负面联想”）；  
@@ -1671,127 +1691,76 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
     - 连续空格/换行/制表符标准化（如“  ”→单空格，“\n\n\n”→单换行），乱码（如“�”“┼─┼”）及全角半角混杂符号（如“ａA”→“aA”）清除；  
     - 过度标点修正（“！！！”→“！”，“？？？”→“？”，保留合理情感表达如“！？”）。  
   - **内容噪声**：  
-    - 重复段落/句子去重（重复率≤5%），移除“同上”“如题”等孤立短句及“啊啊啊”“嗯嗯嗯”等无意义语气词堆砌。  
+    - 重复段落/句子去重（重复率≤5%）。  
 
-- **低质内容过滤达标**：  
-  - 机翻痕迹消除（如“我吃饭在餐厅”→“我在餐厅吃饭”，禁止中英混杂“Let’s 开始分析数据”）；  
-  - 逻辑断裂修复：补全不完整对话（如“Q: 怎么解？A: 用公式”→“A: 建议用勾股定理公式求解”），剔除碎片化内容（如单句“好的”无上下文）。  
+- **学习噪声**：
+   - **低学习价值过滤**：清除不影响整体内容理解的ISBN、时间信息、网址、DOI等
+   - **信息去噪**：清除图片、表格等多模态信息不可理解且无法恢复的内容
 
 
 ### **二、语义修复有效性（改写治理核心，25%权重）**  
 #### ▶ 核心要求：最小干预修复结构问题，100%保留核心语义  
 - **基础规范修复完整性**：  
   - **文字/标点**：  
-    - 拼写/语法错误修正（“辩别”→“辨别”，“通过跑步，让我健康”→“跑步让我健康”）；  
-    - 标点统一（中文全角“。，”，英文半角“.,”），大小写规范（“i phone”→“iPhone”，“internet”→“Internet”作为专有名词时）；  
-    - 火星文/颜文字过滤（“屮艸芔茻”→“草木”，“(≧▽≦)”→删除，保留必要专业符号如“℃”“→”）。  
+    - 拼写/语法错误修正
+    - 标点统一  
+    - 火星文/颜文字过滤
   - **技术格式**：  
-    - 数学公式完整性（修复断裂LaTeX，如补全`\begin{equation}`到`\end{equation}`）；  
-    - 代码块语法正确性（Python缩进4空格，Java括号闭合，确保可编译运行）。  
+    - 数学公式完整性
+    - 代码块语法正确性
 
 - **语义完整性优化**：  
-  - **不完整句子补全**：结合上下文补全逻辑（如“根据定理，得证”→“根据勾股定理，得证AB²=AC²+BC²”）；  
-  - **重复表意合并**：删除冗余（如“提出建议和意见”→“提出建议”，“重要的事情说三遍，非常重要”→“重要的事情说三遍”）。  
+  - **不完整句子补全**：结合上下文补全逻辑
+  - **重复表意合并**：删除冗余  
 
 - **逻辑连贯性增强**：  
-  - **指代明确化**：修正歧义指代（如“小明和小红去买书，他喜欢科幻”→“小明喜欢科幻”）；  
-  - **语序合理化**：调整混乱语序（“今天吃了饭我”→“今天我吃了饭”，“数据统计年度的2023”→“2023年度的数据统计”）；  
-  - 逻辑连接词补充（如添加“因为...所以...”“虽然...但是...”增强语义衔接）。  
+  - **指代明确化**：修正歧义指代
+  - **语序合理化**：调整混乱语序 
+  - 逻辑连接词补充
+
+- **低质内容过滤达标**：  
+  - 机翻痕迹消除 
+  - 逻辑断裂修复
 
 
-### **三、信息完备性（原文保护核心，20%权重）**  
+### **三、信息完备性（原文保护核心，40%权重）**  
 #### ▶ 核心要求：全流程不丢失原文有效信息，仅新增必要治理内容  
 - **原文信息零丢失**：  
-  - **数据/结论保留**：删除噪声后，关键数据（如“GDP增长率3.2%”）、核心结论（如“实验证明A方案更优”）、专业术语（如“区块链”）、公式（如“E=mc²”）完整保留，不得篡改/简化（如“影响因子2.5”不得改为“约2.5”）；  
-  - **内容无删减**：除明确违规/噪声内容外，不得删除原文语句（如保留“勾股定理”不得改为“毕达哥拉斯定理”，除非统一术语且首次出现时注释）。  
+  - **数据/结论保留**：删除噪声后，关键数据、核心结论、专业术语、公式完整保留，不得篡改/简化；  
+  - **内容无删减**：除明确违规/噪声内容外，不得删除原文语句。  
 
 - **改写操作最小干预**：  
-  - 仅修正明确错误（语法/拼写），不改变原文观点、情感倾向或逻辑关系（如“可能有效”不得改为“绝对有效”）；  
-  - 技术文档参数/公式保持原值（如“`timeout=5000`”不得改为“`timeout=5`”，需保留单位“ms”）。  
+  - 仅修正明确错误（语法/拼写），不改变原文观点、情感倾向或逻辑关系。
+  - 技术文档参数/公式保持原值。  
 
 
-### **四、内容完整性（注释治理核心，15%权重）**  
-#### ▶ 核心要求：关键信息100%注释覆盖，场景化思考过程显化  
-- **必注场景全覆盖（20+语料类型适配）**：  
-  | **语料类型**       | **核心注释要求**                          | **示例**                                                                 |  
-  |--------------------|-------------------------------------------|-------------------------------------------------------------------------|  
-  | **教育/习题**       | 命题逻辑（考察点、易错点、解题思路）       | 【注】【命题逻辑】本题考察导数求极值，易错点：①未求二阶导数判断极值类型；②忽略定义域限制。【/注】<br>求函数f(x)=x³-3x的极值。 |  
-  | **技术文档**       | 参数设计（功能、默认值、约束条件）         | 【注】【API参数】`page_size=50`：①默认分页大小，经压测验证单页50条时接口响应时间≤200ms；②最大限制100条，避免内存溢出。【/注】<br>请求参数：`page_size=50` |  
-  | **法律文书**       | 法条援引（条款编号、责任边界、风险场景）   | 【注】【法条依据】“连带责任”依据《民法典》第178条：多个责任人对同一债务承担全部清偿义务，债权人可任选其一追偿。【/注】<br>担保条款：保证人承担连带责任直至债务清偿完毕。 |  
-  | **科研论文**       | 实验设计（方法选择、变量控制、数据验证）   | 【注】【实验逻辑】选择RT-PCR检测基因表达：①目标基因序列长度800bp，适合该方法；②内参GAPDH用于校正RNA提取效率，重复3次取平均值。【/注】<br>结果：基因A表达量在处理组比对照组高1.8倍（P<0.01）。 |  
-  | **翻译文本**       | 文化差异（不可译元素、双关处理、语境适配） | 【注】【文化注释】“孔融让梨”译为“Kong Rong yielding pears”时补充：中国传统美德故事，体现孩童谦让精神，源自《后汉书·孔融传》。【/注】<br>英文译文：The story of Kong Rong yielding pears teaches the virtue of humility. |  
-
-- **注释有效性要求**：  
-  - **专业术语**：首次出现时定义（如“AI模型”无需注释，“Transformer架构”需注释“基于自注意力机制的神经网络结构”）；  
-  - **复杂逻辑**：补全推导步骤（如“由①②得③”→“【注】①×2-②消去x，得3y=15，故y=5【/注】”）；  
-  - **跨领域概念**：解释核心思想（如“马太效应”→“强者愈强的两极分化现象，源自《圣经》‘凡有的，还要加给他’”）。  
-
-- **改写与注释协同**：  
-  - 改写后新术语仍需注释（如“毕达哥拉斯定理”改写自“勾股定理”，首次出现时需注释“即勾股定理，指直角三角形斜边平方等于两直角边平方和”）；  
-  - 合并句子后关键逻辑节点仍需前置注释（如合并推导步骤后，核心公式“AB=5”前需注释“AC=3，BC=4，由勾股定理得”）。  
-
-
-### **五、格式规范性（全流程格式标准，10%权重）**  
+### **四、格式规范性（全流程格式标准，5%权重）**  
 #### ▶ 核心要求：删除/改写/注释后格式统一，技术元素合规  
 - **基础格式标准化**：  
   - 段落间距统一（学术论文段落间空1行，网文段落紧凑），表格/列表行列对齐（无缺失单元格）；  
-  - Markdown标题层级正确（“##”后不得直接“###”），代码块标记完整（```python ... ```闭合）。  
-
-- **注释格式正确性**：  
-  - **语言匹配**：中文用“【注】...【/注】”，英文用“[Note]...[/Note]”，代码注释用对应语言规范（Python`#`，Java`//`）；  
-  - **位置精准**：注释严格位于待解释内容**前一句/前一行**，禁止后置（如“【注】解释内容【/注】待解释内容”为正确格式）；  
-  - 符号规范：无空格冗余（“【注】 ”→“【注】”），中英文符号不混用（中文文档禁止“[Note]”）。  
-
-- **多模态格式约束**：  
-  - 图表/图片：表头术语首次出现时注释（如“BMI”列上方添加“【注】BMI=体重(kg)/身高(m)²【/注】”），图片专业元素标注（如显微镜照片“标尺=10μm”）；  
-  - 数学公式：LaTeX代码完整，支持渲染（如补全`\begin{align}`到`\end{align}`）。  
+  - Markdown标题层级正确（“##”后不得直接“###”），代码块标记完整（```python ... ```闭合），LaTex格式正确完整。  
 
 
-### **六、语言一致性（风格/语种统一，10%权重）**  
+
+### **六、语言一致性（风格/语种统一，5%权重）**  
 #### ▶ 核心要求：治理后语言与原文基调一致，无突兀变化  
 - **语种统一性**：  
-  - 全文语种一致（中文文档无英文段落，英文文档注释用英文），代码注释语言与代码语种匹配（Python代码注释用英文，中文技术文档注释用中文）；  
+  - 全文语种一致，代码注释语言与代码语种匹配；  
   - 语种混杂修复（如“Hello，你好吗？”→“你好，最近怎么样？”或“Hello, how are you?”，依原文语种选择）。  
 
 - **风格匹配性**：  
-  - **正式文档**：保持严谨（如“吃饭了吗”→“是否用餐”不合规，应保留“你吃饭了吗”以维持口语化场景）；  
-  - **专业文档**：术语与行业标准一致（医学用“2型糖尿病”而非“消渴症”，法律用“不可抗力”而非“意外事件”）；  
-  - **口语化文本**：保留自然语气（如“嗯嗯，好的”→“好的”属过度改写，应保留原表达）。  
+  - **正式文档**：保持严谨）；  
+  - **专业文档**：术语与行业标准一致；  
+  - **口语化文本**：保留自然语气。  
 
 
 ### **一票否决项（直接判定不合格）**  
 1. **违规内容残留**：任何显性/隐性违规信息（如变体广告、政治隐喻）未清除；  
 2. **核心语义篡改**：改写导致数据结论错误（如“增长”→“下降”）、逻辑关系颠倒（“因为A所以B”→“因为B所以A”）；  
-3. **技术格式错误**：断裂的LaTeX公式、无法运行的代码块、表格行列错位；  
-4. **关键信息未注释**：专业术语首次出现未解释、复杂逻辑无推导注释（如“CPI”未定义）；  
+3. **核心语义丢失**：改写导致原文核心内容或结论丢失，造成大量信息损失；  
+4. **技术格式错误**：断裂的LaTeX公式、无法运行的代码块、表格行列错位；  
 5. **语种混杂未修复**：中英句子混杂（如“Let’s 开始分析数据”未处理）。  
-
-
-### **评估流程与工具建议**  
-1. **删除治理校验**：  
-   - 违规内容：正则表达式扫描关键词+人工审核（如广告链接、敏感词库）；  
-   - 噪声检测：文本编辑器统计连续空格/换行数，重复内容检测工具（如diffchecker）标记重复段落。  
-
-2. **改写治理校验**：  
-   - 基础规范：Grammarly（英文）/ 中文语法检查工具（如LTP句法分析）；  
-   - 逻辑连贯：人工通读验证指代/语序，公式/代码渲染测试（如LaTeX在线编译）。  
-
-3. **注释治理校验**：  
-   - 场景 checklist：按语料类型（教育/法律/医学等）列出必注项（如教育需命题逻辑、法律需法条援引），逐项打勾；  
-   - 格式校验：脚本扫描注释符号错误（如中文文档出现“[Note]”）、位置错误（注释在解释内容之后）。  
-
-4. **多语料场景适配**：  
-   - 教育数据：重点校验公式推导注释、出题逻辑显化；  
-   - 技术文档：核心检查参数注释完整性、代码格式合规性；  
-   - 法律文书：严格审核法条引用准确性、术语释明完整性。  
-
-
-### **应用价值**  
-- **模型训练质量**：通过“清洗-修复-注释”全流程治理，确保数据纯净、语义完整、领域可解释，提升模型泛化能力；  
-- **跨领域适配**：覆盖教育、技术、法律等20+语料类型，满足多行业大模型训练需求；  
-- **合规性保障**：明确违规内容过滤规则，降低数据输入风险，符合各行业数据治理标准。  
-
-此标准通过**六维评估体系+场景化细分+技术校验工具**，构建了从数据清洗到深度治理的闭环质量控制体系，为大模型训练提供高质量、高可靠性的基础数据。
+6. **内容重复未修复**：包含大量内容意思重复的段落/句子/表述
 """
 
     def __init__(self, split="train", parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD, rouge_coef=1.0, info_coef=1.5):
@@ -1812,6 +1781,7 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
         self.format_penalty = CoTPretrainRefineFormatReward(
             postprocess_solution_fn=CoTPretrainRefineComputeScore.postprocess_solution_fn,
             postprocess_gt_fn=lambda x: x["ground_truth"],
+            get_thought_fn=CoTPretrainRefineComputeScore.get_thought
         )
 
     def get_penalties(self) -> Dict[str, Callable]:
@@ -1826,8 +1796,10 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
         document = cls.postprocess_solution_fn(solution_str)
         if not isinstance(document, str):
             return None
-        document = re.sub(r'\[Note\].*?\[/Note\]', "", document)
-        document = re.sub(r'【注】.*?【/注】', "", document)
+
+        document = re.sub(r'\[Note\][\s\S]*?\[/Note\]',
+                          "", document, flags=re.DOTALL)
+        document = re.sub(r'【注】[\s\S]*?【/注】', "", document, flags=re.DOTALL)
         return document
 
     @classmethod
@@ -1848,7 +1820,8 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
             return None
         return document
 
-    def get_thought(self, solution_str: str):
+    @classmethod
+    def get_thought(cls, solution_str: str):
         solution_str = postprocess_solution(solution_str)
         try:
             thought = re.findall(r'<chain-of-thought>(.*)</chain-of-thought>',
@@ -1920,12 +1893,12 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
         new_batch_ground_truth = []
         for _ in batch_ground_truth:
             new_batch_ground_truth.append({
-                "ground_truth": f'你是一名专精于大模型数据治理的专家。你的任务目标是给定一个提供的预训练语料，处理成一个高质量训练数据。\n\n[Raw Corpus]\n{_["ground_truth"]}\n\n\n# 评价标准\n{self.JUDGE_CRITERIA}'
+                "ground_truth": f'你是一名专精于大模型数据改写的治理专家。目标是给定一篇从网页爬取或者PDF解析出来的文档，改写成一篇优质的大语言模型预训练语料。\n\n[Raw Corpus]\n{_["ground_truth"]}\n\n\n# 评价标准\n{self.JUDGE_CRITERIA_REFINE}'
             })
         rewards = compute_rm_score(
             batch_solution_str=batch_solution_str,
             batch_ground_truth=new_batch_ground_truth,
-            postprocess_solution_fn=self.postprocess_solution_fn,
+            postprocess_solution_fn=self.postprocess_for_rouge,
             parse_result_failure_score=self.parse_result_failure_score
         )
         return rewards
@@ -2068,6 +2041,7 @@ class CoTPretrainAnnotationComputeScore(CoTPretrainRefineComputeScore):
         self.format_penalty = CoTPretrainRefineFormatReward(
             postprocess_solution_fn=CoTPretrainAnnotationComputeScore.postprocess_solution_fn,
             postprocess_gt_fn=lambda x: x["ground_truth"],
+            get_thought_fn=CoTPretrainRefineComputeScore.get_thought
         )
         self.rouge_threshold = rouge_threshold
 
