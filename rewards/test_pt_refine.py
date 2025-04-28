@@ -8,7 +8,8 @@ from pt_refine import (
     parse_doc_wo_notes,
     parse_doc_w_notes,
     MainBodyRecall,
-    LengthDiffPenalty
+    LengthDiffPenalty,
+    NotesFormatReward
 )
 
 
@@ -46,6 +47,15 @@ class TestRulebasedPostprocess(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_pretrain_refinement(
             num=100)
         penalty = LengthDiffPenalty(
+            postprocess_solution_fn=parse_doc_w_notes)
+        for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
+            print(penalty.get_penalty_or_reward(
+                solution_str, ground_truth))
+
+    def test_notes_format_reward(self):
+        batch_solution_str, batch_ground_truth = load_pretrain_refinement(
+            num=100)
+        penalty = NotesFormatReward(
             postprocess_solution_fn=parse_doc_w_notes)
         for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
             print(penalty.get_penalty_or_reward(

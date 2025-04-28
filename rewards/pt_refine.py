@@ -333,11 +333,51 @@ class LengthDiffPenalty(PenaltyOrReward):
         sol_token_size = len(sl_tokenized)
 
         if self.mode == "lt":
-            return self.penalty_base * min(max((gt_token_size-sol_token_size), 0) / gt_token_size, 5.)
+            return self.penalty_base * min(max((gt_token_size-sol_token_size), 0) / gt_token_size, 20.)
         elif self.mode == "gt":
-            return self.penalty_base * min(max((sol_token_size-gt_token_size), 0) / gt_token_size, 5.)
+            return self.penalty_base * min(max((sol_token_size-gt_token_size), 0) / gt_token_size, 20.)
         elif self.mode == "both":
-            return self.penalty_base * min(abs(sol_token_size-gt_token_size) / gt_token_size, 5.)
+            return self.penalty_base * min(abs(sol_token_size-gt_token_size) / gt_token_size, 20.)
+
+
+class NotesFormatReward(PenaltyOrReward):
+    def __init__(self,
+                 postprocess_solution_fn,
+                 max_reward=0.1,
+                 step_reward=0.01,
+                 max_steps=10,
+                 ):
+        self.postprocess_solution_fn = postprocess_solution_fn
+        self.max_reward = max_reward
+        self.step_reward = step_reward
+        self.max_steps = max_steps
+
+    def get_penalty_or_reward(self, solution_str, ground_truth, lang_code=None):
+        solution_str = self.postprocess_solution_fn(solution_str)
+        if solution_str is None:
+            return 0.
+
+        base_score = 0.0
+
+        # [Note][/Note]闭合
+        wo_notes = re.sub(r'\[Note\][\s\S]*?\[/Note\]',
+                          "", solution_str, flags=re.DOTALL)
+        if any(_ in wo_notes for _ in ("[Note]", "[/Note]")):
+            base_score -= 0.5
+
+        # 思考过程奖励
+        try:
+            loose_follow = re.findall(
+                r'\[Note\].*?\[/Note\]', solution_str, re.DOTALL)
+
+            strict_follow = [_ for _ in loose_follow if (
+                ("Question:" in _ and "Think Step by Step:" in _) or ("问题：" in _ and "一步步思考：" in _))]
+
+            score = min(len(loose_follow), self.max_steps) * self.step_reward/2 + \
+                min(len(strict_follow), self.max_steps) * self.step_reward/2
+            return base_score + min(score, self.max_reward)
+        except Exception as err:
+            return base_score
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
