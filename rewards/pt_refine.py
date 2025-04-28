@@ -286,13 +286,16 @@ class MainBodyRecall(PenaltyOrReward):
                 print(gt_tokenized)
                 print("="*80)
                 print(sl_tokenized)
-                raise NotImplementedError
+                print("@"*80)
+                print(rouge_recall)
+                print("\n\n")
+                # raise NotImplementedError
                 return rouge_recall
             else:
                 return rouge_recall - self.low_range_penalty
 
         except Exception as err:
-            print(err)
+            print(f'[ERROR] {err}')
             return self.parse_result_failure_score
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
