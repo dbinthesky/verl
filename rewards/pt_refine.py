@@ -380,6 +380,49 @@ class NotesFormatReward(PenaltyOrReward):
             return base_score
 
 
+class NotesRepetitionPenalty(PenaltyOrReward):
+    """ Coef建议设置多少呢？ =0.5
+    """
+
+    def __init__(self,
+                 postprocess_solution_fn,
+                 ):
+        self.postprocess_solution_fn = postprocess_solution_fn
+        self.scorer = rouge_scorer.RougeScorer(
+            ['rouge2', 'rougeL'], use_stemmer=True)
+
+    def get_penalty_or_reward(self, solution_str, ground_truth, lang_code=None):
+        solution_str = self.postprocess_solution_fn(solution_str)
+        if solution_str is None:
+            return 0.
+
+        def normalize(s):
+            s = s.replace("[Note]", "").replace("[/Note]", "").strip()
+            s = s.replace("Q:", "").replace("Think:", "").strip()
+            s = s.replace("Question:", "").replace(
+                "Think Step by Step:", "").strip()
+            s = s.replace("问题：", "").replace("一步步思考：", "").strip()
+            return s
+
+        notes = re.findall(
+            r'\[Note\].*?\[/Note\]', solution_str, re.DOTALL)
+        notes_str = "\n".join([normalize(_) for _ in notes])
+        if len(notes) == 0:
+            return 0.
+
+        gt = ground_truth["ground_truth"]
+
+        score = self.scorer.score(gt, notes_str)
+        rouge_recall = score["rouge2"].recall
+
+        penalty = 0.
+        if rouge_recall < 0.05:
+            penalty = 0.
+        else:
+            penalty = -rouge_recall
+        return penalty
+
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 预训练数据治理
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
