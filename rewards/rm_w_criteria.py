@@ -29,7 +29,7 @@ RATE_LIMIT_RETRY_ATTEMPTS = 10
 WORKFLOW_AGENT_LOGFILE = os.getenv("WORKFLOW_AGENT_LOGFILE", None)
 
 RM_URLS = [
-    "http://10.130.0.222:5003"
+    "http://10.130.1.154:5020"
 ]
 
 BT_REWARD_URLS = [
@@ -1392,8 +1392,15 @@ class CorpusLengthPenalty(PenaltyOrReward):
         gt = remove_latex_format(gt)
         solution_str = remove_latex_format(solution_str)
 
-        gt_token_size = len(gt)
-        sol_token_size = len(solution_str)
+        # gt_token_size = len(gt)
+        # sol_token_size = len(solution_str)
+
+        if contain_chinese(gt):
+            gt_token_size = len(simple_zh_tokenize(gt))
+            sol_token_size = len(simple_zh_tokenize(solution_str))
+        else:
+            gt_token_size = len(simple_en_tokenize(gt))
+            sol_token_size = len(simple_en_tokenize(solution_str))
 
         if self.mode == "lt_gt":
             return self.penalty_base * min(max((gt_token_size-sol_token_size), 0) / gt_token_size, 5.)
@@ -1581,11 +1588,12 @@ class CoTPretrainRefineFormatReward(PenaltyOrReward):
                 r'\[Note\].*?\[/Note\]', solution_str, re.DOTALL)
             zh_notes = re.findall(r'【注】.*?【/注】', solution_str, re.DOTALL)
             all_notes = en_notes + zh_notes
-            all_notes = [_ for _ in all_notes if (
-                ("Q:" in _ and "A:" in _) or ("Q：" in _ and "A：" in _))]
+            strict_all_notes = [_ for _ in all_notes if (
+                ("Q:" in _ and "Think:" in _) or ("Q：" in _ and "Think：" in _))]
 
-            num_notes = len(all_notes)
-            return thinking_lang_penalty + min(num_notes * reward_per_note, max_shaped_reward)
+            score = len(all_notes) * reward_per_note/2 + \
+                len(strict_all_notes) * reward_per_note/2
+            return thinking_lang_penalty + min(score, max_shaped_reward)
         except Exception as err:
             return 0.
 
@@ -1660,12 +1668,12 @@ class ROUGEScorer(PenaltyOrReward):
                             score["rouge2"].recall) / 2.0
 
             # reward分段奖励
-            if rouge_recall >= 0.6:
+            if rouge_recall >= 0.75:
                 return 1.0
-            elif rouge_recall >= 0.4:
+            elif rouge_recall >= 0.6:
                 return rouge_recall
             else:
-                return rouge_recall / 2.0
+                return rouge_recall - 0.1
 
         except Exception as err:
             return self.parse_result_failure_score
@@ -1764,18 +1772,23 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
 #### 一、结构规范性（基础硬性指标）
 1. **标签使用准确性**  
    - 是否根据文本语言类型正确使用标记：中文场景使用“【注】...【/注】”，非中文场景使用“[Note]...[/Note]”，代码场景在注释区域添加  
-   - 标签内是否严格遵循“Q: 问题描述 A: 思考内容”的自问自答格式，禁止出现无设问的纯叙述性思考  
+   - 标签内是否严格遵循“Q: 问题描述 Think: 思考内容”的自问自答格式，禁止出现无设问的纯叙述性思考  
 
 2. **位置合理性**  
    - 思考过程是否出现在需要解释的内容**之前**，确保问题导向性（如先提出“如何证明勾股定理？”再展开证明过程）  
    - 避免在无关位置插入思考（如在结论后补充问题，或在段落中间突兀插入不相关思考）  
 
 #### 二、内容相关性（核心逻辑指标）  
-1. **问题-内容强绑定性**  
+1. **思考必要性**
+   - 思考内容应当与后续原文内容不同，而非后文内容的简单重复或者概括，需要凸显出更深层次的思考过程。
+   - 增强批判性思考，例如是否存在潜在逻辑漏洞或其他假设条件，或者对多解问题存在起他思考可能。
+   - 深入细节，对文档中不经意或者细节之处提出设问是非常有益的。
+
+2. **问题-内容强绑定性**  
    - 提出的问题是否与后续原文内容构成“问题-答案”直接映射关系（例：问题“如何计算两个集合的交集大小？”对应后续集合运算推导过程）  
    - 禁止出现“泛泛而问”（如“这里该怎么想？”），问题需精准指向具体内容的核心矛盾或关键步骤  
 
-2. **知识衔接度**  
+3. **知识衔接度**  
    - 思考过程是否补全原文隐含的逻辑断层（如数学题中省略的辅助线构造思路、跨学科概念引用时的理论铺垫）  
    - 是否对专业术语、特殊符号（如LaTeX公式、代码语法）进行必要的原理性解释（例：在出现“∇f”时，补充“表示函数f的梯度，即各变量偏导数组成的向量”）  
 
@@ -1811,6 +1824,11 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
 2. **专业术语准确性**  
    - 技术领域思考是否正确使用专业术语（如计算机科学中准确区分“算法复杂度”与“数据结构”，生物学中正确表述“基因表达”与“蛋白质合成”的关系）  
    - 跨领域解释是否避免知识性错误（如在解释物理学概念时，不混淆“惯性”与“惯性定律”的定义）  
+   - 语言简洁精炼，避免重复或者冗余表述
+
+3. **避免内容重复**  
+   - 思考过程不应是后续内容的简单重复或者概括。应该有独特之处，是对后续内容的补充和深入思考。
+   - 避免整体修改后的文本过于重复、冗余。
 
 #### 六、价值附加性（高阶质量指标）  
 1. **认知脚手架构建**  
@@ -1973,8 +1991,12 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
             parse_result_failure_score=self.parse_result_failure_score
         )
         rewards = []
-        for x, y in zip(rewards1, rewards2):
-            rewards.append(x+y)
+        for x, y, sol in zip(rewards1, rewards2, batch_solution_str):
+            notes_summary = self.get_all_notes(sol)
+            if len(notes_summary) == 0:
+                rewards.append(x)
+            else:
+                rewards.append(x+y)
         return rewards
 
     def compute_score(self,
@@ -2012,6 +2034,9 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
             final_results.append(_reward)
             thought = self.get_thought(batch_solution_str[i])
 
+            # Notes Summary
+            notes_summary = self.get_all_notes(batch_solution_str[i])
+
             if self.split == "valid":
                 print(
                     f"--------------------------------[VALID]--------------------------------")
@@ -2023,6 +2048,8 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
                     f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})``{self.log_ground_truth(batch_ground_truth[i])}`')
                 print(
                     f'Reward (rouge_coef={self.rouge_coef}; info_coef={self.info_coef})={_reward:.3f} | info={base_rewards[i]:.3f} | {" | ".join(penalty_log_str)}\n')
+                for i, note in enumerate(notes_summary, start=1):
+                    print(f'\t【Note {i}】{repr(note)}')
             elif self.split == "train" and random.random() < 0.01:
                 print(
                     f"--------------------------------[TRAIN]--------------------------------")
@@ -2034,7 +2061,18 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
                     f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})`{self.log_ground_truth(batch_ground_truth[i])}`')
                 print(
                     f'Reward (rouge_coef={self.rouge_coef}; info_coef={self.info_coef})={_reward:.3f} | info={base_rewards[i]:.3f} | {" | ".join(penalty_log_str)}\n')
+                for i, note in enumerate(notes_summary, start=1):
+                    print(f'\t【Note {i}】{repr(note)}')
         return final_results
+
+    def get_all_notes(self, solution):
+        try:
+            notes_summary = self.postprocess_solution_fn(solution)
+            notes_summary = re.findall(
+                r'\[Note\].*?\[/Note\]', notes_summary, re.DOTALL) + re.findall(r'【注】.*?【/注】', notes_summary, re.DOTALL)
+        except Exception as err:
+            notes_summary = []
+        return notes_summary
 
     def log_ground_truth(self, ground_truth):
         return repr(self.clip_string(ground_truth["ground_truth"]))

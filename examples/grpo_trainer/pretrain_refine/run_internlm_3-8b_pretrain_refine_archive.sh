@@ -49,9 +49,7 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_pretrain_refine_e2e_v1_0_1_80_open_source_hf"
-    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/internlm3-8b_pretrain_e2e_refine_v1-dlc-2025-04-27-07-33-52_grpo_step_20"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/internlm3-8b_pretrain_e2e_refine_v1-dlc-2025-04-27-13-06-08_grpo_step_10"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_pretrain_refine_e2e_v1_0_1_80_open_source_hf"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/reason_pretrain_v2_8k_train_fix_0427_enzh_balance"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/pdf_2025_v1_zh_en_4k_e2e_refine_test_fix"
 
