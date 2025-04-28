@@ -27,10 +27,15 @@ def contain_chinese(string):
         return False
 
 
+def postprocess_solution(solution_str):
+    if "<|im_end|>" in solution_str:
+        return solution_str[:solution_str.index("<|im_end|>")]
+    return solution_str
+
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 基于规则的数据后处理
@@ -202,6 +207,35 @@ def pretrain_postprocess(
 # 预训练数据治理
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+def parse_solution_fn(solution_str: str):
+    solution_str = postprocess_solution(solution_str)
+    try:
+        thought = re.findall(r'<chain-of-thought>.*</chain-of-thought>',
+                             solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+    try:
+        document = re.findall(r'<doc>(.*)</doc>',
+                              solution_str, re.DOTALL)[0].strip()
+    except Exception as err:
+        return None
+
+    if any(_ in document for _ in ("<chain-of-thought>", "</chain-of-thought>", "<doc>", "</doc>")):
+        return None
+    return thought, document
+
+
+def parse_doc_wo_notes(solution_str: str):
+    result = parse_solution_fn(solution_str)
+    if result is None:
+        return None
+    thought, document = result
+
+    document = re.sub(r'\[Note\][\s\S]*?\[/Note\]',
+                      "", document, flags=re.DOTALL)
+    return document
+
+
 class MainBodyRecall(PenaltyOrReward):
     def __init__(self,
                  postprocess_solution_fn,
@@ -219,38 +253,39 @@ class MainBodyRecall(PenaltyOrReward):
         self.middle_range = middle_range
         self.low_range_penalty = low_range_penalty
 
-        def get_penalty_or_reward(self, solution_str, ground_truth, lang_code=None):
-            try:
-                solution_str = self.postprocess_solution_fn(solution_str)
-                if solution_str is None:
-                    return self.parse_result_failure_score
-
-                gt = ground_truth["ground_truth"]
-                if lang_code is None:
-                    if contain_chinese(gt):
-                        lang_code = "zh"
-                    else:
-                        lang_code = "en"
-
-                gt_tokenized = pretrain_postprocess(gt, lang_code=lang_code)
-                sl_tokenized = pretrain_postprocess(
-                    solution_str, lang_code=lang_code)
-
-                score = self.scorer.score(gt_tokenized, sl_tokenized)
-
-                rouge_recall = (score["rouge1"].recall +
-                                score["rouge2"].recall) / 2.0
-
-                # 分段函数打分
-                if rouge_recall >= self.high_range:
-                    return 1.0
-                elif rouge_recall >= middle_range:
-                    return rouge_recall
-                else:
-                    return rouge_recall - self.low_range_penalty
-
-            except Exception as err:
+    def get_penalty_or_reward(self, solution_str, ground_truth, lang_code=None):
+        try:
+            solution_str = self.postprocess_solution_fn(solution_str)
+            if solution_str is None:
                 return self.parse_result_failure_score
+
+            gt = ground_truth["ground_truth"]
+            if lang_code is None:
+                if contain_chinese(gt):
+                    lang_code = "zh"
+                else:
+                    lang_code = "en"
+
+            gt_tokenized = pretrain_postprocess(gt, lang_code=lang_code)
+            sl_tokenized = pretrain_postprocess(
+                solution_str, lang_code=lang_code)
+
+            score = self.scorer.score(gt_tokenized, sl_tokenized)
+
+            rouge_recall = (score["rouge1"].recall +
+                            score["rouge2"].recall) / 2.0
+
+            # 分段函数打分
+            if rouge_recall >= self.high_range:
+                return 1.0
+            elif rouge_recall >= self.middle_range:
+                return rouge_recall
+            else:
+                return rouge_recall - self.low_range_penalty
+
+        except Exception as err:
+            print(err)
+            return self.parse_result_failure_score
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 预训练数据治理
