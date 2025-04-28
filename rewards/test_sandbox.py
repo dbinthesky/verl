@@ -5,6 +5,7 @@ import unittest
 import pandas as pd
 from sandbox import (
     LengthDiffPenalty,
+    TextSimilarity,
     fabricate_qa_postprocess_solution_fn
 )
 
@@ -41,6 +42,15 @@ class TestFabricateQA(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_fabricate_data(
             num=100)
         penalty = LengthDiffPenalty(
+            postprocess_solution_fn=fabricate_qa_postprocess_solution_fn)
+        for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
+            print(penalty.get_penalty_or_reward(
+                solution_str, ground_truth))
+
+    def test_text_similarity(self):
+        batch_solution_str, batch_ground_truth = load_fabricate_data(
+            num=100)
+        penalty = TextSimilarity(
             postprocess_solution_fn=fabricate_qa_postprocess_solution_fn)
         for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
             print(penalty.get_penalty_or_reward(
