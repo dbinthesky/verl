@@ -1,5 +1,7 @@
 import re
 import jieba
+import random
+import requests
 import sacrebleu
 from typing import Any
 from functools import partial
@@ -23,6 +25,7 @@ RM_URLS = [
 ]
 VERIFIER_MODEL_NAME = "qwen25_7B_instruct"
 VERIFIER_MODEL_PATH = "http://10.130.247.138:8000/v1"
+DEFAULT_PARSE_FAILURE_REWARD = -2.
 
 
 class APIError(Exception):
@@ -129,6 +132,17 @@ class PenaltyOrReward(object):
         raise NotImplementedError
 
 
+def batchify(iterable, n):
+    batch = []
+    for item in iterable:
+        batch.append(item)
+        if len(batch) == n:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
+
+
 def contain_chinese(string):
     try:
         pattern = re.compile(r'[\u4e00-\u9fa5]')
@@ -160,6 +174,46 @@ def rm_request_with_retry(RM_URLS, data, max_retries=3, retry_delay=1, suffix="/
                 time.sleep(retry_delay)
     print("达到最大重试次数，请求失败。")
     return None
+
+
+def compute_rm_score(
+        batch_solution_str,
+        batch_ground_truth,
+        postprocess_solution_fn,
+        parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD,
+        judge_prompt_key="ground_truth"
+):
+    input_datas = []
+    rewards = {}
+
+    for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+        solution_str = postprocess_solution_fn(solution_str)
+        if solution_str is None:
+            rewards[i] = parse_result_failure_score
+            continue
+        if ground_truth is None:
+            rewards[i] = parse_result_failure_score
+            continue
+
+        input_data = {
+            "prompt": ground_truth[judge_prompt_key], "response": solution_str, "id": i
+        }
+        input_datas.append(input_data)
+
+    if len(input_datas) > 0:
+        for batch in tqdm_nonasync(batchify(input_datas, n=128), desc=f'[RM][{RM_URLS}] batchify inference (batch=128)'):
+            output_datas = rm_request_with_retry(RM_URLS, batch)
+            for _ in output_datas['reward']:
+                _id = int(_["id"])
+                rewards[_id] = _["rm_score"]
+
+    final_results = []
+    for i in range(len(batch_solution_str)):
+        if i in rewards:
+            final_results.append(rewards[i])
+        else:
+            final_results.append(0.)
+    return final_results
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # BASE
@@ -248,17 +302,137 @@ class TextSimilarity(PenaltyOrReward):
             return self.parse_result_failure_score
 
 
-#     judge_template = """ 直接回答我构造好的问题。
+def get_rm_rewards(
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
+    judge_template_zh = """ 直接回答我构造好的问题。
 
+# 评价标准
+1. 你的回答（构造的指令/问题）必须是下面这个：
+```
+{question}
+```
+2. 回答必须直接返回问题/指令，不能包含其他不相关的信息，比如问题分析或者问题解答等**任何**不是问题内容本身的信息。
+3. 问题语言必须是中文
+"""
+    judge_template_en = """ Answer my well-constructed question directly.
 
-# # 评价标准
-# 1. 你的回答（构造的指令/问题）必须是下面这个：
-# ```
-# {question}
-# ```
-# 2. 回答必须直接返回问题/指令，不能包含其他不相关的信息，比如问题分析或者问题解答等等。
-# """
+# Evaluation Criteria
+1. Your answer (constructed instruction/question) must be the following:
+```
+{question}
+```
+2. The answer must directly return the question/instruction, and must not contain any other irrelevant information, such as question analysis or question solution, and **any** information that is not the content of the question itself.
+3. The language of the question must be English. 
+"""
+
+    new_batch_ground_truth = []
+    for _ in batch_ground_truth:
+        if _["lang_code"] == "zh":
+            judge = judge_template_zh.format(question=_["ground_truth"])
+        else:
+            judge = judge_template_en.format(question=_["ground_truth"])
+        new_batch_ground_truth.append({
+            "ground_truth": judge
+        })
+
+    return compute_rm_score(
+        batch_solution_str=batch_solution_str,
+        batch_ground_truth=new_batch_ground_truth,
+        postprocess_solution_fn=fabricate_qa_postprocess_solution_fn,
+        parse_result_failure_score=parse_result_failure_score
+    )
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 沙盒问题合成（一阶段）
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+    # class ComputeScoreBase(object):
+    #     def __init__(self,
+    #                  split="train",
+    #                  parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD,
+    #                  ):
+    #         self.split = split
+    #         self.parse_result_failure_score = parse_result_failure_score
+
+    #     def clip_string(self, s: str):
+    #         if len(s) > 2000:
+    #             return f'{s[:1000]}... [省略] ...{s[-1000:]}'
+    #         return s
+
+    #     @abstractmethod
+    #     def get_penalties(self) -> Dict[str, Callable]:
+    #         raise NotImplementedError
+
+    #     def get_question_type(self, ground_truth):
+    #         if "extra_info" in ground_truth and "question_type" in ground_truth["extra_info"]:
+    #             return ground_truth["extra_info"]["question_type"]
+    #         else:
+    #             return "unknown"
+
+    #     @abstractmethod
+    #     def postprocess_solution_fn(self, solution_str: str):
+    #         raise NotImplementedError
+
+    #     def log_solution(self, solution):
+    #         norm = self.postprocess_solution_fn(solution)
+    #         if norm is None:
+    #             return repr(self.clip_string(solution))
+    #         return repr(self.clip_string(norm))
+
+    #     def log_ground_truth(self, ground_truth):
+    #         return repr(ground_truth["ground_truth"])
+
+    #     def get_uuid(self, ground_truth):
+    #         try:
+    #             return ground_truth["extra_info"]["uuid"]
+    #         except Exception as err:
+    #             return "NO RECORD"
+
+    #     def compute_score(self,
+    #                       batch_data_sources,
+    #                       batch_solution_str,
+    #                       batch_ground_truth,
+    #                       ):
+
+    #         penalty = defaultdict(dict)
+    #         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+    #             for key, fn in self.get_penalties().items():
+    #                 penalty[key][i] = fn(solution_str, ground_truth)
+
+    #         base_rewards = self.get_rm_rewards(
+    #             batch_data_sources, batch_solution_str, batch_ground_truth)
+
+    #         final_results = []
+    #         for i in range(len(batch_solution_str)):
+    #             penalty_log_str = []
+    #             _reward = base_rewards[i]
+    #             for name, _penalty in penalty.items():
+    #                 if i in _penalty:
+    #                     _reward += _penalty[i]
+    #                     penalty_log_str.append(f'{name} Penalty={_penalty[i]:.2f}')
+
+    #             final_results.append(_reward)
+
+    #             if self.split == "valid":
+    #                 print(
+    #                     f"--------------------------------[VALID]--------------------------------")
+    #                 print(
+    #                     f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
+    #                 print(
+    #                     f"【Ground Truth】({self.get_question_type(batch_ground_truth[i])}) `{self.log_ground_truth(batch_ground_truth[i])}`")
+    #                 print(f'Reward={_reward:.3f};{";".join(penalty_log_str)}\n')
+    #             elif self.split == "train" and random.random() < 0.2:
+    #                 print(
+    #                     f"--------------------------------[TRAIN]--------------------------------")
+    #                 print(
+    #                     f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
+    #                 print(
+    #                     f"【Ground Truth】({self.get_question_type(batch_ground_truth[i])}) `{self.log_ground_truth(batch_ground_truth[i])}`")
+    #                 print(
+    #                     f'【{self.get_uuid(batch_ground_truth[i])}】Reward={_reward:.3f};{";".join(penalty_log_str)}\n')
+
+    #         return final_results

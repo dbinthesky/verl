@@ -6,7 +6,8 @@ import pandas as pd
 from sandbox import (
     LengthDiffPenalty,
     TextSimilarity,
-    fabricate_qa_postprocess_solution_fn
+    fabricate_qa_postprocess_solution_fn,
+    get_rm_rewards
 )
 
 
@@ -55,6 +56,14 @@ class TestFabricateQA(unittest.TestCase):
         for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
             print(penalty.get_penalty_or_reward(
                 solution_str, ground_truth))
+
+    def test_rm_score(self):
+        batch_solution_str, batch_ground_truth = load_fabricate_data(
+            num=100)
+        print(get_rm_rewards(
+            [None] *
+            len(batch_solution_str), batch_solution_str, batch_ground_truth
+        ))
 
 
 if __name__ == '__main__':
