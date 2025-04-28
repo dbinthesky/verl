@@ -279,6 +279,14 @@ class MainBodyRecall(PenaltyOrReward):
             if rouge_recall >= self.high_range:
                 return 1.0
             elif rouge_recall >= self.middle_range:
+                print(gt)
+                print("="*80)
+                print(solution_str)
+                print("="*80)
+                print(gt_tokenized)
+                print("="*80)
+                print(sl_tokenized)
+                raise NotImplementedError
                 return rouge_recall
             else:
                 return rouge_recall - self.low_range_penalty
