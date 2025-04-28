@@ -6,7 +6,9 @@ import pandas as pd
 from pt_refine import (
     pretrain_postprocess,
     parse_doc_wo_notes,
-    MainBodyRecall
+    parse_doc_w_notes,
+    MainBodyRecall,
+    LengthDiffPenalty
 )
 
 
@@ -31,7 +33,7 @@ def load_pretrain_refinement(num=100):
 
 
 class TestRulebasedPostprocess(unittest.TestCase):
-    def test_cot_pretrain_refinement_compute_score(self):
+    def test_main_body_recall(self):
         batch_solution_str, batch_ground_truth = load_pretrain_refinement(
             num=100)
         recall = MainBodyRecall(
@@ -39,6 +41,15 @@ class TestRulebasedPostprocess(unittest.TestCase):
         for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
             recall.get_penalty_or_reward(
                 solution_str, ground_truth)
+
+    def test_length_diff_penalty(self):
+        batch_solution_str, batch_ground_truth = load_pretrain_refinement(
+            num=100)
+        penalty = LengthDiffPenalty(
+            postprocess_solution_fn=parse_doc_w_notes)
+        for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
+            print(penalty.get_penalty_or_reward(
+                solution_str, ground_truth))
 
 
 if __name__ == '__main__':

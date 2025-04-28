@@ -172,7 +172,9 @@ def pretrain_postprocess(
         remove_latex_format=True,
         remove_identifiers=True,
         remove_stop_words=True,
-        remove_punct=True):
+        remove_punct=True,
+        return_str=True):
+
     if lang_code is None:
         lang_code = "zh" if contain_chinese(s) else "en"
     # LaTeX格式清理
@@ -195,7 +197,10 @@ def pretrain_postprocess(
     if remove_punct:
         tokenized_text = [_ for _ in tokenized_text if _ not in PUNCTS + [" "]]
 
-    return " ".join(tokenized_text)
+    if return_str:
+        return " ".join(tokenized_text)
+    else:
+        return tokenized_text
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -223,6 +228,15 @@ def parse_solution_fn(solution_str: str):
     if any(_ in document for _ in ("<chain-of-thought>", "</chain-of-thought>", "<doc>", "</doc>")):
         return None
     return thought, document
+
+
+def parse_doc_w_notes(solution_str: str):
+    result = parse_solution_fn(solution_str)
+    if result is None:
+        return None
+    thought, document = result
+
+    return document
 
 
 def parse_doc_wo_notes(solution_str: str):
@@ -286,6 +300,45 @@ class MainBodyRecall(PenaltyOrReward):
         except Exception as err:
             print(f'[ERROR] {err}')
             return self.parse_result_failure_score
+
+
+class LengthDiffPenalty(PenaltyOrReward):
+    def __init__(self,
+                 postprocess_solution_fn,
+                 penalty_base=-0.4,
+                 mode="lt"
+                 ):
+        self.postprocess_solution_fn = postprocess_solution_fn
+        self.penalty_base = penalty_base
+        self.mode = mode
+
+    def get_penalty_or_reward(self, solution_str, ground_truth, lang_code=None):
+        solution_str = self.postprocess_solution_fn(solution_str)
+        if solution_str is None:
+            return 0.
+
+        gt = ground_truth["ground_truth"]
+        if lang_code is None:
+            if contain_chinese(gt):
+                lang_code = "zh"
+            else:
+                lang_code = "en"
+
+        gt_tokenized = pretrain_postprocess(
+            gt, lang_code=lang_code, return_str=False)
+        sl_tokenized = pretrain_postprocess(
+            solution_str, lang_code=lang_code, return_str=False)
+
+        gt_token_size = len(gt_tokenized)
+        sol_token_size = len(sl_tokenized)
+
+        if self.mode == "lt":
+            return self.penalty_base * min(max((gt_token_size-sol_token_size), 0) / gt_token_size, 5.)
+        elif self.mode == "gt":
+            return self.penalty_base * min(max((sol_token_size-gt_token_size), 0) / gt_token_size, 5.)
+        elif self.mode == "both":
+            return self.penalty_base * min(abs(sol_token_size-gt_token_size) / gt_token_size, 5.)
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 预训练数据治理
