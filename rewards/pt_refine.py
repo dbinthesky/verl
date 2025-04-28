@@ -135,6 +135,13 @@ def remove_latex_format_fn(text):
 
 
 def remove_identifiers_fn(text):
+    # 去除参考文献部分（thebibliography环境）
+    text = re.sub(
+        r'\\begin{thebibliography}{99}(.*?)\\end{thebibliography}', '', text, flags=re.DOTALL)
+    # 去除 \bibliographystyle 和 \bibliography 相关行
+    text = re.sub(
+        r'\\bibliographystyle\{.*?\}\n\\bibliography\{.*?\}\n', '', text)
+
     # 去除本地电子打印件 ID
     text = re.sub(r'Local EPrints ID: \d+', '', text)
     # 去除 URI
@@ -305,7 +312,7 @@ class MainBodyRecall(PenaltyOrReward):
 class LengthDiffPenalty(PenaltyOrReward):
     def __init__(self,
                  postprocess_solution_fn,
-                 penalty_base=-0.4,
+                 penalty_base=-0.8,
                  mode="lt"
                  ):
         self.postprocess_solution_fn = postprocess_solution_fn
