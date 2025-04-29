@@ -4,6 +4,7 @@ import jieba
 import requests
 from abc import abstractmethod
 from typing import Dict, Callable
+from collections import defaultdict
 from tqdm import tqdm as tqdm_nonasync
 from rouge_score import rouge_scorer
 from sacremoses import MosesTokenizer, MosesDetokenizer
@@ -334,6 +335,15 @@ def parse_doc_wo_notes(solution_str: str):
     return document
 
 
+def get_thought(solution_str: str):
+    result = parse_solution_fn(solution_str)
+    if result is None:
+        return f"<FORMAT CORRUPT>"
+
+    thought, document = result
+    return thought
+
+
 def get_notes(solution_str: str):
     result = parse_solution_fn(solution_str)
     if result is None:
@@ -526,15 +536,15 @@ class QwQLongCoTPretrainRefineComputeScore(object):
 以下是深度整合 **内容删除治理、内容改写治理** 后的 **完整大模型数据治理评价标准（Criteria）**：
 
 
-### **一、内容纯净度 **  
-- **违规内容彻底清除**：色情暗示、赌博诱导、广告营销（含链接/二维码/品牌硬广）、政治敏感、仇恨言论、暴力描述等显性/隐性违规内容、医疗文档禁“包治百病”“神医”，教育文档禁“考试答案”“内部渠道”，法律文档禁“套路贷”“虚假诉讼”暗示。  
-- **格式噪声**：标准化格式，去除乱码，修正过度标点。  
+### **一、内容纯净度 **
+- **违规内容彻底清除**：色情暗示、赌博诱导、广告营销（含链接/二维码/品牌硬广）、政治敏感、仇恨言论、暴力描述等显性/隐性违规内容、医疗文档禁“包治百病”“神医”，教育文档禁“考试答案”“内部渠道”，法律文档禁“套路贷”“虚假诉讼”暗示。
+- **格式噪声**：标准化格式，去除乱码，修正过度标点。
 - **内容噪声**：重复内容去重、与上下文无关的孤立短句、无意义语气词堆砌
 - **学习噪声**：删除 ISBN、网址、论文引用文献、DOI、ISSN、ORCID 等学术标识符；删除ISBN、时间信息、网址等对内容理解无关的信息，清除不可恢复的多模态内容
 
 
 ### **二、语义修复有效性**
-核心目标：最小干预修复问题，完整保留核心语义  
+核心目标：最小干预修复问题，完整保留核心语义
 1. **基础规范**：修正拼写语法错误，统一标点，规范技术格式
 2. **语义优化**：补全不完整句子，合并重复表意
 3. **逻辑增强**：明确指代，调整语序，补充逻辑连接词
@@ -563,54 +573,54 @@ class QwQLongCoTPretrainRefineComputeScore(object):
 ## 内容新增治理之“思考过程”专项评价标准
 
 ### 一、结构规范性
-1. **标签使用准确性**  
-   - 正确使用标记：非代码文本使用“[Note]...[/Note]”，代码场景在注释区域添加  
-   - 标签内是否严格遵循英文“Question: *** Think Step by Step: ***”的自问自答格式中文“提问：*** 一步步思考：***”；禁止出现无设问的纯叙述性思考  
+1. **标签使用准确性**
+   - 正确使用标记：非代码文本使用“[Note]...[/Note]”，代码场景在注释区域添加
+   - 标签内是否严格遵循英文“Question: *** Think Step by Step: ***”的自问自答格式中文“提问：*** 一步步思考：***”；禁止出现无设问的纯叙述性思考
 
-2. **位置合理性**  
-   - 思考过程是否出现在需要解释的内容**之前**，确保问题导向性 
-   - 避免在无关位置插入思考（如在结论后补充问题，或在段落中间突兀插入不相关思考）  
+2. **位置合理性**
+   - 思考过程是否出现在需要解释的内容**之前**，确保问题导向性
+   - 避免在无关位置插入思考（如在结论后补充问题，或在段落中间突兀插入不相关思考）
    - 提问、思考与原文内容需要构成“问题-思考-结论”的直接映射关系
 
 ### 二、内容价值性
-#### 1. **信息增量有效性**  
-- **优质特征**：  
-  - 包含原文未明确写出的 **背景知识、原理依据、潜在假设、风险分析或应用场景**。  
-  - 逻辑链条延伸而非表面复述，体现 **“为何如此”“如何推导”**。  
-  - 避免同义转换，需引入 **跨学科关联、前沿动态或实际案例**。  
-- **低效特征**：  
-  - 仅对原文进行 **同义替换或简单概括**。  
-  - 无实质新信息，如空泛表述“这是重要研究方向”“对行业有帮助”，未说明具体价值或原理。  
-  - 直接复制原文结论，未补充 **推导过程或隐性逻辑**。  
+#### 1. **信息增量有效性**
+- **优质特征**：
+  - 包含原文未明确写出的 **背景知识、原理依据、潜在假设、风险分析或应用场景**。
+  - 逻辑链条延伸而非表面复述，体现 **“为何如此”“如何推导”**。
+  - 避免同义转换，需引入 **跨学科关联、前沿动态或实际案例**。
+- **低效特征**：
+  - 仅对原文进行 **同义替换或简单概括**。
+  - 无实质新信息，如空泛表述“这是重要研究方向”“对行业有帮助”，未说明具体价值或原理。
+  - 直接复制原文结论，未补充 **推导过程或隐性逻辑**。
 
-#### 2. **问题导向精准性**  
-- **优质特征**：  
-  - 提问聚焦 **“核心矛盾”或“认知盲区”**，如“为何选择X方法而非Y方法？”“实验数据中的异常值如何处理？”，直指逻辑薄弱点。  
-  - 问题具体且有指向性，避免宽泛或无意义设问（例如：“如何优化算法时间复杂度？”而非“算法有什么用？”）。  
-  - 提问与原文结论形成 **“问题-答案”闭环**，思考内容需完整回应问题并提供深层解释。  
-- **低效特征**：  
-  - 问题表面化，仅复述原文内容。  
-  - 问题模糊笼统，如“如何理解该理论？”“说明标准的重要性”，未明确具体思考维度。  
-  - 提问与原文结论无关，或无法通过思考过程推导出结论。  
+#### 2. **问题导向精准性**
+- **优质特征**：
+  - 提问聚焦 **“核心矛盾”或“认知盲区”**，如“为何选择X方法而非Y方法？”“实验数据中的异常值如何处理？”，直指逻辑薄弱点。
+  - 问题具体且有指向性，避免宽泛或无意义设问（例如：“如何优化算法时间复杂度？”而非“算法有什么用？”）。
+  - 提问与原文结论形成 **“问题-答案”闭环**，思考内容需完整回应问题并提供深层解释。
+- **低效特征**：
+  - 问题表面化，仅复述原文内容。
+  - 问题模糊笼统，如“如何理解该理论？”“说明标准的重要性”，未明确具体思考维度。
+  - 提问与原文结论无关，或无法通过思考过程推导出结论。
 
-#### 3. **批判性思维体现**  
-- **优质特征**：  
-  - **多维度分析**：引入对比（如“X方法vs.Y方法的优劣”）、假设（如“若改变实验条件，结果将如何？”）、风险评估（如“该模型在长尾数据下的潜在偏差”）。  
-  - **挖掘隐含条件**：主动识别原文未明示的前提或逻辑漏洞。  
-  - **提出替代方案**：针对多解问题探索其他路径。  
-- **低效特征**：  
-  - 单向度解释，仅陈述“是什么”或“有效”，未分析“为什么有效”或“局限性”（例如：“该方法可行”，未说明适用边界）。  
-  - 直接接受原文结论，未质疑潜在假设。  
-  - 缺乏对比或风险意识，如忽略“不同场景下方法效果差异”“数据偏差对结论的影响”。  
+#### 3. **批判性思维体现**
+- **优质特征**：
+  - **多维度分析**：引入对比（如“X方法vs.Y方法的优劣”）、假设（如“若改变实验条件，结果将如何？”）、风险评估（如“该模型在长尾数据下的潜在偏差”）。
+  - **挖掘隐含条件**：主动识别原文未明示的前提或逻辑漏洞。
+  - **提出替代方案**：针对多解问题探索其他路径。
+- **低效特征**：
+  - 单向度解释，仅陈述“是什么”或“有效”，未分析“为什么有效”或“局限性”（例如：“该方法可行”，未说明适用边界）。
+  - 直接接受原文结论，未质疑潜在假设。
+  - 缺乏对比或风险意识，如忽略“不同场景下方法效果差异”“数据偏差对结论的影响”。
 
-#### 4. **知识衔接深度**  
-- **优质特征**：  
-  - 补全 **逻辑断层**：将原文隐含的推导步骤显性化（例如：数学证明中补充“辅助线构造利用等腰三角形对称性”的几何原理）。  
-  - 建立 **跨维度关联**：连接单一知识点与学科底层原理、实际应用或前沿研究（例如：将“分子生物学研究”与“疾病诊断工具开发”结合，说明技术转化逻辑）。  
-  - 分层拆解复杂问题，体现“从原理到应用”的链条（例如：解释“代码实现”时，先说明算法思想，再拆解变量功能和边界条件处理）。  
-- **低效特征**：  
-  - 浅层次关联，仅罗列概念或步骤（例如：“研究包含A、B、C方向”，未说明各方向的内在联系）。  
-  - 碎片化陈述，缺乏因果推导（例如：“实验需多次测量”，未解释“误差分布→数据处理”的科学依据）。  
+#### 4. **知识衔接深度**
+- **优质特征**：
+  - 补全 **逻辑断层**：将原文隐含的推导步骤显性化（例如：数学证明中补充“辅助线构造利用等腰三角形对称性”的几何原理）。
+  - 建立 **跨维度关联**：连接单一知识点与学科底层原理、实际应用或前沿研究（例如：将“分子生物学研究”与“疾病诊断工具开发”结合，说明技术转化逻辑）。
+  - 分层拆解复杂问题，体现“从原理到应用”的链条（例如：解释“代码实现”时，先说明算法思想，再拆解变量功能和边界条件处理）。
+- **低效特征**：
+  - 浅层次关联，仅罗列概念或步骤（例如：“研究包含A、B、C方向”，未说明各方向的内在联系）。
+  - 碎片化陈述，缺乏因果推导（例如：“实验需多次测量”，未解释“误差分布→数据处理”的科学依据）。
   - 未衔接底层原理，如直接使用专业术语而不解释（例如：提及“熵增”但未定义“熵”的物理意义）。
 """
 
@@ -689,101 +699,94 @@ class QwQLongCoTPretrainRefineComputeScore(object):
 
         return rewards
 
-        # def compute_score(self,
-        #                   batch_data_sources,
-        #                   batch_solution_str,
-        #                   batch_ground_truth,
-        #                   ):
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
 
-        #     penalty = defaultdict(dict)
-        #     for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-        #         for key, fn in self.get_penalties().items():
-        #             penalty[key][i] = fn(solution_str, ground_truth)
-        #     base_rewards = self.get_rm_rewards(
-        #         batch_data_sources,
-        #         batch_solution_str,
-        #         batch_ground_truth
-        #     )
-        #     final_results = []
-        #     for i in range(len(batch_solution_str)):
-        #         penalty_log_str = []
-        #         _reward = self.info_coef * base_rewards[i]
+        penalty = defaultdict(dict)
+        for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            for key, fn in self.get_penalties().items():
+                penalty[key][i] = fn(solution_str, ground_truth)
+        base_rewards = self.get_rm_rewards(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth
+        )
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            penalty_log_str = []
+            _reward = base_rewards[i]
 
-        #         for name, _penalty in penalty.items():
-        #             if i in _penalty:
-        #                 if name == "ROUGE":
-        #                     _reward += _penalty[i] * self.rouge_coef
-        #                 else:
-        #                     _reward += _penalty[i]
-        #                 try:
-        #                     penalty_log_str.append(
-        #                         f'{name}={_penalty[i]:.3f}')
-        #                 except Exception as _:
-        #                     pass
+            for name, _penalty in penalty.items():
+                if i in _penalty:
+                    _reward += _penalty[i] * self.get_penalty_coef()[name]
+                    try:
+                        penalty_log_str.append(f'{name}={_penalty[i]:.3f}')
+                    except Exception as _:
+                        pass
 
-        #         final_results.append(_reward)
-        #         thought = self.get_thought(batch_solution_str[i])
+                final_results.append(_reward)
+                thought = get_thought(batch_solution_str[i])
 
-        #         # Notes Summary
-        #         notes_summary = self.get_all_notes(batch_solution_str[i])
+                notes_summary = get_notes(batch_solution_str[i])
 
-        #         if self.split == "valid":
-        #             print(
-        #                 f"--------------------------------[VALID]--------------------------------")
-        #             print(
-        #                 f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
-        #             print(
-        #                 f"【Refine】({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`")
-        #             print(
-        #                 f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})``{self.log_ground_truth(batch_ground_truth[i])}`')
-        #             print(
-        #                 f'Reward (rouge_coef={self.rouge_coef}; info_coef={self.info_coef})={_reward:.3f} | info={base_rewards[i]:.3f} | {" | ".join(penalty_log_str)}\n')
-        #             for i, note in enumerate(notes_summary, start=1):
-        #                 print(f'\t【Note {i}】{repr(note)}')
-        #         elif self.split == "train" and random.random() < 0.01:
-        #             print(
-        #                 f"--------------------------------[TRAIN]--------------------------------")
-        #             print(
-        #                 f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
-        #             print(
-        #                 f"【Refine】({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`")
-        #             print(
-        #                 f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})`{self.log_ground_truth(batch_ground_truth[i])}`')
-        #             print(
-        #                 f'Reward (rouge_coef={self.rouge_coef}; info_coef={self.info_coef})={_reward:.3f} | info={base_rewards[i]:.3f} | {" | ".join(penalty_log_str)}\n')
-        #             for i, note in enumerate(notes_summary, start=1):
-        #                 print(f'\t【Note {i}】{repr(note)}')
-        #     return final_results
+                if self.split == "valid":
+                    print(
+                        f"--------------------------------[VALID]--------------------------------")
+                    print(
+                        f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
+                    print(
+                        f"【Refine】({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`")
+                    print(
+                        f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})``{self.log_ground_truth(batch_ground_truth[i])}`')
+                    print(
+                        f'Reward (rouge_coef={self.rouge_coef}; info_coef={self.info_coef})={_reward:.3f} | info={base_rewards[i]:.3f} | {" | ".join(penalty_log_str)}\n')
+                    for i, note in enumerate(notes_summary, start=1):
+                        print(f'\t【Note {i}】{repr(note)}')
+                elif self.split == "train" and random.random() < 0.01:
+                    print(
+                        f"--------------------------------[TRAIN]--------------------------------")
+                    print(
+                        f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
+                    print(
+                        f"【Refine】({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`")
+                    print(
+                        f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})`{self.log_ground_truth(batch_ground_truth[i])}`')
+                    print(
+                        f'Reward (rouge_coef={self.rouge_coef}; info_coef={self.info_coef})={_reward:.3f} | info={base_rewards[i]:.3f} | {" | ".join(penalty_log_str)}\n')
+                    for i, note in enumerate(notes_summary, start=1):
+                        print(f'\t【Note {i}】{repr(note)}')
+            return final_results
 
-        # def get_all_notes(self, solution):
-        #     try:
-        #         notes_summary = self.postprocess_solution_fn(solution)
-        #         notes_summary = re.findall(
-        #             r'\[Note\].*?\[/Note\]', notes_summary, re.DOTALL) + re.findall(r'【注】.*?【/注】', notes_summary, re.DOTALL)
-        #     except Exception as err:
-        #         notes_summary = []
-        #     return notes_summary
+    def log_ground_truth(self, ground_truth):
+        return repr(self.clip_string(ground_truth["ground_truth"]))
 
-        # def log_ground_truth(self, ground_truth):
-        #     return repr(self.clip_string(ground_truth["ground_truth"]))
+    def log_solution(self, solution):
+        norm = parse_doc_w_notes(solution)
+        if norm is None:
+            return repr(self.clip_string(solution))
+        return repr(self.clip_string(norm))
 
-        # def log_solution(self, solution):
-        #     norm = self.postprocess_solution_fn(solution)
-        #     if norm is None:
-        #         return repr(self.clip_string(solution))
-        #     return repr(self.clip_string(norm))
+    def get_document_len(self, solution):
+        norm = parse_doc_w_notes(solution)
+        if norm is None:
+            return 0
+        return len(norm)
 
-        # def get_document_len(self, solution):
-        #     norm = self.postprocess_solution_fn(solution)
-        #     if norm is None:
-        #         return 0
-        #     return len(norm)
+    def clip_string(self, s: str):
+        if len(s) > 1500:
+            return f'{s[:700]}... [省略] ...{s[-800:]}'
+        return s
 
-        # def clip_string(self, s: str):
-        #     if len(s) > 1500:
-        #         return f'{s[:700]}... [省略] ...{s[-800:]}'
-        #     return s
 
-        # ------------------------------------------------------------------------------------------------------------------------------------------------------
-        # 预训练数据治理
-        # ------------------------------------------------------------------------------------------------------------------------------------------------------
+_qwq_longcot_pretrain_refine_compute_score_train = QwQLongCoTPretrainRefineComputeScore(
+    split="train")
+_qwq_longcot_pretrain_refine_compute_score_valid = QwQLongCoTPretrainRefineComputeScore(
+    split="valid")
+qwq_longcot_pretrain_refine_compute_score_train = _qwq_longcot_pretrain_refine_compute_score_train.compute_score
+qwq_longcot_pretrain_refine_compute_score_valid = _qwq_longcot_pretrain_refine_compute_score_valid.compute_score
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# 预训练数据治理
+# ------------------------------------------------------------------------------------------------------------------------------------------------------

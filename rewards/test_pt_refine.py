@@ -16,7 +16,8 @@ from pt_refine import (
     LengthDiffPenalty,
     NotesFormatReward,
     NotesRepetitionPenalty,
-    QwQLongCoTPretrainRefineComputeScore
+    QwQLongCoTPretrainRefineComputeScore,
+    qwq_longcot_pretrain_refine_compute_score_valid
 )
 
 
@@ -95,16 +96,11 @@ class TestPretrainRefine(unittest.TestCase):
     def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_pretrain_refinement(
             num=100)
-        task = QwQLongCoTPretrainRefineComputeScore()
-        task.get_rm_rewards(
+        task = QwQLongCoTPretrainRefineComputeScore(split="valid")
+        qwq_longcot_pretrain_refine_compute_score_valid(
             [None] *
             len(batch_solution_str), batch_solution_str, batch_ground_truth
         )
-        # penalty = NotesRepetitionPenalty(
-        #     postprocess_solution_fn=parse_doc_w_notes)
-        # for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
-        #     print(penalty.get_penalty_or_reward(
-        #         solution_str, ground_truth))
 
 
 if __name__ == '__main__':
