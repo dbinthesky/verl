@@ -662,23 +662,31 @@ class QwQLongCoTPretrainRefineComputeScore(object):
         )
 
         addition_judge = []
-        for _ in batch_ground_truth:
+        new_batch_solution_str = []
+        indices = []
+        for i, (_, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            notes = get_notes(sol)
+            if len(notes) == 0:
+                continue
             addition_judge.append({
-                "ground_truth": f'你是一名专精于大模型数据改写的治理专家。目标是给定一篇从网页爬取或者PDF解析出来的文档，改写成一篇优质的大语言模型预训练语料。目标是给定一篇从网页爬取或者PDF解析出来的文档增加注释（思考过程）。好的新增思考过程应当满足下面的标准\n\n# 评价标准\n{self.JUDGE_CRITERIA_THINK}'
+                "ground_truth": f'你是一名专精于大模型数据改写的治理专家。目标是给定一篇从网页爬取或者PDF解析出来的文档，改写成一篇优质的大语言模型预训练语料。目标是给定一篇从网页爬取或者PDF解析出来的文档增加注释（思考过程）。好的新增思考过程应当满足下面的标准\n\n# 评价标准\n{self.JUDGE_CRITERIA_W_NOTES}'
             })
+            indices.append(i)
+            new_batch_solution_str.append(sol)
+
         rewards2 = compute_rm_score(
-            batch_solution_str=batch_solution_str,
+            batch_solution_str=new_batch_solution_str,
             batch_ground_truth=addition_judge,
             postprocess_solution_fn=parse_doc_w_notes,
             parse_result_failure_score=self.parse_result_failure_score
         )
         rewards = []
-        for x, y, sol in zip(rewards1, rewards2, batch_solution_str):
-            notes = get_notes(sol)
-            if len(notes) == 0:
-                rewards.append(x)
+        for i, _reward1 in enumerate(rewards1):
+            if i in indices:
+                rewards.append(rewards2[indices.index(i)]+_reward1)
             else:
-                rewards.append(x+y)
+                rewards.append(_reward1)
+
         return rewards
 
         # def compute_score(self,
@@ -776,6 +784,6 @@ class QwQLongCoTPretrainRefineComputeScore(object):
         #         return f'{s[:700]}... [省略] ...{s[-800:]}'
         #     return s
 
-# ------------------------------------------------------------------------------------------------------------------------------------------------------
-# 预训练数据治理
-# ------------------------------------------------------------------------------------------------------------------------------------------------------
+        # ------------------------------------------------------------------------------------------------------------------------------------------------------
+        # 预训练数据治理
+        # ------------------------------------------------------------------------------------------------------------------------------------------------------
