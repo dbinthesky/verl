@@ -2,13 +2,15 @@
 
 DLC_PATH="/cpfs01/shared/public/dlc"
 
-JOB_NAME="qwen2_5-7b_qwq_sandbox_fabricate_qa"
+JOB_NAME="SANDBOX_SYNTHETIC_qwen2_5-7b_qwq_sandbox_fabricate_qa"
 PYARGS="${@:3}"
 
 NUM_PROCESSES="${NUM_PROCESSES:-4}"
 DLC_CONFIG_PATH="${DLC_CONFIG_PATH:-"/cpfs01/shared/llm_ddd/tongjian/dlc.config"}"
 # [ddd]
-# WORKSPACE_ID="${WORKSPACE_ID:-"ws1ujefpjyfgqjwp"}"
+# WORKSPACE_ID="${WORKSPACE_ID:-"ws1f6e9s7dh69ttt"}"
+# [new_ddd]
+# WORKSPACE_ID="${WORKSPACE_ID:-"wso1gao759kjyz4p"}"
 # [he]
 WORKSPACE_ID="${WORKSPACE_ID:-"wso1cah3ytpgmaah"}"
 # [hc]

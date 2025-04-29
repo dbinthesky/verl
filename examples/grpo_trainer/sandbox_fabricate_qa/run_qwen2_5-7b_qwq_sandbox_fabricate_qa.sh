@@ -50,8 +50,8 @@ setup_path() {
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-7B-fabricate_qa_v2"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/sandbox_fabricate/sandbox_data_0409_fabricate_qa_train_v1.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/sandbox_fabricate/sandbox_data_fabricate_qa_valid.parquet"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/sandbox_fabricate/sandbox_data_0428_fabricate_qa_train_fix0429.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/sandbox_fabricate/sandbox_data_0428_fabricate_qa_test_fix0429.parquet"
 
     experiment_name="qwen2_5-7b_qwq_sandbox_fabricate_qa-dlc-${YYMMDD}-${HHMMSS}"
     project_name="verl_grpo_qwq_sandbox_fabricate_qa"
@@ -88,16 +88,16 @@ run_training() {
     # self.config.actor.ppo_micro_batch_size_per_gpu = self.config.actor.ppo_micro_batch_size
 
     python3 -m verl.trainer.main_ppo \
-        custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/rm_w_criteria.py" \
-        custom_reward_function.name=qwq_longcot_fabricate_qa_compute_score_train \
-        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/rm_w_criteria.py" \
-        +custom_valid_reward_function.name=qwq_longcot_fabricate_qa_compute_score_valid \
+        custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/sandbox.py" \
+        custom_reward_function.name=stage1_qwq_longcot_fabricate_qa_compute_score_train \
+        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/sandbox.py" \
+        +custom_valid_reward_function.name=stage1_qwq_longcot_fabricate_qa_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
         data.train_batch_size=128 \
-        data.max_prompt_length=8192 \
-        data.max_response_length=24576 \
+        data.max_prompt_length=24576 \
+        data.max_response_length=8192 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
@@ -122,7 +122,7 @@ run_training() {
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.85 \
         actor_rollout_ref.rollout.temperature=1.1 \
-        actor_rollout_ref.rollout.n=16 \
+        actor_rollout_ref.rollout.n=4 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
