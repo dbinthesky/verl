@@ -1,17 +1,33 @@
+import os
+import re
 import json
 import string
 import random
 import unittest
+from tqdm import tqdm
 import pandas as pd
 from pt_refine import (
+    contain_chinese,
     pretrain_postprocess,
     parse_doc_wo_notes,
     parse_doc_w_notes,
+    parse_solution_fn,
     MainBodyRecall,
     LengthDiffPenalty,
     NotesFormatReward,
     NotesRepetitionPenalty
 )
+
+
+def batchify(iterable, n):
+    batch = []
+    for item in iterable:
+        batch.append(item)
+        if len(batch) == n:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
 
 
 def random_generate_doc():
@@ -34,7 +50,7 @@ def load_pretrain_refinement(num=100):
     return batch_solution_str, batch_ground_truth
 
 
-class TestRulebasedPostprocess(unittest.TestCase):
+class TestPretrainRefine(unittest.TestCase):
     def test_main_body_recall(self):
         batch_solution_str, batch_ground_truth = load_pretrain_refinement(
             num=100)
