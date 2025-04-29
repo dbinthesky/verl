@@ -1,6 +1,10 @@
 import re
+import random
 import jieba
+import requests
 from abc import abstractmethod
+from typing import Dict, Callable
+from tqdm import tqdm as tqdm_nonasync
 from rouge_score import rouge_scorer
 from sacremoses import MosesTokenizer, MosesDetokenizer
 
@@ -11,10 +15,27 @@ en_mt = MosesTokenizer(lang='en')
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+RM_URLS = [
+    "http://10.130.1.180:5020"
+]
+DEFAULT_PARSE_FAILURE_REWARD = -2.
+
+
 class PenaltyOrReward(object):
     @abstractmethod
     def get_penalty_or_reward(self, solution_str, ground_truth, lang_code=None):
         raise NotImplementedError
+
+
+def batchify(iterable, n):
+    batch = []
+    for item in iterable:
+        batch.append(item)
+        if len(batch) == n:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
 
 
 def contain_chinese(string):
@@ -33,9 +54,65 @@ def postprocess_solution(solution_str):
     return solution_str
 
 
+def rm_request_with_retry(RM_URLS, data, max_retries=3, retry_delay=1, suffix="/reward"):
+    retries = 0
+    while retries < max_retries:
+        try:
+            url = random.choice(RM_URLS)
+            response = requests.post(f'{url}{suffix}', json=data, timeout=600)
+            response.raise_for_status()  # 如果状态码不是 200，抛出异常
+            return response.json()
+        except requests.RequestException as e:
+            print(f"请求(数据总量={len(data)})失败，错误信息: {e}，重试第 {retries + 1} 次...")
+            retries += 1
+            if retries < max_retries:
+                time.sleep(retry_delay)
+    print("达到最大重试次数，请求失败。")
+    return None
+
+
+def compute_rm_score(
+        batch_solution_str,
+        batch_ground_truth,
+        postprocess_solution_fn,
+        parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD,
+        judge_prompt_key="ground_truth"
+):
+    input_datas = []
+    rewards = {}
+
+    for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+        solution_str = postprocess_solution_fn(solution_str)
+        if solution_str is None:
+            rewards[i] = parse_result_failure_score
+            continue
+        if ground_truth is None:
+            rewards[i] = parse_result_failure_score
+            continue
+
+        input_data = {
+            "prompt": ground_truth[judge_prompt_key], "response": solution_str, "id": i
+        }
+        input_datas.append(input_data)
+
+    if len(input_datas) > 0:
+        for batch in tqdm_nonasync(batchify(input_datas, n=128), desc=f'[RM][{RM_URLS}] batchify inference (batch=128)'):
+            output_datas = rm_request_with_retry(RM_URLS, batch)
+            for _ in output_datas['reward']:
+                _id = int(_["id"])
+                rewards[_id] = _["rm_score"]
+
+    final_results = []
+    for i in range(len(batch_solution_str)):
+        if i in rewards:
+            final_results.append(rewards[i])
+        else:
+            final_results.append(0.)
+    return final_results
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 基于规则的数据后处理
@@ -257,6 +334,20 @@ def parse_doc_wo_notes(solution_str: str):
     return document
 
 
+def get_notes(solution_str: str):
+    result = parse_solution_fn(solution_str)
+    if result is None:
+        return []
+    thought, document = result
+
+    try:
+        notes = re.findall(
+            r'\[Note\].*?\[/Note\]', document, re.DOTALL)
+        return notes
+    except Exception as err:
+        return []
+
+
 class MainBodyRecall(PenaltyOrReward):
     def __init__(self,
                  postprocess_solution_fn,
@@ -429,6 +520,261 @@ class NotesRepetitionPenalty(PenaltyOrReward):
             penalty = -rouge_recall
         return penalty
 
+
+class QwQLongCoTPretrainRefineComputeScore(object):
+    JUDGE_CRITERIA_WO_NOTES = """
+以下是深度整合 **内容删除治理、内容改写治理** 后的 **完整大模型数据治理评价标准（Criteria）**：
+
+
+### **一、内容纯净度 **  
+- **违规内容彻底清除**：色情暗示、赌博诱导、广告营销（含链接/二维码/品牌硬广）、政治敏感、仇恨言论、暴力描述等显性/隐性违规内容、医疗文档禁“包治百病”“神医”，教育文档禁“考试答案”“内部渠道”，法律文档禁“套路贷”“虚假诉讼”暗示。  
+- **格式噪声**：标准化格式，去除乱码，修正过度标点。  
+- **内容噪声**：重复内容去重、与上下文无关的孤立短句、无意义语气词堆砌
+- **学习噪声**：删除 ISBN、网址、论文引用文献、DOI、ISSN、ORCID 等学术标识符；删除ISBN、时间信息、网址等对内容理解无关的信息，清除不可恢复的多模态内容
+
+
+### **二、语义修复有效性**
+核心目标：最小干预修复问题，完整保留核心语义  
+1. **基础规范**：修正拼写语法错误，统一标点，规范技术格式
+2. **语义优化**：补全不完整句子，合并重复表意
+3. **逻辑增强**：明确指代，调整语序，补充逻辑连接词
+4. **质量提升**：消除机翻痕迹，修复逻辑断裂
+
+
+## 三、信息完备性
+核心目标：确保原文有效信息完整，避免不必要修改
+1. **信息保留**：除需要删除、改写外的其他信息完整保留
+2. **最小干预**：仅修正明确错误，不改变原文主要内容
+
+
+## 四、格式规范性
+核心目标：统一治理后文档格式，确保技术元素正确
+1. **规范段落间距、表格格式**
+2. **确保Markdown、代码块、LaTeX等技术格式正确**
+
+
+## 五、语言一致性
+核心目标：保持原文语言风格和语种统一
+1. **语种统一**：全文语种一致，代码注释与代码语种匹配
+2. **风格匹配**：保持与原文一致的正式度和专业术语使用
+"""
+
+    JUDGE_CRITERIA_W_NOTES = """
+## 内容新增治理之“思考过程”专项评价标准
+
+### 一、结构规范性
+1. **标签使用准确性**  
+   - 正确使用标记：非代码文本使用“[Note]...[/Note]”，代码场景在注释区域添加  
+   - 标签内是否严格遵循英文“Question: *** Think Step by Step: ***”的自问自答格式中文“提问：*** 一步步思考：***”；禁止出现无设问的纯叙述性思考  
+
+2. **位置合理性**  
+   - 思考过程是否出现在需要解释的内容**之前**，确保问题导向性 
+   - 避免在无关位置插入思考（如在结论后补充问题，或在段落中间突兀插入不相关思考）  
+   - 提问、思考与原文内容需要构成“问题-思考-结论”的直接映射关系
+
+### 二、内容价值性
+#### 1. **信息增量有效性**  
+- **优质特征**：  
+  - 包含原文未明确写出的 **背景知识、原理依据、潜在假设、风险分析或应用场景**。  
+  - 逻辑链条延伸而非表面复述，体现 **“为何如此”“如何推导”**。  
+  - 避免同义转换，需引入 **跨学科关联、前沿动态或实际案例**。  
+- **低效特征**：  
+  - 仅对原文进行 **同义替换或简单概括**。  
+  - 无实质新信息，如空泛表述“这是重要研究方向”“对行业有帮助”，未说明具体价值或原理。  
+  - 直接复制原文结论，未补充 **推导过程或隐性逻辑**。  
+
+#### 2. **问题导向精准性**  
+- **优质特征**：  
+  - 提问聚焦 **“核心矛盾”或“认知盲区”**，如“为何选择X方法而非Y方法？”“实验数据中的异常值如何处理？”，直指逻辑薄弱点。  
+  - 问题具体且有指向性，避免宽泛或无意义设问（例如：“如何优化算法时间复杂度？”而非“算法有什么用？”）。  
+  - 提问与原文结论形成 **“问题-答案”闭环**，思考内容需完整回应问题并提供深层解释。  
+- **低效特征**：  
+  - 问题表面化，仅复述原文内容。  
+  - 问题模糊笼统，如“如何理解该理论？”“说明标准的重要性”，未明确具体思考维度。  
+  - 提问与原文结论无关，或无法通过思考过程推导出结论。  
+
+#### 3. **批判性思维体现**  
+- **优质特征**：  
+  - **多维度分析**：引入对比（如“X方法vs.Y方法的优劣”）、假设（如“若改变实验条件，结果将如何？”）、风险评估（如“该模型在长尾数据下的潜在偏差”）。  
+  - **挖掘隐含条件**：主动识别原文未明示的前提或逻辑漏洞。  
+  - **提出替代方案**：针对多解问题探索其他路径。  
+- **低效特征**：  
+  - 单向度解释，仅陈述“是什么”或“有效”，未分析“为什么有效”或“局限性”（例如：“该方法可行”，未说明适用边界）。  
+  - 直接接受原文结论，未质疑潜在假设。  
+  - 缺乏对比或风险意识，如忽略“不同场景下方法效果差异”“数据偏差对结论的影响”。  
+
+#### 4. **知识衔接深度**  
+- **优质特征**：  
+  - 补全 **逻辑断层**：将原文隐含的推导步骤显性化（例如：数学证明中补充“辅助线构造利用等腰三角形对称性”的几何原理）。  
+  - 建立 **跨维度关联**：连接单一知识点与学科底层原理、实际应用或前沿研究（例如：将“分子生物学研究”与“疾病诊断工具开发”结合，说明技术转化逻辑）。  
+  - 分层拆解复杂问题，体现“从原理到应用”的链条（例如：解释“代码实现”时，先说明算法思想，再拆解变量功能和边界条件处理）。  
+- **低效特征**：  
+  - 浅层次关联，仅罗列概念或步骤（例如：“研究包含A、B、C方向”，未说明各方向的内在联系）。  
+  - 碎片化陈述，缺乏因果推导（例如：“实验需多次测量”，未解释“误差分布→数据处理”的科学依据）。  
+  - 未衔接底层原理，如直接使用专业术语而不解释（例如：提及“熵增”但未定义“熵”的物理意义）。
+"""
+
+    def __init__(self,
+                 split="train",
+                 parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
+        self.split = split
+        self.parse_result_failure_score = parse_result_failure_score
+
+        self.recall = MainBodyRecall(
+            postprocess_solution_fn=parse_doc_wo_notes)
+        self.len_diff = LengthDiffPenalty(
+            postprocess_solution_fn=parse_doc_wo_notes)
+        self.note_format = NotesFormatReward(
+            postprocess_solution_fn=parse_doc_w_notes)
+        self.note_rep = NotesRepetitionPenalty(
+            postprocess_solution_fn=parse_doc_w_notes)
+
+    def get_penalties(self) -> Dict[str, Callable]:
+        return {
+            "TextRecall": self.recall.get_penalty_or_reward,
+            "LengthDiff": self.len_diff.get_penalty_or_reward,
+            "NoteFormat": self.note_format.get_penalty_or_reward,
+            "NoteRep": self.note_rep.get_penalty_or_reward
+        }
+
+    def get_penalty_coef(self):
+        return {
+            "TextRecall": 1.0,
+            "LengthDiff": 1.0,
+            "NoteFormat": 1.0,
+            "NoteRep": 0.5,
+        }
+
+    def get_rm_rewards(self,
+                       batch_data_sources,
+                       batch_solution_str,
+                       batch_ground_truth):
+        refine_judges = []
+        for _ in batch_ground_truth:
+            refine_judges.append({
+                "ground_truth": f'你是一名专精于大模型数据改写的治理专家。目标是给定一篇从网页爬取或者PDF解析出来的文档，改写成一篇优质的大语言模型预训练语料。\n\n[Raw Corpus]\n{_["ground_truth"]}\n\n\n# 评价标准\n{self.JUDGE_CRITERIA_WO_NOTES}'
+            })
+        rewards1 = compute_rm_score(
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=refine_judges,
+            postprocess_solution_fn=parse_doc_wo_notes,
+            parse_result_failure_score=self.parse_result_failure_score
+        )
+
+        addition_judge = []
+        for _ in batch_ground_truth:
+            addition_judge.append({
+                "ground_truth": f'你是一名专精于大模型数据改写的治理专家。目标是给定一篇从网页爬取或者PDF解析出来的文档，改写成一篇优质的大语言模型预训练语料。目标是给定一篇从网页爬取或者PDF解析出来的文档增加注释（思考过程）。好的新增思考过程应当满足下面的标准\n\n# 评价标准\n{self.JUDGE_CRITERIA_THINK}'
+            })
+        rewards2 = compute_rm_score(
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=addition_judge,
+            postprocess_solution_fn=parse_doc_w_notes,
+            parse_result_failure_score=self.parse_result_failure_score
+        )
+        rewards = []
+        for x, y, sol in zip(rewards1, rewards2, batch_solution_str):
+            notes = get_notes(sol)
+            if len(notes) == 0:
+                rewards.append(x)
+            else:
+                rewards.append(x+y)
+        return rewards
+
+        # def compute_score(self,
+        #                   batch_data_sources,
+        #                   batch_solution_str,
+        #                   batch_ground_truth,
+        #                   ):
+
+        #     penalty = defaultdict(dict)
+        #     for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+        #         for key, fn in self.get_penalties().items():
+        #             penalty[key][i] = fn(solution_str, ground_truth)
+        #     base_rewards = self.get_rm_rewards(
+        #         batch_data_sources,
+        #         batch_solution_str,
+        #         batch_ground_truth
+        #     )
+        #     final_results = []
+        #     for i in range(len(batch_solution_str)):
+        #         penalty_log_str = []
+        #         _reward = self.info_coef * base_rewards[i]
+
+        #         for name, _penalty in penalty.items():
+        #             if i in _penalty:
+        #                 if name == "ROUGE":
+        #                     _reward += _penalty[i] * self.rouge_coef
+        #                 else:
+        #                     _reward += _penalty[i]
+        #                 try:
+        #                     penalty_log_str.append(
+        #                         f'{name}={_penalty[i]:.3f}')
+        #                 except Exception as _:
+        #                     pass
+
+        #         final_results.append(_reward)
+        #         thought = self.get_thought(batch_solution_str[i])
+
+        #         # Notes Summary
+        #         notes_summary = self.get_all_notes(batch_solution_str[i])
+
+        #         if self.split == "valid":
+        #             print(
+        #                 f"--------------------------------[VALID]--------------------------------")
+        #             print(
+        #                 f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
+        #             print(
+        #                 f"【Refine】({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`")
+        #             print(
+        #                 f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})``{self.log_ground_truth(batch_ground_truth[i])}`')
+        #             print(
+        #                 f'Reward (rouge_coef={self.rouge_coef}; info_coef={self.info_coef})={_reward:.3f} | info={base_rewards[i]:.3f} | {" | ".join(penalty_log_str)}\n')
+        #             for i, note in enumerate(notes_summary, start=1):
+        #                 print(f'\t【Note {i}】{repr(note)}')
+        #         elif self.split == "train" and random.random() < 0.01:
+        #             print(
+        #                 f"--------------------------------[TRAIN]--------------------------------")
+        #             print(
+        #                 f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
+        #             print(
+        #                 f"【Refine】({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`")
+        #             print(
+        #                 f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})`{self.log_ground_truth(batch_ground_truth[i])}`')
+        #             print(
+        #                 f'Reward (rouge_coef={self.rouge_coef}; info_coef={self.info_coef})={_reward:.3f} | info={base_rewards[i]:.3f} | {" | ".join(penalty_log_str)}\n')
+        #             for i, note in enumerate(notes_summary, start=1):
+        #                 print(f'\t【Note {i}】{repr(note)}')
+        #     return final_results
+
+        # def get_all_notes(self, solution):
+        #     try:
+        #         notes_summary = self.postprocess_solution_fn(solution)
+        #         notes_summary = re.findall(
+        #             r'\[Note\].*?\[/Note\]', notes_summary, re.DOTALL) + re.findall(r'【注】.*?【/注】', notes_summary, re.DOTALL)
+        #     except Exception as err:
+        #         notes_summary = []
+        #     return notes_summary
+
+        # def log_ground_truth(self, ground_truth):
+        #     return repr(self.clip_string(ground_truth["ground_truth"]))
+
+        # def log_solution(self, solution):
+        #     norm = self.postprocess_solution_fn(solution)
+        #     if norm is None:
+        #         return repr(self.clip_string(solution))
+        #     return repr(self.clip_string(norm))
+
+        # def get_document_len(self, solution):
+        #     norm = self.postprocess_solution_fn(solution)
+        #     if norm is None:
+        #         return 0
+        #     return len(norm)
+
+        # def clip_string(self, s: str):
+        #     if len(s) > 1500:
+        #         return f'{s[:700]}... [省略] ...{s[-800:]}'
+        #     return s
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 预训练数据治理
