@@ -222,7 +222,7 @@ def pretrain_postprocess(
 def parse_solution_fn(solution_str: str):
     solution_str = postprocess_solution(solution_str)
     try:
-        thought = re.findall(r'<chain-of-thought>.*</chain-of-thought>',
+        thought = re.findall(r'<think>.*</think>',
                              solution_str, re.DOTALL)[0]
     except Exception as err:
         return None
@@ -232,7 +232,7 @@ def parse_solution_fn(solution_str: str):
     except Exception as err:
         return None
 
-    if any(_ in document for _ in ("<chain-of-thought>", "</chain-of-thought>", "<doc>", "</doc>")):
+    if any(_ in document for _ in ("<think>", "</think>", "<doc>", "</doc>")):
         return None
     return thought, document
 

@@ -47,6 +47,10 @@ def load_pretrain_refinement(num=100):
     with open(filename, "rt") as f:
         data = json.load(f)
     batch_solution_str, batch_ground_truth = data["batch_solution_str"], data["batch_ground_truth"]
+
+    def tag_modify(s):
+        return s.replace("<chain-of-thought>", "<think>").replace("</chain-of-thought>", "</think>")
+    batch_solution_str = [tag_modify(_) for _ in batch_solution_str]
     return batch_solution_str, batch_ground_truth
 
 
