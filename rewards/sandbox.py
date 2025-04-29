@@ -413,7 +413,7 @@ class Stage1QwQLongCoTFabricateQAComputeScore(object):
                 print(
                     f"【Authentic】`{self.log_ground_truth(batch_ground_truth[i])}`")
                 print(
-                    f'[Final Reward]={_reward:.3f}|{"|".join(penalty_log_str)}\n')
+                    f'({batch_ground_truth[i]["data_source"]})[Final Reward]={_reward:.3f}|{"|".join(penalty_log_str)}\n')
             elif self.split == "train" and random.random() < 0.1:
                 print(
                     f"--------------------------------[TRAIN]--------------------------------")
@@ -422,7 +422,7 @@ class Stage1QwQLongCoTFabricateQAComputeScore(object):
                 print(
                     f"【Authentic】`{self.log_ground_truth(batch_ground_truth[i])}`")
                 print(
-                    f'[Final Reward]={_reward:.3f}|{"|".join(penalty_log_str)}\n')
+                    f'({batch_ground_truth[i]["data_source"]})[Final Reward]={_reward:.3f}|{"|".join(penalty_log_str)}\n')
 
         return final_results
 

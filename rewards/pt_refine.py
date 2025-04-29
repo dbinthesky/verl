@@ -378,7 +378,7 @@ class NotesFormatReward(PenaltyOrReward):
                 r'\[Note\].*?\[/Note\]', solution_str, re.DOTALL)
 
             strict_follow = [_ for _ in loose_follow if (
-                ("Question:" in _ and "Think Step by Step:" in _) or ("问题：" in _ and "一步步思考：" in _))]
+                ("Question:" in _ and "Think Step by Step:" in _) or ("提问：" in _ and "一步步思考：" in _))]
 
             score = min(len(loose_follow), self.max_steps) * self.step_reward/2 + \
                 min(len(strict_follow), self.max_steps) * self.step_reward/2
@@ -408,7 +408,7 @@ class NotesRepetitionPenalty(PenaltyOrReward):
             s = s.replace("Q:", "").replace("Think:", "").strip()
             s = s.replace("Question:", "").replace(
                 "Think Step by Step:", "").strip()
-            s = s.replace("问题：", "").replace("一步步思考：", "").strip()
+            s = s.replace("提问：", "").replace("一步步思考：", "").strip()
             return s
 
         notes = re.findall(

@@ -50,8 +50,8 @@ setup_path() {
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-7B-fabricate_qa_v2"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/sandbox_fabricate/sandbox_data_0428_fabricate_qa_train_fix0429.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/sandbox_fabricate/sandbox_data_0428_fabricate_qa_test_fix0429.parquet"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/sandbox_fabricate/sandbox_data_0428_fabricate_qa_train_fix0430.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/sandbox_fabricate/sandbox_data_0428_fabricate_qa_test_fix0430.parquet"
 
     experiment_name="qwen2_5-7b_qwq_sandbox_fabricate_qa-dlc-${YYMMDD}-${HHMMSS}"
     project_name="verl_grpo_qwq_sandbox_fabricate_qa"

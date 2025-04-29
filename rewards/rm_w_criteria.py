@@ -1766,6 +1766,7 @@ class CoTPretrainRefineComputeScore(QwQLongCoTPretrainBackTranslationComputeScor
 5. **语种混杂未修复**：中英句子混杂（如“Let’s 开始分析数据”未处理）。  
 6. **内容重复未修复**：包含大量内容意思重复的段落/句子/表述
 """
+
     JUDGE_CRITERIA_THINK = """
 ### 内容新增治理之“思考过程”专项评价标准
 

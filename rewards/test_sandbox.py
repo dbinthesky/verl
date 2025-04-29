@@ -24,7 +24,7 @@ def random_generate_doc():
 
 
 def load_fabricate_data(num=100):
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/sandbox_fabricate/sandbox_data_0428_fabricate_qa_test.parquet"
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/sandbox_fabricate/sandbox_data_0428_fabricate_qa_test_fix0430.parquet"
     batch_solution_str, batch_ground_truth = [], []
 
     df = pd.read_parquet(filename)
