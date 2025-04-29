@@ -17,7 +17,8 @@ from pt_refine import (
     NotesFormatReward,
     NotesRepetitionPenalty,
     QwQLongCoTPretrainRefineComputeScore,
-    qwq_longcot_pretrain_refine_compute_score_valid
+    qwq_longcot_pretrain_refine_compute_score_valid,
+    qwq_longcot_pretrain_refine_compute_score_train
 )
 
 
@@ -97,7 +98,7 @@ class TestPretrainRefine(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_pretrain_refinement(
             num=100)
         task = QwQLongCoTPretrainRefineComputeScore(split="valid")
-        qwq_longcot_pretrain_refine_compute_score_valid(
+        qwq_longcot_pretrain_refine_compute_score_train(
             [None] *
             len(batch_solution_str), batch_solution_str, batch_ground_truth
         )

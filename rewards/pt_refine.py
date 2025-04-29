@@ -742,9 +742,9 @@ class QwQLongCoTPretrainRefineComputeScore(object):
                     print(
                         f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})``{self.log_ground_truth(batch_ground_truth[i])}`')
                     print(
-                        f'Reward (rouge_coef={self.rouge_coef}; info_coef={self.info_coef})={_reward:.3f} | info={base_rewards[i]:.3f} | {" | ".join(penalty_log_str)}\n')
+                        f'[Final Reward]({self.get_penalty_coef()})={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|{"|".join(penalty_log_str)}\n')
                     for i, note in enumerate(notes_summary, start=1):
-                        print(f'\t【Note {i}】{repr(note)}')
+                        print(f'\t【新增注释{i}】{repr(note)}')
                 elif self.split == "train" and random.random() < 0.01:
                     print(
                         f"--------------------------------[TRAIN]--------------------------------")
@@ -755,9 +755,9 @@ class QwQLongCoTPretrainRefineComputeScore(object):
                     print(
                         f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})`{self.log_ground_truth(batch_ground_truth[i])}`')
                     print(
-                        f'Reward (rouge_coef={self.rouge_coef}; info_coef={self.info_coef})={_reward:.3f} | info={base_rewards[i]:.3f} | {" | ".join(penalty_log_str)}\n')
+                        f'[Final Reward]({self.get_penalty_coef()})={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|{"|".join(penalty_log_str)}\n')
                     for i, note in enumerate(notes_summary, start=1):
-                        print(f'\t【Note {i}】{repr(note)}')
+                        print(f'\t【新增注释{i}】...{repr(note)}')
             return final_results
 
     def log_ground_truth(self, ground_truth):
