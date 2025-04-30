@@ -17,7 +17,7 @@ en_mt = MosesTokenizer(lang='en')
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 RM_URLS = [
-    "http://10.130.0.174:5012"
+    "http://10.130.0.174:5020"
 ]
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 
@@ -698,6 +698,91 @@ class QwQLongCoTPretrainRefineComputeScore(object):
 1. **规避重复**：通过“链条连贯性”“目标聚焦性”等条目，明确要求步骤围绕核心问题单向推进，杜绝同一概念在不同维度重复描述。  
 2. **强化缜密性**：新增“分层拆解度”“步骤详实度”，强调复杂问题必须拆解为**可执行的分阶任务**，每个环节需包含具体操作细节，避免笼统表述。
 """
+    JUDGE_CRITERIA_QUESTION_QUALITY = """
+    ## 高质量提问评价标准
+
+1. **相关性**  
+   - 问题必须直接指向原文待解释的关键知识点、逻辑断层或核心结论，避免无关发散。  
+   - 能精准定位内容中的核心矛盾、未明确假设或潜在逻辑跳步。  
+
+2. **多样性**  
+   - 问题视角多样性，需要覆盖尽可能更多的场景和提问类型；问题提问视角千万不要单一；下面是一些不同提问类型的例子
+
+    #### **1. 数学证明思路补全**  
+    提问：如何证明柯西不等式的向量形式？  
+
+    #### **2. 算法复杂度分析**  
+    提问：如何推导快速排序算法的平均时间复杂度？  
+
+    #### **3. 物理定律推导**  
+    提问：如何从开普勒行星运动定律推导出万有引力定律？  
+
+    ### **4. 教育场景**  
+    提问：这道微积分题的出题思路是什么？为什么要这么出题  
+
+    #### **5. 实验题能力要求分析**  
+    提问：本研究为何选择 XX 群体作为研究对象？分组时采用 XX 标准的依据是什么？技术路线中关键步骤的顺序安排基于哪些方法论原则？
+
+    #### **6. 语文阅读理解题考点设置**  
+    提问：小说阅读题为何反复强调“老钟摆”的意象？  
+
+    #### **7. 方法学合理性论证**
+    提问：为何选择 XX 实验方法而非其他技术？所采用的统计工具在本研究中的适用性及潜在局限是什么？数据收集方法如何平衡效度与信度？
+
+    #### **8. 数据解读深度拓展**
+    提问：如何从现有数据推断出 XX 生物学 / 医学机制？数据中 XX 异常趋势可能反映了哪些未被揭示的潜在规律？
+
+    #### **9. 跨文献研究对比分析**
+    提问：本研究结论与 XX 文献的差异，可能由哪些样本选择、实验条件或理论假设的不同导致？如何解释文献中相互矛盾的研究发现？
+
+    #### **10. 研究局限性与改进方向**
+    提问：研究设计中样本量不足或数据维度单一可能导致哪些结论偏差？未来研究可从哪些技术手段或研究视角进行优化？
+    
+    #### **11. 结论推导严谨性补充**
+    提问：从数据统计结果到核心结论的推导过程中，需要补充哪些逻辑验证步骤以避免过度推断？
+    
+    #### **12. 技术文档场景**
+    提问：API 接口中参数类型校验、长度限制和格式规范的设计，主要基于哪些安全性、兼容性和易用性考量？
+
+    #### **13. 算法参数调优逻辑**
+    提问：在机器学习模型训练中，选择 XX 学习率、批次大小和正则化系数的决策依据是什么？如何通过交叉验证平衡模型的偏差与方差？
+
+    #### **14. 古代政策文本解读**
+    提问：史书中记载的 XX 朝代赋税制度（如两税法、一条鞭法），其征税对象和税率调整的背后反映了哪些经济结构变化和统治逻辑？
+
+    #### **15. 外交文书语义辨析**
+    提问：近代 XX 条约（如《南京条约》《马关条约》）中 “利益均沾”“最惠国待遇” 等模糊表述，如何体现当时列强的权力博弈和外交策略？
+
+    #### **16. 法律文书场景**
+    提问：商业合同中违约责任条款为何区分 “轻微违约”“重大违约” 并设置不同赔偿标准？条款中 “不可抗力” 范围的列举式规定有何法律实务意义？
+
+    #### **17. 法律条文歧义消解**
+    提问：刑法中 “情节严重”“数额较大” 等弹性条款，司法实践中主要依据哪些司法解释和指导性案例进行具体认定？
+    
+    #### **18. 翻译文本场景**
+    提问：中医术语 “经络”“气血” 在英译时，为何采用音译加注释而非字面直译？这种处理如何兼顾文化独特性与国际学术理解？
+
+    #### **19. 法律文本术语校准**
+    提问：国际公约中 “Intellectual Property” 译为 “知识产权” 而非 “知识财产”，主要基于哪些法律概念的精准性和行业惯例考量？
+    
+    #### **20. 法律文本术语校准**
+    提问：正式商务邮件为何采用 “结论先行 — 细节支撑 — 行动诉求” 的结构？这种布局如何提升收件人的信息处理效率？
+
+    #### **21. 跨部门沟通话术设计**
+    提问：在跨部门协作中，“问题描述 — 影响分析 — 解决方案” 的沟通模板如何减少信息误差并推动快速共识？
+
+3. **逻辑深度**  
+   - 围绕“为什么”“如何”“基于什么假设”等深层逻辑展开，而非停留在表面事实。  
+   - 体现对知识原理、方法论或潜在风险的追问。  
+
+4. **引导性**  
+   - 问题需自然引出“步骤性思考”，如通过“需要哪些前提条件？”“分几步验证？”等表述，为后续解释提供逻辑框架。  
+   - 避免封闭性问题（如“是对的吗？”），应鼓励展开式推导（如“从实验数据到结论的归纳过程中，可能存在哪些推导漏洞？”）。  
+
+5. **批判性视角（挖掘深层问题）**  
+   - 主动质疑原文假设、方法局限性或逻辑漏洞。  
+   - 探索替代方案或逆向思考。  
+"""
 
     def __init__(self,
                  split="train",
@@ -789,6 +874,27 @@ class QwQLongCoTPretrainRefineComputeScore(object):
             postprocess_solution_fn=lambda x: x,
             parse_result_failure_score=self.parse_result_failure_score
         )
+        # 提问评价单独拆分
+        addition_judge = []
+        new_batch_solution_str = []
+        indices3 = []
+        for i, (_, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            notes = get_notes_and_conclusions(sol)
+            if len(notes) == 0:
+                continue
+
+            addition_judge.append({
+                "ground_truth": f'你是一个擅长提问的思考者。你需要提出高质量的问题并回答。\n\n# 评价标准\n{self.JUDGE_CRITERIA_QUESTION_QUALITY}'
+            })
+            indices3.append(i)
+            new_batch_solution_str.append("\n\n\n".join(notes))
+        rewards4 = compute_rm_score(
+            batch_solution_str=new_batch_solution_str,
+            batch_ground_truth=addition_judge,
+            postprocess_solution_fn=lambda x: x,
+            parse_result_failure_score=self.parse_result_failure_score
+        )
+
         rewards = []
         for i, _reward1 in enumerate(rewards1):
             cur_reward = _reward1
@@ -797,6 +903,8 @@ class QwQLongCoTPretrainRefineComputeScore(object):
                 cur_reward += rewards2[indices1.index(i)]
             if i in indices2:
                 cur_reward = + rewards3[indices2.index(i)]
+            if i in indices3:
+                cur_reward = + rewards4[indices3.index(i)]
 
             rewards.append(cur_reward)
 
@@ -860,7 +968,7 @@ class QwQLongCoTPretrainRefineComputeScore(object):
                 print(
                     f'[Final Reward]={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
                 for i, note in enumerate(notes_summary, start=1):
-                    print(f'\t【新增注释{i}】...{repr(note)}')
+                    print(f'\t【新增注释{i}】{repr(note)}')
         return final_results
 
     def get_notes_summary(self, solution):
