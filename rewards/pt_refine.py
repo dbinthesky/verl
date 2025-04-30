@@ -17,7 +17,7 @@ en_mt = MosesTokenizer(lang='en')
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 RM_URLS = [
-    "http://10.130.0.53:5015"
+    "http://10.130.0.174:5012"
 ]
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 
@@ -330,9 +330,16 @@ def parse_doc_wo_notes(solution_str: str):
         return None
     thought, document = result
 
-    document = re.sub(r'\[Note\][\s\S]*?\[/Note\]',
+    document = re.sub(r'\[EXPLANATION\][\s\S]*?\[/EXPLANATION\]',
                       "", document, flags=re.DOTALL)
     return document
+
+
+def parse_doc_wo_notes_and_tags(solution_str: str):
+    document = parse_doc_wo_notes(solution_str)
+    if document is None:
+        return None
+    return document.replace("[CONCLUSION]", "").replace("[/CONCLUSION]", "")
 
 
 def get_thought(solution_str: str):
@@ -352,7 +359,21 @@ def get_notes(solution_str: str):
 
     try:
         notes = re.findall(
-            r'\[Note\].*?\[/Note\]', document, re.DOTALL)
+            r'\[EXPLANATION\].*?\[/EXPLANATION\]', document, re.DOTALL)
+        return notes
+    except Exception as err:
+        return []
+
+
+def get_notes_and_conclusions(solution_str: str):
+    result = parse_solution_fn(solution_str)
+    if result is None:
+        return []
+    thought, document = result
+
+    try:
+        notes = re.findall(
+            r'\[EXPLANATION\].*?\[/EXPLANATION\]\n*\[CONCLUSION\].*?\[/CONCLUSION\]', document, re.DOTALL)
         return notes
     except Exception as err:
         return []
@@ -467,22 +488,24 @@ class NotesFormatReward(PenaltyOrReward):
 
         base_score = 0.0
 
-        # [Note][/Note]闭合
-        wo_notes = re.sub(r'\[Note\][\s\S]*?\[/Note\]',
+        # [EXPLANATION][/EXPLANATION]闭合
+        wo_notes = re.sub(r'\[EXPLANATION\][\s\S]*?\[/EXPLANATION\]',
                           "", solution_str, flags=re.DOTALL)
-        if any(_ in wo_notes for _ in ("[Note]", "[/Note]")):
+        if any(_ in wo_notes for _ in ("[EXPLANATION]", "[/EXPLANATION]")):
             base_score -= 0.5
 
         # 思考过程奖励
         try:
             loose_follow = re.findall(
-                r'\[Note\].*?\[/Note\]', solution_str, re.DOTALL)
-
-            strict_follow = [_ for _ in loose_follow if (
+                r'\[EXPLANATION\].*?\[/EXPLANATION\]', solution_str, re.DOTALL)
+            strict_follow = re.findall(
+                r'\[EXPLANATION\].*?\[/EXPLANATION\]\n*\[CONCLUSION\].*?\[/CONCLUSION\]', solution_str, re.DOTALL)
+            more_strict_follow = [_ for _ in loose_follow if (
                 ("Question:" in _ and "Think Step by Step:" in _) or ("提问：" in _ and "一步步思考：" in _))]
 
-            score = min(len(loose_follow), self.max_steps) * self.step_reward/2 + \
-                min(len(strict_follow), self.max_steps) * self.step_reward/2
+            score = min(len(loose_follow), self.max_steps) * self.step_reward/3 + \
+                min(len(strict_follow), self.max_steps) * self.step_reward/3 + \
+                min(len(more_strict_follow), self.max_steps) * self.step_reward/3
             return base_score + min(score, self.max_reward)
         except Exception as err:
             return base_score
@@ -505,7 +528,8 @@ class NotesRepetitionPenalty(PenaltyOrReward):
             return 0.
 
         def normalize(s):
-            s = s.replace("[Note]", "").replace("[/Note]", "").strip()
+            s = s.replace("[EXPLANATION]", "").replace(
+                "[/EXPLANATION]", "").strip()
             s = s.replace("Q:", "").replace("Think:", "").strip()
             s = s.replace("Question:", "").replace(
                 "Think Step by Step:", "").strip()
@@ -513,7 +537,7 @@ class NotesRepetitionPenalty(PenaltyOrReward):
             return s
 
         notes = re.findall(
-            r'\[Note\].*?\[/Note\]', solution_str, re.DOTALL)
+            r'\[EXPLANATION\].*?\[/EXPLANATION\]', solution_str, re.DOTALL)
         notes_str = "\n".join([normalize(_) for _ in notes])
         if len(notes) == 0:
             return 0.
@@ -574,13 +598,15 @@ class QwQLongCoTPretrainRefineComputeScore(object):
 
 ### 一、结构规范性
 1. **标签使用准确性**
-   - 正确使用标记：非代码文本使用“[Note]...[/Note]”，代码场景在注释区域添加
+   - 正确使用标记：
+     - 非代码文本使用“[EXPLANATION]...[/EXPLANATION]”，代码场景在注释区域添加
+     - 紧接着思考过程“[EXPLANATION]...[/EXPLANATION]”之后，使用“[CONCLUSION]...[/CONCLUSION]”把原文中内容作为结论部分。
    - 标签内是否严格遵循英文“Question: *** Think Step by Step: ***”的自问自答格式中文“提问：*** 一步步思考：***”；禁止出现无设问的纯叙述性思考
 
 2. **位置合理性**
    - 思考过程是否出现在需要解释的内容**之前**，确保问题导向性
    - 避免在无关位置插入思考（如在结论后补充问题，或在段落中间突兀插入不相关思考）
-   - 提问、思考与原文内容需要构成“问题-思考-结论”的直接映射关系
+   - 提问、思考与原文内容（[EXPLANATION]...[/EXPLANATION][CONCLUSION]...[/CONCLUSION]）需要构成“问题-思考-结论”的直接映射关系
 
 ### 二、内容价值性
 #### 1. **信息增量有效性**
@@ -624,16 +650,66 @@ class QwQLongCoTPretrainRefineComputeScore(object):
   - 未衔接底层原理，如直接使用专业术语而不解释（例如：提及“熵增”但未定义“熵”的物理意义）。
 """
 
+    JUDGE_CRITERIA_THINKING_QUALITY = """
+## 思考过程质量评价标准
+
+#### **一、逻辑结构**  
+1. **链条连贯性**  
+   - 步骤是否按“问题识别→要素分析→逻辑推导”线性展开，无断裂或循环重复。  
+2. **分层拆解度**  
+   - 复杂问题是否拆解为可操作的**分阶子步骤**，每阶任务清晰可追溯。  
+
+
+#### **二、问题拆解能力**  
+3. **要素精准度**  
+   - 是否准确定位问题的**核心驱动变量**）、约束条件或假设。  
+4. **因果逻辑性**  
+   - 是否从“现象描述”深入到“机制分析”，再延伸至“影响推导”，形成“是什么→为什么→如何影响”的递进链条。  
+
+
+#### **三、专业深度与实用性**  
+5. **理论嵌入性**  
+   - 是否调用领域核心理论或技术原理支撑分析，避免停留在表面描述。  
+6. **现实适配性**  
+   - 是否兼顾理论理想化假设与实际约束。  
+
+
+#### **四、过程完整性**  
+7. **目标聚焦性**  
+   - 所有分析步骤是否紧密围绕初始问题核心。  
+8. **步骤详实度**  
+   - 关键环节是否包含**具体操作细节**，避免笼统概括。  
+
+
+#### **五、表达规范**  
+9. **术语准确性**  
+   - 专业术语使用是否精准，无概念混淆。  
+10. **表述简洁性**  
+    - 是否用“首先/其次”“由于/因此”等逻辑连接词串联步骤，**避免同义重复或冗长描述*。  
+
+
+### **核心特征**  
+- **无冗余性**：思考过程与结论指向明确，步骤间无重复论证，尤其是思考过程和结论无重复内容展开。  
+- **缜密分阶性**：复杂问题必按**可操作的子步骤展开**，每阶逻辑严密、细节完整。  
+- **因果闭环性**：从问题提出到结论形成形成完整链条，关键推导环节无逻辑断层。  
+
+
+### 优化说明  
+1. **规避重复**：通过“链条连贯性”“目标聚焦性”等条目，明确要求步骤围绕核心问题单向推进，杜绝同一概念在不同维度重复描述。  
+2. **强化缜密性**：新增“分层拆解度”“步骤详实度”，强调复杂问题必须拆解为**可执行的分阶任务**，每个环节需包含具体操作细节，避免笼统表述。
+"""
+
     def __init__(self,
                  split="train",
                  parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
         self.split = split
         self.parse_result_failure_score = parse_result_failure_score
 
+        # FIXME
         self.recall = MainBodyRecall(
-            postprocess_solution_fn=parse_doc_wo_notes)
+            postprocess_solution_fn=parse_doc_wo_notes_and_tags)
         self.len_diff = LengthDiffPenalty(
-            postprocess_solution_fn=parse_doc_wo_notes)
+            postprocess_solution_fn=parse_doc_wo_notes_and_tags)
         self.note_format = NotesFormatReward(
             postprocess_solution_fn=parse_doc_w_notes)
         self.note_rep = NotesRepetitionPenalty(
@@ -659,6 +735,7 @@ class QwQLongCoTPretrainRefineComputeScore(object):
                        batch_data_sources,
                        batch_solution_str,
                        batch_ground_truth):
+        # 评价除思考过程的改写内容
         refine_judges = []
         for _ in batch_ground_truth:
             refine_judges.append({
@@ -667,13 +744,14 @@ class QwQLongCoTPretrainRefineComputeScore(object):
         rewards1 = compute_rm_score(
             batch_solution_str=batch_solution_str,
             batch_ground_truth=refine_judges,
-            postprocess_solution_fn=parse_doc_wo_notes,
+            postprocess_solution_fn=parse_doc_wo_notes_and_tags,
             parse_result_failure_score=self.parse_result_failure_score
         )
 
+        # 整体评价思考过程
         addition_judge = []
         new_batch_solution_str = []
-        indices = []
+        indices1 = []
         for i, (_, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
             notes = get_notes(sol)
             if len(notes) == 0:
@@ -681,7 +759,7 @@ class QwQLongCoTPretrainRefineComputeScore(object):
             addition_judge.append({
                 "ground_truth": f'你是一名专精于大模型数据改写的治理专家。目标是给定一篇从网页爬取或者PDF解析出来的文档，改写成一篇优质的大语言模型预训练语料。目标是给定一篇从网页爬取或者PDF解析出来的文档增加注释（思考过程）。好的新增思考过程应当满足下面的标准\n\n# 评价标准\n{self.JUDGE_CRITERIA_W_NOTES}'
             })
-            indices.append(i)
+            indices1.append(i)
             new_batch_solution_str.append(sol)
 
         rewards2 = compute_rm_score(
@@ -690,12 +768,37 @@ class QwQLongCoTPretrainRefineComputeScore(object):
             postprocess_solution_fn=parse_doc_w_notes,
             parse_result_failure_score=self.parse_result_failure_score
         )
+
+        # 思考过程单独拆分
+        addition_judge = []
+        new_batch_solution_str = []
+        indices2 = []
+        for i, (_, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            notes = get_notes_and_conclusions(sol)
+            if len(notes) == 0:
+                continue
+
+            addition_judge.append({
+                "ground_truth": f'你是一个擅长深度思考的思想家，你会完成高质量的思考过程，并一步一步思考达到最终的结论。\n\n# 评价标准\n{self.JUDGE_CRITERIA_THINKING_QUALITY}'
+            })
+            indices2.append(i)
+            new_batch_solution_str.append("\n\n\n".join(notes))
+        rewards3 = compute_rm_score(
+            batch_solution_str=new_batch_solution_str,
+            batch_ground_truth=addition_judge,
+            postprocess_solution_fn=lambda x: x,
+            parse_result_failure_score=self.parse_result_failure_score
+        )
         rewards = []
         for i, _reward1 in enumerate(rewards1):
-            if i in indices:
-                rewards.append(rewards2[indices.index(i)]+_reward1)
-            else:
-                rewards.append(_reward1)
+            cur_reward = _reward1
+
+            if i in indices1:
+                cur_reward += rewards2[indices1.index(i)]
+            if i in indices2:
+                cur_reward = + rewards3[indices2.index(i)]
+
+            rewards.append(cur_reward)
 
         return rewards
 
@@ -730,7 +833,7 @@ class QwQLongCoTPretrainRefineComputeScore(object):
             final_results.append(_reward)
             thought = get_thought(batch_solution_str[i])
 
-            notes_summary = get_notes(batch_solution_str[i])
+            notes_summary = self.get_notes_summary(batch_solution_str[i])
 
             if self.split == "valid":
                 print(
@@ -759,6 +862,14 @@ class QwQLongCoTPretrainRefineComputeScore(object):
                 for i, note in enumerate(notes_summary, start=1):
                     print(f'\t【新增注释{i}】...{repr(note)}')
         return final_results
+
+    def get_notes_summary(self, solution):
+        notes_and_conclusions = get_notes_and_conclusions(solution)
+        notes = get_notes(solution)
+        for _ in notes:
+            if not any(_ in c for c in notes_and_conclusions):
+                notes_and_conclusions.append(_)
+        return notes_and_conclusions
 
     def log_ground_truth(self, ground_truth):
         return repr(self.clip_string(ground_truth["ground_truth"]))

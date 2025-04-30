@@ -11,6 +11,7 @@ from pt_refine import (
     pretrain_postprocess,
     parse_doc_wo_notes,
     parse_doc_w_notes,
+    parse_doc_wo_notes_and_tags,
     parse_solution_fn,
     MainBodyRecall,
     LengthDiffPenalty,
@@ -33,10 +34,9 @@ def batchify(iterable, n):
         yield batch
 
 
-def random_generate_doc():
+def random_generate_doc(doc_size=500):
     all_characters = string.ascii_letters + string.digits + " "
     n = 8
-    doc_size = 500
     doc = []
     for i in range(doc_size):
         doc.append(''.join(random.choice(all_characters) for _ in range(n)))
@@ -52,8 +52,13 @@ def load_pretrain_refinement(num=100):
     batch_solution_str, batch_ground_truth = data["batch_solution_str"], data["batch_ground_truth"]
 
     def tag_modify(s):
-        return s.replace("<chain-of-thought>", "<think>").replace("</chain-of-thought>", "</think>")
+        output = s.replace("<chain-of-thought>",
+                           "<think>").replace("</chain-of-thought>", "</think>")
+        output = output.replace("[Note]", "[EXPLANATION]").replace(
+            "[/Note]", f"[/EXPLANATION]\n\n[xxCONCLUSION]{random_generate_doc(10)}[/CONCLUSION]")
+        return output
     batch_solution_str = [tag_modify(_) for _ in batch_solution_str]
+
     return batch_solution_str, batch_ground_truth
 
 
@@ -62,16 +67,16 @@ class TestPretrainRefine(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_pretrain_refinement(
             num=100)
         recall = MainBodyRecall(
-            postprocess_solution_fn=parse_doc_wo_notes)
+            postprocess_solution_fn=parse_doc_wo_notes_and_tags)
         for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
-            recall.get_penalty_or_reward(
-                solution_str, ground_truth)
+            print(recall.get_penalty_or_reward(
+                solution_str, ground_truth))
 
     def test_length_diff_penalty(self):
         batch_solution_str, batch_ground_truth = load_pretrain_refinement(
             num=100)
         penalty = LengthDiffPenalty(
-            postprocess_solution_fn=parse_doc_wo_notes)
+            postprocess_solution_fn=parse_doc_wo_notes_and_tags)
         for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
             print(penalty.get_penalty_or_reward(
                 solution_str, ground_truth))
