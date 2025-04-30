@@ -6,6 +6,7 @@ import random
 import unittest
 from tqdm import tqdm
 import pandas as pd
+import asyncio as aio
 from pt_refine import (
     contain_chinese,
     pretrain_postprocess,
@@ -55,7 +56,7 @@ def load_pretrain_refinement(num=100):
         output = s.replace("<chain-of-thought>",
                            "<think>").replace("</chain-of-thought>", "</think>")
         output = output.replace("[Note]", "[EXPLANATION]").replace(
-            "[/Note]", f"[/EXPLANATION]\n\n[xxCONCLUSION]{random_generate_doc(10)}[/CONCLUSION]")
+            "[/Note]", f"[/EXPLANATION]\n\n[CONCLUSION]{random_generate_doc(10)}[/CONCLUSION]")
         return output
     batch_solution_str = [tag_modify(_) for _ in batch_solution_str]
 
@@ -107,6 +108,19 @@ class TestPretrainRefine(unittest.TestCase):
             [None] *
             len(batch_solution_str), batch_solution_str, batch_ground_truth
         )
+
+    def test_get_revise_rm_rewards(self):
+        async def main():
+            batch_solution_str, batch_ground_truth = load_pretrain_refinement(
+                num=100)
+            task = QwQLongCoTPretrainRefineComputeScore(split="valid")
+            results = await task.get_question_rm_rewards(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth
+            )
+            print(results)
+            print(len(results))
+        aio.run(main())
 
 
 if __name__ == '__main__':

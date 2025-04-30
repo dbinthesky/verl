@@ -1,9 +1,11 @@
 import re
-import random
 import jieba
+import random
+import aiohttp
+import asyncio
 import requests
 from abc import abstractmethod
-from typing import Dict, Callable
+from typing import Dict, Callable, List
 from collections import defaultdict
 from tqdm import tqdm as tqdm_nonasync
 from rouge_score import rouge_scorer
@@ -17,7 +19,10 @@ en_mt = MosesTokenizer(lang='en')
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 RM_URLS = [
-    "http://10.130.0.174:5020"
+    "http://10.130.1.17:27308",
+    "http://10.130.1.17:25065",
+    "http://10.130.1.17:27338",
+    "http://10.130.1.17:29686"
 ]
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 
@@ -55,29 +60,32 @@ def postprocess_solution(solution_str):
     return solution_str
 
 
-def rm_request_with_retry(RM_URLS, data, max_retries=3, retry_delay=1, suffix="/reward"):
+async def rm_request_with_retry(urls, data, max_retries=3, retry_delay=1, suffix="/reward"):
     retries = 0
     while retries < max_retries:
         try:
-            url = random.choice(RM_URLS)
-            response = requests.post(f'{url}{suffix}', json=data, timeout=600)
-            response.raise_for_status()  # 如果状态码不是 200，抛出异常
-            return response.json()
-        except requests.RequestException as e:
+            url = random.choice(urls)
+            async with aiohttp.ClientSession() as session:
+                async with session.post(f'{url}{suffix}', json=data, timeout=aiohttp.ClientTimeout(total=600)) as response:
+                    response.raise_for_status()
+                    return await response.json()
+        except (aiohttp.ClientError, aiohttp.ClientResponseError) as e:
             print(f"请求(数据总量={len(data)})失败，错误信息: {e}，重试第 {retries + 1} 次...")
             retries += 1
             if retries < max_retries:
-                time.sleep(retry_delay)
+                await asyncio.sleep(retry_delay)
     print("达到最大重试次数，请求失败。")
     return None
 
 
-def compute_rm_score(
+async def compute_rm_score(
+        urls: List[str],
         batch_solution_str,
         batch_ground_truth,
         postprocess_solution_fn,
         parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD,
-        judge_prompt_key="ground_truth"
+        judge_prompt_key="ground_truth",
+        desc=""
 ):
     input_datas = []
     rewards = {}
@@ -97,8 +105,8 @@ def compute_rm_score(
         input_datas.append(input_data)
 
     if len(input_datas) > 0:
-        for batch in tqdm_nonasync(batchify(input_datas, n=128), desc=f'[RM][{RM_URLS}] batchify inference (batch=128)'):
-            output_datas = rm_request_with_retry(RM_URLS, batch)
+        for batch in tqdm_nonasync(batchify(input_datas, n=128), desc=f'[RM{desc}][{urls}] batchify inference (batch=128)'):
+            output_datas = await rm_request_with_retry(urls, batch)
             for _ in output_datas['reward']:
                 _id = int(_["id"])
                 rewards[_id] = _["rm_score"]
@@ -816,27 +824,44 @@ class QwQLongCoTPretrainRefineComputeScore(object):
             "NoteRep": 0.5,
         }
 
-    def get_rm_rewards(self,
-                       batch_data_sources,
-                       batch_solution_str,
-                       batch_ground_truth):
-        # 评价除思考过程的改写内容
+    async def get_revise_rm_rewards(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            urls=RM_URLS):
+        """
+            评价除去处思考过程后的改写内容
+        """
         refine_judges = []
         for _ in batch_ground_truth:
             refine_judges.append({
                 "ground_truth": f'你是一名专精于大模型数据改写的治理专家。目标是给定一篇从网页爬取或者PDF解析出来的文档，改写成一篇优质的大语言模型预训练语料。\n\n[Raw Corpus]\n{_["ground_truth"]}\n\n\n# 评价标准\n{self.JUDGE_CRITERIA_WO_NOTES}'
             })
-        rewards1 = compute_rm_score(
+        rewards = await compute_rm_score(
+            urls=urls,
             batch_solution_str=batch_solution_str,
             batch_ground_truth=refine_judges,
             postprocess_solution_fn=parse_doc_wo_notes_and_tags,
-            parse_result_failure_score=self.parse_result_failure_score
+            parse_result_failure_score=self.parse_result_failure_score,
+            desc="-judge_wo_notes"
         )
+        return rewards
 
-        # 整体评价思考过程
+    async def get_notes_mix_rm_rewards(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            urls=RM_URLS,
+            default_penalty=-0.1
+    ):
+        """
+            评价整体改写后的内容（思考过程+原文）
+        """
         addition_judge = []
         new_batch_solution_str = []
-        indices1 = []
+        indices = []
         for i, (_, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
             notes = get_notes(sol)
             if len(notes) == 0:
@@ -844,40 +869,39 @@ class QwQLongCoTPretrainRefineComputeScore(object):
             addition_judge.append({
                 "ground_truth": f'你是一名专精于大模型数据改写的治理专家。目标是给定一篇从网页爬取或者PDF解析出来的文档，改写成一篇优质的大语言模型预训练语料。目标是给定一篇从网页爬取或者PDF解析出来的文档增加注释（思考过程）。好的新增思考过程应当满足下面的标准\n\n# 评价标准\n{self.JUDGE_CRITERIA_W_NOTES}'
             })
-            indices1.append(i)
+            indices.append(i)
             new_batch_solution_str.append(sol)
 
-        rewards2 = compute_rm_score(
+        rewards = await compute_rm_score(
+            urls=urls,
             batch_solution_str=new_batch_solution_str,
             batch_ground_truth=addition_judge,
             postprocess_solution_fn=parse_doc_w_notes,
-            parse_result_failure_score=self.parse_result_failure_score
+            parse_result_failure_score=self.parse_result_failure_score,
+            desc="-judge_w_notes"
         )
+        full_rewards = []
+        for i in range(len(batch_solution_str)):
+            if i in indices:
+                full_rewards.append(rewards[indices.index(i)])
+            else:
+                full_rewards.append(default_penalty)
+        return full_rewards
 
-        # 思考过程单独拆分
+    async def get_thinking_rm_rewards(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            urls=RM_URLS,
+            default_penalty=-0.1
+    ):
+        """
+            单独评价思考过程
+        """
         addition_judge = []
         new_batch_solution_str = []
-        indices2 = []
-        for i, (_, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-            notes = get_notes_and_conclusions(sol)
-            if len(notes) == 0:
-                continue
-
-            addition_judge.append({
-                "ground_truth": f'你是一个擅长深度思考的思想家，你会完成高质量的思考过程，并一步一步思考达到最终的结论。\n\n# 评价标准\n{self.JUDGE_CRITERIA_THINKING_QUALITY}'
-            })
-            indices2.append(i)
-            new_batch_solution_str.append("\n\n\n".join(notes))
-        rewards3 = compute_rm_score(
-            batch_solution_str=new_batch_solution_str,
-            batch_ground_truth=addition_judge,
-            postprocess_solution_fn=lambda x: x,
-            parse_result_failure_score=self.parse_result_failure_score
-        )
-        # 提问评价单独拆分
-        addition_judge = []
-        new_batch_solution_str = []
-        indices3 = []
+        indices = []
         for i, (_, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
             notes = get_notes_and_conclusions(sol)
             if len(notes) == 0:
@@ -886,41 +910,106 @@ class QwQLongCoTPretrainRefineComputeScore(object):
             addition_judge.append({
                 "ground_truth": f'你是一个擅长提问的思考者。你需要提出高质量的问题并回答。\n\n# 评价标准\n{self.JUDGE_CRITERIA_QUESTION_QUALITY}'
             })
-            indices3.append(i)
+            indices.append(i)
             new_batch_solution_str.append("\n\n\n".join(notes))
-        rewards4 = compute_rm_score(
+        rewards = await compute_rm_score(
+            urls=urls,
             batch_solution_str=new_batch_solution_str,
             batch_ground_truth=addition_judge,
             postprocess_solution_fn=lambda x: x,
-            parse_result_failure_score=self.parse_result_failure_score
+            parse_result_failure_score=self.parse_result_failure_score,
+            desc="-judge_thinking"
         )
+        full_rewards = []
+        for i in range(len(batch_solution_str)):
+            if i in indices:
+                full_rewards.append(rewards[indices.index(i)])
+            else:
+                full_rewards.append(default_penalty)
+        return full_rewards
 
-        rewards = []
-        for i, _reward1 in enumerate(rewards1):
-            cur_reward = _reward1
+    async def get_question_rm_rewards(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            urls=RM_URLS,
+            default_penalty=-0.1
+    ):
+        """
+            单独评价提问质量
+        """
+        addition_judge = []
+        new_batch_solution_str = []
+        indices = []
+        for i, (_, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            notes = get_notes_and_conclusions(sol)
+            if len(notes) == 0:
+                continue
 
-            if i in indices1:
-                cur_reward += rewards2[indices1.index(i)]
-            if i in indices2:
-                cur_reward = + rewards3[indices2.index(i)]
-            if i in indices3:
-                cur_reward = + rewards4[indices3.index(i)]
+            addition_judge.append({
+                "ground_truth": f'你是一个擅长提问的思考者。你需要提出高质量的问题并回答。\n\n# 评价标准\n{self.JUDGE_CRITERIA_QUESTION_QUALITY}'
+            })
+            indices.append(i)
+            new_batch_solution_str.append("\n\n\n".join(notes))
+        rewards = await compute_rm_score(
+            urls=urls,
+            batch_solution_str=new_batch_solution_str,
+            batch_ground_truth=addition_judge,
+            postprocess_solution_fn=lambda x: x,
+            parse_result_failure_score=self.parse_result_failure_score,
+            desc="-judge_questioning"
+        )
+        full_rewards = []
+        for i in range(len(batch_solution_str)):
+            if i in indices:
+                full_rewards.append(rewards[indices.index(i)])
+            else:
+                full_rewards.append(default_penalty)
+        return full_rewards
 
-            rewards.append(cur_reward)
+    async def get_rm_rewards(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth):
+        tasks = [
+            self.get_revise_rm_rewards(
+                batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[0]]),
+            self.get_notes_mix_rm_rewards(
+                batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[1]]),
+            self.get_thinking_rm_rewards(
+                batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[2]]),
+            self.get_question_rm_rewards(
+                batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[3]])
+        ]
+        results = await asyncio.gather(*tasks)
+        rewards_union = [0.0] * len(batch_data_sources)
+        for result in results:
+            for i, reward in enumerate(result):
+                rewards_union[i] += reward
 
-        return rewards
+        return rewards_union
 
     def compute_score(self,
                       batch_data_sources,
                       batch_solution_str,
                       batch_ground_truth,
                       ):
+        async def main():
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+        return asyncio.run(main())
+
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
 
         penalty = defaultdict(dict)
         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
             for key, fn in self.get_penalties().items():
                 penalty[key][i] = fn(solution_str, ground_truth)
-        base_rewards = self.get_rm_rewards(
+        base_rewards = await self.get_rm_rewards(
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth
