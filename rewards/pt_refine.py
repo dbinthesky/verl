@@ -17,7 +17,7 @@ en_mt = MosesTokenizer(lang='en')
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 RM_URLS = [
-    "http://10.130.1.180:5020"
+    "http://10.130.0.53:5015"
 ]
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 
@@ -727,38 +727,38 @@ class QwQLongCoTPretrainRefineComputeScore(object):
                     except Exception as _:
                         pass
 
-                final_results.append(_reward)
-                thought = get_thought(batch_solution_str[i])
+            final_results.append(_reward)
+            thought = get_thought(batch_solution_str[i])
 
-                notes_summary = get_notes(batch_solution_str[i])
+            notes_summary = get_notes(batch_solution_str[i])
 
-                if self.split == "valid":
-                    print(
-                        f"--------------------------------[VALID]--------------------------------")
-                    print(
-                        f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
-                    print(
-                        f"【Refine】({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`")
-                    print(
-                        f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})``{self.log_ground_truth(batch_ground_truth[i])}`')
-                    print(
-                        f'[Final Reward]({self.get_penalty_coef()})={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|{"|".join(penalty_log_str)}\n')
-                    for i, note in enumerate(notes_summary, start=1):
-                        print(f'\t【新增注释{i}】{repr(note)}')
-                elif self.split == "train" and random.random() < 0.01:
-                    print(
-                        f"--------------------------------[TRAIN]--------------------------------")
-                    print(
-                        f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
-                    print(
-                        f"【Refine】({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`")
-                    print(
-                        f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})`{self.log_ground_truth(batch_ground_truth[i])}`')
-                    print(
-                        f'[Final Reward]({self.get_penalty_coef()})={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|{"|".join(penalty_log_str)}\n')
-                    for i, note in enumerate(notes_summary, start=1):
-                        print(f'\t【新增注释{i}】...{repr(note)}')
-            return final_results
+            if self.split == "valid":
+                print(
+                    f"--------------------------------[VALID]--------------------------------")
+                print(
+                    f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
+                print(
+                    f"【Refine】({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})``{self.log_ground_truth(batch_ground_truth[i])}`')
+                print(
+                    f'[Final Reward]={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
+                for i, note in enumerate(notes_summary, start=1):
+                    print(f'\t【新增注释{i}】{repr(note)}')
+            elif self.split == "train" and random.random() < 0.01:
+                print(
+                    f"--------------------------------[TRAIN]--------------------------------")
+                print(
+                    f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
+                print(
+                    f"【Refine】({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})`{self.log_ground_truth(batch_ground_truth[i])}`')
+                print(
+                    f'[Final Reward]={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
+                for i, note in enumerate(notes_summary, start=1):
+                    print(f'\t【新增注释{i}】...{repr(note)}')
+        return final_results
 
     def log_ground_truth(self, ground_truth):
         return repr(self.clip_string(ground_truth["ground_truth"]))
