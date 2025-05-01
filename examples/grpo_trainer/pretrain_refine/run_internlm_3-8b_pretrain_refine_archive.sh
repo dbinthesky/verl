@@ -49,9 +49,13 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_pretrain_refine_e2e_v1_0_1_80_open_source_hf"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/reason_pretrain_v2_8k_train_fix_0427_enzh_balance"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/pdf_2025_v1_zh_en_4k_e2e_refine_test_fix"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_pretrain_refine_e2e_v1_0_2_127_open_source_hf"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_distill_qwq_aime_gpqa_aug_v1_250405_10929_open_source_hf"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/internlm3-8b_pretrain_e2e_refine_v1-dlc-2025-04-30-11-06-21_grpo_step_20"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/internlm3-8b_pretrain_e2e_refine_v1-dlc-2025-04-30-09-40-37_grpo_step_40"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_pretrain_refine_e2e_v1_0_3_20_open_source_hf"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/reason_pretrain_v3_8k_train_0501"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/reason_pretrain_v3_8k_test_0501"
 
     experiment_name="internlm3-8b_pretrain_e2e_refine_v1-dlc-${YYMMDD}-${HHMMSS}"
     project_name="verl_grpo_internlm_pretrain_e2e_refine"
@@ -88,16 +92,16 @@ run_training() {
     # self.config.actor.ppo_micro_batch_size_per_gpu = self.config.actor.ppo_micro_batch_size
 
     python3 -m verl.trainer.main_ppo \
-        custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/rm_w_criteria.py" \
-        custom_reward_function.name=cot_pretrain_refine_compute_score_train \
-        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/rm_w_criteria.py" \
-        +custom_valid_reward_function.name=cot_pretrain_refine_compute_score_valid \
+        custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/pt_refine.py" \
+        custom_reward_function.name=qwq_longcot_pretrain_refine_compute_score_train \
+        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/pt_refine.py" \
+        +custom_valid_reward_function.name=qwq_longcot_pretrain_refine_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=256 \
-        data.max_prompt_length=12288 \
-        data.max_response_length=12288 \
+        data.train_batch_size=64 \
+        data.max_prompt_length=16384 \
+        data.max_response_length=16384 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
@@ -108,7 +112,7 @@ run_training() {
         actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus * 4)) \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=24576 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=32768 \
         actor_rollout_ref.actor.use_kl_loss=False \
         actor_rollout_ref.actor.kl_loss_coef=0.0 \
         actor_rollout_ref.actor.entropy_coeff=0.001 \

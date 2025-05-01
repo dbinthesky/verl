@@ -19,11 +19,17 @@ en_mt = MosesTokenizer(lang='en')
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 RM_URLS = [
-    "http://10.130.1.95:27337",
-    "http://10.130.1.95:25950",
-    "http://10.130.1.95:26240",
-    "http://10.130.1.95:34377"
+    "http://10.130.1.95:34604",
+    "http://10.130.1.95:34580",
+    "http://10.130.1.95:31929",
+    "http://10.130.1.95:31400"
 ]
+# RM_URLS = [
+#     "http://10.130.1.95:27337",
+#     "http://10.130.1.95:25950",
+#     "http://10.130.1.95:26240",
+#     "http://10.130.1.95:34377"
+# ]
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 
 
@@ -442,7 +448,7 @@ class MainBodyRecall(PenaltyOrReward):
 class LanguageConsistencyReward(PenaltyOrReward):
     def __init__(self,
                  postprocess_solution_fn,
-                 penalty_base=0.8,
+                 penalty_base=0.3,
                  ):
         self.postprocess_solution_fn = postprocess_solution_fn
         self.penalty_base = penalty_base

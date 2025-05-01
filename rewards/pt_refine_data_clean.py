@@ -15,7 +15,8 @@ from pt_refine import (
     MainBodyRecall,
     LengthDiffPenalty,
     NotesFormatReward,
-    NotesRepetitionPenalty
+    NotesRepetitionPenalty,
+    get_notes_and_conclusions
 )
 
 
@@ -71,8 +72,13 @@ def main(input_filename, output_filename, index, total):
                     else:
                         gt = gt[gt.index("[RAW DOCUMENT]")
                                          :gt.index("# 提示")].strip()
+                    output = {}
+                    output["lang_code"] = "zh" if contain_chinese(gt) else "en"
+                    # if output["lang_code"] == "zh":
+                    #     continue
+
                     if recall.get_penalty_or_reward(
-                            example["output"], {"ground_truth": gt}) < 1.0:
+                            example["output"], {"ground_truth": gt}) < 0.8:
                         continue
 
                     # 检测参考文献是否被删除
@@ -83,13 +89,10 @@ def main(input_filename, output_filename, index, total):
                         continue
 
                     if format_reward.get_penalty_or_reward(
-                            example["output"], {"ground_truth": gt}) < 0.05:
+                            example["output"], {"ground_truth": gt}) < 0.00:
                         continue
-                    print(format_reward.get_penalty_or_reward(
-                            example["output"], {"ground_truth": gt}))
-                    raise NotImplementedError
                     notes = re.findall(
-                        r'\[Note\].*?\[/Note\]', document, re.DOTALL)
+                        r'\[EXPLANATION\].*?\[/EXPLANATION\]', document, re.DOTALL)
 
                     flag = False
                     if all(("Question:" in _) and ("Think Step by Step") for _ in notes) or all(("提问：" in _) and ("一步步思考") for _ in notes):
@@ -99,18 +102,28 @@ def main(input_filename, output_filename, index, total):
                     if rep_penalty.get_penalty_or_reward(
                             example["output"], {"ground_truth": gt}) < -1.2:
                         continue
-                    output = {}
-                    output["lang_code"] = "zh" if contain_chinese(
-                        gt) else "en"
-                    output["response"] = document
+
+                    notes = get_notes_and_conclusions(example["output"])
+
+                    if len(notes) == 0:
+                        continue
+                    if output["lang_code"] == "zh":
+                        if not all(("提问" in _ and "一步步思考" in _) for _ in notes):
+                            continue
+                    else:
+                        if not all(("Question" in _ and "Think Step by Step" in _) for _ in notes):
+                            continue
+
+                    output["response"] = example["output"]
                     prompt = example["prompt"]
+
                     prompt = prompt[prompt.index(
                         "<s><|im_start|>user")+len("<s><|im_start|>user"):prompt.index("<|im_end|>\n<|im_start|>assistant")].strip()
-                    if "# 提示：下面的文档是中文的，" in prompt:
+                    if "# 提示：" in prompt:
                         prompt = prompt[:prompt.index(
-                            "# 提示：下面的文档是中文的，")].strip()
+                            "# 提示：")].strip()
                     else:
-                        prompt = prompt[:prompt.index("# Hint")].strip()
+                        prompt = prompt[:prompt.index("# Hint: ")].strip()
                     prompt = prompt.replace("现在请开始你的任务，对下面的数据增加注解，注意不要改变原文的内容，你需要先一步步思考，把你的思考过程放在<chain-of-thought> </chain-of-thought>里面，再输出**增加注解后**的语料在<doc> </doc>部分。注意回答语言和文档语言保持一致。\nNow, please start your task, add annotations to the following data. Pay attention not to change the original content. You need to think step by step first, put your thinking process within <chain-of-thought> </chain-of-thought>, then output the annotated corpus in the <doc> </doc> part. Pay attention to keeping the answering language consistent with the document language.", "")
                     output["prompt"] = prompt
                     g.write(f'{json.dumps(output, ensure_ascii=False)}\n')
