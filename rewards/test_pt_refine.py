@@ -14,10 +14,12 @@ from pt_refine import (
     parse_doc_w_notes,
     parse_doc_wo_notes_and_tags,
     parse_solution_fn,
+    parse_solution_fn,
     MainBodyRecall,
     LengthDiffPenalty,
     NotesFormatReward,
     NotesRepetitionPenalty,
+    LanguageConsistencyReward,
     QwQLongCoTPretrainRefineComputeScore,
     qwq_longcot_pretrain_refine_compute_score_valid,
     qwq_longcot_pretrain_refine_compute_score_train
@@ -73,6 +75,15 @@ class TestPretrainRefine(unittest.TestCase):
             print(recall.get_penalty_or_reward(
                 solution_str, ground_truth))
 
+    def test_language_consistency_reward(self):
+        batch_solution_str, batch_ground_truth = load_pretrain_refinement(
+            num=100)
+        penalty = LanguageConsistencyReward(
+            postprocess_solution_fn=parse_solution_fn)
+        for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
+            print(penalty.get_penalty_or_reward(
+                solution_str, ground_truth))
+
     def test_length_diff_penalty(self):
         batch_solution_str, batch_ground_truth = load_pretrain_refinement(
             num=100)
@@ -104,7 +115,7 @@ class TestPretrainRefine(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_pretrain_refinement(
             num=100)
         task = QwQLongCoTPretrainRefineComputeScore(split="valid")
-        qwq_longcot_pretrain_refine_compute_score_train(
+        qwq_longcot_pretrain_refine_compute_score_valid(
             [None] *
             len(batch_solution_str), batch_solution_str, batch_ground_truth
         )

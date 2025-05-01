@@ -18,17 +18,11 @@ en_mt = MosesTokenizer(lang='en')
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-# RM_URLS = [
-#     "http://10.130.1.17:27308",
-#     "http://10.130.1.17:25065",
-#     "http://10.130.1.17:27338",
-#     "http://10.130.1.17:29686"
-# ]
 RM_URLS = [
-    "http://10.130.1.74:33219",
-    "http://10.130.1.74:33136",
-    "http://10.130.1.74:28788",
-    "http://10.130.1.74:28788"
+    "http://10.130.0.154:34057",
+    "http://10.130.0.154:27516",
+    "http://10.130.0.154:25631",
+    "http://10.130.0.154:34057"
 ]
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 
@@ -72,7 +66,7 @@ async def rm_request_with_retry(urls, data, max_retries=3, retry_delay=1, suffix
         try:
             url = random.choice(urls)
             async with aiohttp.ClientSession() as session:
-                async with session.post(f'{url}{suffix}', json=data, timeout=aiohttp.ClientTimeout(total=600)) as response:
+                async with session.post(f'{url}{suffix}', json=data, timeout=aiohttp.ClientTimeout(total=1200)) as response:
                     response.raise_for_status()
                     return await response.json()
         except (aiohttp.ClientError, aiohttp.ClientResponseError) as e:
@@ -111,7 +105,7 @@ async def compute_rm_score(
         input_datas.append(input_data)
 
     if len(input_datas) > 0:
-        for batch in tqdm_nonasync(batchify(input_datas, n=128), desc=f'[RM{desc}][{urls}] batchify inference (batch=128)'):
+        for batch in tqdm_nonasync(batchify(input_datas, n=128), desc=f'[RM{desc}][{urls}] batchify inference (batch=64)'):
             output_datas = await rm_request_with_retry(urls, batch)
             for _ in output_datas['reward']:
                 _id = int(_["id"])
@@ -443,6 +437,49 @@ class MainBodyRecall(PenaltyOrReward):
         except Exception as err:
             print(f'[ERROR] {err}')
             return self.parse_result_failure_score
+
+
+class LanguageConsistencyReward(PenaltyOrReward):
+    def __init__(self,
+                 postprocess_solution_fn,
+                 penalty_base=0.2,
+                 mode="lt"
+                 ):
+        self.postprocess_solution_fn = postprocess_solution_fn
+        self.penalty_base = penalty_base
+        self.mode = mode
+
+    def get_penalty_or_reward(self, solution_str, ground_truth, lang_code=None):
+        solution_str = self.postprocess_solution_fn(solution_str)
+        if solution_str is None:
+            return 0.
+
+        gt = ground_truth["ground_truth"]
+        if lang_code is None:
+            if contain_chinese(gt):
+                lang_code = "zh"
+            else:
+                lang_code = "en"
+        thought, document = solution_str
+        reward = 0.0
+        if lang_code == "en":
+            if not contain_chinese(thought):
+                reward += self.penalty_base / 2
+        else:
+            if contain_chinese(thought):
+                reward += self.penalty_base / 2
+
+        explanation = re.findall(
+            r'\[EXPLANATION\](.*?)\[/EXPLANATION\]', document, re.DOTALL)
+        if len(explanation) != 0:
+            if lang_code == "zh":
+                consist = len(
+                    [_ for _ in explanation if contain_chinese(_)]) / len(explanation)
+            else:
+                consist = len(
+                    [_ for _ in explanation if not contain_chinese(_)]) / len(explanation)
+            reward += consist * self.penalty_base / 2
+        return reward
 
 
 class LengthDiffPenalty(PenaltyOrReward):
@@ -813,13 +850,16 @@ class QwQLongCoTPretrainRefineComputeScore(object):
             postprocess_solution_fn=parse_doc_w_notes)
         self.note_rep = NotesRepetitionPenalty(
             postprocess_solution_fn=parse_doc_w_notes)
+        self.lang_consist = LanguageConsistencyReward(
+            postprocess_solution_fn=parse_solution_fn)
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
             "TextRecall": self.recall.get_penalty_or_reward,
             "LengthDiff": self.len_diff.get_penalty_or_reward,
             "NoteFormat": self.note_format.get_penalty_or_reward,
-            "NoteRep": self.note_rep.get_penalty_or_reward
+            "NoteRep": self.note_rep.get_penalty_or_reward,
+            "LangConsistency": self.lang_consist.get_penalty_or_reward
         }
 
     def get_penalty_coef(self):
@@ -828,6 +868,7 @@ class QwQLongCoTPretrainRefineComputeScore(object):
             "LengthDiff": 1.0,
             "NoteFormat": 1.0,
             "NoteRep": 0.5,
+            "LangConsistency": 1.0
         }
 
     async def get_revise_rm_rewards(
