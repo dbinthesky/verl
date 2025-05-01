@@ -85,6 +85,9 @@ def main(input_filename, output_filename, index, total):
                     if format_reward.get_penalty_or_reward(
                             example["output"], {"ground_truth": gt}) < 0.05:
                         continue
+                    print(format_reward.get_penalty_or_reward(
+                            example["output"], {"ground_truth": gt}))
+                    raise NotImplementedError
                     notes = re.findall(
                         r'\[Note\].*?\[/Note\]', document, re.DOTALL)
 
