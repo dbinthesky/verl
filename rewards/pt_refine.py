@@ -448,7 +448,7 @@ class MainBodyRecall(PenaltyOrReward):
 class LanguageConsistencyReward(PenaltyOrReward):
     def __init__(self,
                  postprocess_solution_fn,
-                 penalty_base=0.3,
+                 penalty_base=0.8,
                  ):
         self.postprocess_solution_fn = postprocess_solution_fn
         self.penalty_base = penalty_base
@@ -470,15 +470,19 @@ class LanguageConsistencyReward(PenaltyOrReward):
             if not contain_chinese(thought):
                 reward += self.penalty_base / 2
         else:
-            if contain_chinese(thought):
-                reward += self.penalty_base / 2
+            pass
+            # FIXME
+            # if contain_chinese(thought):
+            #     reward += self.penalty_base / 2
 
         explanation = re.findall(
             r'\[EXPLANATION\](.*?)\[/EXPLANATION\]', document, re.DOTALL)
         if len(explanation) != 0:
             if lang_code == "zh":
-                consist = len(
-                    [_ for _ in explanation if contain_chinese(_)]) / len(explanation)
+                consist = 0
+                # FIXME
+                # consist = len(
+                #     [_ for _ in explanation if contain_chinese(_)]) / len(explanation)
             else:
                 consist = len(
                     [_ for _ in explanation if not contain_chinese(_)]) / len(explanation)
@@ -552,15 +556,11 @@ class NotesFormatReward(PenaltyOrReward):
         # 思考过程奖励
         try:
             loose_follow = re.findall(
-                r'\[EXPLANATION\].*?\[/EXPLANATION\]', solution_str, re.DOTALL)
-            strict_follow = re.findall(
                 r'\[EXPLANATION\].*?\[/EXPLANATION\]\n*\[CONCLUSION\].*?\[/CONCLUSION\]', solution_str, re.DOTALL)
-            more_strict_follow = [_ for _ in loose_follow if (
+            strict_follow = [_ for _ in loose_follow if (
                 ("Question:" in _ and "Think Step by Step:" in _) or ("提问：" in _ and "一步步思考：" in _))]
-
-            score = min(len(loose_follow), self.max_steps) * self.step_reward/3 + \
-                min(len(strict_follow), self.max_steps) * self.step_reward/3 + \
-                min(len(more_strict_follow), self.max_steps) * self.step_reward/3
+            score = min(len(loose_follow), self.max_steps) * self.step_reward/2 + \
+                min(len(strict_follow), self.max_steps) * self.step_reward/2
             return base_score + min(score, self.max_reward)
         except Exception as err:
             return base_score
@@ -871,7 +871,7 @@ class QwQLongCoTPretrainRefineComputeScore(object):
             "TextRecall": 1.0,
             "LengthDiff": 1.0,
             "NoteFormat": 1.0,
-            "NoteRep": 0.5,
+            "NoteRep": 0.7,
             "LangConsistency": 1.0
         }
 
@@ -915,6 +915,9 @@ class QwQLongCoTPretrainRefineComputeScore(object):
         indices = []
         for i, (_, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
             notes = get_notes(sol)
+            notes_w_coclusions = get_notes_and_conclusions(sol)
+            if len(notes) != len(notes_w_coclusions):
+                continue
             if len(notes) == 0:
                 continue
             addition_judge.append({
@@ -954,15 +957,19 @@ class QwQLongCoTPretrainRefineComputeScore(object):
         new_batch_solution_str = []
         indices = []
         for i, (_, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-            notes = get_notes_and_conclusions(sol)
-            if len(notes) == 0:
+            notes = get_notes(sol)
+            notes_w_coclusions = get_notes_and_conclusions(sol)
+            if len(notes) != len(notes_w_coclusions):
+                continue
+
+            if len(notes_w_coclusions) == 0:
                 continue
 
             addition_judge.append({
                 "ground_truth": f'你是一个擅长提问的思考者。你需要提出高质量的问题并回答。\n\n# 评价标准\n{self.JUDGE_CRITERIA_QUESTION_QUALITY}'
             })
             indices.append(i)
-            new_batch_solution_str.append("\n\n\n".join(notes))
+            new_batch_solution_str.append("\n\n\n".join(notes_w_coclusions))
         rewards = await compute_rm_score(
             urls=urls,
             batch_solution_str=new_batch_solution_str,
@@ -994,15 +1001,18 @@ class QwQLongCoTPretrainRefineComputeScore(object):
         new_batch_solution_str = []
         indices = []
         for i, (_, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-            notes = get_notes_and_conclusions(sol)
-            if len(notes) == 0:
+            notes = get_notes(sol)
+            notes_w_coclusions = get_notes_and_conclusions(sol)
+            if len(notes) != len(notes_w_coclusions):
+                continue
+            if len(notes_w_coclusions) == 0:
                 continue
 
             addition_judge.append({
                 "ground_truth": f'你是一个擅长提问的思考者。你需要提出高质量的问题并回答。\n\n# 评价标准\n{self.JUDGE_CRITERIA_QUESTION_QUALITY}'
             })
             indices.append(i)
-            new_batch_solution_str.append("\n\n\n".join(notes))
+            new_batch_solution_str.append("\n\n\n".join(notes_w_coclusions))
         rewards = await compute_rm_score(
             urls=urls,
             batch_solution_str=new_batch_solution_str,
@@ -1035,11 +1045,16 @@ class QwQLongCoTPretrainRefineComputeScore(object):
         ]
         results = await asyncio.gather(*tasks)
         rewards_union = [0.0] * len(batch_data_sources)
-        for result in results:
+        rewards_split = []
+        for i in range(len(batch_data_sources)):
+            rewards_split.append([0.0] * len(tasks))
+
+        for j, result in enumerate(results):
             for i, reward in enumerate(result):
                 rewards_union[i] += reward
+                rewards_split[i][j] = reward
 
-        return rewards_union
+        return rewards_union, rewards_split
 
     def compute_score(self,
                       batch_data_sources,
@@ -1060,11 +1075,12 @@ class QwQLongCoTPretrainRefineComputeScore(object):
         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
             for key, fn in self.get_penalties().items():
                 penalty[key][i] = fn(solution_str, ground_truth)
-        base_rewards = await self.get_rm_rewards(
+        base_rewards, base_rewards_split = await self.get_rm_rewards(
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth
         )
+
         final_results = []
         for i in range(len(batch_solution_str)):
             penalty_log_str = []
@@ -1093,7 +1109,7 @@ class QwQLongCoTPretrainRefineComputeScore(object):
                 print(
                     f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})``{self.log_ground_truth(batch_ground_truth[i])}`')
                 print(
-                    f'[Final Reward]={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
+                    f'[Final Reward]={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|RM_SPLIT={base_rewards_split[i]}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
                 for i, note in enumerate(notes_summary, start=1):
                     print(f'\t【新增注释{i}】{repr(note)}')
             elif self.split == "train" and random.random() < 0.01:
@@ -1106,7 +1122,7 @@ class QwQLongCoTPretrainRefineComputeScore(object):
                 print(
                     f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})`{self.log_ground_truth(batch_ground_truth[i])}`')
                 print(
-                    f'[Final Reward]={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
+                    f'[Final Reward]={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|RM_SPLIT={base_rewards_split[i]}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
                 for i, note in enumerate(notes_summary, start=1):
                     print(f'\t【新增注释{i}】{repr(note)}')
         return final_results

@@ -53,9 +53,11 @@ setup_path() {
     # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_distill_qwq_aime_gpqa_aug_v1_250405_10929_open_source_hf"
     # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/internlm3-8b_pretrain_e2e_refine_v1-dlc-2025-04-30-11-06-21_grpo_step_20"
     # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/internlm3-8b_pretrain_e2e_refine_v1-dlc-2025-04-30-09-40-37_grpo_step_40"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_pretrain_refine_e2e_v1_0_3_20_open_source_hf"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/reason_pretrain_v3_8k_train_0501"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/reason_pretrain_v3_8k_test_0501"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_pretrain_refine_e2e_v1_0_3_20_open_source_hf"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/internlm3-8b_pretrain_e2e_refine_v1-dlc-2025-05-01-14-02-14_grpo_step_10"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/internlm3-8b_pretrain_e2e_refine_v1-dlc-2025-05-02-00-14-04_grpo_step_30"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/reason_pretrain_v3_8k_train_0503"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/reason_pretrain_v3_8k_test_0502"
 
     experiment_name="internlm3-8b_pretrain_e2e_refine_v1-dlc-${YYMMDD}-${HHMMSS}"
     project_name="verl_grpo_internlm_pretrain_e2e_refine"
@@ -99,7 +101,7 @@ run_training() {
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=64 \
+        data.train_batch_size=256 \
         data.max_prompt_length=16384 \
         data.max_response_length=16384 \
         data.filter_overlong_prompts=True \
