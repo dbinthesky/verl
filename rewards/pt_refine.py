@@ -17,19 +17,12 @@ en_mt = MosesTokenizer(lang='en')
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
 RM_URLS = [
-    "http://10.130.1.95:34604",
-    "http://10.130.1.95:34580",
-    "http://10.130.1.95:31929",
-    "http://10.130.1.95:31400"
+    "http://10.130.1.36:25014",
+    "http://10.130.1.36:30638",
+    "http://10.130.1.36:26341",
+    "http://10.130.1.36:25446"
 ]
-# RM_URLS = [
-#     "http://10.130.1.95:27337",
-#     "http://10.130.1.95:25950",
-#     "http://10.130.1.95:26240",
-#     "http://10.130.1.95:34377"
-# ]
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 
 
@@ -397,7 +390,7 @@ class MainBodyRecall(PenaltyOrReward):
     def __init__(self,
                  postprocess_solution_fn,
                  parse_result_failure_score=0.,
-                 high_range=0.75,
+                 high_range=0.85,
                  middle_range=0.6,
                  low_range_penalty=-0.1
                  ):
@@ -429,8 +422,8 @@ class MainBodyRecall(PenaltyOrReward):
 
             score = self.scorer.score(gt_tokenized, sl_tokenized)
 
-            rouge_recall = (score["rouge1"].recall +
-                            score["rouge2"].recall) / 2.0
+            rouge_recall = (score["rouge1"].fmeasure +
+                            score["rouge2"].fmeasure) / 2.0
 
             # 分段函数打分
             if rouge_recall >= self.high_range:
@@ -472,8 +465,8 @@ class LanguageConsistencyReward(PenaltyOrReward):
         else:
             pass
             # FIXME
-            # if contain_chinese(thought):
-            #     reward += self.penalty_base / 2
+            if contain_chinese(thought):
+                reward += self.penalty_base / 2
 
         explanation = re.findall(
             r'\[EXPLANATION\](.*?)\[/EXPLANATION\]', document, re.DOTALL)
@@ -481,8 +474,8 @@ class LanguageConsistencyReward(PenaltyOrReward):
             if lang_code == "zh":
                 consist = 0
                 # FIXME
-                # consist = len(
-                #     [_ for _ in explanation if contain_chinese(_)]) / len(explanation)
+                consist = len(
+                    [_ for _ in explanation if contain_chinese(_)]) / len(explanation)
             else:
                 consist = len(
                     [_ for _ in explanation if not contain_chinese(_)]) / len(explanation)
@@ -534,11 +527,13 @@ class NotesFormatReward(PenaltyOrReward):
                  max_reward=0.1,
                  step_reward=0.01,
                  max_steps=10,
+                 min_penalty=-2.0
                  ):
         self.postprocess_solution_fn = postprocess_solution_fn
         self.max_reward = max_reward
         self.step_reward = step_reward
         self.max_steps = max_steps
+        self.min_penalty = min_penalty
 
     def get_penalty_or_reward(self, solution_str, ground_truth, lang_code=None):
         solution_str = self.postprocess_solution_fn(solution_str)
@@ -550,13 +545,22 @@ class NotesFormatReward(PenaltyOrReward):
         # [EXPLANATION][/EXPLANATION]闭合
         wo_notes = re.sub(r'\[EXPLANATION\][\s\S]*?\[/EXPLANATION\]',
                           "", solution_str, flags=re.DOTALL)
-        if any(_ in wo_notes for _ in ("[EXPLANATION]", "[/EXPLANATION]")):
-            base_score -= 0.5
+        if any(_ in wo_notes.upper() for _ in ("[EXPLANATION]", "[/EXPLANATION]")):
+            base_score -= self.min_penalty
+
+        notes = re.findall(
+            r'\[EXPLANATION\](.*?)\[/EXPLANATION\]', solution_str, re.DOTALL)
+        prohibit_kw = (
+            "[EXPLANATION]", "[/EXPLANATION]", "[CONCLUSION]", "[/CONCLUSION]"
+        )
+        if any(any(kw in _.upper() for kw in prohibit_kw) for _ in notes):
+            base_score -= self.min_penalty
 
         # 思考过程奖励
         try:
             loose_follow = re.findall(
                 r'\[EXPLANATION\].*?\[/EXPLANATION\]\n*\[CONCLUSION\].*?\[/CONCLUSION\]', solution_str, re.DOTALL)
+
             strict_follow = [_ for _ in loose_follow if (
                 ("Question:" in _ and "Think Step by Step:" in _) or ("提问：" in _ and "一步步思考：" in _))]
             score = min(len(loose_follow), self.max_steps) * self.step_reward/2 + \
@@ -582,6 +586,13 @@ class NotesRepetitionPenalty(PenaltyOrReward):
         if solution_str is None:
             return 0.
 
+        gt = ground_truth["ground_truth"]
+        if lang_code is None:
+            if contain_chinese(gt):
+                lang_code = "zh"
+            else:
+                lang_code = "en"
+
         def normalize(s):
             s = s.replace("[EXPLANATION]", "").replace(
                 "[/EXPLANATION]", "").strip()
@@ -591,17 +602,30 @@ class NotesRepetitionPenalty(PenaltyOrReward):
             s = s.replace("提问：", "").replace("一步步思考：", "").strip()
             return s
 
-        notes = re.findall(
-            r'\[EXPLANATION\].*?\[/EXPLANATION\]', solution_str, re.DOTALL)
-        notes_str = "\n".join([normalize(_) for _ in notes])
-        if len(notes) == 0:
-            return 0.
+        notes_w_conclusions = re.findall(
+            r'\[EXPLANATION\](.*?)\[/EXPLANATION\]\n*\[CONCLUSION\](.*?)\[/CONCLUSION\]', solution_str, re.DOTALL)
+        if len(notes_w_conclusions) == 0:
+            return -1.0
 
-        gt = ground_truth["ground_truth"]
+        explanations = "\n".join([normalize(_[0])
+                                 for _ in notes_w_conclusions])
+        conclusions = "\n".join([normalize(_[1]) for _ in notes_w_conclusions])
 
-        score = self.scorer.score(gt, notes_str)
-        rouge_recall = score["rouge2"].recall
+        if lang_code == "en":
+            explanation_tokens = " ".join(en_mt.tokenize(explanations.lower()))
+            conclusion_tokens = " ".join(en_mt.tokenize(conclusions.lower()))
+            gt_tokens = " ".join(en_mt.tokenize(gt.lower()))
+        elif lang_code == "zh":
+            explanation_tokens = " ".join(list(jieba.cut(explanations)))
+            conclusion_tokens = " ".join(list(jieba.cut(conclusions)))
+            gt_tokens = " ".join(list(jieba.cut(gt)))
 
+        rouge_recall1 = self.scorer.score(explanation_tokens, conclusion_tokens)[
+            "rouge2"].recall
+        rouge_recall2 = self.scorer.score(explanation_tokens, gt_tokens)[
+            "rouge2"].recall
+
+        rouge_recall = max(rouge_recall1, rouge_recall2)
         penalty = 0.
         if rouge_recall < 0.05:
             penalty = 0.
@@ -863,7 +887,7 @@ class QwQLongCoTPretrainRefineComputeScore(object):
             "LengthDiff": self.len_diff.get_penalty_or_reward,
             "NoteFormat": self.note_format.get_penalty_or_reward,
             "NoteRep": self.note_rep.get_penalty_or_reward,
-            "LangConsistency": self.lang_consist.get_penalty_or_reward
+            "LangConsistency": self.lang_consist.get_penalty_or_reward,
         }
 
     def get_penalty_coef(self):
@@ -871,8 +895,8 @@ class QwQLongCoTPretrainRefineComputeScore(object):
             "TextRecall": 1.0,
             "LengthDiff": 1.0,
             "NoteFormat": 1.0,
-            "NoteRep": 0.7,
-            "LangConsistency": 1.0
+            "NoteRep": 0.5,
+            "LangConsistency": 1.0,
         }
 
     async def get_revise_rm_rewards(
