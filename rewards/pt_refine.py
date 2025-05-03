@@ -520,7 +520,7 @@ class LengthDiffPenalty(PenaltyOrReward):
 class NotesFormatReward(PenaltyOrReward):
     def __init__(self,
                  postprocess_solution_fn,
-                 max_reward=0.1,
+                 max_reward=0.25,
                  step_reward=0.01,
                  max_steps=10,
                  min_penalty=-2.0
