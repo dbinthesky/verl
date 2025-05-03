@@ -61,6 +61,8 @@ def load_pretrain_refinement(num=100):
             "[/Note]", f"[/EXPLANATION]\n\n[CONCLUSION]{random_generate_doc(10)}[/CONCLUSION]")
         return output
     batch_solution_str = [tag_modify(_) for _ in batch_solution_str]
+    for _ in batch_ground_truth:
+        _["lang_code"] = "zh" if contain_chinese(_["ground_truth"]) else "en"
 
     return batch_solution_str, batch_ground_truth
 

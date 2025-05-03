@@ -463,8 +463,6 @@ class LanguageConsistencyReward(PenaltyOrReward):
             if not contain_chinese(thought):
                 reward += self.penalty_base / 2
         else:
-            pass
-            # FIXME
             if contain_chinese(thought):
                 reward += self.penalty_base / 2
 
@@ -472,8 +470,6 @@ class LanguageConsistencyReward(PenaltyOrReward):
             r'\[EXPLANATION\](.*?)\[/EXPLANATION\]', document, re.DOTALL)
         if len(explanation) != 0:
             if lang_code == "zh":
-                consist = 0
-                # FIXME
                 consist = len(
                     [_ for _ in explanation if contain_chinese(_)]) / len(explanation)
             else:
@@ -542,6 +538,12 @@ class NotesFormatReward(PenaltyOrReward):
 
         base_score = 0.0
 
+        if lang_code is None:
+            if contain_chinese(gt):
+                lang_code = "zh"
+            else:
+                lang_code = "en"
+
         # [EXPLANATION][/EXPLANATION]闭合
         wo_notes = re.sub(r'\[EXPLANATION\][\s\S]*?\[/EXPLANATION\]',
                           "", solution_str, flags=re.DOTALL)
@@ -561,8 +563,12 @@ class NotesFormatReward(PenaltyOrReward):
             loose_follow = re.findall(
                 r'\[EXPLANATION\].*?\[/EXPLANATION\]\n*\[CONCLUSION\].*?\[/CONCLUSION\]', solution_str, re.DOTALL)
 
-            strict_follow = [_ for _ in loose_follow if (
-                ("Question:" in _ and "Think Step by Step:" in _) or ("提问：" in _ and "一步步思考：" in _))]
+            if lang_code == "zh":
+                strict_follow = [_ for _ in loose_follow if (
+                    "提问：" in _ and "一步步思考：" in _)]
+            else:
+                strict_follow = [_ for _ in loose_follow if (
+                    "Question:" in _ and "Think Step by Step:" in _)]
             score = min(len(loose_follow), self.max_steps) * self.step_reward/2 + \
                 min(len(strict_follow), self.max_steps) * self.step_reward/2
             return base_score + min(score, self.max_reward)
@@ -635,7 +641,7 @@ class NotesRepetitionPenalty(PenaltyOrReward):
 
 
 class QwQLongCoTPretrainRefineComputeScore(object):
-    JUDGE_CRITERIA_WO_NOTES = """
+    JUDGE_CRITERIA_WO_NOTES_ZH = """
 以下是深度整合 **内容删除治理、内容改写治理** 后的 **完整大模型数据治理评价标准（Criteria）**：
 
 
@@ -672,7 +678,39 @@ class QwQLongCoTPretrainRefineComputeScore(object):
 2. **风格匹配**：保持与原文一致的正式度和专业术语使用
 """
 
-    JUDGE_CRITERIA_W_NOTES = """
+    JUDGE_CRITERIA_WO_NOTES_EN = """
+The following is the complete evaluation criteria for large model data governance (Criteria) after in-depth integration of **content deletion governance and content rewriting governance**:
+
+### I. Content Purity
+- **Thorough Removal of Violation Content**: Explicit or implicit violation content such as pornographic hints, gambling inducements, advertising and marketing (including links/QR codes/hard brand advertisements), political sensitivity, hate speech, violent descriptions, etc. In medical documents, terms like "curing all diseases" and "miracle doctors" are prohibited; in educational documents, "exam answers" and "internal channels" are prohibited; in legal documents, hints of "loan sharking" and "false litigation" are prohibited.
+- **Format Noise**: Standardize the format, remove garbled characters, and correct excessive punctuation.
+- **Content Noise**: Remove duplicate content, isolate short sentences that are irrelevant to the context, and eliminate the piling up of meaningless modal particles.
+- **Learning Noise**: Delete academic identifiers such as ISBN, website addresses, cited literature in papers, DOI, ISSN, ORCID, etc.; delete information irrelevant to content understanding such as ISBN, time information, website addresses, etc., and remove unrecoverable multimodal content.
+
+### II. Effectiveness of Semantic Restoration
+Core objective: Fix problems with minimal intervention and fully retain the core semantics.
+1. **Basic Specifications**: Correct spelling and grammar errors, unify punctuation, and standardize technical formats.
+2. **Semantic Optimization**: Complete incomplete sentences and merge repeated expressions of meaning.
+3. **Logical Enhancement**: Clarify references, adjust word order, and supplement logical connectives.
+4. **Quality Improvement**: Eliminate traces of machine translation and fix logical breaks.
+
+## III. Information Completeness
+Core objective: Ensure the integrity of the effective information in the original text and avoid unnecessary modifications.
+1. **Information Retention**: Completely retain all other information except for the content that needs to be deleted or rewritten.
+2. **Minimal Intervention**: Only correct clear errors without changing the main content of the original text.
+
+## IV. Format Standardization
+Core objective: Standardize the document format after governance and ensure the correctness of technical elements.
+1. **Standardize paragraph spacing and table format**
+2. **Ensure the correctness of technical formats such as Markdown, code blocks, and LaTeX**
+
+## V. Language Consistency
+Core objective: Maintain the unity of the original text's language style and language type.
+1. **Language Type Unity**: Ensure consistency of the language type throughout the text, and make sure that the language type of code comments matches that of the code.
+2. **Style Matching**: Maintain the same level of formality and use of professional terms as in the original text. 
+"""
+
+    JUDGE_CRITERIA_W_NOTES_ZH = """
 ## 内容新增治理之“思考过程”专项评价标准
 
 ### 一、结构规范性
@@ -728,8 +766,64 @@ class QwQLongCoTPretrainRefineComputeScore(object):
   - 碎片化陈述，缺乏因果推导（例如：“实验需多次测量”，未解释“误差分布→数据处理”的科学依据）。
   - 未衔接底层原理，如直接使用专业术语而不解释（例如：提及“熵增”但未定义“熵”的物理意义）。
 """
+    JUDGE_CRITERIA_W_NOTES_EN = """
+## Special Evaluation Criteria for the "Thinking Process" in Content Addition Governance
 
-    JUDGE_CRITERIA_THINKING_QUALITY = """
+### I. Structural Normativeness
+1. **Accuracy of Label Usage**
+   - Correct Use of Markers:
+     - For non-code text, use “[EXPLANATION]...[/EXPLANATION]”. In the code scenario, add it in the comment area.
+     - Immediately following the thinking process “[EXPLANATION]...[/EXPLANATION]”, use “[CONCLUSION]...[/CONCLUSION]” to take the content in the original text as the conclusion part.
+   - Whether the labels strictly follow the self-questioning and self-answering format of “Question: *** Think Step by Step: ***” in English or “提问：*** 一步步思考：***” in Chinese; Pure narrative thinking without a question setting is prohibited.
+
+2. **Reasonableness of Position**
+   - Whether the thinking process appears **before** the content that needs to be explained to ensure the problem-oriented nature.
+   - Avoid inserting thinking in an irrelevant position (such as adding a question after the conclusion, or abruptly inserting an unrelated thinking in the middle of a paragraph).
+   - The question, thinking, and the original text content ([EXPLANATION]...[/EXPLANATION][CONCLUSION]...[/CONCLUSION]) need to form a direct mapping relationship of “question-thinking-conclusion”.
+
+### II. Content Value
+#### 1. Effectiveness of Information Increment
+- **High-quality Features**:
+  - Include **background knowledge, principle basis, potential assumptions, risk analysis, or application scenarios** that are not explicitly written in the original text.
+  - Extend the logical chain instead of simply repeating it on the surface, reflecting **“why it is so” and “how to derive it”**.
+  - Avoid synonymous conversions and introduce **interdisciplinary associations, cutting-edge developments, or practical cases**.
+- **Ineffective Features**:
+  - Only perform **synonymous substitutions or simple summaries** of the original text.
+  - There is no substantial new information, such as vague expressions like “This is an important research direction” or “It is helpful to the industry”, without explaining the specific value or principle.
+  - Directly copy the conclusion of the original text without supplementing the **derivation process or implicit logic**.
+
+#### 2. Precision of Problem Orientation
+- **High-quality Features**:
+  - The question focuses on the **“core contradiction” or “cognitive blind spot”**, such as “Why choose Method X instead of Method Y?” or “How to deal with the outliers in the experimental data?”, directly pointing to the weak points in logic.
+  - The question is specific and directional, avoiding broad or meaningless questions (for example: “How to optimize the time complexity of the algorithm?” instead of “What is the use of the algorithm?”).
+  - The question forms a **“question-answer” closed loop with the conclusion of the original text, and the thinking content needs to fully respond to the question and provide a deep explanation.
+- **Ineffective Features**:
+  - The question is superficial and only repeats the content of the original text.
+  - The question is vague and general, such as “How to understand this theory?” or “Explain the importance of the standard”, without clarifying the specific thinking dimension.
+  - The question has nothing to do with the conclusion of the original text, or the conclusion cannot be derived through the thinking process.
+
+#### 3. Demonstration of Critical Thinking
+- **High-quality Features**:
+  - **Multi-dimensional Analysis**: Introduce comparisons (such as “The Advantages and Disadvantages of Method X vs. Method Y”), assumptions (such as “What will happen to the results if the experimental conditions are changed?”), and risk assessments (such as “The Potential Bias of This Model Under Long-tail Data”).
+  - **Dig Out Implicit Conditions**: Proactively identify the premises or logical loopholes that are not explicitly stated in the original text.
+  - **Propose Alternative Solutions**: Explore other paths for problems with multiple solutions.
+- **Ineffective Features**:
+  - One-way explanation, only stating “what it is” or “it is effective” without analyzing “why it is effective” or “its limitations” (for example: “This method is feasible” without explaining the applicable boundaries).
+  - Directly accept the conclusion of the original text without questioning the potential assumptions.
+  - Lack of comparison or risk awareness, such as ignoring “the differences in the effects of the method in different scenarios” or “the impact of data bias on the conclusion”.
+
+#### 4. Depth of Knowledge Connection
+- **High-quality Features**:
+  - Fill in the **logical gaps**: Make the implicit derivation steps in the original text explicit (for example: in a mathematical proof, supplement the geometric principle of “constructing auxiliary lines using the symmetry of isosceles triangles”).
+  - Establish **cross-dimensional associations**: Connect a single knowledge point with the underlying principles of the discipline, practical applications, or cutting-edge research (for example: combine “molecular biology research” with “the development of disease diagnosis tools” to illustrate the logic of technology transformation).
+  - Decompose complex problems in layers, reflecting the chain of “from principle to application” (for example: when explaining “code implementation”, first explain the algorithm idea, and then decompose the functions of variables and the handling of boundary conditions).
+- **Ineffective Features**:
+  - Shallow associations, only listing concepts or steps (for example: “The research includes directions A, B, and C” without explaining the internal connections between each direction).
+  - Fragmented statements, lacking causal derivation (for example: “The experiment requires multiple measurements” without explaining the scientific basis of “error distribution→data processing”).
+  - Failure to connect with the underlying principles, such as directly using professional terms without explanation (for example: mentioning “entropy increase” but not defining the physical meaning of “entropy”). 
+"""
+
+    JUDGE_CRITERIA_THINKING_QUALITY_ZH = """
 ## 思考过程质量评价标准
 
 #### **一、逻辑结构**  
@@ -777,7 +871,51 @@ class QwQLongCoTPretrainRefineComputeScore(object):
 1. **规避重复**：通过“链条连贯性”“目标聚焦性”等条目，明确要求步骤围绕核心问题单向推进，杜绝同一概念在不同维度重复描述。  
 2. **强化缜密性**：新增“分层拆解度”“步骤详实度”，强调复杂问题必须拆解为**可执行的分阶任务**，每个环节需包含具体操作细节，避免笼统表述。
 """
-    JUDGE_CRITERIA_QUESTION_QUALITY = """
+
+    JUDGE_CRITERIA_THINKING_QUALITY_EN = """
+## Quality Evaluation Criteria for the Thinking Process
+
+### I. Logical Structure
+1. **Coherence of the Chain**
+   - Whether the steps are linearly developed in the order of "problem identification → element analysis → logical derivation", without breaks or circular repetitions.
+2. **Degree of Hierarchical Decomposition**
+   - Whether complex problems are decomposed into actionable **sub-steps at different levels**, and the tasks at each level are clear and traceable.
+
+### II. Problem Decomposition Ability
+3. **Accuracy of Elements**
+   - Whether the **core driving variables**, constraints, or assumptions of the problem are accurately identified.
+4. **Causal Logic**
+   - Whether it progresses from "phenomenon description" to "mechanism analysis" and then extends to "impact derivation", forming a progressive chain of "what it is → why it is so → how it affects".
+
+### III. Professional Depth and Practicality
+5. **Theoretical Embeddedness**
+   - Whether the core theories or technical principles in the field are used to support the analysis, avoiding staying at the surface description.
+6. **Realistic Adaptability**
+   - Whether both the idealized assumptions in theory and the actual constraints are taken into account.
+
+### IV. Process Completeness
+7. **Focus on the Goal**
+   - Whether all analysis steps are closely centered around the core of the initial problem.
+8. **Degree of Detail in Steps**
+   - Whether the key links contain **specific operation details**, avoiding generalizations.
+
+### V. Expression Specification
+9. **Accuracy of Terminology**
+   - Whether professional terms are used accurately without conceptual confusion.
+10. **Conciseness of Expression**
+   - Whether logical connectives such as "firstly/secondly", "because/therefore" are used to connect the steps, **avoiding synonymous repetitions or verbose descriptions**.
+
+### Core Characteristics
+- **Lack of Redundancy**: The thinking process and conclusion have a clear direction, and there is no repeated argumentation between steps, especially there is no repeated elaboration of the same content in the thinking process and the conclusion.
+- **Meticulous Hierarchical Nature**: Complex problems must be unfolded according to **actionable sub-steps**, and the logic at each level is rigorous and the details are complete.
+- **Causal Closed-loop Nature**: A complete chain is formed from the raising of the problem to the formation of the conclusion, and there is no logical gap in the key derivation links.
+
+### Optimization Instructions
+1. **Avoid Repetition**: Through items such as "coherence of the chain" and "focus on the goal", it is clearly required that the steps should move forward unidirectionally around the core problem, and the repeated description of the same concept in different dimensions is prohibited.
+2. **Strengthen Meticulousness**: New items such as "degree of hierarchical decomposition" and "degree of detail in steps" are added, emphasizing that complex problems must be decomposed into **executable sub-tasks at different levels**, and each link needs to contain specific operation details to avoid general expressions. 
+"""
+
+    JUDGE_CRITERIA_QUESTION_QUALITY_ZH = """
     ## 高质量提问评价标准
 
 1. **相关性**  
@@ -862,6 +1000,91 @@ class QwQLongCoTPretrainRefineComputeScore(object):
    - 主动质疑原文假设、方法局限性或逻辑漏洞。  
    - 探索替代方案或逆向思考。  
 """
+    JUDGE_CRITERIA_QUESTION_QUALITY_EN = """
+## High-quality Question Evaluation Criteria
+
+1. **Relevance**
+   - The question must directly target the key knowledge points, logical gaps, or core conclusions in the original text that need explanation, avoiding irrelevant digressions.
+   - It should be able to precisely identify the core contradictions, unclarified assumptions, or potential logical leaps within the content.
+
+2. **Diversity**
+   - The question should have diverse perspectives, covering as many scenarios and question types as possible. The question perspectives should never be single. Here are some examples of different question types:
+
+    #### **1. Completion of Mathematical Proof Ideas**
+    Question: How can we prove the vector form of the Cauchy inequality?
+
+    #### **2. Analysis of Algorithm Complexity**
+    Question: How can we derive the average time complexity of the quick sort algorithm?
+
+    #### **3. Derivation of Physical Laws**
+    Question: How can we derive the Law of Universal Gravitation from Kepler's laws of planetary motion?
+
+    ### **4. Educational Scenarios**
+    Question: What is the idea behind setting this calculus problem? Why is it set in this way?
+
+    #### **5. Analysis of Capability Requirements in Experimental Questions**
+    Question: Why was the XX group selected as the research object in this study? What is the basis for using the XX criteria in grouping? Based on which methodological principles is the sequence arrangement of the key steps in the technical route determined?
+
+    #### **6. Setting of Test Points in Chinese Reading Comprehension Questions**
+    Question: Why is the image of the "old pendulum" repeatedly emphasized in the novel reading question?
+
+    #### **7. Rationality Demonstration of Methodology**
+    Question: Why was the XX experimental method chosen instead of other techniques? What is the applicability and potential limitations of the statistical tools used in this study? How does the data collection method balance validity and reliability?
+
+    #### **8. In-depth Expansion of Data Interpretation**
+    Question: How can we infer the XX biological/medical mechanism from the existing data? What potential laws that have not been revealed might the XX abnormal trends in the data reflect?
+
+    #### **9. Comparative Analysis of Cross-literature Research**
+    Question: What factors, such as sample selection, experimental conditions, or theoretical assumptions, might lead to the differences between the conclusion of this study and that in the XX literature? How can we explain the contradictory research findings in the literature?
+
+    #### **10. Research Limitations and Improvement Directions**
+    Question: What kinds of conclusion biases might be caused by insufficient sample size or single data dimension in the research design? From which technical means or research perspectives can future research be optimized?
+
+    #### **11. Supplementary of Conclusion Derivation Rigor**
+    Question: In the process of deriving from the data statistical results to the core conclusion, what logical verification steps need to be supplemented to avoid over-inference?
+
+    #### **12. Technical Document Scenarios**
+    Question: Based on which considerations of security, compatibility, and usability are the design of parameter type verification, length limitation, and format specification of the API interface made?
+
+    #### **13. Logic of Algorithm Parameter Tuning**
+    Question: What is the decision-making basis for choosing the XX learning rate, batch size, and regularization coefficient in the training of a machine learning model? How can we balance the bias and variance of the model through cross-validation?
+
+    #### **14. Interpretation of Ancient Policy Texts**
+    Question: Behind the adjustment of the tax objects and tax rates of the tax system (such as the Two-tax Law and the Single-whip Law) in the XX dynasty recorded in historical books, what changes in the economic structure and governing logic do they reflect?
+
+    #### **15. Semantic Analysis of Diplomatic Documents**
+    Question: How do the vague expressions such as "equal sharing of interests" and "most-favored-nation treatment" in the XX treaties (such as the Treaty of Nanking and the Treaty of Shimonoseki) in modern times reflect the power games and diplomatic strategies of the列强 at that time?
+
+    #### **16. Legal Document Scenarios**
+    Question: Why does the liability for breach of contract clause in a commercial contract distinguish between "minor breach" and "major breach" and set different compensation standards? What is the practical legal significance of the enumerated provisions of the scope of "force majeure" in the clause?
+
+    #### **17. Resolution of Ambiguities in Legal Provisions**
+    Question: For the elastic clauses such as "serious circumstances" and "relatively large amount" in criminal law, which judicial interpretations and guiding cases are mainly relied on for specific determination in judicial practice?
+
+    #### **18. Translation Text Scenarios**
+    Question: When translating traditional Chinese medicine terms such as "meridians and collaterals" and "qi and blood" into English, why is the method of transliteration plus annotation used instead of literal translation? How does this treatment take into account both the cultural uniqueness and international academic understanding?
+
+    #### **19. Calibration of Legal Text Terms**
+    Question: Why is "Intellectual Property" in international conventions translated as "知识产权" instead of "知识财产"? What considerations are mainly based on in terms of the precision of legal concepts and industry practices?
+
+    #### **20. Calibration of Legal Text Terms**
+    Question: Why does a formal business email adopt the structure of "conclusion first—detail support—action appeal"? How does this layout improve the recipient's information processing efficiency?
+
+    #### **21. Design of Communication Language across Departments**
+    Question: In cross-departmental collaboration, how can the communication template of "problem description—impact analysis—solution" reduce information errors and promote rapid consensus?
+
+3. **Logical Depth**
+   - The question should revolve around deep logics such as "why", "how", and "based on what assumptions", instead of staying on the surface facts.
+   - It should reflect the pursuit of knowledge principles, methodologies, or potential risks.
+
+4. **Guidedness**
+   - The question should naturally lead to "step-by-step thinking", for example, through expressions like "What preconditions are needed?" and "How many steps are there to verify?" to provide a logical framework for subsequent explanations.
+   - Avoid closed questions (such as "Is it right?") and encourage expansive derivations (such as "What possible derivation loopholes might there be in the process of inducing from the experimental data to the conclusion?").
+
+5. **Critical Perspective (Exploring Deep-seated Issues)**
+   - Actively question the assumptions, methodological limitations, or logical loopholes in the original text.
+   - Explore alternative solutions or think in reverse.  
+"""
 
     def __init__(self,
                  split="train",
@@ -909,9 +1132,15 @@ class QwQLongCoTPretrainRefineComputeScore(object):
             评价除去处思考过程后的改写内容
         """
         refine_judges = []
+
         for _ in batch_ground_truth:
+            lang_code = _["lang_code"]
+            if lang_code == "zh":
+                judge_template = self.JUDGE_CRITERIA_WO_NOTES_ZH
+            else:
+                judge_template = self.JUDGE_CRITERIA_WO_NOTES_EN
             refine_judges.append({
-                "ground_truth": f'你是一名专精于大模型数据改写的治理专家。目标是给定一篇从网页爬取或者PDF解析出来的文档，改写成一篇优质的大语言模型预训练语料。\n\n[Raw Corpus]\n{_["ground_truth"]}\n\n\n# 评价标准\n{self.JUDGE_CRITERIA_WO_NOTES}'
+                "ground_truth": f'你是一名专精于大模型数据改写的治理专家。目标是给定一篇从网页爬取或者PDF解析出来的文档，改写成一篇优质的大语言模型预训练语料。\n\n[Raw Corpus]\n{_["ground_truth"]}\n\n\n# 评价标准\n{judge_template}'
             })
         rewards = await compute_rm_score(
             urls=urls,
@@ -929,7 +1158,7 @@ class QwQLongCoTPretrainRefineComputeScore(object):
             batch_solution_str,
             batch_ground_truth,
             urls=RM_URLS,
-            default_penalty=-0.1
+            default_penalty=-0.1,
     ):
         """
             评价整体改写后的内容（思考过程+原文）
@@ -937,7 +1166,14 @@ class QwQLongCoTPretrainRefineComputeScore(object):
         addition_judge = []
         new_batch_solution_str = []
         indices = []
-        for i, (_, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+
+        for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            lang_code = _gt["lang_code"]
+            if lang_code == "zh":
+                judge_template = self.JUDGE_CRITERIA_W_NOTES_ZH
+            else:
+                judge_template = self.JUDGE_CRITERIA_W_NOTES_EN
+
             notes = get_notes(sol)
             notes_w_coclusions = get_notes_and_conclusions(sol)
             if len(notes) != len(notes_w_coclusions):
@@ -945,7 +1181,7 @@ class QwQLongCoTPretrainRefineComputeScore(object):
             if len(notes) == 0:
                 continue
             addition_judge.append({
-                "ground_truth": f'你是一名专精于大模型数据改写的治理专家。目标是给定一篇从网页爬取或者PDF解析出来的文档，改写成一篇优质的大语言模型预训练语料。目标是给定一篇从网页爬取或者PDF解析出来的文档增加注释（思考过程）。好的新增思考过程应当满足下面的标准\n\n# 评价标准\n{self.JUDGE_CRITERIA_W_NOTES}'
+                "ground_truth": f'你是一名专精于大模型数据改写的治理专家。目标是给定一篇从网页爬取或者PDF解析出来的文档，改写成一篇优质的大语言模型预训练语料。目标是给定一篇从网页爬取或者PDF解析出来的文档增加注释（思考过程）。好的新增思考过程应当满足下面的标准\n\n# 评价标准\n{judge_template}'
             })
             indices.append(i)
             new_batch_solution_str.append(sol)
@@ -972,7 +1208,7 @@ class QwQLongCoTPretrainRefineComputeScore(object):
             batch_solution_str,
             batch_ground_truth,
             urls=RM_URLS,
-            default_penalty=-0.1
+            default_penalty=-0.1,
     ):
         """
             单独评价思考过程
@@ -980,7 +1216,14 @@ class QwQLongCoTPretrainRefineComputeScore(object):
         addition_judge = []
         new_batch_solution_str = []
         indices = []
-        for i, (_, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+
+        for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            lang_code = _gt["lang_code"]
+            if lang_code == "zh":
+                judge_template = self.JUDGE_CRITERIA_THINKING_QUALITY_ZH
+            else:
+                judge_template = self.JUDGE_CRITERIA_THINKING_QUALITY_EN
+
             notes = get_notes(sol)
             notes_w_coclusions = get_notes_and_conclusions(sol)
             if len(notes) != len(notes_w_coclusions):
@@ -990,7 +1233,7 @@ class QwQLongCoTPretrainRefineComputeScore(object):
                 continue
 
             addition_judge.append({
-                "ground_truth": f'你是一个擅长提问的思考者。你需要提出高质量的问题并回答。\n\n# 评价标准\n{self.JUDGE_CRITERIA_QUESTION_QUALITY}'
+                "ground_truth": f'你是一个擅长提问的思考者。你需要提出高质量的问题并回答。\n\n# 评价标准\n{judge_template}'
             })
             indices.append(i)
             new_batch_solution_str.append("\n\n\n".join(notes_w_coclusions))
@@ -1016,7 +1259,7 @@ class QwQLongCoTPretrainRefineComputeScore(object):
             batch_solution_str,
             batch_ground_truth,
             urls=RM_URLS,
-            default_penalty=-0.1
+            default_penalty=-0.1,
     ):
         """
             单独评价提问质量
@@ -1024,7 +1267,14 @@ class QwQLongCoTPretrainRefineComputeScore(object):
         addition_judge = []
         new_batch_solution_str = []
         indices = []
-        for i, (_, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+
+        for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            lang_code = _gt["lang_code"]
+            if lang_code == "zh":
+                judge_template = self.JUDGE_CRITERIA_QUESTION_QUALITY_ZH
+            else:
+                judge_template = self.JUDGE_CRITERIA_QUESTION_QUALITY_EN
+
             notes = get_notes(sol)
             notes_w_coclusions = get_notes_and_conclusions(sol)
             if len(notes) != len(notes_w_coclusions):
@@ -1033,7 +1283,7 @@ class QwQLongCoTPretrainRefineComputeScore(object):
                 continue
 
             addition_judge.append({
-                "ground_truth": f'你是一个擅长提问的思考者。你需要提出高质量的问题并回答。\n\n# 评价标准\n{self.JUDGE_CRITERIA_QUESTION_QUALITY}'
+                "ground_truth": f'你是一个擅长提问的思考者。你需要提出高质量的问题并回答。\n\n# 评价标准\n{judge_template}'
             })
             indices.append(i)
             new_batch_solution_str.append("\n\n\n".join(notes_w_coclusions))
@@ -1098,11 +1348,12 @@ class QwQLongCoTPretrainRefineComputeScore(object):
         penalty = defaultdict(dict)
         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
             for key, fn in self.get_penalties().items():
-                penalty[key][i] = fn(solution_str, ground_truth)
+                penalty[key][i] = fn(
+                    solution_str, ground_truth, lang_code=ground_truth["lang_code"])
         base_rewards, base_rewards_split = await self.get_rm_rewards(
             batch_data_sources,
             batch_solution_str,
-            batch_ground_truth
+            batch_ground_truth,
         )
 
         final_results = []
@@ -1129,9 +1380,9 @@ class QwQLongCoTPretrainRefineComputeScore(object):
                 print(
                     f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
                 print(
-                    f"【Refine】({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`")
+                    f'【Refine】)({batch_ground_truth[i]["lang_code"]})({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`')
                 print(
-                    f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})``{self.log_ground_truth(batch_ground_truth[i])}`')
+                    f'【Raw】({batch_ground_truth[i]["lang_code"]})({len(batch_ground_truth[i]["ground_truth"])})``{self.log_ground_truth(batch_ground_truth[i])}`')
                 print(
                     f'[Final Reward]={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|RM_SPLIT={base_rewards_split[i]}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
                 for i, note in enumerate(notes_summary, start=1):
@@ -1142,9 +1393,9 @@ class QwQLongCoTPretrainRefineComputeScore(object):
                 print(
                     f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
                 print(
-                    f"【Refine】({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`")
+                    f'【Refine】({batch_ground_truth[i]["lang_code"]})({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`')
                 print(
-                    f'【Raw】({len(batch_ground_truth[i]["ground_truth"])})`{self.log_ground_truth(batch_ground_truth[i])}`')
+                    f'【Raw】({batch_ground_truth[i]["lang_code"]})({len(batch_ground_truth[i]["ground_truth"])})`{self.log_ground_truth(batch_ground_truth[i])}`')
                 print(
                     f'[Final Reward]={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|RM_SPLIT={base_rewards_split[i]}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
                 for i, note in enumerate(notes_summary, start=1):
