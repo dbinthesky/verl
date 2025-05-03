@@ -520,7 +520,7 @@ class LengthDiffPenalty(PenaltyOrReward):
 class NotesFormatReward(PenaltyOrReward):
     def __init__(self,
                  postprocess_solution_fn,
-                 max_reward=0.25,
+                 max_reward=0.15,
                  step_reward=0.01,
                  max_steps=10,
                  min_penalty=-2.0
@@ -562,6 +562,8 @@ class NotesFormatReward(PenaltyOrReward):
         try:
             loose_follow = re.findall(
                 r'\[EXPLANATION\].*?\[/EXPLANATION\]\n*\[CONCLUSION\].*?\[/CONCLUSION\]', solution_str, re.DOTALL)
+            if len(loose_follow) != len(notes):
+                return base_score
 
             if lang_code == "zh":
                 strict_follow = [_ for _ in loose_follow if (
@@ -1380,7 +1382,7 @@ Core objective: Maintain the unity of the original text's language style and lan
                 print(
                     f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
                 print(
-                    f'【Refine】)({batch_ground_truth[i]["lang_code"]})({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`')
+                    f'【Refine】({batch_ground_truth[i]["lang_code"]})({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`')
                 print(
                     f'【Raw】({batch_ground_truth[i]["lang_code"]})({len(batch_ground_truth[i]["ground_truth"])})``{self.log_ground_truth(batch_ground_truth[i])}`')
                 print(
