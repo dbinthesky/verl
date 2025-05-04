@@ -17,11 +17,17 @@ en_mt = MosesTokenizer(lang='en')
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# RM_URLS = [
+#     "http://10.130.1.36:25014",
+#     "http://10.130.1.36:30638",
+#     "http://10.130.1.36:26341",
+#     "http://10.130.1.36:25446"
+# ]
 RM_URLS = [
-    "http://10.130.1.36:25014",
-    "http://10.130.1.36:30638",
-    "http://10.130.1.36:26341",
-    "http://10.130.1.36:25446"
+    "http://10.130.1.91:34543",
+    "http://10.130.1.91:26138",
+    "http://10.130.1.91:33051",
+    "http://10.130.1.91:31958"
 ]
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 
@@ -59,13 +65,13 @@ def postprocess_solution(solution_str):
     return solution_str
 
 
-async def rm_request_with_retry(urls, data, max_retries=3, retry_delay=1, suffix="/reward"):
+async def rm_request_with_retry(urls, data, max_retries=3, retry_delay=5, suffix="/reward"):
     retries = 0
     while retries < max_retries:
         try:
             url = random.choice(urls)
             async with aiohttp.ClientSession() as session:
-                async with session.post(f'{url}{suffix}', json=data, timeout=aiohttp.ClientTimeout(total=1200)) as response:
+                async with session.post(f'{url}{suffix}', json=data, timeout=aiohttp.ClientTimeout(total=2400)) as response:
                     response.raise_for_status()
                     return await response.json()
         except (aiohttp.ClientError, aiohttp.ClientResponseError) as e:
@@ -520,16 +526,24 @@ class LengthDiffPenalty(PenaltyOrReward):
 class NotesFormatReward(PenaltyOrReward):
     def __init__(self,
                  postprocess_solution_fn,
-                 max_reward=0.15,
+                 max_reward=0.2,
                  step_reward=0.01,
-                 max_steps=10,
-                 min_penalty=-2.0
+                 max_steps=20,
+                 max_penalty=-2.0
                  ):
         self.postprocess_solution_fn = postprocess_solution_fn
         self.max_reward = max_reward
         self.step_reward = step_reward
         self.max_steps = max_steps
-        self.min_penalty = min_penalty
+        self.max_penalty = max_penalty
+
+    def dedup_notes(self, notes_w_conclusions):
+        dedup = {}
+        for note in notes_w_conclusions:
+            key = note[note.index(
+                "[EXPLANATION]")+len("[EXPLANATION]"):note.index("[/EXPLANATION]")].strip()
+            dedup[key] = note
+        return list(dedup.values())
 
     def get_penalty_or_reward(self, solution_str, ground_truth, lang_code=None):
         solution_str = self.postprocess_solution_fn(solution_str)
@@ -548,7 +562,7 @@ class NotesFormatReward(PenaltyOrReward):
         wo_notes = re.sub(r'\[EXPLANATION\][\s\S]*?\[/EXPLANATION\]',
                           "", solution_str, flags=re.DOTALL)
         if any(_ in wo_notes.upper() for _ in ("[EXPLANATION]", "[/EXPLANATION]")):
-            base_score -= self.min_penalty
+            base_score += self.max_penalty
 
         notes = re.findall(
             r'\[EXPLANATION\](.*?)\[/EXPLANATION\]', solution_str, re.DOTALL)
@@ -556,7 +570,7 @@ class NotesFormatReward(PenaltyOrReward):
             "[EXPLANATION]", "[/EXPLANATION]", "[CONCLUSION]", "[/CONCLUSION]"
         )
         if any(any(kw in _.upper() for kw in prohibit_kw) for _ in notes):
-            base_score -= self.min_penalty
+            base_score += self.max_penalty
 
         # 思考过程奖励
         try:
@@ -564,6 +578,8 @@ class NotesFormatReward(PenaltyOrReward):
                 r'\[EXPLANATION\].*?\[/EXPLANATION\]\n*\[CONCLUSION\].*?\[/CONCLUSION\]', solution_str, re.DOTALL)
             if len(loose_follow) != len(notes):
                 return base_score
+
+            loose_follow = self.dedup_notes(loose_follow)
 
             if lang_code == "zh":
                 strict_follow = [_ for _ in loose_follow if (
@@ -925,6 +941,7 @@ Core objective: Maintain the unity of the original text's language style and lan
    - 能精准定位内容中的核心矛盾、未明确假设或潜在逻辑跳步。  
 
 2. **多样性**  
+   - 避免问题类型过于单一
    - 问题视角多样性，需要覆盖尽可能更多的场景和提问类型；问题提问视角千万不要单一；下面是一些不同提问类型的例子
 
     #### **1. 数学证明思路补全**  
@@ -1010,6 +1027,7 @@ Core objective: Maintain the unity of the original text's language style and lan
    - It should be able to precisely identify the core contradictions, unclarified assumptions, or potential logical leaps within the content.
 
 2. **Diversity**
+   - Avoid the question types from being too monotonous or duplicate.
    - The question should have diverse perspectives, covering as many scenarios and question types as possible. The question perspectives should never be single. Here are some examples of different question types:
 
     #### **1. Completion of Mathematical Proof Ideas**
