@@ -4,6 +4,7 @@ import random
 import aiohttp
 import asyncio
 import requests
+import numpy as np
 from abc import abstractmethod
 from typing import Dict, Callable, List
 from collections import defaultdict
@@ -521,6 +522,37 @@ class LengthDiffPenalty(PenaltyOrReward):
             return self.penalty_base * min(max((sol_token_size-gt_token_size), 0) / gt_token_size, 20.)
         elif self.mode == "both":
             return self.penalty_base * min(abs(sol_token_size-gt_token_size) / gt_token_size, 20.)
+
+
+class NotesDispersionReward(PenaltyOrReward):
+    def __init__(self,
+                 postprocess_solution_fn,
+                 ):
+        self.postprocess_solution_fn = postprocess_solution_fn
+
+    def dedup_notes(self, notes_w_conclusions):
+        dedup = {}
+        for note in notes_w_conclusions:
+            key = note[note.index(
+                "[EXPLANATION]")+len("[EXPLANATION]"):note.index("[/EXPLANATION]")].strip()
+            dedup[key] = note
+        return list(dedup.values())
+
+    def get_penalty_or_reward(self, solution_str, ground_truth, lang_code=None):
+        solution_str = self.postprocess_solution_fn(solution_str)
+        if solution_str is None:
+            return 0.
+
+        base_score = 0.0
+        notes = re.findall(
+            r'\[EXPLANATION\].*?\[/EXPLANATION\]\n*\[CONCLUSION\].*?\[/CONCLUSION\]', solution_str, re.DOTALL)
+        locations = [
+            solution_str.index(_) for _ in notes
+        ]
+        if len(locations) == 0:
+            return -1.0
+        cv = np.std(locations) / np.mean(locations)
+        return cv
 
 
 class NotesFormatReward(PenaltyOrReward):
@@ -1123,6 +1155,9 @@ Core objective: Maintain the unity of the original text's language style and lan
             postprocess_solution_fn=parse_doc_w_notes)
         self.lang_consist = LanguageConsistencyReward(
             postprocess_solution_fn=parse_solution_fn)
+        sef.note_dispersion = NotesDispersionReward(
+            postprocess_solution_fn=parse_doc_w_notes
+        )
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
@@ -1131,6 +1166,7 @@ Core objective: Maintain the unity of the original text's language style and lan
             "NoteFormat": self.note_format.get_penalty_or_reward,
             "NoteRep": self.note_rep.get_penalty_or_reward,
             "LangConsistency": self.lang_consist.get_penalty_or_reward,
+            "NoteDispersion": self.sef.note_dispersion.get_penalty_or_reward
         }
 
     def get_penalty_coef(self):
@@ -1140,6 +1176,7 @@ Core objective: Maintain the unity of the original text's language style and lan
             "NoteFormat": 1.0,
             "NoteRep": 0.5,
             "LangConsistency": 1.0,
+            "NoteDispersion": 1.0
         }
 
     async def get_revise_rm_rewards(
@@ -1473,15 +1510,6 @@ class QwQLongCoTPretrainRefineStage2ComputeScore(QwQLongCoTPretrainRefineCompute
             step_reward=0.05,
             max_steps=40,
             max_penalty=-2.0)
-
-    def get_penalty_coef(self):
-        return {
-            "TextRecall": 1.0,
-            "LengthDiff": 1.0,
-            "NoteFormat": 1.0,
-            "NoteRep": 0.5,
-            "LangConsistency": 1.0,
-        }
 
     async def get_rm_rewards(self,
                              batch_data_sources,

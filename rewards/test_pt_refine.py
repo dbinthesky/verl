@@ -19,6 +19,7 @@ from pt_refine import (
     LengthDiffPenalty,
     NotesFormatReward,
     NotesRepetitionPenalty,
+    NotesDispersionReward,
     LanguageConsistencyReward,
     QwQLongCoTPretrainRefineComputeScore,
     qwq_longcot_pretrain_refine_compute_score_valid,
@@ -109,6 +110,15 @@ class TestPretrainRefine(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_pretrain_refinement(
             num=100)
         penalty = NotesRepetitionPenalty(
+            postprocess_solution_fn=parse_doc_w_notes)
+        for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
+            print(penalty.get_penalty_or_reward(
+                solution_str, ground_truth))
+
+    def test_notes_dispersion_penalty(self):
+        batch_solution_str, batch_ground_truth = load_pretrain_refinement(
+            num=100)
+        penalty = NotesDispersionReward(
             postprocess_solution_fn=parse_doc_w_notes)
         for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
             print(penalty.get_penalty_or_reward(
