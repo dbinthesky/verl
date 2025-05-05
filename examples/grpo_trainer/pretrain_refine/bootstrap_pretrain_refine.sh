@@ -10,9 +10,9 @@ DLC_CONFIG_PATH="${DLC_CONFIG_PATH:-"/cpfs01/shared/llm_ddd/tongjian/dlc.config"
 # [ddd]
 # WORKSPACE_ID="${WORKSPACE_ID:-"ws1ujefpjyfgqjwp"}"
 # [new_ddd]
-# WORKSPACE_ID="${WORKSPACE_ID:-"wssp4wsoiyvfp6ww"}"
+WORKSPACE_ID="${WORKSPACE_ID:-"wssp4wsoiyvfp6ww"}"
 # [he]
-WORKSPACE_ID="${WORKSPACE_ID:-"wso1cah3ytpgmaah"}"
+# WORKSPACE_ID="${WORKSPACE_ID:-"wso1cah3ytpgmaah"}"
 # [hc]
 # WORKSPACE_ID="${WORKSPACE_ID:-"ws1h2vgufjufr4jj"}"
 # [h2]
@@ -24,7 +24,7 @@ WORKER_GPU="${WORKER_GPU:-"8"}"
 WORKER_CPU="${WORKER_CPU:-"64"}"
 WORKER_MEMORY="${WORKER_MEMORY:-"1024"}"
 WORKER_IMAGE="pjlab-shanghai-acr-registry-vpc.cn-shanghai.cr.aliyuncs.com/pjlab-eflops/lishuaibin:lishuaibin-xpuyu-trainrlhf"
-RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/pretrain_refine/run_internlm_3-8b_pretrain_refine.sh"
+RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/pretrain_refine/run_internlm_3-8b_pretrain_refine_stage2.sh"
 
 
 dlcrun_cmd=$(

@@ -17,18 +17,18 @@ en_mt = MosesTokenizer(lang='en')
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
-RM_URLS = [
-    "http://10.130.1.36:25014",
-    "http://10.130.1.36:30638",
-    "http://10.130.1.36:26341",
-    "http://10.130.1.36:25446"
-]
 # RM_URLS = [
-#     "http://10.130.1.91:34543",
-#     "http://10.130.1.91:26138",
-#     "http://10.130.1.91:33051",
-#     "http://10.130.1.91:31958"
+#     "http://10.130.1.36:25014",
+#     "http://10.130.1.36:30638",
+#     "http://10.130.1.36:26341",
+#     "http://10.130.1.36:25446"
 # ]
+RM_URLS = [
+    "http://10.130.1.91:34543",
+    "http://10.130.1.91:26138",
+    "http://10.130.1.91:33051",
+    "http://10.130.1.91:31958"
+]
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 
 
@@ -1460,3 +1460,64 @@ qwq_longcot_pretrain_refine_compute_score_valid = _qwq_longcot_pretrain_refine_c
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 预训练数据治理
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+class QwQLongCoTPretrainRefineStage2ComputeScore(QwQLongCoTPretrainRefineComputeScore):
+    def __init__(self,
+                 split="train",
+                 parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
+        super().__init__(split=split, parse_result_failure_score=parse_result_failure_score)
+        self.note_format = NotesFormatReward(
+            postprocess_solution_fn=parse_doc_w_notes,
+            max_reward=2.0,
+            step_reward=0.05,
+            max_steps=40,
+            max_penalty=-2.0)
+
+    def get_penalty_coef(self):
+        return {
+            "TextRecall": 1.0,
+            "LengthDiff": 1.0,
+            "NoteFormat": 1.0,
+            "NoteRep": 0.5,
+            "LangConsistency": 1.0,
+        }
+
+    async def get_rm_rewards(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth):
+        tasks = [
+            self.get_revise_rm_rewards(
+                batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[0]]),
+            self.get_notes_mix_rm_rewards(
+                batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[1]]),
+            self.get_thinking_rm_rewards(
+                batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[2]]),
+            self.get_question_rm_rewards(
+                batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[3]])
+        ]
+        results = await asyncio.gather(*tasks)
+        rewards_union = [0.0] * len(batch_data_sources)
+        rewards_split = []
+        for i in range(len(batch_data_sources)):
+            rewards_split.append([0.0] * len(tasks))
+
+        for j, result in enumerate(results):
+            for i, reward in enumerate(result):
+                if j == 0 or j == 1:
+                    coef = 5
+                else:
+                    coef = 10
+                rewards_union[i] += coef * reward
+                rewards_split[i][j] = coef * reward
+
+        return rewards_union, rewards_split
+
+
+_qwq_longcot_pretrain_refine_stage2_compute_score_train = QwQLongCoTPretrainRefineStage2ComputeScore(
+    split="train")
+_qwq_longcot_pretrain_refine_stage2_compute_score_valid = QwQLongCoTPretrainRefineStage2ComputeScore(
+    split="valid")
+qwq_longcot_pretrain_refine_stage2_compute_score_train = _qwq_longcot_pretrain_refine_stage2_compute_score_train.compute_score
+qwq_longcot_pretrain_refine_stage2_compute_score_valid = _qwq_longcot_pretrain_refine_stage2_compute_score_valid.compute_score
