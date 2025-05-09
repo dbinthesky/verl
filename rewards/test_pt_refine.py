@@ -147,6 +147,10 @@ class TestPretrainRefine(unittest.TestCase):
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth
             )
+            # results = await task.get_revise_rm_rewards(
+            #     [None] *
+            #     len(batch_solution_str), batch_solution_str, batch_ground_truth
+            # )
             print(results)
             print(len(results))
         aio.run(main())

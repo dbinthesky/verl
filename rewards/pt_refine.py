@@ -1065,14 +1065,30 @@ The quality of questions is evaluated from the following five dimensions, with e
             refine_judges.append({
                 "ground_truth": f'你是一名专精于大模型数据改写的治理专家。目标是给定一篇从网页爬取或者PDF解析出来的文档，改写成一篇优质的大语言模型预训练语料。\n\n[Raw Corpus]\n{_["ground_truth"]}\n\n\n# 评价标准\n{judge_template}'
             })
-        rewards = await compute_rm_score(
-            urls=urls,
-            batch_solution_str=batch_solution_str,
-            batch_ground_truth=refine_judges,
-            postprocess_solution_fn=parse_doc_wo_notes_and_tags,
-            parse_result_failure_score=self.parse_result_failure_score,
-            desc="-judge_wo_notes"
-        )
+
+        tasks = []
+        n = len(urls)
+
+        for i, batch in enumerate(batchify(zip(refine_judges, batch_solution_str), n=64)):
+            refine_judge = [_[0] for _ in batch]
+            mini_batch_solution_str = [_[1] for _ in batch]
+            tasks.append(
+                compute_rm_score(
+                    batch_solution_str=mini_batch_solution_str,
+                    batch_ground_truth=refine_judge,
+                    postprocess_solution_fn=parse_doc_wo_notes_and_tags,
+                    parse_result_failure_score=self.parse_result_failure_score,
+                    desc="-revise",
+                    urls=[urls[i % n]]
+                )
+            )
+
+        results = await self.run_tasks_in_queues(tasks, n=n)
+
+        rewards = []
+        for _ in results:
+            rewards.extend(_)
+
         return rewards
 
     def normalize_question(self, note):
