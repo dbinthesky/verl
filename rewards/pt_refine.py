@@ -5,6 +5,8 @@ import aiohttp
 import asyncio
 import requests
 import numpy as np
+from functools import partial
+from asyncio import Semaphore
 from abc import abstractmethod
 from typing import Dict, Callable, List
 from collections import defaultdict
@@ -18,18 +20,20 @@ en_mt = MosesTokenizer(lang='en')
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
 RM_URLS = [
-    "http://10.130.1.36:25014",
-    "http://10.130.1.36:30638",
-    "http://10.130.1.36:26341",
-    "http://10.130.1.36:25446"
+    "http://10.130.1.37:27709",
+    "http://10.130.1.37:29452",
+    "http://10.130.1.37:32383",
+    "http://10.130.1.37:26082",
+    "http://10.130.1.37:29616",
+    "http://10.130.1.37:32934",
+    "http://10.130.1.208:32260",
+    "http://10.130.1.208:25390",
+    "http://10.130.1.208:29997",
+    "http://10.130.1.208:32325"
 ]
-# RM_URLS = [
-#     "http://10.130.1.91:34543",
-#     "http://10.130.1.91:26138",
-#     "http://10.130.1.91:33051",
-#     "http://10.130.1.91:31958"
-# ]
+
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 
 
@@ -72,7 +76,7 @@ async def rm_request_with_retry(urls, data, max_retries=3, retry_delay=5, suffix
         try:
             url = random.choice(urls)
             async with aiohttp.ClientSession() as session:
-                async with session.post(f'{url}{suffix}', json=data, timeout=aiohttp.ClientTimeout(total=2400)) as response:
+                async with session.post(f'{url}{suffix}', json=data, timeout=aiohttp.ClientTimeout(total=3000)) as response:
                     response.raise_for_status()
                     return await response.json()
         except (aiohttp.ClientError, aiohttp.ClientResponseError) as e:
@@ -111,7 +115,7 @@ async def compute_rm_score(
         input_datas.append(input_data)
 
     if len(input_datas) > 0:
-        for batch in tqdm_nonasync(batchify(input_datas, n=128), desc=f'[RM{desc}][{urls}] batchify inference (batch=64)'):
+        for batch in tqdm_nonasync(batchify(input_datas, n=32), desc=f'[RM{desc}][{urls}] batchify inference (batch=32)'):
             output_datas = await rm_request_with_retry(urls, batch)
             for _ in output_datas['reward']:
                 _id = int(_["id"])
@@ -691,452 +695,189 @@ class NotesRepetitionPenalty(PenaltyOrReward):
 
 
 class QwQLongCoTPretrainRefineComputeScore(object):
-    JUDGE_CRITERIA_WO_NOTES_ZH = """
-以下是深度整合 **内容删除治理、内容改写治理** 后的 **完整大模型数据治理评价标准（Criteria）**：
+    JUDGE_CRITERIA_WO_NOTES_ZH = """### **大模型数据治理评价标准（Criteria）**
 
+#### 一、内容纯净度
+- **违规内容彻底清除**：明确识别并彻底删除色情暗示、赌博诱导、广告营销（含链接/二维码/品牌硬广）、政治敏感（如涉政言论、敏感事件）、仇恨言论、暴力描述、医疗文档中的“包治百病”“神医”等违规内容。提供具体的关键词列表，如“赌博”、“色情”、“政治敏感”等。
+- **格式噪声**：标准化格式，去除连续空格（超过2个）、多余换行符（超过1行），修正过度标点。具体示例：连续空格“  ”、多余换行符“\n\n\n”。
+- **内容噪声**：删除与上下文无关的孤立短句（如“同上”“如题”“啊啊啊”等）、无意义语气词堆砌。具体示例：“同上”在某些情况下可以保留，如表格中的重复内容。
+- **学习噪声**：删除ISBN、网址、论文引用文献、DOI、ISSN、ORCID等学术标识符；删除时间信息、网址等对内容理解无关的信息，清除不可恢复的多模态内容（如图片、表格）。明确哪些元数据需要删除，哪些需要保留，如时间信息在某些情况下需要保留。
 
-### **一、内容纯净度 **
-- **违规内容彻底清除**：色情暗示、赌博诱导、广告营销（含链接/二维码/品牌硬广）、政治敏感、仇恨言论、暴力描述等显性/隐性违规内容、医疗文档禁“包治百病”“神医”，教育文档禁“考试答案”“内部渠道”，法律文档禁“套路贷”“虚假诉讼”暗示。
-- **格式噪声**：标准化格式，去除乱码，修正过度标点。
-- **内容噪声**：重复内容去重、与上下文无关的孤立短句、无意义语气词堆砌
-- **学习噪声**：删除 ISBN、网址、论文引用文献、DOI、ISSN、ORCID 等学术标识符；删除ISBN、时间信息、网址等对内容理解无关的信息，清除不可恢复的多模态内容
+#### 二、语义修复有效性
+- **基础规范**：修正拼写语法错误，统一标点符号、大小写、特殊符号（如全角半角转换、火星文/颜文字过滤）。具体示例：“接受”与“接收”的区别，标点符号的全角半角转换。
+- **语义优化**：结合上下文合理补全不完整句子，合并重复表意。具体示例：“由于……因此……”的结构。
+- **逻辑增强**：明确指代，调整语序，补充逻辑连接词（如“因此”、“然而”、“他”等）。具体示例：常见的逻辑连接词和指代示例。
+- **质量提升**：消除机翻痕迹，修复逻辑断裂，修正术语翻译错误、文化差异错误。具体示例：“翻译腔”、“文化背景差异”等。
 
+#### 三、信息完备性
+- **信息保留**：除需要删除、改写外的其他信息完整保留，特别是时间信息在某些情况下需要保留。明确哪些信息是必须保留的，哪些信息是可以删除的，提供具体的判断标准。
+- **最小干预**：仅修正明确错误，不改变原文主要内容，明确哪些修改是必要的，哪些是不必要的。具体示例：拼写错误必须修正，但某些语法错误可以忽略。
 
-### **二、语义修复有效性**
-核心目标：最小干预修复问题，完整保留核心语义
-1. **基础规范**：修正拼写语法错误，统一标点，规范技术格式
-2. **语义优化**：补全不完整句子，合并重复表意
-3. **逻辑增强**：明确指代，调整语序，补充逻辑连接词
-4. **质量提升**：消除机翻痕迹，修复逻辑断裂
+#### 四、格式规范性
+- **规范段落间距、表格格式**：统一段落间距（如1.5倍行距），确保表格对齐方式一致。具体示例：1.5倍行距的具体设置方法。
+- **确保Markdown、代码块、LaTeX等技术格式正确**：检查并修复Markdown、代码块、LaTeX等技术格式，确保其正确无误。具体示例：列表项格式混乱、链接格式错误的具体修复方法。
 
+#### 五、语言一致性
+- **语种统一**：全文语种一致，代码注释与代码语种匹配，处理多语言文档时确保语种统一。具体示例：如何处理中英文混合的文档。
+- **风格匹配**：保持与原文一致的正式度和专业术语使用，明确不同风格的具体定义和匹配方法。具体示例：正式度和专业术语的具体使用方法。
 
-## 三、信息完备性
-核心目标：确保原文有效信息完整，避免不必要修改
-1. **信息保留**：除需要删除、改写外的其他信息完整保留
-2. **最小干预**：仅修正明确错误，不改变原文主要内容
+#### 六、可读性
+- **文档可读性**：确保文档在治理后仍然易于阅读和理解，避免冗长复杂的句子结构，保持段落清晰。具体示例：如何避免冗长复杂的句子结构，如何保持段落清晰。
 
-
-## 四、格式规范性
-核心目标：统一治理后文档格式，确保技术元素正确
-1. **规范段落间距、表格格式**
-2. **确保Markdown、代码块、LaTeX等技术格式正确**
-
-
-## 五、语言一致性
-核心目标：保持原文语言风格和语种统一
-1. **语种统一**：全文语种一致，代码注释与代码语种匹配
-2. **风格匹配**：保持与原文一致的正式度和专业术语使用
+#### 七、附加要求
+- **数据隐私**：确保处理过程中不泄露个人隐私信息，如姓名、地址、电话号码等。具体示例：姓名、地址、电话号码等。
+- **数据合规**：确保处理后的数据符合相关法律法规和行业标准。具体示例：符合《个人信息保护法》等。
 """
 
-    JUDGE_CRITERIA_WO_NOTES_EN = """
-The following is the complete evaluation criteria for large model data governance (Criteria) after in-depth integration of **content deletion governance and content rewriting governance**:
+    JUDGE_CRITERIA_WO_NOTES_EN = """### Criteria for Governance of Large Model Data
 
-### I. Content Purity
-- **Thorough Removal of Violation Content**: Explicit or implicit violation content such as pornographic hints, gambling inducements, advertising and marketing (including links/QR codes/hard brand advertisements), political sensitivity, hate speech, violent descriptions, etc. In medical documents, terms like "curing all diseases" and "miracle doctors" are prohibited; in educational documents, "exam answers" and "internal channels" are prohibited; in legal documents, hints of "loan sharking" and "false litigation" are prohibited.
-- **Format Noise**: Standardize the format, remove garbled characters, and correct excessive punctuation.
-- **Content Noise**: Remove duplicate content, isolate short sentences that are irrelevant to the context, and eliminate the piling up of meaningless modal particles.
-- **Learning Noise**: Delete academic identifiers such as ISBN, website addresses, cited literature in papers, DOI, ISSN, ORCID, etc.; delete information irrelevant to content understanding such as ISBN, time information, website addresses, etc., and remove unrecoverable multimodal content.
+#### I. Content Purity
+- **Thorough Removal of Illegal Content**: Clearly identify and completely delete content such as pornographic hints, gambling inducements, advertising and marketing (including links, QR codes, and hard brand advertisements), politically sensitive information (such as remarks related to politics and sensitive events), hate speech, violent descriptions, and illegal content like "curing all diseases" and "miracle doctors" in medical documents. Provide a specific list of keywords, such as "gambling", "pornography", "politically sensitive", etc.
+- **Format Noise**: Standardize the format, remove consecutive spaces (more than 2), redundant line breaks (more than 1 line), and correct excessive punctuation. Specific examples: Consecutive spaces "  ", redundant line breaks "\n\n\n".
+- **Content Noise**: Delete isolated short sentences irrelevant to the context (such as "the same as above", "as in the question", "ahhhh", etc.) and meaningless piles of interjections. Specific examples: "The same as above" can be retained in some cases, such as repeated content in a table.
+- **Learning Noise**: Delete academic identifiers such as ISBN, website URLs, cited literature in papers, DOI, ORCID, etc.; delete information that is irrelevant to content understanding, such as time information and website URLs, and remove unrecoverable multimodal content (such as pictures and tables). Clearly define which metadata needs to be deleted and which needs to be retained. For example, time information may need to be retained in some cases.
 
-### II. Effectiveness of Semantic Restoration
-Core objective: Fix problems with minimal intervention and fully retain the core semantics.
-1. **Basic Specifications**: Correct spelling and grammar errors, unify punctuation, and standardize technical formats.
-2. **Semantic Optimization**: Complete incomplete sentences and merge repeated expressions of meaning.
-3. **Logical Enhancement**: Clarify references, adjust word order, and supplement logical connectives.
-4. **Quality Improvement**: Eliminate traces of machine translation and fix logical breaks.
+#### II. Effectiveness of Semantic Repair
+- **Basic Specification**: Correct spelling and grammar errors, unify punctuation marks, case, and special symbols (such as conversion between full-width and half-width characters, filtering of strange characters and emoticons). Specific examples: The difference between "accept" and "receive", conversion between full-width and half-width punctuation marks.
+- **Semantic Optimization**: Reasonably complete incomplete sentences in combination with the context, and merge repetitive expressions. Specific examples: The structure of "due to... therefore...".
+- **Logical Enhancement**: Clearly define references, adjust word order, and supplement logical connectives (such as "therefore", "however", "he", etc.). Specific examples: Common examples of logical connectives and references.
+- **Quality Improvement**: Eliminate the traces of machine translation, repair logical breaks, and correct translation errors of terms and errors caused by cultural differences. Specific examples: "Translationese", "cultural background differences", etc.
 
-## III. Information Completeness
-Core objective: Ensure the integrity of the effective information in the original text and avoid unnecessary modifications.
-1. **Information Retention**: Completely retain all other information except for the content that needs to be deleted or rewritten.
-2. **Minimal Intervention**: Only correct clear errors without changing the main content of the original text.
+#### III. Information Completeness
+- **Information Retention**: Completely retain all information except for the content that needs to be deleted or rewritten. In particular, time information may need to provide specific judgment criteria on which information must be retained and which can be deleted. Specific examples: Spelling errors must be corrected, but some grammar errors can be ignored.
 
-## IV. Format Standardization
-Core objective: Standardize the document format after governance and ensure the correctness of technical elements.
-1. **Standardize paragraph spacing and table format**
-2. **Ensure the correctness of technical formats such as Markdown, code blocks, and LaTeX**
+#### IV. Format Specification
+- **Standardize Paragraph Spacing and Table Format**: Unify the paragraph spacing (such as 1.5-line spacing), and ensure consistent alignment of tables. Specific examples: The specific method for setting 1.5-line spacing.
+- **Ensure the Correctness of Technical Formats such as Markdown, Code Blocks, and LaTeX**: Check and repair technical formats such as Markdown, code blocks, and LaTeX to ensure their correctness. Specific examples: Specific repair methods for chaotic list item formats and incorrect link formats.
 
-## V. Language Consistency
-Core objective: Maintain the unity of the original text's language style and language type.
-1. **Language Type Unity**: Ensure consistency of the language type throughout the text, and make sure that the language type of code comments matches that of the code.
-2. **Style Matching**: Maintain the same level of formality and use of professional terms as in the original text. 
+#### V. Language Consistency
+- **Language Unity**: Ensure consistent language throughout the document. The language of code comments should match the code language. When dealing with multi-language documents, ensure language unity. Specific examples: How to deal with documents that mix Chinese and English.
+- **Style Matching**: Maintain the same formality and use of professional terms as the original text, and clearly define the specific definitions and matching methods of different styles. Specific examples: The specific usage methods of formality and professional terms.
+
+#### VI. Readability
+- **Document Readability**: Ensure that the document is still easy to read and understand after governance, avoid long and complex sentence structures, and keep paragraphs clear. Specific examples: How to avoid long and complex sentence structures and how to keep paragraphs clear.
+
+#### VII. Additional Requirements
+- **Data Privacy**: Ensure that personal privacy information, such as names, addresses, and phone numbers, is not leaked during the processing. Specific examples: Names, addresses, phone numbers, etc.
+- **Data Compliance**: Ensure that the processed data complies with relevant laws, regulations, and industry standards. Specific examples: Comply with laws such as the Personal Information Protection Law. 
 """
 
-    JUDGE_CRITERIA_W_NOTES_ZH = """
-## 内容新增治理之“思考过程”专项评价标准
+    JUDGE_CRITERIA_SINGLE_QUESTION_ZH = """### 高质量提问评价标准
 
-### 一、结构规范性
-1. **标签使用准确性**
-   - 正确使用标记：
-     - 非代码文本使用“[EXPLANATION]...[/EXPLANATION]”，代码场景在注释区域添加
-     - 紧接着思考过程“[EXPLANATION]...[/EXPLANATION]”之后，使用“[CONCLUSION]...[/CONCLUSION]”把原文中内容作为结论部分。
-   - 标签内是否严格遵循英文“Question: *** Think Step by Step: ***”的自问自答格式中文“提问：*** 一步步思考：***”；禁止出现无设问的纯叙述性思考
+#### 一、核心评价维度与评分细则
 
-2. **位置合理性**
-   - 思考过程是否出现在需要解释的内容**之前**，确保问题导向性
-   - 避免在无关位置插入思考（如在结论后补充问题，或在段落中间突兀插入不相关思考）
-   - 提问、思考与原文内容（[EXPLANATION]...[/EXPLANATION][CONCLUSION]...[/CONCLUSION]）需要构成“问题-思考-结论”的直接映射关系
+以下从五个维度评估提问质量，每个维度按0-4分打分（4分为最高）：
 
-### 二、内容价值性
-#### 1. **信息增量有效性**
-- **优质特征**：
-  - 包含原文未明确写出的 **背景知识、原理依据、潜在假设、风险分析或应用场景**。
-  - 逻辑链条延伸而非表面复述，体现 **“为何如此”“如何推导”**。
-  - 避免同义转换，需引入 **跨学科关联、前沿动态或实际案例**。
-- **低效特征**：
-  - 仅对原文进行 **同义替换或简单概括**。
-  - 无实质新信息，如空泛表述“这是重要研究方向”“对行业有帮助”，未说明具体价值或原理。
-  - 直接复制原文结论，未补充 **推导过程或隐性逻辑**。
+1. **相关性**
+   - **0分**：问题与文档核心内容无关，涉及背景知识外的话题（如询问作者学术背景、文档格式等）。
+   - **1分**：问题指向边缘细节，但对理解核心内容有辅助作用（如追问术语定义，有助于理解后续内容）。
+   - **2分**：问题涉及次要逻辑环节，如询问具体公式推导步骤，但未指出其中假设漏洞。
+   - **3分**：问题精准定位关键知识点或逻辑断层，并明确指出矛盾点。
+   - **4分**：问题直接指向文档中理解晦涩或过于简略的部分，且明确指出未解释清楚的内容，并能引导读者进一步思考。
 
-#### 2. **问题导向精准性**
-- **优质特征**：
-  - 提问聚焦 **“核心矛盾”或“认知盲区”**，如“为何选择X方法而非Y方法？”“实验数据中的异常值如何处理？”，直指逻辑薄弱点。
-  - 问题具体且有指向性，避免宽泛或无意义设问（例如：“如何优化算法时间复杂度？”而非“算法有什么用？”）。
-  - 提问与原文结论形成 **“问题-答案”闭环**，思考内容需完整回应问题并提供深层解释。
-- **低效特征**：
-  - 问题表面化，仅复述原文内容。
-  - 问题模糊笼统，如“如何理解该理论？”“说明标准的重要性”，未明确具体思考维度。
-  - 提问与原文结论无关，或无法通过思考过程推导出结论。
+2. **逻辑深度**
+   - **0分**：停留在事实复述或表面现象。
+   - **1分**：基于单一因果关系提问，未涉及多因素关联。
+   - **2分**：追问方法或过程，并能指出潜在的假设。
+   - **3分**：涉及知识原理或潜在假设，并能指出假设的合理性。
+   - **4分**：追问知识体系的底层逻辑或潜在风险，涉及多因素关联，并能引导读者进行系统性思考。
 
-#### 3. **批判性思维体现**
-- **优质特征**：
-  - **多维度分析**：引入对比（如“X方法vs.Y方法的优劣”）、假设（如“若改变实验条件，结果将如何？”）、风险评估（如“该模型在长尾数据下的潜在偏差”）。
-  - **挖掘隐含条件**：主动识别原文未明示的前提或逻辑漏洞。
-  - **提出替代方案**：针对多解问题探索其他路径。
-- **低效特征**：
-  - 单向度解释，仅陈述“是什么”或“有效”，未分析“为什么有效”或“局限性”（例如：“该方法可行”，未说明适用边界）。
-  - 直接接受原文结论，未质疑潜在假设。
-  - 缺乏对比或风险意识，如忽略“不同场景下方法效果差异”“数据偏差对结论的影响”。
+3. **引导性**
+   - **0分**：封闭性问题，答案为“是/否”或单一事实。
+   - **1分**：问题仅需单一解释。
+   - **2分**：问题隐含步骤提示，并能引导读者思考。
+   - **3分**：问题明确引导逻辑链条。
+   - **4分**：问题构建系统性思考框架，并能引导读者进行多角度思考，且能提供具体思考路径。
 
-#### 4. **知识衔接深度**
-- **优质特征**：
-  - 补全 **逻辑断层**：将原文隐含的推导步骤显性化（例如：数学证明中补充“辅助线构造利用等腰三角形对称性”的几何原理）。
-  - 建立 **跨维度关联**：连接单一知识点与学科底层原理、实际应用或前沿研究（例如：将“分子生物学研究”与“疾病诊断工具开发”结合，说明技术转化逻辑）。
-  - 分层拆解复杂问题，体现“从原理到应用”的链条（例如：解释“代码实现”时，先说明算法思想，再拆解变量功能和边界条件处理）。
-- **低效特征**：
-  - 浅层次关联，仅罗列概念或步骤（例如：“研究包含A、B、C方向”，未说明各方向的内在联系）。
-  - 碎片化陈述，缺乏因果推导（例如：“实验需多次测量”，未解释“误差分布→数据处理”的科学依据）。
-  - 未衔接底层原理，如直接使用专业术语而不解释（例如：提及“熵增”但未定义“熵”的物理意义）。
-"""
-    JUDGE_CRITERIA_W_NOTES_EN = """
-## Special Evaluation Criteria for the "Thinking Process" in Content Addition Governance
+4. **批判性视角**
+   - **0分**：无质疑，仅请求解释或复述内容。
+   - **1分**：表面质疑，未具体指出漏洞。
+   - **2分**：指出方法局限性或现实矛盾，并能提出改进建议。
+   - **3分**：质疑原文假设或逻辑漏洞，并能提出具体质疑点。
+   - **4分**：探索替代方案或逆向思考，提供具体替代方法，并能引导读者进行深入探讨。
 
-### I. Structural Normativeness
-1. **Accuracy of Label Usage**
-   - Correct Use of Markers:
-     - For non-code text, use “[EXPLANATION]...[/EXPLANATION]”. In the code scenario, add it in the comment area.
-     - Immediately following the thinking process “[EXPLANATION]...[/EXPLANATION]”, use “[CONCLUSION]...[/CONCLUSION]” to take the content in the original text as the conclusion part.
-   - Whether the labels strictly follow the self-questioning and self-answering format of “Question: *** Think Step by Step: ***” in English or “提问：*** 一步步思考：***” in Chinese; Pure narrative thinking without a question setting is prohibited.
+5. **具体性**
+   - **0分**：问题过于宽泛，难以具体回答。
+   - **1分**：问题有一定的具体性，但仍有较大的回答空间。
+   - **2分**：问题具体明确，指向明确的内容。
+   - **3分**：问题不仅具体明确，还包含背景信息，便于回答。
+   - **4分**：问题具体明确，包含详细的背景信息，并能引导读者进行深入思考。
 
-2. **Reasonableness of Position**
-   - Whether the thinking process appears **before** the content that needs to be explained to ensure the problem-oriented nature.
-   - Avoid inserting thinking in an irrelevant position (such as adding a question after the conclusion, or abruptly inserting an unrelated thinking in the middle of a paragraph).
-   - The question, thinking, and the original text content ([EXPLANATION]...[/EXPLANATION][CONCLUSION]...[/CONCLUSION]) need to form a direct mapping relationship of “question-thinking-conclusion”.
+#### 二、综合评分计算方法
 
-### II. Content Value
-#### 1. Effectiveness of Information Increment
-- **High-quality Features**:
-  - Include **background knowledge, principle basis, potential assumptions, risk analysis, or application scenarios** that are not explicitly written in the original text.
-  - Extend the logical chain instead of simply repeating it on the surface, reflecting **“why it is so” and “how to derive it”**.
-  - Avoid synonymous conversions and introduce **interdisciplinary associations, cutting-edge developments, or practical cases**.
-- **Ineffective Features**:
-  - Only perform **synonymous substitutions or simple summaries** of the original text.
-  - There is no substantial new information, such as vague expressions like “This is an important research direction” or “It is helpful to the industry”, without explaining the specific value or principle.
-  - Directly copy the conclusion of the original text without supplementing the **derivation process or implicit logic**.
+1. **权重分配**：五个维度权重均等，各占20%。
+2. **得分计算**：总分 = （相关性得分 + 逻辑深度得分 + 引导性得分 + 批判性视角得分 + 具体性得分） × 0.2，满分4分。
+   - **示例**：
+     - 提问“若数据存在时空相关性，原文的平稳性假设失效，此时应如何修正模型？”
+     - 相关性4分（指向假设漏洞），逻辑深度3分（涉及理论适用），引导性3分（隐含修正步骤），批判性视角4分（探索替代方案），具体性3分（具体明确且包含背景信息）。
+     - 总分 = (4+3+3+4+3)×0.2 = 3.4分，属于“逻辑较深且具有批判意识的高质量提问”。
 
-#### 2. Precision of Problem Orientation
-- **High-quality Features**:
-  - The question focuses on the **“core contradiction” or “cognitive blind spot”**, such as “Why choose Method X instead of Method Y?” or “How to deal with the outliers in the experimental data?”, directly pointing to the weak points in logic.
-  - The question is specific and directional, avoiding broad or meaningless questions (for example: “How to optimize the time complexity of the algorithm?” instead of “What is the use of the algorithm?”).
-  - The question forms a **“question-answer” closed loop with the conclusion of the original text, and the thinking content needs to fully respond to the question and provide a deep explanation.
-- **Ineffective Features**:
-  - The question is superficial and only repeats the content of the original text.
-  - The question is vague and general, such as “How to understand this theory?” or “Explain the importance of the standard”, without clarifying the specific thinking dimension.
-  - The question has nothing to do with the conclusion of the original text, or the conclusion cannot be derived through the thinking process.
+### 说明
 
-#### 3. Demonstration of Critical Thinking
-- **High-quality Features**:
-  - **Multi-dimensional Analysis**: Introduce comparisons (such as “The Advantages and Disadvantages of Method X vs. Method Y”), assumptions (such as “What will happen to the results if the experimental conditions are changed?”), and risk assessments (such as “The Potential Bias of This Model Under Long-tail Data”).
-  - **Dig Out Implicit Conditions**: Proactively identify the premises or logical loopholes that are not explicitly stated in the original text.
-  - **Propose Alternative Solutions**: Explore other paths for problems with multiple solutions.
-- **Ineffective Features**:
-  - One-way explanation, only stating “what it is” or “it is effective” without analyzing “why it is effective” or “its limitations” (for example: “This method is feasible” without explaining the applicable boundaries).
-  - Directly accept the conclusion of the original text without questioning the potential assumptions.
-  - Lack of comparison or risk awareness, such as ignoring “the differences in the effects of the method in different scenarios” or “the impact of data bias on the conclusion”.
-
-#### 4. Depth of Knowledge Connection
-- **High-quality Features**:
-  - Fill in the **logical gaps**: Make the implicit derivation steps in the original text explicit (for example: in a mathematical proof, supplement the geometric principle of “constructing auxiliary lines using the symmetry of isosceles triangles”).
-  - Establish **cross-dimensional associations**: Connect a single knowledge point with the underlying principles of the discipline, practical applications, or cutting-edge research (for example: combine “molecular biology research” with “the development of disease diagnosis tools” to illustrate the logic of technology transformation).
-  - Decompose complex problems in layers, reflecting the chain of “from principle to application” (for example: when explaining “code implementation”, first explain the algorithm idea, and then decompose the functions of variables and the handling of boundary conditions).
-- **Ineffective Features**:
-  - Shallow associations, only listing concepts or steps (for example: “The research includes directions A, B, and C” without explaining the internal connections between each direction).
-  - Fragmented statements, lacking causal derivation (for example: “The experiment requires multiple measurements” without explaining the scientific basis of “error distribution→data processing”).
-  - Failure to connect with the underlying principles, such as directly using professional terms without explanation (for example: mentioning “entropy increase” but not defining the physical meaning of “entropy”). 
+- **相关性**：增加对问题是否能引导读者深入理解文档核心内容的评估。
+- **逻辑深度**：增加对问题是否能引导读者进行多角度思考的评估。
+- **引导性**：增加对问题是否能引导读者进行系统性思考的评估。
+- **批判性视角**：增加对问题是否能引导读者进行逆向思考的评估。
+- **具体性**：增加对问题具体性和明确性的评估，确保问题能够明确指出未解释清楚的内容。
 """
 
-    JUDGE_CRITERIA_THINKING_QUALITY_ZH = """
-## 思考过程质量评价标准
+    JUDGE_CRITERIA_SINGLE_QUESTION_EN = """### High-quality Question Evaluation Criteria
 
-#### **一、逻辑结构**  
-1. **链条连贯性**  
-   - 步骤是否按“问题识别→要素分析→逻辑推导”线性展开，无断裂或循环重复。  
-2. **分层拆解度**  
-   - 复杂问题是否拆解为可操作的**分阶子步骤**，每阶任务清晰可追溯。  
+#### I. Core Evaluation Dimensions and Scoring Rules
 
-
-#### **二、问题拆解能力**  
-3. **要素精准度**  
-   - 是否准确定位问题的**核心驱动变量**）、约束条件或假设。  
-4. **因果逻辑性**  
-   - 是否从“现象描述”深入到“机制分析”，再延伸至“影响推导”，形成“是什么→为什么→如何影响”的递进链条。  
-
-
-#### **三、专业深度与实用性**  
-5. **理论嵌入性**  
-   - 是否调用领域核心理论或技术原理支撑分析，避免停留在表面描述。  
-6. **现实适配性**  
-   - 是否兼顾理论理想化假设与实际约束。  
-
-
-#### **四、过程完整性**  
-7. **目标聚焦性**  
-   - 所有分析步骤是否紧密围绕初始问题核心。  
-8. **步骤详实度**  
-   - 关键环节是否包含**具体操作细节**，避免笼统概括。  
-
-
-#### **五、表达规范**  
-9. **术语准确性**  
-   - 专业术语使用是否精准，无概念混淆。  
-10. **表述简洁性**  
-    - 是否用“首先/其次”“由于/因此”等逻辑连接词串联步骤，**避免同义重复或冗长描述*。  
-
-
-### **核心特征**  
-- **无冗余性**：思考过程与结论指向明确，步骤间无重复论证，尤其是思考过程和结论无重复内容展开。  
-- **缜密分阶性**：复杂问题必按**可操作的子步骤展开**，每阶逻辑严密、细节完整。  
-- **因果闭环性**：从问题提出到结论形成形成完整链条，关键推导环节无逻辑断层。  
-
-
-### 优化说明  
-1. **规避重复**：通过“链条连贯性”“目标聚焦性”等条目，明确要求步骤围绕核心问题单向推进，杜绝同一概念在不同维度重复描述。  
-2. **强化缜密性**：新增“分层拆解度”“步骤详实度”，强调复杂问题必须拆解为**可执行的分阶任务**，每个环节需包含具体操作细节，避免笼统表述。
-"""
-
-    JUDGE_CRITERIA_THINKING_QUALITY_EN = """
-## Quality Evaluation Criteria for the Thinking Process
-
-### I. Logical Structure
-1. **Coherence of the Chain**
-   - Whether the steps are linearly developed in the order of "problem identification → element analysis → logical derivation", without breaks or circular repetitions.
-2. **Degree of Hierarchical Decomposition**
-   - Whether complex problems are decomposed into actionable **sub-steps at different levels**, and the tasks at each level are clear and traceable.
-
-### II. Problem Decomposition Ability
-3. **Accuracy of Elements**
-   - Whether the **core driving variables**, constraints, or assumptions of the problem are accurately identified.
-4. **Causal Logic**
-   - Whether it progresses from "phenomenon description" to "mechanism analysis" and then extends to "impact derivation", forming a progressive chain of "what it is → why it is so → how it affects".
-
-### III. Professional Depth and Practicality
-5. **Theoretical Embeddedness**
-   - Whether the core theories or technical principles in the field are used to support the analysis, avoiding staying at the surface description.
-6. **Realistic Adaptability**
-   - Whether both the idealized assumptions in theory and the actual constraints are taken into account.
-
-### IV. Process Completeness
-7. **Focus on the Goal**
-   - Whether all analysis steps are closely centered around the core of the initial problem.
-8. **Degree of Detail in Steps**
-   - Whether the key links contain **specific operation details**, avoiding generalizations.
-
-### V. Expression Specification
-9. **Accuracy of Terminology**
-   - Whether professional terms are used accurately without conceptual confusion.
-10. **Conciseness of Expression**
-   - Whether logical connectives such as "firstly/secondly", "because/therefore" are used to connect the steps, **avoiding synonymous repetitions or verbose descriptions**.
-
-### Core Characteristics
-- **Lack of Redundancy**: The thinking process and conclusion have a clear direction, and there is no repeated argumentation between steps, especially there is no repeated elaboration of the same content in the thinking process and the conclusion.
-- **Meticulous Hierarchical Nature**: Complex problems must be unfolded according to **actionable sub-steps**, and the logic at each level is rigorous and the details are complete.
-- **Causal Closed-loop Nature**: A complete chain is formed from the raising of the problem to the formation of the conclusion, and there is no logical gap in the key derivation links.
-
-### Optimization Instructions
-1. **Avoid Repetition**: Through items such as "coherence of the chain" and "focus on the goal", it is clearly required that the steps should move forward unidirectionally around the core problem, and the repeated description of the same concept in different dimensions is prohibited.
-2. **Strengthen Meticulousness**: New items such as "degree of hierarchical decomposition" and "degree of detail in steps" are added, emphasizing that complex problems must be decomposed into **executable sub-tasks at different levels**, and each link needs to contain specific operation details to avoid general expressions. 
-"""
-
-    JUDGE_CRITERIA_QUESTION_QUALITY_ZH = """
-    ## 高质量提问评价标准
-
-1. **相关性**  
-   - 问题必须直接指向原文待解释的关键知识点、逻辑断层或核心结论，避免无关发散。  
-   - 能精准定位内容中的核心矛盾、未明确假设或潜在逻辑跳步。  
-
-2. **多样性**  
-   - 避免问题类型过于单一
-   - 问题视角多样性，需要覆盖尽可能更多的场景和提问类型；问题提问视角千万不要单一；下面是一些不同提问类型的例子
-
-    #### **1. 数学证明思路补全**  
-    提问：如何证明柯西不等式的向量形式？  
-
-    #### **2. 算法复杂度分析**  
-    提问：如何推导快速排序算法的平均时间复杂度？  
-
-    #### **3. 物理定律推导**  
-    提问：如何从开普勒行星运动定律推导出万有引力定律？  
-
-    ### **4. 教育场景**  
-    提问：这道微积分题的出题思路是什么？为什么要这么出题  
-
-    #### **5. 实验题能力要求分析**  
-    提问：本研究为何选择 XX 群体作为研究对象？分组时采用 XX 标准的依据是什么？技术路线中关键步骤的顺序安排基于哪些方法论原则？
-
-    #### **6. 语文阅读理解题考点设置**  
-    提问：小说阅读题为何反复强调“老钟摆”的意象？  
-
-    #### **7. 方法学合理性论证**
-    提问：为何选择 XX 实验方法而非其他技术？所采用的统计工具在本研究中的适用性及潜在局限是什么？数据收集方法如何平衡效度与信度？
-
-    #### **8. 数据解读深度拓展**
-    提问：如何从现有数据推断出 XX 生物学 / 医学机制？数据中 XX 异常趋势可能反映了哪些未被揭示的潜在规律？
-
-    #### **9. 跨文献研究对比分析**
-    提问：本研究结论与 XX 文献的差异，可能由哪些样本选择、实验条件或理论假设的不同导致？如何解释文献中相互矛盾的研究发现？
-
-    #### **10. 研究局限性与改进方向**
-    提问：研究设计中样本量不足或数据维度单一可能导致哪些结论偏差？未来研究可从哪些技术手段或研究视角进行优化？
-    
-    #### **11. 结论推导严谨性补充**
-    提问：从数据统计结果到核心结论的推导过程中，需要补充哪些逻辑验证步骤以避免过度推断？
-    
-    #### **12. 技术文档场景**
-    提问：API 接口中参数类型校验、长度限制和格式规范的设计，主要基于哪些安全性、兼容性和易用性考量？
-
-    #### **13. 算法参数调优逻辑**
-    提问：在机器学习模型训练中，选择 XX 学习率、批次大小和正则化系数的决策依据是什么？如何通过交叉验证平衡模型的偏差与方差？
-
-    #### **14. 古代政策文本解读**
-    提问：史书中记载的 XX 朝代赋税制度（如两税法、一条鞭法），其征税对象和税率调整的背后反映了哪些经济结构变化和统治逻辑？
-
-    #### **15. 外交文书语义辨析**
-    提问：近代 XX 条约（如《南京条约》《马关条约》）中 “利益均沾”“最惠国待遇” 等模糊表述，如何体现当时列强的权力博弈和外交策略？
-
-    #### **16. 法律文书场景**
-    提问：商业合同中违约责任条款为何区分 “轻微违约”“重大违约” 并设置不同赔偿标准？条款中 “不可抗力” 范围的列举式规定有何法律实务意义？
-
-    #### **17. 法律条文歧义消解**
-    提问：刑法中 “情节严重”“数额较大” 等弹性条款，司法实践中主要依据哪些司法解释和指导性案例进行具体认定？
-    
-    #### **18. 翻译文本场景**
-    提问：中医术语 “经络”“气血” 在英译时，为何采用音译加注释而非字面直译？这种处理如何兼顾文化独特性与国际学术理解？
-
-    #### **19. 法律文本术语校准**
-    提问：国际公约中 “Intellectual Property” 译为 “知识产权” 而非 “知识财产”，主要基于哪些法律概念的精准性和行业惯例考量？
-    
-    #### **20. 法律文本术语校准**
-    提问：正式商务邮件为何采用 “结论先行 — 细节支撑 — 行动诉求” 的结构？这种布局如何提升收件人的信息处理效率？
-
-    #### **21. 跨部门沟通话术设计**
-    提问：在跨部门协作中，“问题描述 — 影响分析 — 解决方案” 的沟通模板如何减少信息误差并推动快速共识？
-
-3. **逻辑深度**  
-   - 围绕“为什么”“如何”“基于什么假设”等深层逻辑展开，而非停留在表面事实。  
-   - 体现对知识原理、方法论或潜在风险的追问。  
-
-4. **引导性**  
-   - 问题需自然引出“步骤性思考”，如通过“需要哪些前提条件？”“分几步验证？”等表述，为后续解释提供逻辑框架。  
-   - 避免封闭性问题（如“是对的吗？”），应鼓励展开式推导（如“从实验数据到结论的归纳过程中，可能存在哪些推导漏洞？”）。  
-
-5. **批判性视角（挖掘深层问题）**  
-   - 主动质疑原文假设、方法局限性或逻辑漏洞。  
-   - 探索替代方案或逆向思考。  
-"""
-
-    JUDGE_CRITERIA_QUESTION_QUALITY_EN = """
-## High-quality Question Evaluation Criteria
+The quality of questions is evaluated from the following five dimensions, with each dimension scored from 0 to 4 points (4 points being the highest).
 
 1. **Relevance**
-   - The question must directly target the key knowledge points, logical gaps, or core conclusions in the original text that need explanation, avoiding irrelevant digressions.
-   - It should be able to precisely identify the core contradictions, unclarified assumptions, or potential logical leaps within the content.
+   - **0 points**: The question is unrelated to the core content of the document and involves topics outside of the background knowledge (such as asking about the author's academic background, document format, etc.).
+   - **1 point**: The question points to marginal details but has an auxiliary role in understanding the core content (such as asking for the definition of a term, which helps in understanding the subsequent content).
+   - **2 points**: The question involves secondary logical links, such as asking for the derivation steps of a specific formula, but does not point out the loopholes in the assumptions.
+   - **3 points**: The question precisely locates key knowledge points or logical discontinuities and clearly points out contradictions.
+   - **4 points**: The question directly points to the parts of the document that are difficult to understand or too brief, clearly points out the content that is not explained clearly, and can guide the reader to think further.
 
-2. **Diversity**
-   - Avoid the question types from being too monotonous or duplicate.
-   - The question should have diverse perspectives, covering as many scenarios and question types as possible. The question perspectives should never be single. Here are some examples of different question types:
+2. **Logical Depth**
+   - **0 points**: Stays at the level of fact repetition or surface phenomena.
+   - **1 point**: Asks questions based on a single causal relationship without involving the correlation of multiple factors.
+   - **2 points**: Asks about the method or process and can point out potential assumptions.
+   - **3 points**: Involves knowledge principles or potential assumptions and can point out the rationality of the assumptions.
+   - **4 points**: Asks about the underlying logic or potential risks of the knowledge system, involves the correlation of multiple factors, and can guide the reader to think systematically.
 
-    #### **1. Completion of Mathematical Proof Ideas**
-    Question: How can we prove the vector form of the Cauchy inequality?
+3. **Guidedness**
+   - **0 points**: Closed-ended question with an answer of "yes/no" or a single fact.
+   - **1 point**: The question only requires a single explanation.
+   - **2 points**: The question implies step hints and can guide the reader to think.
+   - **3 points**: The question clearly guides the logical chain.
+   - **4 points**: The question constructs a systematic thinking framework, can guide the reader to think from multiple angles, and can provide a specific thinking path.
 
-    #### **2. Analysis of Algorithm Complexity**
-    Question: How can we derive the average time complexity of the quick sort algorithm?
+4. **Critical Perspective**
+   - **0 points**: No questioning, only requests for explanation or repetition of content.
+   - **1 point**: Superficial questioning without specifically pointing out loopholes.
+   - **2 points**: Points out the limitations of the method or real-world contradictions and can propose improvement suggestions.
+   - **3 points**: Questions the assumptions or logical loopholes in the original text and can put forward specific points of doubt.
+   - **4 points**: Explores alternative solutions or thinks in reverse, provides specific alternative methods, and can guide the reader to conduct in-depth discussions.
 
-    #### **3. Derivation of Physical Laws**
-    Question: How can we derive the Law of Universal Gravitation from Kepler's laws of planetary motion?
+5. **Specificity**
+   - **0 points**: The question is too broad to be answered specifically.
+   - **1 point**: The question has some specificity but still leaves a large space for answering.
+   - **2 points**: The question is specific and clear, pointing to clear content.
+   - **3 points**: The question is not only specific and clear but also includes background information, making it easy to answer.
+   - **4 points**: The question is specific and clear, includes detailed background information, and can guide the reader to think deeply.
 
-    ### **4. Educational Scenarios**
-    Question: What is the idea behind setting this calculus problem? Why is it set in this way?
+#### II. Comprehensive Scoring Calculation Method
 
-    #### **5. Analysis of Capability Requirements in Experimental Questions**
-    Question: Why was the XX group selected as the research object in this study? What is the basis for using the XX criteria in grouping? Based on which methodological principles is the sequence arrangement of the key steps in the technical route determined?
+1. **Weight Allocation**: The five dimensions have equal weight, each accounting for 20%.
+2. **Score Calculation**: Total score = (Relevance score + Logical depth score + Guidedness score + Critical perspective score + Specificity score) × 0.2, with a full score of 4 points.
+   - **Example**:
+     - Question: "If there is spatiotemporal correlation in the data and the stationarity assumption in the original text fails, how should the model be revised?"
+     - Relevance: 4 points (points to the assumption loophole), Logical depth: 3 points (involves the application of theory), Guidedness: 3 points (implies the steps of revision), Critical perspective: 4 points (explores alternative solutions), Specificity: 3 points (specific and clear, includes background information).
+     - Total score = (4 + 3 + 3 + 4 + 3)×0.2 = 3.4 points, which belongs to "a high-quality question with relatively deep logic and critical awareness".
 
-    #### **6. Setting of Test Points in Chinese Reading Comprehension Questions**
-    Question: Why is the image of the "old pendulum" repeatedly emphasized in the novel reading question?
+### Explanation
 
-    #### **7. Rationality Demonstration of Methodology**
-    Question: Why was the XX experimental method chosen instead of other techniques? What is the applicability and potential limitations of the statistical tools used in this study? How does the data collection method balance validity and reliability?
-
-    #### **8. In-depth Expansion of Data Interpretation**
-    Question: How can we infer the XX biological/medical mechanism from the existing data? What potential laws that have not been revealed might the XX abnormal trends in the data reflect?
-
-    #### **9. Comparative Analysis of Cross-literature Research**
-    Question: What factors, such as sample selection, experimental conditions, or theoretical assumptions, might lead to the differences between the conclusion of this study and that in the XX literature? How can we explain the contradictory research findings in the literature?
-
-    #### **10. Research Limitations and Improvement Directions**
-    Question: What kinds of conclusion biases might be caused by insufficient sample size or single data dimension in the research design? From which technical means or research perspectives can future research be optimized?
-
-    #### **11. Supplementary of Conclusion Derivation Rigor**
-    Question: In the process of deriving from the data statistical results to the core conclusion, what logical verification steps need to be supplemented to avoid over-inference?
-
-    #### **12. Technical Document Scenarios**
-    Question: Based on which considerations of security, compatibility, and usability are the design of parameter type verification, length limitation, and format specification of the API interface made?
-
-    #### **13. Logic of Algorithm Parameter Tuning**
-    Question: What is the decision-making basis for choosing the XX learning rate, batch size, and regularization coefficient in the training of a machine learning model? How can we balance the bias and variance of the model through cross-validation?
-
-    #### **14. Interpretation of Ancient Policy Texts**
-    Question: Behind the adjustment of the tax objects and tax rates of the tax system (such as the Two-tax Law and the Single-whip Law) in the XX dynasty recorded in historical books, what changes in the economic structure and governing logic do they reflect?
-
-    #### **15. Semantic Analysis of Diplomatic Documents**
-    Question: How do the vague expressions such as "equal sharing of interests" and "most-favored-nation treatment" in the XX treaties (such as the Treaty of Nanking and the Treaty of Shimonoseki) in modern times reflect the power games and diplomatic strategies of the列强 at that time?
-
-    #### **16. Legal Document Scenarios**
-    Question: Why does the liability for breach of contract clause in a commercial contract distinguish between "minor breach" and "major breach" and set different compensation standards? What is the practical legal significance of the enumerated provisions of the scope of "force majeure" in the clause?
-
-    #### **17. Resolution of Ambiguities in Legal Provisions**
-    Question: For the elastic clauses such as "serious circumstances" and "relatively large amount" in criminal law, which judicial interpretations and guiding cases are mainly relied on for specific determination in judicial practice?
-
-    #### **18. Translation Text Scenarios**
-    Question: When translating traditional Chinese medicine terms such as "meridians and collaterals" and "qi and blood" into English, why is the method of transliteration plus annotation used instead of literal translation? How does this treatment take into account both the cultural uniqueness and international academic understanding?
-
-    #### **19. Calibration of Legal Text Terms**
-    Question: Why is "Intellectual Property" in international conventions translated as "知识产权" instead of "知识财产"? What considerations are mainly based on in terms of the precision of legal concepts and industry practices?
-
-    #### **20. Calibration of Legal Text Terms**
-    Question: Why does a formal business email adopt the structure of "conclusion first—detail support—action appeal"? How does this layout improve the recipient's information processing efficiency?
-
-    #### **21. Design of Communication Language across Departments**
-    Question: In cross-departmental collaboration, how can the communication template of "problem description—impact analysis—solution" reduce information errors and promote rapid consensus?
-
-3. **Logical Depth**
-   - The question should revolve around deep logics such as "why", "how", and "based on what assumptions", instead of staying on the surface facts.
-   - It should reflect the pursuit of knowledge principles, methodologies, or potential risks.
-
-4. **Guidedness**
-   - The question should naturally lead to "step-by-step thinking", for example, through expressions like "What preconditions are needed?" and "How many steps are there to verify?" to provide a logical framework for subsequent explanations.
-   - Avoid closed questions (such as "Is it right?") and encourage expansive derivations (such as "What possible derivation loopholes might there be in the process of inducing from the experimental data to the conclusion?").
-
-5. **Critical Perspective (Exploring Deep-seated Issues)**
-   - Actively question the assumptions, methodological limitations, or logical loopholes in the original text.
-   - Explore alternative solutions or think in reverse.  
+- **Relevance**: Adds an assessment of whether the question can guide the reader to deeply understand the core content of the document.
+- **Logical Depth**: Adds an assessment of whether the question can guide the reader to think from multiple angles.
+- **Guidedness**: Adds an assessment of whether the question can guide the reader to think systematically.
+- **Critical Perspective**: Adds an assessment of whether the question can guide the reader to think in reverse.
+- **Specificity**: Adds an assessment of the specificity and clarity of the question to ensure that the question can clearly point out the content that is not explained clearly. 
 """
 
     def __init__(self,
@@ -1156,7 +897,7 @@ Core objective: Maintain the unity of the original text's language style and lan
             postprocess_solution_fn=parse_doc_w_notes)
         self.lang_consist = LanguageConsistencyReward(
             postprocess_solution_fn=parse_solution_fn)
-        sef.note_dispersion = NotesDispersionReward(
+        self.note_dispersion = NotesDispersionReward(
             postprocess_solution_fn=parse_doc_w_notes
         )
 
@@ -1210,128 +951,79 @@ Core objective: Maintain the unity of the original text's language style and lan
         )
         return rewards
 
-    async def get_notes_mix_rm_rewards(
-            self,
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-            urls=RM_URLS,
-            default_penalty=-0.1,
-    ):
-        """
-            评价整体改写后的内容（思考过程+原文）
-        """
-        addition_judge = []
-        new_batch_solution_str = []
-        indices = []
+    def normalize_question(self, note):
+        if "提问：" in note and "一步步思考：":
+            question = note[note.index("提问："):note.index(
+                "一步步思考：")].strip()
+        elif "Question:" in note and "Think Step by Step:":
+            question = note[note.index("Question:"):note.index(
+                "Think Step by Step:")].strip()
+        else:
+            question = re.findall(
+                r'\[EXPLANATION\](.*?)\[/EXPLANATION\]', note, re.DOTALL)[0].strip()
+        conclusion = re.findall(
+            r'\[CONCLUSION\](.*?)\[/CONCLUSION\]', note, re.DOTALL)[0].strip()
+        return question.strip(), conclusion.strip()
 
-        for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-            lang_code = _gt["lang_code"]
-            if lang_code == "zh":
-                judge_template = self.JUDGE_CRITERIA_W_NOTES_ZH
-            else:
-                judge_template = self.JUDGE_CRITERIA_W_NOTES_EN
+    async def process_queue(self, queue, semaphore):
+        """处理单个队列，确保队列内任务串行执行"""
+        async with semaphore:  # 限制并发队列数量
+            results = []
+            for task in queue:
+                result = await task
+                results.append(result)
+            return results
 
-            notes = get_notes(sol)
-            notes_w_coclusions = get_notes_and_conclusions(sol)
-            if len(notes) != len(notes_w_coclusions):
-                continue
-            if len(notes) == 0:
-                continue
-            addition_judge.append({
-                "ground_truth": f'你是一名专精于大模型数据改写的治理专家。目标是给定一篇从网页爬取或者PDF解析出来的文档，改写成一篇优质的大语言模型预训练语料。目标是给定一篇从网页爬取或者PDF解析出来的文档增加注释（思考过程）。好的新增思考过程应当满足下面的标准\n\n# 评价标准\n{judge_template}'
-            })
-            indices.append(i)
-            new_batch_solution_str.append(sol)
+    async def run_tasks_in_queues(self, tasks, n):
+        """将任务分成n个队列并行执行"""
+        # 创建n个队列
+        queues = [[] for _ in range(n)]
 
-        rewards = await compute_rm_score(
-            urls=urls,
-            batch_solution_str=new_batch_solution_str,
-            batch_ground_truth=addition_judge,
-            postprocess_solution_fn=parse_doc_w_notes,
-            parse_result_failure_score=self.parse_result_failure_score,
-            desc="-judge_w_notes"
+        # 平均分配任务到各个队列
+        for i, task in enumerate(tasks):
+            queues[i % n].append(task)
+
+        # 创建信号量限制并发队列数量
+        semaphore = Semaphore(n)
+
+        # 并行处理所有队列
+        queue_results = await asyncio.gather(
+            *[self.process_queue(queue, semaphore) for queue in queues]
         )
-        full_rewards = []
-        for i in range(len(batch_solution_str)):
-            if i in indices:
-                full_rewards.append(rewards[indices.index(i)])
-            else:
-                full_rewards.append(default_penalty)
-        return full_rewards
 
-    async def get_thinking_rm_rewards(
+        # 展平结果列表（保持原始顺序）
+        flattened_results = []
+        for i in range(len(tasks)):
+            queue_idx = i % n
+            task_idx = i // n
+            flattened_results.append(queue_results[queue_idx][task_idx])
+
+        return flattened_results
+
+    async def get_single_question_judge_rm_rewards(
             self,
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth,
             urls=RM_URLS,
-            default_penalty=-0.1,
+            default_penalty=-1.0,
+            reward_rectifier_value=0.
     ):
         """
-            单独评价思考过程
+            评价单条提问质量
         """
-        addition_judge = []
-        new_batch_solution_str = []
         indices = []
+
+        addition_judges = []
+        new_batch_solution_strs = []
+        sizes = []
 
         for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
             lang_code = _gt["lang_code"]
             if lang_code == "zh":
-                judge_template = self.JUDGE_CRITERIA_THINKING_QUALITY_ZH
+                judge_template = self.JUDGE_CRITERIA_SINGLE_QUESTION_ZH
             else:
-                judge_template = self.JUDGE_CRITERIA_THINKING_QUALITY_EN
-
-            notes = get_notes(sol)
-            notes_w_coclusions = get_notes_and_conclusions(sol)
-            if len(notes) != len(notes_w_coclusions):
-                continue
-
-            if len(notes_w_coclusions) == 0:
-                continue
-
-            addition_judge.append({
-                "ground_truth": f'你是一个擅长提问的思考者。你需要提出高质量的问题并回答。\n\n# 评价标准\n{judge_template}'
-            })
-            indices.append(i)
-            new_batch_solution_str.append("\n\n\n".join(notes_w_coclusions))
-        rewards = await compute_rm_score(
-            urls=urls,
-            batch_solution_str=new_batch_solution_str,
-            batch_ground_truth=addition_judge,
-            postprocess_solution_fn=lambda x: x,
-            parse_result_failure_score=self.parse_result_failure_score,
-            desc="-judge_thinking"
-        )
-        full_rewards = []
-        for i in range(len(batch_solution_str)):
-            if i in indices:
-                full_rewards.append(rewards[indices.index(i)])
-            else:
-                full_rewards.append(default_penalty)
-        return full_rewards
-
-    async def get_question_rm_rewards(
-            self,
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-            urls=RM_URLS,
-            default_penalty=-0.1,
-    ):
-        """
-            单独评价提问质量
-        """
-        addition_judge = []
-        new_batch_solution_str = []
-        indices = []
-
-        for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-            lang_code = _gt["lang_code"]
-            if lang_code == "zh":
-                judge_template = self.JUDGE_CRITERIA_QUESTION_QUALITY_ZH
-            else:
-                judge_template = self.JUDGE_CRITERIA_QUESTION_QUALITY_EN
+                judge_template = self.JUDGE_CRITERIA_SINGLE_QUESTION_EN
 
             notes = get_notes(sol)
             notes_w_coclusions = get_notes_and_conclusions(sol)
@@ -1340,26 +1032,236 @@ Core objective: Maintain the unity of the original text's language style and lan
             if len(notes_w_coclusions) == 0:
                 continue
 
-            addition_judge.append({
-                "ground_truth": f'你是一个擅长提问的思考者。你需要提出高质量的问题并回答。\n\n# 评价标准\n{judge_template}'
-            })
-            indices.append(i)
-            new_batch_solution_str.append("\n\n\n".join(notes_w_coclusions))
-        rewards = await compute_rm_score(
-            urls=urls,
-            batch_solution_str=new_batch_solution_str,
-            batch_ground_truth=addition_judge,
-            postprocess_solution_fn=lambda x: x,
-            parse_result_failure_score=self.parse_result_failure_score,
-            desc="-judge_questioning"
-        )
-        full_rewards = []
-        for i in range(len(batch_solution_str)):
-            if i in indices:
-                full_rewards.append(rewards[indices.index(i)])
+            questions = [self.normalize_question(
+                _) for _ in notes_w_coclusions]
+
+            if lang_code == "zh":
+                questions = [
+                    f'- 原文中需要进行提问的部分： \n"{_[1]}"\n\n- 提问：\n"{_[0]}"' for _ in questions]
+                judge_prompt = f'任务：针对文档中理解晦涩、过于简略的部分进行提问。\n\n[Raw Corpus]\n{_gt["ground_truth"]}\n\n\n# 评价标准\n{judge_template}'
             else:
-                full_rewards.append(default_penalty)
-        return full_rewards
+                questions = [
+                    f'- Identify the parts in the original text that need to be questioned.\n"{_[1]}"\n\n- The question raised.\n"{_[0]}"' for _ in questions]
+                judge_prompt = f'Task: Ask questions about the obscure and overly brief parts in the document.\n\n[Raw Corpus]\n{_gt["ground_truth"]}\n\n\n# Judge Criteria\n{judge_template}'
+
+            for question in questions:
+                addition_judges.append({"ground_truth": judge_prompt})
+                new_batch_solution_strs.append(question)
+            sizes.append(len(questions))
+
+            indices.append(i)
+
+        tasks = []
+        n = len(RM_URLS)
+
+        for i, batch in enumerate(batchify(zip(addition_judges, new_batch_solution_strs), n=64)):
+            addition_judge = [_[0] for _ in batch]
+            new_batch_solution_str = [_[1] for _ in batch]
+            tasks.append(
+                compute_rm_score(
+                    batch_solution_str=new_batch_solution_str,
+                    batch_ground_truth=addition_judge,
+                    postprocess_solution_fn=lambda x: x,
+                    parse_result_failure_score=self.parse_result_failure_score,
+                    desc="-single_question_judge",
+                    urls=[RM_URLS[i % n]]
+                )
+            )
+
+        results = await self.run_tasks_in_queues(tasks, n=n)
+        print(results)
+
+        # tasks = []
+        # for i, (addition_judge, new_batch_solution_str) in enumerate(zip(addition_judges, new_batch_solution_strs)):
+        #     urls = [RM_URLS[i % len(RM_URLS)]]
+        #     tasks.append(compute_rm_score(
+        #         urls=urls,
+        #         batch_solution_str=new_batch_solution_str,
+        #         batch_ground_truth=addition_judge,
+        #         postprocess_solution_fn=lambda x: x,
+        #         parse_result_failure_score=self.parse_result_failure_score,
+        #         desc="-single_question_judge"
+        #     ))
+        #     if i > 4:
+        #         break
+        # results = await asyncio.gather(*tasks)
+
+        # rewards_group = []
+        # for size in sizes:
+        #     rewards_group.append(rewards[:size])
+        #     rewards = rewards[size:]
+        # print(results)
+        #         addition_judge.append({
+        #             "ground_truth": f'你是一个擅长提问的思考者。你需要提出高质量的问题并回答。\n\n# 评价标准\n{judge_template}'
+        #         })
+        #
+        #         new_batch_solution_str.append("\n\n\n".join(notes_w_coclusions))
+        #     rewards = await compute_rm_score(
+        #         urls=urls,
+        #         batch_solution_str=new_batch_solution_str,
+        #         batch_ground_truth=addition_judge,
+        #         postprocess_solution_fn=lambda x: x,
+        #         parse_result_failure_score=self.parse_result_failure_score,
+        #         desc="-judge_questioning"
+        #     )
+        #     full_rewards = []
+        #     for i in range(len(batch_solution_str)):
+        #         if i in indices:
+        #             full_rewards.append(rewards[indices.index(i)])
+        #         else:
+        #             full_rewards.append(default_penalty)
+        #     return full_rewards
+
+        # async def get_notes_mix_rm_rewards(
+        #         self,
+        #         batch_data_sources,
+        #         batch_solution_str,
+        #         batch_ground_truth,
+        #         urls=RM_URLS,
+        #         default_penalty=-0.1,
+        # ):
+        #     """
+        #         评价整体改写后的内容（思考过程+原文）
+        #     """
+        #     addition_judge = []
+        #     new_batch_solution_str = []
+        #     indices = []
+
+        #     for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+        #         lang_code = _gt["lang_code"]
+        #         if lang_code == "zh":
+        #             judge_template = self.JUDGE_CRITERIA_W_NOTES_ZH
+        #         else:
+        #             judge_template = self.JUDGE_CRITERIA_W_NOTES_EN
+
+        #         notes = get_notes(sol)
+        #         notes_w_coclusions = get_notes_and_conclusions(sol)
+        #         if len(notes) != len(notes_w_coclusions):
+        #             continue
+        #         if len(notes) == 0:
+        #             continue
+        #         addition_judge.append({
+        #             "ground_truth": f'你是一名专精于大模型数据改写的治理专家。目标是给定一篇从网页爬取或者PDF解析出来的文档，改写成一篇优质的大语言模型预训练语料。目标是给定一篇从网页爬取或者PDF解析出来的文档增加注释（思考过程）。好的新增思考过程应当满足下面的标准\n\n# 评价标准\n{judge_template}'
+        #         })
+        #         indices.append(i)
+        #         new_batch_solution_str.append(sol)
+
+        #     rewards = await compute_rm_score(
+        #         urls=urls,
+        #         batch_solution_str=new_batch_solution_str,
+        #         batch_ground_truth=addition_judge,
+        #         postprocess_solution_fn=parse_doc_w_notes,
+        #         parse_result_failure_score=self.parse_result_failure_score,
+        #         desc="-judge_w_notes"
+        #     )
+        #     full_rewards = []
+        #     for i in range(len(batch_solution_str)):
+        #         if i in indices:
+        #             full_rewards.append(rewards[indices.index(i)])
+        #         else:
+        #             full_rewards.append(default_penalty)
+        #     return full_rewards
+
+        # async def get_thinking_rm_rewards(
+        #         self,
+        #         batch_data_sources,
+        #         batch_solution_str,
+        #         batch_ground_truth,
+        #         urls=RM_URLS,
+        #         default_penalty=-0.1,
+        # ):
+        #     """
+        #         单独评价思考过程
+        #     """
+        #     addition_judge = []
+        #     new_batch_solution_str = []
+        #     indices = []
+
+        #     for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+        #         lang_code = _gt["lang_code"]
+        #         if lang_code == "zh":
+        #             judge_template = self.JUDGE_CRITERIA_THINKING_QUALITY_ZH
+        #         else:
+        #             judge_template = self.JUDGE_CRITERIA_THINKING_QUALITY_EN
+
+        #         notes = get_notes(sol)
+        #         notes_w_coclusions = get_notes_and_conclusions(sol)
+        #         if len(notes) != len(notes_w_coclusions):
+        #             continue
+
+        #         if len(notes_w_coclusions) == 0:
+        #             continue
+
+        #         addition_judge.append({
+        #             "ground_truth": f'你是一个擅长提问的思考者。你需要提出高质量的问题并回答。\n\n# 评价标准\n{judge_template}'
+        #         })
+        #         indices.append(i)
+        #         new_batch_solution_str.append("\n\n\n".join(notes_w_coclusions))
+        #     rewards = await compute_rm_score(
+        #         urls=urls,
+        #         batch_solution_str=new_batch_solution_str,
+        #         batch_ground_truth=addition_judge,
+        #         postprocess_solution_fn=lambda x: x,
+        #         parse_result_failure_score=self.parse_result_failure_score,
+        #         desc="-judge_thinking"
+        #     )
+        #     full_rewards = []
+        #     for i in range(len(batch_solution_str)):
+        #         if i in indices:
+        #             full_rewards.append(rewards[indices.index(i)])
+        #         else:
+        #             full_rewards.append(default_penalty)
+        #     return full_rewards
+
+        # async def get_question_rm_rewards(
+        #         self,
+        #         batch_data_sources,
+        #         batch_solution_str,
+        #         batch_ground_truth,
+        #         urls=RM_URLS,
+        #         default_penalty=-0.1,
+        # ):
+        #     """
+        #         单独评价提问质量
+        #     """
+        #     addition_judge = []
+        #     new_batch_solution_str = []
+        #     indices = []
+
+        #     for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+        #         lang_code = _gt["lang_code"]
+        #         if lang_code == "zh":
+        #             judge_template = self.JUDGE_CRITERIA_QUESTION_QUALITY_ZH
+        #         else:
+        #             judge_template = self.JUDGE_CRITERIA_QUESTION_QUALITY_EN
+
+        #         notes = get_notes(sol)
+        #         notes_w_coclusions = get_notes_and_conclusions(sol)
+        #         if len(notes) != len(notes_w_coclusions):
+        #             continue
+        #         if len(notes_w_coclusions) == 0:
+        #             continue
+
+        #         addition_judge.append({
+        #             "ground_truth": f'你是一个擅长提问的思考者。你需要提出高质量的问题并回答。\n\n# 评价标准\n{judge_template}'
+        #         })
+        #         indices.append(i)
+        #         new_batch_solution_str.append("\n\n\n".join(notes_w_coclusions))
+        #     rewards = await compute_rm_score(
+        #         urls=urls,
+        #         batch_solution_str=new_batch_solution_str,
+        #         batch_ground_truth=addition_judge,
+        #         postprocess_solution_fn=lambda x: x,
+        #         parse_result_failure_score=self.parse_result_failure_score,
+        #         desc="-judge_questioning"
+        #     )
+        #     full_rewards = []
+        #     for i in range(len(batch_solution_str)):
+        #         if i in indices:
+        #             full_rewards.append(rewards[indices.index(i)])
+        #         else:
+        #             full_rewards.append(default_penalty)
+        #     return full_rewards
 
     async def get_rm_rewards(self,
                              batch_data_sources,
@@ -1368,13 +1270,14 @@ Core objective: Maintain the unity of the original text's language style and lan
         tasks = [
             self.get_revise_rm_rewards(
                 batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[0]]),
-            self.get_notes_mix_rm_rewards(
-                batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[1]]),
-            self.get_thinking_rm_rewards(
-                batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[2]]),
-            self.get_question_rm_rewards(
-                batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[3]])
+            # self.get_notes_mix_rm_rewards(
+            #     batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[1]]),
+            # self.get_thinking_rm_rewards(
+            #     batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[2]]),
+            # self.get_question_rm_rewards(
+            #     batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[3]])
         ]
+        raise NotImplementedError
         results = await asyncio.gather(*tasks)
         rewards_union = [0.0] * len(batch_data_sources)
         rewards_split = []
