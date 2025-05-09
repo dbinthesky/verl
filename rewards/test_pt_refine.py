@@ -143,7 +143,7 @@ class TestPretrainRefine(unittest.TestCase):
             batch_solution_str, batch_ground_truth = load_pretrain_refinement(
                 num=100)
             task = QwQLongCoTPretrainRefineComputeScore(split="valid")
-            results = await task.get_question_diversity_rm_rewards(
+            results = await task.get_rm_rewards(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth
             )

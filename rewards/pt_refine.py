@@ -1176,7 +1176,7 @@ The quality of questions is evaluated from the following five dimensions, with e
             indices.append(i)
 
         tasks = []
-        n = len(RM_URLS)
+        n = len(urls)
 
         for i, batch in enumerate(batchify(zip(addition_judges, new_batch_solution_strs), n=64)):
             addition_judge = [_[0] for _ in batch]
@@ -1188,7 +1188,7 @@ The quality of questions is evaluated from the following five dimensions, with e
                     postprocess_solution_fn=lambda x: x,
                     parse_result_failure_score=self.parse_result_failure_score,
                     desc="-single_question_judge",
-                    urls=[RM_URLS[i % n]]
+                    urls=[urls[i % n]]
                 )
             )
 
@@ -1259,7 +1259,7 @@ The quality of questions is evaluated from the following five dimensions, with e
             new_batch_solution_strs.append("\n\n".join(questions))
 
         tasks = []
-        n = len(RM_URLS)
+        n = len(urls)
 
         for i, batch in enumerate(batchify(zip(addition_judges, new_batch_solution_strs), n=64)):
             addition_judge = [_[0] for _ in batch]
@@ -1271,7 +1271,7 @@ The quality of questions is evaluated from the following five dimensions, with e
                     postprocess_solution_fn=lambda x: x,
                     parse_result_failure_score=self.parse_result_failure_score,
                     desc="-question_diversity_judge",
-                    urls=[RM_URLS[i % n]]
+                    urls=[urls[i % n]]
                 )
             )
 
@@ -1288,81 +1288,30 @@ The quality of questions is evaluated from the following five dimensions, with e
                 full_rewards.append(default_penalty)
         return full_rewards
 
-        # async def get_question_rm_rewards(
-        #         self,
-        #         batch_data_sources,
-        #         batch_solution_str,
-        #         batch_ground_truth,
-        #         urls=RM_URLS,
-        #         default_penalty=-0.1,
-        # ):
-        #     """
-        #         单独评价提问质量
-        #     """
-        #     addition_judge = []
-        #     new_batch_solution_str = []
-        #     indices = []
-
-        #     for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-        #         lang_code = _gt["lang_code"]
-        #         if lang_code == "zh":
-        #             judge_template = self.JUDGE_CRITERIA_QUESTION_QUALITY_ZH
-        #         else:
-        #             judge_template = self.JUDGE_CRITERIA_QUESTION_QUALITY_EN
-
-        #         notes = get_notes(sol)
-        #         notes_w_coclusions = get_notes_and_conclusions(sol)
-        #         if len(notes) != len(notes_w_coclusions):
-        #             continue
-        #         if len(notes_w_coclusions) == 0:
-        #             continue
-
-        #         addition_judge.append({
-        #             "ground_truth": f'你是一个擅长提问的思考者。你需要提出高质量的问题并回答。\n\n# 评价标准\n{judge_template}'
-        #         })
-        #         indices.append(i)
-        #         new_batch_solution_str.append("\n\n\n".join(notes_w_coclusions))
-        #     rewards = await compute_rm_score(
-        #         urls=urls,
-        #         batch_solution_str=new_batch_solution_str,
-        #         batch_ground_truth=addition_judge,
-        #         postprocess_solution_fn=lambda x: x,
-        #         parse_result_failure_score=self.parse_result_failure_score,
-        #         desc="-judge_questioning"
-        #     )
-        #     full_rewards = []
-        #     for i in range(len(batch_solution_str)):
-        #         if i in indices:
-        #             full_rewards.append(rewards[indices.index(i)])
-        #         else:
-        #             full_rewards.append(default_penalty)
-        #     return full_rewards
-
     async def get_rm_rewards(self,
                              batch_data_sources,
                              batch_solution_str,
                              batch_ground_truth):
-        tasks = [
-            self.get_revise_rm_rewards(
-                batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[0]]),
-            # self.get_notes_mix_rm_rewards(
-            #     batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[1]]),
-            # self.get_thinking_rm_rewards(
-            #     batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[2]]),
-            # self.get_question_rm_rewards(
-            #     batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[3]])
-        ]
-        raise NotImplementedError
-        results = await asyncio.gather(*tasks)
+        revise_scores = await self.get_revise_rm_rewards(
+            batch_data_sources, batch_solution_str, batch_ground_truth)
+
+        single_question_scores = await self.get_single_question_judge_rm_rewards(
+            batch_data_sources, batch_solution_str, batch_ground_truth
+        )
+        question_diversity_scores = await self.get_question_diversity_rm_rewards(
+            batch_data_sources, batch_solution_str, batch_ground_truth
+        )
+
         rewards_union = [0.0] * len(batch_data_sources)
         rewards_split = []
         for i in range(len(batch_data_sources)):
-            rewards_split.append([0.0] * len(tasks))
+            rewards_split.append(
+                [revise_scores[i], single_question_scores[i], question_diversity_scores[i]])
 
-        for j, result in enumerate(results):
-            for i, reward in enumerate(result):
-                rewards_union[i] += reward
-                rewards_split[i][j] = reward
+        for i in range(len(batch_data_sources)):
+            # TODO: 参数化
+            rewards_union += revise_scores[i] * 2.0 + np.sum(
+                [_ + 0.5 * question_diversity_scores[i] for _ in single_question_scores[i]])
 
         return rewards_union, rewards_split
 
