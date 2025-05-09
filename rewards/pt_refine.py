@@ -880,6 +880,130 @@ The quality of questions is evaluated from the following five dimensions, with e
 - **Specificity**: Adds an assessment of the specificity and clarity of the question to ensure that the question can clearly point out the content that is not explained clearly.
 """
 
+    JUDGE_CRITERIA_QUESTION_DIVERSITY_ZH = """### **问题多样性评价标准**：
+
+### 一、问题类型多样性
+1. **高阶思维类问题**：
+   - **跨域整合**：结合多学科知识提出问题，例如“结合法律和经济学视角，分析知识产权保护的有效性”。
+   - **批判性思考**：质疑既有结论，提出研究设计反思的问题，例如“分析文献中样本偏差对研究结果的影响”。
+   - **创新性拓展**：提出假设推演与知识延伸的问题，例如“探讨重力常数变化对航天模型的影响”。
+
+2. **应用分析类问题**：
+   - **场景适配**：提出特定场景适用性分析的问题，例如“分析高并发场景下的技术选型”。
+   - **风险评估**：提出潜在问题预判与局限性分析的问题，例如“分析自动驾驶技术的瓶颈”。
+   - **优劣比较**：提出方案对比与适用情境区分的问题，例如“比较不同研究方法的优劣”。
+
+3. **基础认知类问题**：
+   - **原理推导**：提出逻辑链条构建的问题，例如“从麦克斯韦方程组推导电磁波方程”。
+   - **方法解析**：提出技术路线分解的问题，例如“解析层次分析法权重计算”。
+   - **概念阐释**：提出基础定义解读的问题，例如“解释机器学习中的过拟合”。
+   - **具体应用**：针对文档中的简略或晦涩部分，提出具体问题，例如“‘本改进工艺试验为提高甘油产品质量提供了一个较好的方法’，具体改进了哪些工艺参数？”。
+
+### 二、问题视角多样性
+1. **利益相关者视角**：
+   - **决策者视角**：提出政策影响与资源配置的问题，例如“碳关税对企业创新的激励”。
+   - **研究者视角**：提出研究方法优化的问题，例如“统计模型选择的依据”。
+   - **使用者视角**：提出用户体验与产品适配的问题，例如“APP界面设计原理”。
+
+2. **场景维度多元性**：
+   - **实践应用**：提出技术开发、商业决策等现实场景的问题，例如“芯片产业的机遇与挑战”。
+   - **学术研究**：提出科研全流程的问题，例如“文献差异原因分析”。
+   - **教育教学**：提出教学专属的问题，例如“试题设计思路分析”。
+
+3. **学科覆盖广度**：
+   - **交叉学科**：提出跨学科融合的问题，例如“认知心理学与多媒体教学”。
+   - **人文社科**：提出法学、经济学等领域的问题，例如“历史赋税制度的经济逻辑”。
+   - **自然科学**：提出基础学科与应用技术的问题，例如“柯西不等式向量形式证明”。
+
+### 三、分析深度多样性
+1. **定性与定量分析融合度**：
+   - **定量建模**：提出数据统计与数学建模的问题，例如“使用Logistic回归进行风险评估”。
+   - **定性描述**：提出现象归纳与特征阐释的问题，例如“分析小说中的主题思想”。
+
+2. **正向推导与逆向思考**：
+   - **正向推导**：从已知条件出发，推导出结论，例如“从益气活血法的疗效出发，推导其作用机制”。
+   - **逆向思考**：从结果出发，反推原因，例如“分析自动驾驶技术的瓶颈，反推其技术难题”。
+
+3. **单维分析与系统分析**：
+   - **单维分析**：从单一角度分析问题，例如“从单个药物的作用机制出发，分析其在益气活血法中的贡献”。
+   - **系统分析**：从多个角度综合分析问题，例如“分析益气活血法在不同地区和不同人群中的适用性”。
+
+### 四、思维路径多样性
+1. **归纳与演绎**：
+   - **归纳**：从具体案例中归纳出一般规律，例如“从历史案例中归纳出取消协议的常见原因”。
+   - **演绎**：从一般规律推导出具体结论，例如“从物理原理出发，推导引射喷管的性能”。
+
+2. **发散与收敛**：
+   - **发散**：从不同角度探讨问题，例如“从不同角度探讨取消协议的可能后果”。
+   - **收敛**：将不同角度的分析综合成一个结论，例如“综合各方意见，提出最优解决方案”。
+
+3. **线性与非线性思维**：
+   - **线性思维**：按步骤顺序分析问题，例如“分析自动驾驶技术的渐进过程”。
+   - **非线性思维**：从非线性角度分析问题，例如“分析自动驾驶技术的突变
+"""
+    JUDGE_CRITERIA_QUESTION_DIVERSITY_EN = """### Problem Diversity Evaluation Criteria:
+
+### I. Problem Type Diversity
+1. **High-order Thinking Problems**:
+   - **Cross-domain Integration**: Propose questions that combine knowledge from multiple disciplines. For example, "Analyze the effectiveness of intellectual property protection from the perspectives of law and economics."
+   - **Critical Thinking**: Raise questions that challenge existing conclusions and involve reflections on research designs. For example, "Analyze the impact of sample bias in the literature on research results."
+   - **Innovative Expansion**: Put forward questions that involve hypothesis deduction and knowledge extension. For example, "Explore the impact of changes in the gravitational constant on aerospace models."
+
+2. **Application and Analysis Problems**:
+   - **Scenario Adaptability**: Pose questions about the analysis of applicability in specific scenarios. For example, "Analyze the technology selection in high-concurrency scenarios."
+   - **Risk Assessment**: Raise questions about predicting potential problems and analyzing limitations. For example, "Analyze the bottlenecks of autonomous driving technology."
+   - **Advantages and Disadvantages Comparison**: Propose questions about comparing different solutions and distinguishing applicable situations. For example, "Compare the advantages and disadvantages of different research methods."
+
+3. **Basic Cognitive Problems**:
+   - **Principle Deduction**: Put forward questions about constructing logical chains. For example, "Deduce the electromagnetic wave equation from Maxwell's equations."
+   - **Method Analysis**: Raise questions about decomposing technical routes. For example, "Analyze the weight calculation in the Analytic Hierarchy Process."
+   - **Concept Interpretation**: Pose questions about interpreting basic definitions. For example, "Explain overfitting in machine learning."
+   - **Specific Application**: Raise specific questions regarding the concise or obscure parts in documents. For example, "In the statement 'This improved process experiment provides a good method for improving the quality of glycerol products', which process parameters are specifically improved?"
+
+### II. Problem Perspective Diversity
+1. **Stakeholder Perspectives**:
+   - **Decision-maker Perspective**: Raise questions about the impact of policies and resource allocation. For example, "The incentive of carbon tariffs for corporate innovation."
+   - **Researcher Perspective**: Pose questions about optimizing research methods. For example, "The basis for choosing a statistical model."
+   - **User Perspective**: Raise questions about user experience and product adaptation. For example, "The design principles of an APP interface."
+
+2. **Diversity of Scenario Dimensions**:
+   - **Practical Application**: Propose questions related to real-world scenarios such as technology development and business decision-making. For example, "The opportunities and challenges in the chip industry."
+   - **Academic Research**: Raise questions covering the entire process of scientific research. For example, "Analysis of the reasons for differences in literature."
+   - **Education and Teaching**: Pose questions specific to teaching. For example, "Analysis of the design ideas of test questions."
+
+3. **Breadth of Subject Coverage**:
+   - **Interdisciplinary**: Raise questions that integrate multiple disciplines. For example, "Cognitive psychology and multimedia teaching."
+   - **Humanities and Social Sciences**: Pose questions in fields such as law and economics. For example, "The economic logic of historical tax systems."
+   - **Natural Sciences**: Raise questions in basic disciplines and applied technologies. For example, "Proof of the vector form of the Cauchy inequality."
+
+### III. Diversity of Analysis Depth
+1. **Integration of Qualitative and Quantitative Analysis**:
+   - **Quantitative Modeling**: Raise questions about data statistics and mathematical modeling. For example, "Use Logistic regression for risk assessment."
+   - **Qualitative Description**: Put forward questions about summarizing phenomena and explaining characteristics. For example, "Analyze the theme in a novel."
+
+2. **Forward Deduction and Reverse Thinking**:
+   - **Forward Deduction**: Starting from known conditions, derive conclusions. For example, "Starting from the curative effect of the method of replenishing qi and promoting blood circulation, deduce its mechanism of action."
+   - **Reverse Thinking**: Starting from the results, infer the causes. For example, "Analyze the bottlenecks of autonomous driving technology and infer its technical difficulties."
+
+3. **Single-dimensional Analysis and Systematic Analysis**:
+   - **Single-dimensional Analysis**: Analyze problems from a single perspective. For example, "Starting from the mechanism of action of a single drug, analyze its contribution to the method of replenishing qi and promoting blood circulation."
+   - **Systematic Analysis**: Analyze problems comprehensively from multiple angles. For example, "Analyze the applicability of the method of replenishing qi and promoting blood circulation in different regions and among different groups of people."
+
+### IV. Diversity of Thinking Paths
+1. **Induction and Deduction**:
+   - **Induction**: Summarize general laws from specific cases. For example, "Summarize the common reasons for canceling agreements from historical cases."
+   - **Deduction**: Derive specific conclusions from general laws. For example, "Starting from physical principles, deduce the performance of an ejector nozzle."
+
+2. **Divergent and Convergent Thinking**:
+   - **Divergent**: Explore problems from different angles. For example, "Explore the possible consequences of canceling agreements from different angles."
+   - **Convergent**: Synthesize analyses from different angles into a conclusion. For example, "Propose the optimal solution by integrating various opinions."
+
+3. **Linear and Non-linear Thinking**:
+   - **Linear Thinking**: Analyze problems step by step. For example, "Analyze the progressive process of autonomous driving technology."
+   - **Non-linear Thinking**: Analyze problems from a non-linear perspective. For example, "Analyze the sudden changes in autonomous driving technology." 
+
+"""
+
     def __init__(self,
                  split="train",
                  parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
@@ -1037,11 +1161,11 @@ The quality of questions is evaluated from the following five dimensions, with e
 
             if lang_code == "zh":
                 questions = [
-                    f'- 原文中需要进行提问的部分： \n"{_[1]}"\n\n- 提问：\n"{_[0]}"' for _ in questions]
+                    f'- 原文中需要进行提问的部分： \n"{_[1]}"\n- 提问：\n"{_[0]}"' for _ in questions]
                 judge_prompt = f'任务：针对文档中理解晦涩、过于简略的部分进行提问。\n\n[Raw Corpus]\n{_gt["ground_truth"]}\n\n\n# 评价标准\n{judge_template}'
             else:
                 questions = [
-                    f'- Identify the parts in the original text that need to be questioned.\n"{_[1]}"\n\n- The question raised.\n"{_[0]}"' for _ in questions]
+                    f'- Identify the parts in the original text that need to be questioned.\n"{_[1]}"\n- The question raised.\n"{_[0]}"' for _ in questions]
                 judge_prompt = f'Task: Ask questions about the obscure and overly brief parts in the document.\n\n[Raw Corpus]\n{_gt["ground_truth"]}\n\n\n# Judge Criteria\n{judge_template}'
 
             for question in questions:
@@ -1086,106 +1210,83 @@ The quality of questions is evaluated from the following five dimensions, with e
                 full_rewards.append([default_penalty])
         return full_rewards
 
-        # async def get_notes_mix_rm_rewards(
-        #         self,
-        #         batch_data_sources,
-        #         batch_solution_str,
-        #         batch_ground_truth,
-        #         urls=RM_URLS,
-        #         default_penalty=-0.1,
-        # ):
-        #     """
-        #         评价整体改写后的内容（思考过程+原文）
-        #     """
-        #     addition_judge = []
-        #     new_batch_solution_str = []
-        #     indices = []
+    async def get_question_diversity_rm_rewards(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            urls=RM_URLS,
+            default_penalty=-0.1,
+    ):
+        """
+            整体评价提问的多样性
+        """
+        addition_judges = []
+        new_batch_solution_strs = []
+        indices = []
 
-        #     for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-        #         lang_code = _gt["lang_code"]
-        #         if lang_code == "zh":
-        #             judge_template = self.JUDGE_CRITERIA_W_NOTES_ZH
-        #         else:
-        #             judge_template = self.JUDGE_CRITERIA_W_NOTES_EN
+        for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            lang_code = _gt["lang_code"]
+            if lang_code == "zh":
+                judge_template = self.JUDGE_CRITERIA_QUESTION_DIVERSITY_ZH
+            else:
+                judge_template = self.JUDGE_CRITERIA_QUESTION_DIVERSITY_EN
 
-        #         notes = get_notes(sol)
-        #         notes_w_coclusions = get_notes_and_conclusions(sol)
-        #         if len(notes) != len(notes_w_coclusions):
-        #             continue
-        #         if len(notes) == 0:
-        #             continue
-        #         addition_judge.append({
-        #             "ground_truth": f'你是一名专精于大模型数据改写的治理专家。目标是给定一篇从网页爬取或者PDF解析出来的文档，改写成一篇优质的大语言模型预训练语料。目标是给定一篇从网页爬取或者PDF解析出来的文档增加注释（思考过程）。好的新增思考过程应当满足下面的标准\n\n# 评价标准\n{judge_template}'
-        #         })
-        #         indices.append(i)
-        #         new_batch_solution_str.append(sol)
+            notes = get_notes(sol)
+            notes_w_coclusions = get_notes_and_conclusions(sol)
+            if len(notes) != len(notes_w_coclusions):
+                continue
 
-        #     rewards = await compute_rm_score(
-        #         urls=urls,
-        #         batch_solution_str=new_batch_solution_str,
-        #         batch_ground_truth=addition_judge,
-        #         postprocess_solution_fn=parse_doc_w_notes,
-        #         parse_result_failure_score=self.parse_result_failure_score,
-        #         desc="-judge_w_notes"
-        #     )
-        #     full_rewards = []
-        #     for i in range(len(batch_solution_str)):
-        #         if i in indices:
-        #             full_rewards.append(rewards[indices.index(i)])
-        #         else:
-        #             full_rewards.append(default_penalty)
-        #     return full_rewards
+            if len(notes_w_coclusions) == 0:
+                continue
 
-        # async def get_thinking_rm_rewards(
-        #         self,
-        #         batch_data_sources,
-        #         batch_solution_str,
-        #         batch_ground_truth,
-        #         urls=RM_URLS,
-        #         default_penalty=-0.1,
-        # ):
-        #     """
-        #         单独评价思考过程
-        #     """
-        #     addition_judge = []
-        #     new_batch_solution_str = []
-        #     indices = []
+            questions = [self.normalize_question(
+                _) for _ in notes_w_coclusions]
 
-        #     for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-        #         lang_code = _gt["lang_code"]
-        #         if lang_code == "zh":
-        #             judge_template = self.JUDGE_CRITERIA_THINKING_QUALITY_ZH
-        #         else:
-        #             judge_template = self.JUDGE_CRITERIA_THINKING_QUALITY_EN
+            if lang_code == "zh":
+                questions = [
+                    f'- 原文中需要进行提问的部分： \n"{_[1]}"\n- 提问：\n"{_[0]}"' for _ in questions]
+                judge_prompt = f'任务：针对文档中理解晦涩、过于简略的部分进行提问。\n\n[Raw Corpus]\n{_gt["ground_truth"]}\n\n\n# 评价标准\n{judge_template}'
+            else:
+                questions = [
+                    f'- Identify the parts in the original text that need to be questioned.\n"{_[1]}"\n- The question raised.\n"{_[0]}"' for _ in questions]
+                judge_prompt = f'Task: Ask questions about the obscure and overly brief parts in the document.\n\n[Raw Corpus]\n{_gt["ground_truth"]}\n\n\n# Judge Criteria\n{judge_template}'
 
-        #         notes = get_notes(sol)
-        #         notes_w_coclusions = get_notes_and_conclusions(sol)
-        #         if len(notes) != len(notes_w_coclusions):
-        #             continue
+            addition_judges.append({
+                "ground_truth": judge_prompt
+            })
+            indices.append(i)
+            new_batch_solution_strs.append("\n\n".join(questions))
 
-        #         if len(notes_w_coclusions) == 0:
-        #             continue
+        tasks = []
+        n = len(RM_URLS)
 
-        #         addition_judge.append({
-        #             "ground_truth": f'你是一个擅长提问的思考者。你需要提出高质量的问题并回答。\n\n# 评价标准\n{judge_template}'
-        #         })
-        #         indices.append(i)
-        #         new_batch_solution_str.append("\n\n\n".join(notes_w_coclusions))
-        #     rewards = await compute_rm_score(
-        #         urls=urls,
-        #         batch_solution_str=new_batch_solution_str,
-        #         batch_ground_truth=addition_judge,
-        #         postprocess_solution_fn=lambda x: x,
-        #         parse_result_failure_score=self.parse_result_failure_score,
-        #         desc="-judge_thinking"
-        #     )
-        #     full_rewards = []
-        #     for i in range(len(batch_solution_str)):
-        #         if i in indices:
-        #             full_rewards.append(rewards[indices.index(i)])
-        #         else:
-        #             full_rewards.append(default_penalty)
-        #     return full_rewards
+        for i, batch in enumerate(batchify(zip(addition_judges, new_batch_solution_strs), n=64)):
+            addition_judge = [_[0] for _ in batch]
+            new_batch_solution_str = [_[1] for _ in batch]
+            tasks.append(
+                compute_rm_score(
+                    batch_solution_str=new_batch_solution_str,
+                    batch_ground_truth=addition_judge,
+                    postprocess_solution_fn=lambda x: x,
+                    parse_result_failure_score=self.parse_result_failure_score,
+                    desc="-question_diversity_judge",
+                    urls=[RM_URLS[i % n]]
+                )
+            )
+
+        results = await self.run_tasks_in_queues(tasks, n=n)
+        rewards = []
+        for _ in results:
+            rewards.extend(_)
+
+        full_rewards = []
+        for i in range(len(batch_solution_str)):
+            if i in indices:
+                full_rewards.append(rewards[indices.index(i)])
+            else:
+                full_rewards.append(default_penalty)
+        return full_rewards
 
         # async def get_question_rm_rewards(
         #         self,
