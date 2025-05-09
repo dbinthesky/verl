@@ -21,18 +21,29 @@ en_mt = MosesTokenizer(lang='en')
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+# RM_URLS = [
+#     "http://10.130.1.208:31884",
+#     "http://10.130.1.208:27670",
+#     "http://10.130.1.208:32135",
+#     "http://10.130.1.208:34850",
+#     "http://10.130.1.37:27709",
+#     "http://10.130.1.37:29452",
+#     "http://10.130.1.37:32383",
+#     "http://10.130.1.37:26082",
+#     "http://10.130.1.37:29616",
+#     "http://10.130.1.37:32934",
+# ]
+
 RM_URLS = [
-    "http://10.130.1.208:31884",
-    "http://10.130.1.208:27670",
-    "http://10.130.1.208:32135",
-    "http://10.130.1.208:34850",
-    "http://10.130.1.37:27709",
-    "http://10.130.1.37:29452",
-    "http://10.130.1.37:32383",
-    "http://10.130.1.37:26082",
-    "http://10.130.1.37:29616",
-    "http://10.130.1.37:32934",
+    "http://10.130.0.218:32091",
+    "http://10.130.0.218:27737",
+    "http://10.130.0.218:25772",
+    "http://10.130.0.218:26159",
+    "http://10.130.0.218:32609",
+    "http://10.130.0.218:27461",
+    "http://10.130.0.218:25543",
 ]
+
 
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 
@@ -1092,10 +1103,10 @@ The quality of questions is evaluated from the following five dimensions, with e
         return rewards
 
     def normalize_question(self, note):
-        if "提问：" in note and "一步步思考：":
+        if "提问：" in note and "一步步思考：" in note:
             question = note[note.index("提问："):note.index(
                 "一步步思考：")].strip()
-        elif "Question:" in note and "Think Step by Step:":
+        elif "Question:" in note and "Think Step by Step:" in note:
             question = note[note.index("Question:"):note.index(
                 "Think Step by Step:")].strip()
         else:
