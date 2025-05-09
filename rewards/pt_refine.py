@@ -403,6 +403,19 @@ def get_notes_and_conclusions(solution_str: str):
     try:
         notes = re.findall(
             r'\[EXPLANATION\].*?\[/EXPLANATION\]\n*\[CONCLUSION\].*?\[/CONCLUSION\]', document, re.DOTALL)
+
+        uniq_notes = []
+        uniq_conclusions = set()
+        for note in notes:
+            if "一步步思考：" in note:
+                uniq_key = note[:note.index("一步步思考：")].strip()
+            elif "Think Step by Step" in note:
+                uniq_key = note[:note.index("Think Step by Step")].strip()
+            else:
+                uniq_key = note
+            if uniq_key not in uniq_conclusions:
+                uniq_conclusions.add(uniq_key)
+                uniq_notes.append(note)
         return notes
     except Exception as err:
         return []

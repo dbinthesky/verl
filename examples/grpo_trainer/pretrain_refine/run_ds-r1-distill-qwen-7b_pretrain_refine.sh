@@ -53,10 +53,10 @@ setup_path() {
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/reason_pretrain_v3_8k_train_0503"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/reason_pretrain_v3_8k_test"
 
-    experiment_name="ds-r1-distill-qwen-7b_pretrain_e2e_refine_question-dlc-${YYMMDD}-${HHMMSS}"
-    project_name="verl_grpo_ds-r1-distill-qwen-7b_e2e_refine_question"
+    experiment_name="ds-r1-distill-qwen-7b_pretrain_e2e_refine-dlc-${YYMMDD}-${HHMMSS}"
+    project_name="verl_grpo_ds-r1-distill-qwen-7b_e2e_refine"
 
-    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/ds-r1-distill-qwen-7b_pretrain_e2e_refine_question/${experiment_name}/${YYMMDD}/${HHMMSS}"
+    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/ds-r1-distill-qwen-7b_pretrain_e2e_refine/${experiment_name}/${YYMMDD}/${HHMMSS}"
     mkdir -p "${OUTPUT_DIR}"
 }
 setup_path

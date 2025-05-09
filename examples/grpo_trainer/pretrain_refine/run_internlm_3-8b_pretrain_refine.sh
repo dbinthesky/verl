@@ -49,8 +49,7 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_pretrain_refine_e2e_v1_0_4_77_open_source_hf"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/internlm3-8b_pretrain_e2e_refine_v1-dlc-2025-05-04-01-13-00_grpo_step_20"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_pretrain_refine_e2e_v1_0_4_77_open_source_hf"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/reason_pretrain_v3_8k_train_0503"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/reason_pretrain_v3_8k_test"
 
@@ -123,7 +122,7 @@ run_training() {
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.85 \
         actor_rollout_ref.rollout.temperature=1.0 \
-        actor_rollout_ref.rollout.n=4 \
+        actor_rollout_ref.rollout.n=8 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
