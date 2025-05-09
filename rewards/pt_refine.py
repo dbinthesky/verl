@@ -22,16 +22,16 @@ en_mt = MosesTokenizer(lang='en')
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 RM_URLS = [
+    "http://10.130.1.208:31884",
+    "http://10.130.1.208:27670",
+    "http://10.130.1.208:32135",
+    "http://10.130.1.208:34850",
     "http://10.130.1.37:27709",
     "http://10.130.1.37:29452",
     "http://10.130.1.37:32383",
     "http://10.130.1.37:26082",
     "http://10.130.1.37:29616",
     "http://10.130.1.37:32934",
-    "http://10.130.1.208:32260",
-    "http://10.130.1.208:25390",
-    "http://10.130.1.208:29997",
-    "http://10.130.1.208:32325"
 ]
 
 DEFAULT_PARSE_FAILURE_REWARD = -2.
@@ -759,7 +759,7 @@ class QwQLongCoTPretrainRefineComputeScore(object):
 
 #### VII. Additional Requirements
 - **Data Privacy**: Ensure that personal privacy information, such as names, addresses, and phone numbers, is not leaked during the processing. Specific examples: Names, addresses, phone numbers, etc.
-- **Data Compliance**: Ensure that the processed data complies with relevant laws, regulations, and industry standards. Specific examples: Comply with laws such as the Personal Information Protection Law. 
+- **Data Compliance**: Ensure that the processed data complies with relevant laws, regulations, and industry standards. Specific examples: Comply with laws such as the Personal Information Protection Law.
 """
 
     JUDGE_CRITERIA_SINGLE_QUESTION_ZH = """### 高质量提问评价标准
@@ -877,7 +877,7 @@ The quality of questions is evaluated from the following five dimensions, with e
 - **Logical Depth**: Adds an assessment of whether the question can guide the reader to think from multiple angles.
 - **Guidedness**: Adds an assessment of whether the question can guide the reader to think systematically.
 - **Critical Perspective**: Adds an assessment of whether the question can guide the reader to think in reverse.
-- **Specificity**: Adds an assessment of the specificity and clarity of the question to ensure that the question can clearly point out the content that is not explained clearly. 
+- **Specificity**: Adds an assessment of the specificity and clarity of the question to ensure that the question can clearly point out the content that is not explained clearly.
 """
 
     def __init__(self,
@@ -1069,48 +1069,22 @@ The quality of questions is evaluated from the following five dimensions, with e
             )
 
         results = await self.run_tasks_in_queues(tasks, n=n)
-        print(results)
 
-        # tasks = []
-        # for i, (addition_judge, new_batch_solution_str) in enumerate(zip(addition_judges, new_batch_solution_strs)):
-        #     urls = [RM_URLS[i % len(RM_URLS)]]
-        #     tasks.append(compute_rm_score(
-        #         urls=urls,
-        #         batch_solution_str=new_batch_solution_str,
-        #         batch_ground_truth=addition_judge,
-        #         postprocess_solution_fn=lambda x: x,
-        #         parse_result_failure_score=self.parse_result_failure_score,
-        #         desc="-single_question_judge"
-        #     ))
-        #     if i > 4:
-        #         break
-        # results = await asyncio.gather(*tasks)
+        rewards = []
+        for _ in results:
+            rewards.extend(_)
+        rewards_group = []
+        for size in sizes:
+            rewards_group.append(rewards[:size])
+            rewards = rewards[size:]
 
-        # rewards_group = []
-        # for size in sizes:
-        #     rewards_group.append(rewards[:size])
-        #     rewards = rewards[size:]
-        # print(results)
-        #         addition_judge.append({
-        #             "ground_truth": f'你是一个擅长提问的思考者。你需要提出高质量的问题并回答。\n\n# 评价标准\n{judge_template}'
-        #         })
-        #
-        #         new_batch_solution_str.append("\n\n\n".join(notes_w_coclusions))
-        #     rewards = await compute_rm_score(
-        #         urls=urls,
-        #         batch_solution_str=new_batch_solution_str,
-        #         batch_ground_truth=addition_judge,
-        #         postprocess_solution_fn=lambda x: x,
-        #         parse_result_failure_score=self.parse_result_failure_score,
-        #         desc="-judge_questioning"
-        #     )
-        #     full_rewards = []
-        #     for i in range(len(batch_solution_str)):
-        #         if i in indices:
-        #             full_rewards.append(rewards[indices.index(i)])
-        #         else:
-        #             full_rewards.append(default_penalty)
-        #     return full_rewards
+        full_rewards = []
+        for i in range(len(batch_solution_str)):
+            if i in indices:
+                full_rewards.append(rewards_group[indices.index(i)])
+            else:
+                full_rewards.append([default_penalty])
+        return full_rewards
 
         # async def get_notes_mix_rm_rewards(
         #         self,
