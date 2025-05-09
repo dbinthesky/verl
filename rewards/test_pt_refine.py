@@ -24,7 +24,6 @@ from pt_refine import (
     QwQLongCoTPretrainRefineComputeScore,
     qwq_longcot_pretrain_refine_compute_score_valid,
     qwq_longcot_pretrain_refine_compute_score_train,
-    qwq_longcot_pretrain_refine_stage2_compute_score_valid
 )
 
 
@@ -128,14 +127,11 @@ class TestPretrainRefine(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_pretrain_refinement(
             num=100)
         task = QwQLongCoTPretrainRefineComputeScore(split="valid")
-        # qwq_longcot_pretrain_refine_compute_score_valid(
-        #     [None] *
-        #     len(batch_solution_str), batch_solution_str, batch_ground_truth
-        # )
-        qwq_longcot_pretrain_refine_stage2_compute_score_valid(
+        qwq_longcot_pretrain_refine_compute_score_valid(
             [None] *
             len(batch_solution_str), batch_solution_str, batch_ground_truth
         )
+
         print("[Finish]")
 
     def test_get_revise_rm_rewards(self):

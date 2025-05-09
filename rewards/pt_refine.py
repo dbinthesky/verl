@@ -1032,7 +1032,7 @@ The quality of questions is evaluated from the following five dimensions, with e
             "NoteFormat": self.note_format.get_penalty_or_reward,
             "NoteRep": self.note_rep.get_penalty_or_reward,
             "LangConsistency": self.lang_consist.get_penalty_or_reward,
-            "NoteDispersion": self.sef.note_dispersion.get_penalty_or_reward
+            "NoteDispersion": self.note_dispersion.get_penalty_or_reward
         }
 
     def get_penalty_coef(self):
@@ -1326,9 +1326,8 @@ The quality of questions is evaluated from the following five dimensions, with e
 
         for i in range(len(batch_data_sources)):
             # TODO: 参数化
-            rewards_union += revise_scores[i] * 2.0 + np.sum(
+            rewards_union[i] += revise_scores[i] * 2.0 + np.sum(
                 [_ + 0.5 * question_diversity_scores[i] for _ in single_question_scores[i]])
-
         return rewards_union, rewards_split
 
     def compute_score(self,
@@ -1369,15 +1368,21 @@ The quality of questions is evaluated from the following five dimensions, with e
                         penalty_log_str.append(f'{name}={_penalty[i]:.3f}')
                     except Exception as _:
                         pass
-
             final_results.append(_reward)
             thought = get_thought(batch_solution_str[i])
 
             notes_summary = self.get_notes_summary(batch_solution_str[i])
 
-            if self.split == "valid":
+            _revise, _single_q, _diversity = base_rewards_split[i]
+            if self.split == "valid" or (self.split == "train" and random.random() < 0.01):
+                log = True
+                log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
+            else:
+                log = False
+
+            if log:
                 print(
-                    f"--------------------------------[VALID]--------------------------------")
+                    f"--------------------------------{log_flag}--------------------------------")
                 print(
                     f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
                 print(
@@ -1385,30 +1390,14 @@ The quality of questions is evaluated from the following five dimensions, with e
                 print(
                     f'【Raw】({batch_ground_truth[i]["lang_code"]})({len(batch_ground_truth[i]["ground_truth"])})``{self.log_ground_truth(batch_ground_truth[i])}`')
                 print(
-                    f'[Final Reward]={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|RM_SPLIT={base_rewards_split[i]}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
-                for i, note in enumerate(notes_summary, start=1):
-                    print(f'\t【新增注释{i}】{repr(note)}')
-            elif self.split == "train" and random.random() < 0.01:
-                print(
-                    f"--------------------------------[TRAIN]--------------------------------")
-                print(
-                    f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
-                print(
-                    f'【Refine】({batch_ground_truth[i]["lang_code"]})({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`')
-                print(
-                    f'【Raw】({batch_ground_truth[i]["lang_code"]})({len(batch_ground_truth[i]["ground_truth"])})`{self.log_ground_truth(batch_ground_truth[i])}`')
-                print(
-                    f'[Final Reward]={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|RM_SPLIT={base_rewards_split[i]}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
-                for i, note in enumerate(notes_summary, start=1):
-                    print(f'\t【新增注释{i}】{repr(note)}')
+                    f'[Final Reward]={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|RM_REVISE={_revise:.2f}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
+                for j, note in enumerate(notes_summary):
+                    print(
+                        f'\t【新增注释{j}】({f"{_single_q[j]:.3f}" if j < len(_single_q) else "<not_found>"}+(0.5*{_diversity:.3f})){repr(note)}')
         return final_results
 
     def get_notes_summary(self, solution):
         notes_and_conclusions = get_notes_and_conclusions(solution)
-        notes = get_notes(solution)
-        for _ in notes:
-            if not any(_ in c for c in notes_and_conclusions):
-                notes_and_conclusions.append(_)
         return notes_and_conclusions
 
     def log_ground_truth(self, ground_truth):
@@ -1441,55 +1430,3 @@ qwq_longcot_pretrain_refine_compute_score_valid = _qwq_longcot_pretrain_refine_c
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 预训练数据治理
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-class QwQLongCoTPretrainRefineStage2ComputeScore(QwQLongCoTPretrainRefineComputeScore):
-    def __init__(self,
-                 split="train",
-                 parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
-        super().__init__(split=split, parse_result_failure_score=parse_result_failure_score)
-        self.note_format = NotesFormatReward(
-            postprocess_solution_fn=parse_doc_w_notes,
-            max_reward=2.0,
-            step_reward=0.05,
-            max_steps=40,
-            max_penalty=-2.0)
-
-    async def get_rm_rewards(self,
-                             batch_data_sources,
-                             batch_solution_str,
-                             batch_ground_truth):
-        tasks = [
-            self.get_revise_rm_rewards(
-                batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[0]]),
-            self.get_notes_mix_rm_rewards(
-                batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[1]]),
-            self.get_thinking_rm_rewards(
-                batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[2]]),
-            self.get_question_rm_rewards(
-                batch_data_sources, batch_solution_str, batch_ground_truth, urls=[RM_URLS[3]])
-        ]
-        results = await asyncio.gather(*tasks)
-        rewards_union = [0.0] * len(batch_data_sources)
-        rewards_split = []
-        for i in range(len(batch_data_sources)):
-            rewards_split.append([0.0] * len(tasks))
-
-        for j, result in enumerate(results):
-            for i, reward in enumerate(result):
-                if j == 0 or j == 1:
-                    coef = 5
-                else:
-                    coef = 10
-                rewards_union[i] += coef * reward
-                rewards_split[i][j] = coef * reward
-
-        return rewards_union, rewards_split
-
-
-_qwq_longcot_pretrain_refine_stage2_compute_score_train = QwQLongCoTPretrainRefineStage2ComputeScore(
-    split="train")
-_qwq_longcot_pretrain_refine_stage2_compute_score_valid = QwQLongCoTPretrainRefineStage2ComputeScore(
-    split="valid")
-qwq_longcot_pretrain_refine_stage2_compute_score_train = _qwq_longcot_pretrain_refine_stage2_compute_score_train.compute_score
-qwq_longcot_pretrain_refine_stage2_compute_score_valid = _qwq_longcot_pretrain_refine_stage2_compute_score_valid.compute_score
