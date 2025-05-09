@@ -620,7 +620,7 @@ class NotesIntraRepetitionReward(PenaltyOrReward):
 
             rouge_recall = self.scorer.score(a, b)["rouge2"].recall
             recalls.append(rouge_recall)
-        return -np.mean(recalls)
+        return -np.mean(recalls) * len(recalls)
 
 
 class NotesFormatReward(PenaltyOrReward):
@@ -1111,7 +1111,7 @@ The quality of questions is evaluated from the following five dimensions, with e
             "NoteRep": 0.5,
             "LangConsistency": 1.0,
             "NoteDispersion": 1.0,
-            "NoteIntraRepetition": 1.0
+            "NoteIntraRepetition": 0.15
         }
 
     async def get_revise_rm_rewards(
