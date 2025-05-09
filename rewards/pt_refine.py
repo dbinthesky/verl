@@ -21,28 +21,28 @@ en_mt = MosesTokenizer(lang='en')
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-# RM_URLS = [
-#     "http://10.130.1.208:31884",
-#     "http://10.130.1.208:27670",
-#     "http://10.130.1.208:32135",
-#     "http://10.130.1.208:34850",
-#     "http://10.130.1.37:27709",
-#     "http://10.130.1.37:29452",
-#     "http://10.130.1.37:32383",
-#     "http://10.130.1.37:26082",
-#     "http://10.130.1.37:29616",
-#     "http://10.130.1.37:32934",
-# ]
-
 RM_URLS = [
-    "http://10.130.0.218:32091",
-    "http://10.130.0.218:27737",
-    "http://10.130.0.218:25772",
-    "http://10.130.0.218:26159",
-    "http://10.130.0.218:32609",
-    "http://10.130.0.218:27461",
-    "http://10.130.0.218:25543",
+    "http://10.130.1.208:31884",
+    "http://10.130.1.208:27670",
+    "http://10.130.1.208:32135",
+    "http://10.130.1.208:34850",
+    "http://10.130.1.37:27709",
+    "http://10.130.1.37:29452",
+    "http://10.130.1.37:32383",
+    "http://10.130.1.37:26082",
+    "http://10.130.1.37:29616",
+    "http://10.130.1.37:32934",
 ]
+
+# RM_URLS = [
+#     "http://10.130.0.218:32091",
+#     "http://10.130.0.218:27737",
+#     "http://10.130.0.218:25772",
+#     "http://10.130.0.218:26159",
+#     "http://10.130.0.218:32609",
+#     "http://10.130.0.218:27461",
+#     "http://10.130.0.218:25543",
+# ]
 
 
 DEFAULT_PARSE_FAILURE_REWARD = -2.
@@ -583,6 +583,46 @@ class NotesDispersionReward(PenaltyOrReward):
         return cv
 
 
+class NotesIntraRepetitionReward(PenaltyOrReward):
+    def __init__(self,
+                 postprocess_solution_fn,
+                 ):
+        self.postprocess_solution_fn = postprocess_solution_fn
+        self.scorer = rouge_scorer.RougeScorer(
+            ['rouge1', 'rouge2'], use_stemmer=True)
+
+    def get_penalty_or_reward(self, solution_str, ground_truth, lang_code=None):
+        solution_str = self.postprocess_solution_fn(solution_str)
+        if solution_str is None:
+            return 0.
+
+        base_score = 0.0
+        notes = re.findall(
+            r'\[EXPLANATION\](.*?)\[/EXPLANATION\]', solution_str, re.DOTALL)
+
+        def extract_question(s):
+            if "Think Step by Step:" in s and "Question:" in s:
+                s = s[s.index("Question:") + len("Question:"):s.index("Think Step by Step:")]
+            if "一步步思考：" in s and "提问：" in s:
+                s = s[s.index("提问：") + len("提问："):s.index("一步步思考：")]
+            return s.strip()
+
+        notes = [extract_question(_) for _ in notes]
+        recalls = []
+        for i, a in enumerate(notes):
+            b = "\n".join([_ for j, _ in enumerate(notes) if j != i])
+            if lang_code == "en":
+                a = " ".join(en_mt.tokenize(a.lower()))
+                b = " ".join(en_mt.tokenize(b.lower()))
+            elif lang_code == "zh":
+                a = " ".join(list(jieba.cut(a)))
+                b = " ".join(list(jieba.cut(b)))
+
+            rouge_recall = self.scorer.score(a, b)["rouge2"].recall
+            recalls.append(rouge_recall)
+        return -np.mean(recalls)
+
+
 class NotesFormatReward(PenaltyOrReward):
     def __init__(self,
                  postprocess_solution_fn,
@@ -654,7 +694,7 @@ class NotesFormatReward(PenaltyOrReward):
             return base_score
 
 
-class NotesRepetitionPenalty(PenaltyOrReward):
+class NotesDocumentRepetitionPenalty(PenaltyOrReward):
     """ Coef建议设置多少呢？ =0.5
     """
 
@@ -1041,11 +1081,14 @@ The quality of questions is evaluated from the following five dimensions, with e
             postprocess_solution_fn=parse_doc_wo_notes_and_tags)
         self.note_format = NotesFormatReward(
             postprocess_solution_fn=parse_doc_w_notes)
-        self.note_rep = NotesRepetitionPenalty(
+        self.note_rep = NotesDocumentRepetitionPenalty(
             postprocess_solution_fn=parse_doc_w_notes)
         self.lang_consist = LanguageConsistencyReward(
             postprocess_solution_fn=parse_solution_fn)
         self.note_dispersion = NotesDispersionReward(
+            postprocess_solution_fn=parse_doc_w_notes
+        )
+        self.note_intra_rep = NotesIntraRepetitionReward(
             postprocess_solution_fn=parse_doc_w_notes
         )
 
@@ -1056,7 +1099,8 @@ The quality of questions is evaluated from the following five dimensions, with e
             "NoteFormat": self.note_format.get_penalty_or_reward,
             "NoteRep": self.note_rep.get_penalty_or_reward,
             "LangConsistency": self.lang_consist.get_penalty_or_reward,
-            "NoteDispersion": self.note_dispersion.get_penalty_or_reward
+            "NoteDispersion": self.note_dispersion.get_penalty_or_reward,
+            "NoteIntraRepetition": self.note_intra_rep.get_penalty_or_reward
         }
 
     def get_penalty_coef(self):
@@ -1066,7 +1110,8 @@ The quality of questions is evaluated from the following five dimensions, with e
             "NoteFormat": 1.0,
             "NoteRep": 0.5,
             "LangConsistency": 1.0,
-            "NoteDispersion": 1.0
+            "NoteDispersion": 1.0,
+            "NoteIntraRepetition": 1.0
         }
 
     async def get_revise_rm_rewards(
