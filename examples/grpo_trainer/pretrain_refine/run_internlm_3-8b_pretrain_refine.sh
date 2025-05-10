@@ -49,7 +49,8 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_pretrain_refine_e2e_v1_0_4_77_open_source_hf"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_pretrain_refine_e2e_v1_0_4_77_open_source_hf"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/internlm3-8b_pretrain_e2e_refine_v1-dlc-2025-05-09-10-40-40_grpo_step_30"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/reason_pretrain_v3_8k_train_0503"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/reason_pretrain_v3_8k_test"
 
@@ -95,7 +96,7 @@ run_training() {
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=256 \
+        data.train_batch_size=64 \
         data.max_prompt_length=16384 \
         data.max_response_length=16384 \
         data.filter_overlong_prompts=True \
@@ -105,7 +106,7 @@ run_training() {
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
         actor_rollout_ref.actor.ppo_mini_batch_size=64 \
-        actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus * 4)) \
+        actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus)) \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=32768 \

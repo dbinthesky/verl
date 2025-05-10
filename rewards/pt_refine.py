@@ -1,4 +1,5 @@
 import re
+import math
 import jieba
 import random
 import aiohttp
@@ -22,26 +23,25 @@ en_mt = MosesTokenizer(lang='en')
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 RM_URLS = [
-    "http://10.130.1.208:31884",
-    "http://10.130.1.208:27670",
-    "http://10.130.1.208:32135",
-    "http://10.130.1.208:34850",
-    "http://10.130.1.37:27709",
-    "http://10.130.1.37:29452",
-    "http://10.130.1.37:32383",
-    "http://10.130.1.37:26082",
-    "http://10.130.1.37:29616",
-    "http://10.130.1.37:32934",
+    "http://10.130.1.101:32436",
+    "http://10.130.1.101:32877",
+    "http://10.130.1.101:25601",
+    "http://10.130.1.101:32976",
+    "http://10.130.2.53:28863",
+    "http://10.130.2.53:33706",
+    "http://10.130.2.53:30696",
+    "http://10.130.2.53:29722"
 ]
 
+
 # RM_URLS = [
-#     "http://10.130.0.218:32091",
-#     "http://10.130.0.218:27737",
-#     "http://10.130.0.218:25772",
-#     "http://10.130.0.218:26159",
-#     "http://10.130.0.218:32609",
-#     "http://10.130.0.218:27461",
-#     "http://10.130.0.218:25543",
+#     "http://10.130.1.36:32901",
+#     "http://10.130.1.36:31703",
+#     "http://10.130.1.36:28031",
+#     "http://10.130.1.36:33926",
+#     "http://10.130.1.208:29423",
+#     "http://10.130.1.208:34720",
+#     "http://10.130.1.208:33369",
 # ]
 
 
@@ -602,25 +602,32 @@ class NotesIntraRepetitionReward(PenaltyOrReward):
 
         def extract_question(s):
             if "Think Step by Step:" in s and "Question:" in s:
-                s = s[s.index("Question:") + len("Question:"):s.index("Think Step by Step:")]
+                s = s[s.index("Question:") + len("Question:")                      :s.index("Think Step by Step:")]
             if "一步步思考：" in s and "提问：" in s:
                 s = s[s.index("提问：") + len("提问："):s.index("一步步思考：")]
             return s.strip()
 
         notes = [extract_question(_) for _ in notes]
         recalls = []
-        for i, a in enumerate(notes):
-            b = "\n".join([_ for j, _ in enumerate(notes) if j != i])
-            if lang_code == "en":
-                a = " ".join(en_mt.tokenize(a.lower()))
-                b = " ".join(en_mt.tokenize(b.lower()))
-            elif lang_code == "zh":
-                a = " ".join(list(jieba.cut(a)))
-                b = " ".join(list(jieba.cut(b)))
+        score = 0.0
+        try:
+            for i, a in enumerate(notes):
+                b = "\n".join([_ for j, _ in enumerate(notes) if j != i])
+                if lang_code == "en":
+                    a = " ".join(en_mt.tokenize(a.lower()))
+                    b = " ".join(en_mt.tokenize(b.lower()))
+                elif lang_code == "zh":
+                    a = " ".join(list(jieba.cut(a)))
+                    b = " ".join(list(jieba.cut(b)))
 
-            rouge_recall = self.scorer.score(a, b)["rouge2"].recall
-            recalls.append(rouge_recall)
-        return -np.mean(recalls) * len(recalls)
+                rouge_recall = self.scorer.score(a, b)["rouge2"].recall
+                recalls.append(rouge_recall)
+            score = -min(np.mean(recalls), 1.0) * len(recalls)
+        except Exception as err:
+            pass
+        if math.isnan(score):
+            return 0.0
+        return max(score, -20.)
 
 
 class NotesFormatReward(PenaltyOrReward):
@@ -1111,7 +1118,7 @@ The quality of questions is evaluated from the following five dimensions, with e
             "NoteRep": 0.5,
             "LangConsistency": 1.0,
             "NoteDispersion": 1.0,
-            "NoteIntraRepetition": 0.15
+            "NoteIntraRepetition": 0.05
         }
 
     async def get_revise_rm_rewards(
@@ -1434,7 +1441,8 @@ The quality of questions is evaluated from the following five dimensions, with e
                 if i in _penalty:
                     _reward += _penalty[i] * self.get_penalty_coef()[name]
                     try:
-                        penalty_log_str.append(f'{name}={_penalty[i]:.3f}')
+                        penalty_log_str.append(
+                            f'{name}={_penalty[i]:.3f}*{self.get_penalty_coef()[name]}')
                     except Exception as _:
                         pass
             final_results.append(_reward)
