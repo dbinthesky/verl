@@ -2,8 +2,8 @@
 
 DLC_PATH="/cpfs01/shared/public/dlc"
 
-# JOB_NAME="internlm_3-8b_pretrain_refine"
-JOB_NAME="run_ds-r1-distill-qwen-7b_pretrain_refine"
+JOB_NAME="internlm_3-8b_pretrain_refine"
+# JOB_NAME="run_ds-r1-distill-qwen-7b_pretrain_refine"
 PYARGS="${@:3}"
 
 NUM_PROCESSES="${NUM_PROCESSES:-4}"
@@ -25,8 +25,8 @@ WORKER_GPU="${WORKER_GPU:-"8"}"
 WORKER_CPU="${WORKER_CPU:-"64"}"
 WORKER_MEMORY="${WORKER_MEMORY:-"1024"}"
 WORKER_IMAGE="pjlab-shanghai-acr-registry-vpc.cn-shanghai.cr.aliyuncs.com/pjlab-eflops/lishuaibin:lishuaibin-xpuyu-trainrlhf"
-# RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/pretrain_refine/run_internlm_3-8b_pretrain_refine.sh"
-RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/pretrain_refine/run_ds-r1-distill-qwen-7b_pretrain_refine.sh"
+RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/pretrain_refine/run_internlm_3-8b_pretrain_refine.sh"
+# RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/pretrain_refine/run_ds-r1-distill-qwen-7b_pretrain_refine.sh"
 
 
 dlcrun_cmd=$(

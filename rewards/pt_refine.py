@@ -602,7 +602,7 @@ class NotesIntraRepetitionReward(PenaltyOrReward):
 
         def extract_question(s):
             if "Think Step by Step:" in s and "Question:" in s:
-                s = s[s.index("Question:") + len("Question:")                      :s.index("Think Step by Step:")]
+                s = s[s.index("Question:") + len("Question:"):s.index("Think Step by Step:")]
             if "一步步思考：" in s and "提问：" in s:
                 s = s[s.index("提问：") + len("提问："):s.index("一步步思考：")]
             return s.strip()
@@ -1118,7 +1118,7 @@ The quality of questions is evaluated from the following five dimensions, with e
             "NoteRep": 0.5,
             "LangConsistency": 1.0,
             "NoteDispersion": 1.0,
-            "NoteIntraRepetition": 0.05
+            "NoteIntraRepetition": 0.00
         }
 
     async def get_revise_rm_rewards(
@@ -1506,4 +1506,12 @@ qwq_longcot_pretrain_refine_compute_score_train = _qwq_longcot_pretrain_refine_c
 qwq_longcot_pretrain_refine_compute_score_valid = _qwq_longcot_pretrain_refine_compute_score_valid.compute_score
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 预训练数据治理
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# 思维过程优化
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# 思维过程优化
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
