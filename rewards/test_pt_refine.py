@@ -23,6 +23,7 @@ from pt_refine import (
     NotesDispersionReward,
     LanguageConsistencyReward,
     QwQLongCoTPretrainRefineComputeScore,
+    CoTEnhanceComputeScore,
     qwq_longcot_pretrain_refine_compute_score_valid,
     qwq_longcot_pretrain_refine_compute_score_train,
 )
@@ -175,9 +176,7 @@ def load_pretrain_cot_enhance():
             r'\[RAW DOCUMENT\] \n```(.*?)```', prompt, re.DOTALL)[0].strip()
         raw_notes = get_notes_and_conclusions(
             prompt[prompt.index("其中注释部分我帮你摘取出来\n[NOTE]"):])
-        print(raw_notes)
-        # print(raw_document)
-        print("="*80)
+
         batch_solution_str.append(
             chosen
         )
@@ -187,8 +186,10 @@ def load_pretrain_cot_enhance():
                 "judges": [TEMPLATE.format(note=note, document=raw_document) for note in raw_notes]
             }
         )
+        if len(batch_ground_truth) == 256:
+            break
 
-        return batch_solution_str, batch_ground_truth
+    return batch_solution_str, batch_ground_truth
 
 
 class TestPretrainRefine(unittest.TestCase):
@@ -287,6 +288,11 @@ class TestPretrainRefine(unittest.TestCase):
 class TestCoTEnhance(unittest.TestCase):
     def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_pretrain_cot_enhance()
+        task = CoTEnhanceComputeScore(split="valid")
+        task.compute_score(
+            [None] *
+            len(batch_solution_str), batch_solution_str, batch_ground_truth
+        )
 
 
 if __name__ == '__main__':

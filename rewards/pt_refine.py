@@ -22,27 +22,27 @@ en_mt = MosesTokenizer(lang='en')
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-RM_URLS = [
-    "http://10.130.1.101:32436",
-    "http://10.130.1.101:32877",
-    "http://10.130.1.101:25601",
-    "http://10.130.1.101:32976",
-    "http://10.130.2.53:28863",
-    "http://10.130.2.53:33706",
-    "http://10.130.2.53:30696",
-    "http://10.130.2.53:29722"
-]
-
-
 # RM_URLS = [
-#     "http://10.130.1.36:32901",
-#     "http://10.130.1.36:31703",
-#     "http://10.130.1.36:28031",
-#     "http://10.130.1.36:33926",
-#     "http://10.130.1.208:29423",
-#     "http://10.130.1.208:34720",
-#     "http://10.130.1.208:33369",
+#     "http://10.130.1.101:32436",
+#     "http://10.130.1.101:32877",
+#     "http://10.130.1.101:25601",
+#     "http://10.130.1.101:32976",
+#     "http://10.130.2.53:28863",
+#     "http://10.130.2.53:33706",
+#     "http://10.130.2.53:30696",
+#     "http://10.130.2.53:29722"
 # ]
+
+
+RM_URLS = [
+    "http://10.130.2.51:31911",
+    "http://10.130.2.51:27705",
+    "http://10.130.2.51:28351",
+    "http://10.130.2.51:28053",
+    "http://10.130.2.51:33426",
+    "http://10.130.2.51:32013",
+    "http://10.130.2.51:27039",
+]
 
 
 DEFAULT_PARSE_FAILURE_REWARD = -2.
@@ -1513,7 +1513,7 @@ qwq_longcot_pretrain_refine_compute_score_valid = _qwq_longcot_pretrain_refine_c
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-class CoTEnhanceComputeScore(object):
+class CoTEnhanceComputeScore(QwQLongCoTPretrainRefineComputeScore):
     JUDGE_CRITERIA_COT_ZH = """
 ## 思维过程评价标准体系
 
@@ -1613,11 +1613,164 @@ class CoTEnhanceComputeScore(object):
         self.split = split
         self.parse_result_failure_score = parse_result_failure_score
 
-    def get_penalties(self) -> Dict[str, Callable]:
-        return {}
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+        async def main():
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+        return asyncio.run(main())
 
-    def get_penalty_coef(self):
-        return {}
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+
+        base_rewards, base_rewards_split = await self.get_rm_rewards(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
+
+        # final_results = []
+        # for i in range(len(batch_solution_str)):
+        #     penalty_log_str = []
+        #     _reward = base_rewards[i]
+
+        #     for name, _penalty in penalty.items():
+        #         if i in _penalty:
+        #             _reward += _penalty[i] * self.get_penalty_coef()[name]
+        #             try:
+        #                 penalty_log_str.append(
+        #                     f'{name}={_penalty[i]:.3f}*{self.get_penalty_coef()[name]}')
+        #             except Exception as _:
+        #                 pass
+        #     final_results.append(_reward)
+        #     thought = get_thought(batch_solution_str[i])
+
+        #     notes_summary = self.get_notes_summary(batch_solution_str[i])
+
+        #     _revise, _single_q, _diversity = base_rewards_split[i]
+        #     if self.split == "valid" or (self.split == "train" and random.random() < 0.01):
+        #         log = True
+        #         log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
+        #     else:
+        #         log = False
+
+        #     if log:
+        #         print(
+        #             f"--------------------------------{log_flag}--------------------------------")
+        #         print(
+        #             f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
+        #         print(
+        #             f'【Refine】({batch_ground_truth[i]["lang_code"]})({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`')
+        #         print(
+        #             f'【Raw】({batch_ground_truth[i]["lang_code"]})({len(batch_ground_truth[i]["ground_truth"])})``{self.log_ground_truth(batch_ground_truth[i])}`')
+        #         print(
+        #             f'[Final Reward]={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|RM_REVISE={_revise:.2f}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
+        #         for j, note in enumerate(notes_summary):
+        #             print(
+        #                 f'\t【新增注释{j}】({f"{_single_q[j]:.3f}" if j < len(_single_q) else "<not_found>"}+(0.5*{_diversity:.3f})){repr(note)}')
+        # return final_results
+
+    def get_conclusion(self, s):
+        return re.findall(r'\[CONCLUSION\](.*?)\[/CONCLUSION\]', s, re.DOTALL)[0].strip()
+
+    def get_question(self, s):
+        if "提问：" in s and "一步步思考：" in s:
+            return s[s.index("提问：")+len("提问："):s.index("一步步思考：")].strip()
+        if "Question:" in s and "Think Step by Step:" in s:
+            return s[s.index("Question:")+len("提问："):s.index("Think Step by Step:")].strip()
+        return None
+
+    def get_notes_and_conclusions(self, s: str):
+        try:
+            notes = re.findall(
+                r'\[EXPLANATION\].*?\[/EXPLANATION\]\n*\[CONCLUSION\].*?\[/CONCLUSION\]', s, re.DOTALL)
+            return notes
+        except Exception as err:
+            return []
+
+    async def get_rm_rewards(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            urls=RM_URLS):
+        """
+            评价除去处思考过程后的改写内容
+        """
+        mapper = []
+        cot_judges = []
+        new_batch_solution_strs = []
+
+        for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            judge_template = self.JUDGE_CRITERIA_COT_ZH
+
+            raw_notes = _gt["notes"]
+            judge_prompts = _gt["judges"]
+
+            refine_notes = self.get_notes_and_conclusions(sol)
+
+            for j, note in enumerate(raw_notes):
+                uniq_key = (self.get_question(note), self.get_conclusion(note))
+
+                matched = None
+                for refine in refine_notes:
+                    refine_key = (self.get_question(refine),
+                                  self.get_conclusion(refine))
+                    if refine_key == uniq_key:
+                        matched = refine
+                        break
+
+                if matched:
+                    judge_prompt = f'{judge_prompts[j]}\n\n\n# 评价标准\n{judge_template}'
+                    cot_judges.append({"ground_truth": judge_prompt})
+                    new_batch_solution_strs.append(matched)
+                    mapper.append((i, j))
+                else:
+                    continue
+
+        tasks = []
+        n = len(urls)
+
+        for i, batch in enumerate(batchify(zip(cot_judges, new_batch_solution_strs), n=64)):
+            batch_judges = [_[0] for _ in batch]
+            new_batch_solution_str = [_[1] for _ in batch]
+            tasks.append(
+                compute_rm_score(
+                    batch_solution_str=new_batch_solution_str,
+                    batch_ground_truth=batch_judges,
+                    postprocess_solution_fn=lambda x: x,
+                    parse_result_failure_score=self.parse_result_failure_score,
+                    desc="-cot_judge",
+                    urls=[urls[i % n]]
+                )
+            )
+
+        results = await self.run_tasks_in_queues(tasks, n=n)
+
+        print(results)
+
+        raise NotImplementedError
+        rewards = []
+        for _ in results:
+            rewards.extend(_)
+        rewards_group = []
+        for size in sizes:
+            rewards_group.append(rewards[:size])
+            rewards = rewards[size:]
+
+        full_rewards = []
+        for i in range(len(batch_solution_str)):
+            if i in indices:
+                full_rewards.append(rewards_group[indices.index(i)])
+            else:
+                full_rewards.append([default_penalty])
+        return full_rewards
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 思维过程优化
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
