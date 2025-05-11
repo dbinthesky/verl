@@ -602,7 +602,7 @@ class NotesIntraRepetitionReward(PenaltyOrReward):
 
         def extract_question(s):
             if "Think Step by Step:" in s and "Question:" in s:
-                s = s[s.index("Question:") + len("Question:")                      :s.index("Think Step by Step:")]
+                s = s[s.index("Question:") + len("Question:"):s.index("Think Step by Step:")]
             if "一步步思考：" in s and "提问：" in s:
                 s = s[s.index("提问：") + len("提问："):s.index("一步步思考：")]
             return s.strip()
@@ -1071,7 +1071,7 @@ The quality of questions is evaluated from the following five dimensions, with e
 
 3. **Linear and Non-linear Thinking**:
    - **Linear Thinking**: Analyze problems step by step. For example, "Analyze the progressive process of autonomous driving technology."
-   - **Non-linear Thinking**: Analyze problems from a non-linear perspective. For example, "Analyze the sudden changes in autonomous driving technology." 
+   - **Non-linear Thinking**: Analyze problems from a non-linear perspective. For example, "Analyze the sudden changes in autonomous driving technology."
 
 """
 
@@ -1609,7 +1609,7 @@ class CoTEnhanceComputeScore(QwQLongCoTPretrainRefineComputeScore):
 
     def __init__(self,
                  split="train",
-                 parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
+                 parse_result_failure_score=-0.2):
         self.split = split
         self.parse_result_failure_score = parse_result_failure_score
 
@@ -1628,52 +1628,67 @@ class CoTEnhanceComputeScore(QwQLongCoTPretrainRefineComputeScore):
                              batch_ground_truth,
                              ):
 
-        base_rewards, base_rewards_split = await self.get_rm_rewards(
+        rewards = await self.get_rm_rewards(
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth,
         )
 
-        # final_results = []
-        # for i in range(len(batch_solution_str)):
-        #     penalty_log_str = []
-        #     _reward = base_rewards[i]
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            _reward = rewards[i]
+            final_results.append(np.mean(_reward))
 
-        #     for name, _penalty in penalty.items():
-        #         if i in _penalty:
-        #             _reward += _penalty[i] * self.get_penalty_coef()[name]
-        #             try:
-        #                 penalty_log_str.append(
-        #                     f'{name}={_penalty[i]:.3f}*{self.get_penalty_coef()[name]}')
-        #             except Exception as _:
-        #                 pass
-        #     final_results.append(_reward)
-        #     thought = get_thought(batch_solution_str[i])
+            if self.split == "valid" or (self.split == "train" and random.random() < 0.05):
+                log = True
+                log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
+            else:
+                log = False
 
-        #     notes_summary = self.get_notes_summary(batch_solution_str[i])
+            notes_summary = self.get_notes_summary(
+                batch_ground_truth[i], batch_solution_str[i])
 
-        #     _revise, _single_q, _diversity = base_rewards_split[i]
-        #     if self.split == "valid" or (self.split == "train" and random.random() < 0.01):
-        #         log = True
-        #         log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
-        #     else:
-        #         log = False
+            if log:
+                print(
+                    f"================================{log_flag}================================")
+                print(
+                    f'[Final Reward]={np.mean(_reward):.3f}\n')
+                for j, (raw, refine) in enumerate(notes_summary):
+                    score = f'{_reward[j]:.3f}' if j < len(
+                        _reward) else "<not_found>"
+                    print(
+                        f'\t【注释{j}修改前】{repr(self.clip_string(raw))}')
+                    print(
+                        f'\t【注释{j}修改后】({score}){repr(self.clip_string(refine))}\n')
+                    print(
+                        '----------------------------------------------------------------')
+        return final_results
 
-        #     if log:
-        #         print(
-        #             f"--------------------------------{log_flag}--------------------------------")
-        #         print(
-        #             f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
-        #         print(
-        #             f'【Refine】({batch_ground_truth[i]["lang_code"]})({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`')
-        #         print(
-        #             f'【Raw】({batch_ground_truth[i]["lang_code"]})({len(batch_ground_truth[i]["ground_truth"])})``{self.log_ground_truth(batch_ground_truth[i])}`')
-        #         print(
-        #             f'[Final Reward]={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|RM_REVISE={_revise:.2f}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
-        #         for j, note in enumerate(notes_summary):
-        #             print(
-        #                 f'\t【新增注释{j}】({f"{_single_q[j]:.3f}" if j < len(_single_q) else "<not_found>"}+(0.5*{_diversity:.3f})){repr(note)}')
-        # return final_results
+    def get_notes_summary(self, ground_truth, solution):
+        notes = ground_truth["notes"]
+        raw = {}
+        for note in notes:
+            question, conclusion = self.get_question(
+                note), self.get_conclusion(note)
+            raw[(question, conclusion)] = note
+
+        refined = {}
+        refinements = self.get_notes_and_conclusions(solution)
+        for refine in refinements:
+            question, conclusion = self.get_question(
+                refine), self.get_conclusion(refine)
+            if (question, conclusion) in raw:
+                refined[(question, conclusion)] = refine
+
+        summary = []
+        for note in notes:
+            question, conclusion = self.get_question(
+                note), self.get_conclusion(note)
+            summary.append((
+                raw[(question, conclusion)], refined.get(
+                    (question, conclusion), "<corrupt>")
+            ))
+        return summary
 
     def get_conclusion(self, s):
         return re.findall(r'\[CONCLUSION\](.*?)\[/CONCLUSION\]', s, re.DOTALL)[0].strip()
@@ -1702,7 +1717,7 @@ class CoTEnhanceComputeScore(QwQLongCoTPretrainRefineComputeScore):
         """
             评价除去处思考过程后的改写内容
         """
-        mapper = []
+        mapper = {}
         cot_judges = []
         new_batch_solution_strs = []
 
@@ -1729,7 +1744,7 @@ class CoTEnhanceComputeScore(QwQLongCoTPretrainRefineComputeScore):
                     judge_prompt = f'{judge_prompts[j]}\n\n\n# 评价标准\n{judge_template}'
                     cot_judges.append({"ground_truth": judge_prompt})
                     new_batch_solution_strs.append(matched)
-                    mapper.append((i, j))
+                    mapper[(i, j)] = len(new_batch_solution_strs) - 1
                 else:
                     continue
 
@@ -1751,24 +1766,21 @@ class CoTEnhanceComputeScore(QwQLongCoTPretrainRefineComputeScore):
             )
 
         results = await self.run_tasks_in_queues(tasks, n=n)
-
-        print(results)
-
-        raise NotImplementedError
         rewards = []
         for _ in results:
             rewards.extend(_)
-        rewards_group = []
-        for size in sizes:
-            rewards_group.append(rewards[:size])
-            rewards = rewards[size:]
 
         full_rewards = []
-        for i in range(len(batch_solution_str)):
-            if i in indices:
-                full_rewards.append(rewards_group[indices.index(i)])
-            else:
-                full_rewards.append([default_penalty])
+        for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            raw_notes = _gt["notes"]
+            full_rewards.append([])
+            assert len(raw_notes) > 0
+            for j, note in enumerate(raw_notes):
+                if (i, j) in mapper:
+                    full_rewards[-1].append(rewards[mapper[(i, j)]])
+                else:
+                    full_rewards[-1].append(self.parse_result_failure_score)
+
         return full_rewards
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------

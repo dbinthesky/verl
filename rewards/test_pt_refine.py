@@ -166,7 +166,7 @@ def load_pretrain_cot_enhance():
             if question is None or conclusion is None:
                 continue
             normalized_notes[(question, conclusion)] = note
-        if len(raw_notes) != len(normalized_notes):
+        if len(raw_notes) != len(normalized_notes) or len(raw_notes) == 0:
             continue
 
         chosen = random.choice(example["self_improvement"]["responses"])[
