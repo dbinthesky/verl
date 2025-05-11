@@ -69,6 +69,128 @@ def load_pretrain_refinement(num=100):
     return batch_solution_str, batch_ground_truth
 
 
+def load_pretrain_cot_enhance():
+    def get_notes_and_conclusions(s: str):
+        try:
+            notes = re.findall(
+                r'\[EXPLANATION\].*?\[/EXPLANATION\]\n*\[CONCLUSION\].*?\[/CONCLUSION\]', s, re.DOTALL)
+            return notes
+        except Exception as err:
+            return []
+
+    def get_conclusion(s):
+        return re.findall(r'\[CONCLUSION\](.*?)\[/CONCLUSION\]', s, re.DOTALL)[0].strip()
+
+    def get_question(s):
+        if "提问：" in s and "一步步思考：" in s:
+            return s[s.index("提问：")+len("提问："):s.index("一步步思考：")].strip()
+        if "Question:" in s and "Think Step by Step:" in s:
+            return s[s.index("Question:")+len("提问："):s.index("Think Step by Step:")].strip()
+        return None
+
+    input_data = []
+    with open("/cpfs01/shared/llm_ddd/tongjian/pretrain/pretrain_refine_e2e_cot_enhance_train.jsonl", "rt") as f:
+        for line in f:
+            example = json.loads(line)
+            input_data.append(example)
+
+    random.shuffle(input_data)
+    batch_solution_str = []
+    batch_ground_truth = []
+
+    TEMPLATE = """
+    任务说明: 
+下面是一篇文档，文档中包含一些注释，注释的格式为“[EXPLANATION]***[/EXPLANATION][CONCLUSION]***[/CONCLUSION]”
+其中[EXPLANATION]***[/EXPLANATION]内的内容以“自问自答”的形式进行组织
+- 对于中文文档，格式为“提问：*** 一步步思考：***”
+- 对于英文文档，格式为“Question: *** Think Step by Step: ***”
+
+现在我需要你帮我把思考过程（“一步步思考：”之后的内容，或者“Think Step by Step: ”）进行改进、完善，步骤清晰、逻辑严密。
+
+优秀的思考过程应该满足下面的条件
+### **一、逻辑基础**  
+1. **概念清晰**：明确问题边界、核心定义及已知条件，避免模糊假设。  
+2. **推理严密**：论证符合逻辑规则（归纳/演绎/类比），结论可被前提支撑，无明显逻辑漏洞。  
+
+
+### **二、分析深度**  
+3. **本质挖掘**：超越表面现象，追溯问题根源（如底层机制、核心矛盾）。  
+4. **抽象具象**：能在具体案例与抽象规律间双向转化（归纳共性/演绎落地）。  
+
+
+### **三、思维广度**  
+5. **多维视角**：纳入不同立场（用户/竞品/执行者）、学科（技术/经济/心理）、时间（短期/长期）维度。  
+6. **要素关联**：识别关键变量及其因果关系、互动机制，避免孤立分析。  
+
+
+### **四、创新突破**  
+7. **质疑假设**：挑战固有认知或行业惯例，避免惯性思维。  
+8. **方案拓展**：生成多种备选方案（最优/次优/风险解），接纳非传统路径。  
+
+
+### **五、自我校准**  
+9. **证据依赖**：基于数据/事实/逻辑判断，主动验证反例，拒绝主观臆断。  
+10. **动态调整**：随信息更新（数据/反馈/环境）及时修正结论，承认局限性。  
+
+
+[RAW DOCUMENT] 
+```
+{document}
+```
+
+
+
+
+
+其中注释部分我帮你摘取出来
+[NOTE]
+```
+{note}
+```
+
+下面请你完善注释的思考步骤。格式和[NOTE]部分的格式完全一致，注意，问题和结论部分不要做修改，需要一字不改地完整保留。
+[OUTPUT]
+
+"""
+
+    for example in input_data:
+        prompt = example["self_improvement"]["prompt"]
+        prompt = prompt[prompt.index("[NOTE]"):]
+        raw_notes = get_notes_and_conclusions(prompt)
+
+        normalized_notes = {}
+        for note in raw_notes:
+            question = get_question(note)
+            conclusion = get_conclusion(note)
+            if question is None or conclusion is None:
+                continue
+            normalized_notes[(question, conclusion)] = note
+        if len(raw_notes) != len(normalized_notes):
+            continue
+
+        chosen = random.choice(example["self_improvement"]["responses"])[
+            "response"]
+        prompt = example["self_improvement"]["prompt"]
+        raw_document = re.findall(
+            r'\[RAW DOCUMENT\] \n```(.*?)```', prompt, re.DOTALL)[0].strip()
+        raw_notes = get_notes_and_conclusions(
+            prompt[prompt.index("其中注释部分我帮你摘取出来\n[NOTE]"):])
+        print(raw_notes)
+        # print(raw_document)
+        print("="*80)
+        batch_solution_str.append(
+            chosen
+        )
+        batch_ground_truth.append(
+            {
+                "notes": raw_notes,
+                "judges": [TEMPLATE.format(note=note, document=raw_document) for note in raw_notes]
+            }
+        )
+
+        return batch_solution_str, batch_ground_truth
+
+
 class TestPretrainRefine(unittest.TestCase):
     def test_main_body_recall(self):
         batch_solution_str, batch_ground_truth = load_pretrain_refinement(
@@ -160,6 +282,11 @@ class TestPretrainRefine(unittest.TestCase):
             print(results)
             print(len(results))
         aio.run(main())
+
+
+class TestCoTEnhance(unittest.TestCase):
+    def test_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_pretrain_cot_enhance()
 
 
 if __name__ == '__main__':
