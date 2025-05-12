@@ -288,7 +288,7 @@ class TestPretrainRefine(unittest.TestCase):
 class TestCoTEnhance(unittest.TestCase):
     def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_pretrain_cot_enhance()
-        task = CoTEnhanceComputeScore(split="valid")
+        task = CoTEnhanceComputeScore(split="valid", parse_result_failure_score=-10.)
         task.compute_score(
             [None] *
             len(batch_solution_str), batch_solution_str, batch_ground_truth

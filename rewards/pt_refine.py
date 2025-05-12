@@ -1729,9 +1729,10 @@ class CoTEnhanceComputeScore(QwQLongCoTPretrainRefineComputeScore):
 
             # 格式检查
             try:
-                content = sol[sol.index("[OUTPUT]\n```")+len("[OUTPUT]\n```"):]
+                content = sol[sol.index("[NOTE]\n```")+len("[NOTE]\n```"):]
                 content = content[:content.index("```")]
-                otherpart = re.sub(r'\[EXPLANATION\].*?\[/EXPLANATION\]\n*\[CONCLUSION\].*?\[/CONCLUSION\]', "", content, re.DOTALL).strip()
+                otherpart = re.sub(r'\[EXPLANATION\][\s\S]*?\[/EXPLANATION\]\n*\[CONCLUSION\][\s\S]*?\[/CONCLUSION\]', "", content, re.DOTALL).strip()
+
                 if len(otherpart) != 0:
                     format_corrupt.append(i)
                     continue
@@ -1748,6 +1749,8 @@ class CoTEnhanceComputeScore(QwQLongCoTPretrainRefineComputeScore):
                 for refine in refine_notes:
                     refine_key = (self.get_question(refine),
                                   self.get_conclusion(refine))
+                    if any(kw in refine for kw in ("概念清晰", "推理严密", "本质挖掘")):
+                        break
                     if refine_key == uniq_key:
                         matched = refine
                         break
@@ -1802,9 +1805,9 @@ class CoTEnhanceComputeScore(QwQLongCoTPretrainRefineComputeScore):
 
 
 _cot_enhance_compute_score_train = CoTEnhanceComputeScore(
-    split="train")
+    split="train", parse_result_failure_score=-10.0)
 _cot_enhance_compute_score_valid = CoTEnhanceComputeScore(
-    split="valid")
+    split="valid", parse_result_failure_score=-10.0)
 cot_enhance_compute_score_train = _cot_enhance_compute_score_train.compute_score
 cot_enhance_compute_score_valid = _cot_enhance_compute_score_valid.compute_score
 

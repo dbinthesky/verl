@@ -49,9 +49,9 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_pretrain_refine_e2e_v1_0_4_77_open_source_hf"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/pretrain_refine_e2e_cot_enhance_train_16k"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/pretrain_refine_e2e_cot_enhance_test_16k"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/DATAREVIEW_SFT_TEST_internlm3_dense8B_pretrain_refine_e2e_cot_enhance_v0_0_1_69_open_source_hf"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/pretrain_refine_e2e_cot_enhance_train_16k.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_rl/pretrain_refine_e2e_cot_enhance_test_16k.parquet"
 
     experiment_name="internlm3-8b_pretrain_cot_enhance-dlc-${YYMMDD}-${HHMMSS}"
     project_name="verl_grpo_internlm_pretrain_cot_enhance"
@@ -95,7 +95,7 @@ run_training() {
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=256 \
+        data.train_batch_size=128 \
         data.max_prompt_length=16384 \
         data.max_response_length=16384 \
         data.filter_overlong_prompts=True \
