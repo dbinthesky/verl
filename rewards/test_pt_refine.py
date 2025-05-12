@@ -186,7 +186,7 @@ def load_pretrain_cot_enhance():
                 "judges": [TEMPLATE.format(note=note, document=raw_document) for note in raw_notes]
             }
         )
-        if len(batch_ground_truth) == 256:
+        if len(batch_ground_truth) == 512:
             break
 
     return batch_solution_str, batch_ground_truth

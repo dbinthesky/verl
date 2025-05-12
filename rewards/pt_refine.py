@@ -35,13 +35,12 @@ en_mt = MosesTokenizer(lang='en')
 
 
 RM_URLS = [
-    "http://10.130.2.51:31911",
-    "http://10.130.2.51:27705",
-    "http://10.130.2.51:28351",
-    "http://10.130.2.51:28053",
-    "http://10.130.2.51:33426",
-    "http://10.130.2.51:32013",
-    "http://10.130.2.51:27039",
+    "http://10.130.1.125:27356",
+    "http://10.130.1.125:29254",
+    "http://10.130.1.125:33221",
+    "http://10.130.1.125:33121",
+    "http://10.130.1.125:30667",
+    "http://10.130.1.125:34695",
 ]
 
 
@@ -1609,7 +1608,7 @@ class CoTEnhanceComputeScore(QwQLongCoTPretrainRefineComputeScore):
 
     def __init__(self,
                  split="train",
-                 parse_result_failure_score=-0.2):
+                 parse_result_failure_score=-2.0):
         self.split = split
         self.parse_result_failure_score = parse_result_failure_score
 
@@ -1633,7 +1632,6 @@ class CoTEnhanceComputeScore(QwQLongCoTPretrainRefineComputeScore):
             batch_solution_str,
             batch_ground_truth,
         )
-
         final_results = []
         for i in range(len(batch_solution_str)):
             _reward = rewards[i]
@@ -1721,11 +1719,25 @@ class CoTEnhanceComputeScore(QwQLongCoTPretrainRefineComputeScore):
         cot_judges = []
         new_batch_solution_strs = []
 
+        format_corrupt = []
+
         for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
             judge_template = self.JUDGE_CRITERIA_COT_ZH
 
             raw_notes = _gt["notes"]
             judge_prompts = _gt["judges"]
+
+            # 格式检查
+            try:
+                content = sol[sol.index("[OUTPUT]\n```")+len("[OUTPUT]\n```"):]
+                content = content[:content.index("```")]
+                otherpart = re.sub(r'\[EXPLANATION\].*?\[/EXPLANATION\]\n*\[CONCLUSION\].*?\[/CONCLUSION\]', "", content, re.DOTALL).strip()
+                if len(otherpart) != 0:
+                    format_corrupt.append(i)
+                    continue
+            except Exception as err:
+                format_corrupt.append(i)
+                continue
 
             refine_notes = self.get_notes_and_conclusions(sol)
 
@@ -1759,19 +1771,24 @@ class CoTEnhanceComputeScore(QwQLongCoTPretrainRefineComputeScore):
                     batch_solution_str=new_batch_solution_str,
                     batch_ground_truth=batch_judges,
                     postprocess_solution_fn=lambda x: x,
-                    parse_result_failure_score=self.parse_result_failure_score,
+                    parse_result_failure_score=-0.2,
                     desc="-cot_judge",
                     urls=[urls[i % n]]
                 )
             )
 
         results = await self.run_tasks_in_queues(tasks, n=n)
+
         rewards = []
         for _ in results:
             rewards.extend(_)
 
         full_rewards = []
         for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            if i in format_corrupt:
+                full_rewards.append([self.parse_result_failure_score])
+                continue
+
             raw_notes = _gt["notes"]
             full_rewards.append([])
             assert len(raw_notes) > 0
@@ -1779,9 +1796,17 @@ class CoTEnhanceComputeScore(QwQLongCoTPretrainRefineComputeScore):
                 if (i, j) in mapper:
                     full_rewards[-1].append(rewards[mapper[(i, j)]])
                 else:
-                    full_rewards[-1].append(self.parse_result_failure_score)
+                    full_rewards[-1].append(-0.2)
 
         return full_rewards
+
+
+_cot_enhance_compute_score_train = CoTEnhanceComputeScore(
+    split="train")
+_cot_enhance_compute_score_valid = CoTEnhanceComputeScore(
+    split="valid")
+cot_enhance_compute_score_train = _cot_enhance_compute_score_train.compute_score
+cot_enhance_compute_score_valid = _cot_enhance_compute_score_valid.compute_score
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 思维过程优化
