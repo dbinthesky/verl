@@ -1700,8 +1700,7 @@ class CoTEnhanceComputeScore(QwQLongCoTPretrainRefineComputeScore):
 
     def get_notes_and_conclusions(self, s: str):
         try:
-            notes = re.findall(
-                r'\[EXPLANATION\].*?\[/EXPLANATION\]\n*\[CONCLUSION\].*?\[/CONCLUSION\]', s, re.DOTALL)
+            notes = re.findall(r'\[EXPLANATION\].*?\[/EXPLANATION\]\n*\[CONCLUSION\].*?\[/CONCLUSION\]', s, re.DOTALL)
             return notes
         except Exception as err:
             return []
