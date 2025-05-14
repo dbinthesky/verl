@@ -2,6 +2,8 @@ import re
 import jieba
 import random
 import requests
+import tqdm.asyncio
+import asyncio as aio
 from functools import partial
 from abc import abstractmethod
 from typing import Any, Dict, Callable
@@ -20,7 +22,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 RM_URLS = [
     "http://10.130.0.174:5020"
 ]
-VERIFIER_MODEL_NAME = "qwen25_7B_instruct"
+VERIFIER_MODEL_NAME = "qwen25_72B_instruct"
 VERIFIER_MODEL_PATH = "http://10.130.247.138:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 
@@ -66,7 +68,7 @@ class Agent:
             self.request_kwargs.update(request_kwargs)
 
     async def run(self, messages, max_concurrent, desc, postprocess_fns):
-        semaphore = asyncio.Semaphore(max_concurrent)
+        semaphore = aio.Semaphore(max_concurrent)
         async with AsyncOpenAI(api_key=self.api_keys, base_url=self.base_url) as client:
             results = []
             tasks = [self.process_prompt(client, message, semaphore, postprocess_fn)
