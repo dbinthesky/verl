@@ -466,7 +466,7 @@ D. 315
         prompts.append(prompt)
 
     results = await agent.run(prompts, max_concurrent_requests, desc="[Fabricate QA]", postprocess_fns=[postprocess]*len(prompts))
-    return results
+    return [_[1] for _ in results]
 
 
 async def question_similarity(authentic, fabricate, max_concurrent_requests=32):
@@ -560,7 +560,16 @@ SIMILARITY=4
         prompts.append(prompt)
 
     results = await agent.run(prompts, max_concurrent_requests, desc="[Fabricate QA]", postprocess_fns=[postprocess]*len(prompts))
-    return results
+    return [_[1] for _ in results]
+
+
+class QwQLongCoTCreateCriteriaComputeScore(object):
+    def __init__(self,
+                 split="train",
+                 parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
+        self.split = split
+        self.parse_result_failure_score = parse_result_failure_score
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Criteria构造
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
