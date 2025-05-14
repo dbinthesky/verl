@@ -109,6 +109,19 @@ class TestCriteria(unittest.TestCase):
                 batch_ground_truth))
         aio.run(main())
 
+    def test_calc_classify_acc_reward(self):
+        task = QwQLongCoTCreateCriteriaComputeScore()
+        batch_solution_str, batch_ground_truth = load_criteria()
+        batch_solution_str = batch_solution_str[:10]
+        batch_ground_truth = batch_ground_truth[:10]
+
+        async def main():
+            print(await task.calc_classify_acc_reward(
+                [None]*len(batch_solution_str),
+                batch_solution_str,
+                batch_ground_truth))
+        aio.run(main())
+
 
 if __name__ == '__main__':
     # async def main():

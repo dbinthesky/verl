@@ -2,6 +2,7 @@ import re
 import jieba
 import random
 import requests
+import numpy as np
 import tqdm.asyncio
 import asyncio as aio
 from functools import partial
@@ -570,6 +571,81 @@ class QwQLongCoTCreateCriteriaComputeScore(object):
         self.split = split
         self.parse_result_failure_score = parse_result_failure_score
 
+    async def calc_classify_acc_reward(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        max_concurrent_requests=32,
+        diff_threshold=0.1
+    ):
+        """
+            计算Criteria是否可以准确区分出真题/合成题
+            Score分为两个部分
+            Score1: 有效区分出真题/合成题的准确率 (真题分数-合成题分数 >= diff_threshold) 分值-1～+1
+            Score2: 真题通过Criteria判定的得分，越接近1越好。分值正则化到-1～+1
+
+        """
+        questions, criteria = [], []
+
+        indices = []
+        for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            criterion = criteria_parse_solution_fn(solution_str)
+            if criterion is not None:
+                questions.append(gt["positive"])
+                criteria.append(criterion)
+                indices.append((i, "positive"))
+
+                for negative in gt["negatives"]:
+                    questions.append(negative)
+                    criteria.append(criterion)
+                    indices.append((i, "negative"))
+
+        results = await criteria_get_score(questions, criteria, max_concurrent_requests=max_concurrent_requests)
+
+        pos = {}
+        neg = defaultdict(list)
+        for result, index in zip(results, indices):
+            index, tag = index
+            if tag == "positive":
+                pos[index] = result
+            else:
+                neg[index].append(result)
+
+        score1, score2 = [0.0] * \
+            len(batch_solution_str), [0.0] * len(batch_solution_str)
+
+        def normalize(value):
+            return 2 * value - 1.0
+
+        for i in range(len(batch_solution_str)):
+            # 解析错误
+            if i not in pos:
+                continue
+            else:
+                if pos[i] == None:
+                    continue
+                else:
+                    score2[i] = normalize(pos[i])
+
+                    acc = []
+                    for val in neg[i]:
+                        if val is not None:
+                            _acc = (pos[i] - val) >= diff_threshold
+                            if _acc:
+                                acc.append(normalize(1.0))
+                            else:
+                                acc.append(normalize(0.0))
+                    if len(acc) > 0:
+                        score1[i] = np.mean(acc)
+                    else:
+                        score1[i] = 0.0
+
+        total_score = []
+        for x, y in zip(score1, score2):
+            total_score.append(x+y)
+        return total_score
+
     async def calc_compression_ratio_reward(
             self,
             batch_data_sources,
@@ -609,7 +685,7 @@ class QwQLongCoTCreateCriteriaComputeScore(object):
             max_concurrent_requests=max_concurrent_requests
         )
         scores = [0.0] * len(batch_solution_str)
-        for sim, index in zip(similarity, index):
+        for sim, index in zip(similarity, new_indices):
             if sim is None:
                 pass
             else:

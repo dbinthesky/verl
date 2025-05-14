@@ -601,7 +601,8 @@ class NotesIntraRepetitionReward(PenaltyOrReward):
 
         def extract_question(s):
             if "Think Step by Step:" in s and "Question:" in s:
-                s = s[s.index("Question:") + len("Question:"):s.index("Think Step by Step:")]
+                s = s[s.index("Question:") + len("Question:")
+                              :s.index("Think Step by Step:")]
             if "一步步思考：" in s and "提问：" in s:
                 s = s[s.index("提问：") + len("提问："):s.index("一步步思考：")]
             return s.strip()
@@ -1228,10 +1229,7 @@ The quality of questions is evaluated from the following five dimensions, with e
             评价单条提问质量
         """
         indices = []
-
-        addition_judges = []
-        new_batch_solution_strs = []
-        sizes = []
+        print(batch_solution_str)
 
         for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
             lang_code = _gt["lang_code"]
@@ -1700,7 +1698,8 @@ class CoTEnhanceComputeScore(QwQLongCoTPretrainRefineComputeScore):
 
     def get_notes_and_conclusions(self, s: str):
         try:
-            notes = re.findall(r'\[EXPLANATION\].*?\[/EXPLANATION\]\n*\[CONCLUSION\].*?\[/CONCLUSION\]', s, re.DOTALL)
+            notes = re.findall(
+                r'\[EXPLANATION\].*?\[/EXPLANATION\]\n*\[CONCLUSION\].*?\[/CONCLUSION\]', s, re.DOTALL)
             return notes
         except Exception as err:
             return []
@@ -1730,7 +1729,8 @@ class CoTEnhanceComputeScore(QwQLongCoTPretrainRefineComputeScore):
             try:
                 content = sol[sol.index("[NOTE]\n```")+len("[NOTE]\n```"):]
                 content = content[:content.index("```")]
-                otherpart = re.sub(r'\[EXPLANATION\][\s\S]*?\[/EXPLANATION\]\n*\[CONCLUSION\][\s\S]*?\[/CONCLUSION\]', "", content, re.DOTALL).strip()
+                otherpart = re.sub(
+                    r'\[EXPLANATION\][\s\S]*?\[/EXPLANATION\]\n*\[CONCLUSION\][\s\S]*?\[/CONCLUSION\]', "", content, re.DOTALL).strip()
 
                 if len(otherpart) != 0:
                     format_corrupt.append(i)
