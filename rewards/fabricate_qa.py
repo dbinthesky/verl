@@ -739,8 +739,6 @@ class QwQLongCoTCreateCriteriaComputeScore(object):
                     f"【Question】`{self.log_ground_truth(gt)}`")
                 print(
                     f"【Criteria】`{self.log_solution(solution)}`")
-                print(f'Reward={_reward:.3f};{";".join(penalty_log_str)}\n')
-
                 print(
                     f'[Final Reward]={final_results[-1]:.3f}\n')
         return final_results
