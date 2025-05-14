@@ -9,7 +9,8 @@ from fabricate_qa import (
     get_total_score,
     decode_to_question,
     criteria_get_score,
-    question_similarity
+    question_similarity,
+    QwQLongCoTCreateCriteriaComputeScore
 )
 
 
@@ -95,6 +96,17 @@ class TestCriteria(unittest.TestCase):
 
         async def main():
             print(await question_similarity(x, y))
+        aio.run(main())
+
+    def test_calc_compression_ratio_reward(self):
+        task = QwQLongCoTCreateCriteriaComputeScore()
+        batch_solution_str, batch_ground_truth = load_criteria()
+
+        async def main():
+            print(await task.calc_compression_ratio_reward(
+                [None]*len(batch_solution_str),
+                batch_solution_str,
+                batch_ground_truth))
         aio.run(main())
 
 

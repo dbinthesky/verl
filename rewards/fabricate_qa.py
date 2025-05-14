@@ -559,7 +559,7 @@ SIMILARITY=4
             f'\n\n现在需要你比较下面两个问题的相似度。\n\n[原问题]\n{a}\n\n[对比问题]\n{b}\n\n[输出]\n'
         prompts.append(prompt)
 
-    results = await agent.run(prompts, max_concurrent_requests, desc="[Fabricate QA]", postprocess_fns=[postprocess]*len(prompts))
+    results = await agent.run(prompts, max_concurrent_requests, desc="[QA Similarity]", postprocess_fns=[postprocess]*len(prompts))
     return [_[1] for _ in results]
 
 
@@ -569,6 +569,58 @@ class QwQLongCoTCreateCriteriaComputeScore(object):
                  parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
         self.split = split
         self.parse_result_failure_score = parse_result_failure_score
+
+    async def calc_compression_ratio_reward(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            max_concurrent_requests=32,
+            similarity_threshold=4,
+    ):
+        """
+            计算Criteria对应原问题的信息压缩率, score取值区间-1～+1
+        """
+
+        indices = []
+        criteria = []
+        for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            criterion = criteria_parse_solution_fn(sol)
+            if criterion is not None:
+                criteria.append(criterion)
+                indices.append(i)
+            else:
+                continue
+
+        results = await decode_to_question(criteria)
+        new_indices, fabricates, authentics = [], [], []
+
+        for fabricate, index in zip(results, indices):
+            if fabricate is None:
+                continue
+            else:
+                fabricates.append(fabricate)
+                new_indices.append(index)
+                authentics.append(batch_ground_truth[index]["positive"])
+
+        similarity = await question_similarity(
+            authentic=authentics,
+            fabricate=fabricates,
+            max_concurrent_requests=max_concurrent_requests
+        )
+        scores = [0.0] * len(batch_solution_str)
+        for sim, index in zip(similarity, index):
+            if sim is None:
+                pass
+            else:
+                # 相似度过高，泄题 => 负
+                if sim >= similarity_threshold:
+                    scores[index] = -1.0
+                else:
+                    scores[index] = 1.0
+
+        return scores
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Criteria构造
