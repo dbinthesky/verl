@@ -27,6 +27,7 @@ RM_URLS = [
 VERIFIER_MODEL_NAME = "qwen25_72B_instruct"
 VERIFIER_MODEL_PATH = "http://10.130.247.138:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
+MAX_CONCURRENT = 32
 
 
 class APIError(Exception):
@@ -181,7 +182,7 @@ def compute_rm_score(
         batch_solution_str,
         batch_ground_truth,
         postprocess_solution_fn,
-        parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD,
+        parse_result_failure_score=-3.0,
         judge_prompt_key="ground_truth"
 ):
     input_datas = []
@@ -567,9 +568,11 @@ SIMILARITY=4
 class QwQLongCoTCreateCriteriaComputeScore(object):
     def __init__(self,
                  split="train",
-                 parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
+                 parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD,
+                 max_concurrent_requests=32):
         self.split = split
         self.parse_result_failure_score = parse_result_failure_score
+        self.max_concurrent_requests = max_concurrent_requests
 
     async def calc_classify_acc_reward(
         self,
@@ -697,7 +700,64 @@ class QwQLongCoTCreateCriteriaComputeScore(object):
 
         return scores
 
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+        scores1 = await self.calc_classify_acc_reward(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            self.max_concurrent_requests
+        )
+        scores2 = await self.calc_compression_ratio_reward(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            self.max_concurrent_requests
+        )
 
+        final_results = []
+        for gt, solution, score1, score2 in zip(batch_ground_truth, batch_solution_str, scores1, scores2):
+            criteria = criteria_parse_solution_fn(solution)
+            if criteria is None:
+                final_results.append(self.parse_result_failure_score)
+            else:
+                final_results.append(score1+score2)
+
+            if self.split == "valid" or (self.split == "train" and random.random() < 0.01):
+                log = True
+                log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
+            else:
+                log = False
+
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f"【Question】`{self.log_ground_truth(gt)}`")
+                print(
+                    f"【Criteria】`{self.log_solution(solution)}`")
+                print(f'Reward={_reward:.3f};{";".join(penalty_log_str)}\n')
+
+                print(
+                    f'[Final Reward]={final_results[-1]:.3f}\n')
+        return final_results
+
+    def log_solution(self, solution):
+        criteria = criteria_parse_solution_fn(solution)
+        if criteria is None:
+            return repr(self.clip_string(solution))
+        return repr(self.clip_string(criteria))
+
+    def log_ground_truth(self, ground_truth):
+        return repr(self.clip_string(ground_truth["positive"]))
+
+    def clip_string(self, s: str):
+        if len(s) > 1500:
+            return f'{s[:700]}... [省略] ...{s[-800:]}'
+        return s
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Criteria构造
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
