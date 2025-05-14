@@ -401,7 +401,9 @@ async def decode_to_question(criteria, max_concurrent_requests=32):
             conclusion = s.replace(thought, "")
             conclusion = conclusion[conclusion.index(
                 "[QUESTION]")+len("[QUESTION]"):conclusion.index("[/QUESTION]")].strip()
+            return conclusion
         except Exception as err:
+            print(err)
             raise PostprocessError(f'{err}')
 
     TEMPLATE = """
@@ -462,7 +464,7 @@ D. 315
     prompts = []
     for c in criteria:
         prompt = TEMPLATE + \
-            f'\n\n现在需要你基于下面打分表构造一道完美符合要求的问题。\n\n[打分表]\n{c}\n\n[输出]\n'
+            f'\n\n现在需要你基于下面打分表构造一道完美符合要求的问题。\n*注意*最终你只需要生成问题，不要尝试解答问题\n\n[打分表]\n{c}\n\n[输出]\n'
         prompts.append(prompt)
 
     results = await agent.run(prompts, max_concurrent_requests, desc="[Fabricate QA]", postprocess_fns=[postprocess]*len(prompts))

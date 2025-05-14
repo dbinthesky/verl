@@ -76,6 +76,8 @@ class TestCriteria(unittest.TestCase):
                 x.append(random.choice(gt["negatives"]))
                 y.append(criteria)
 
+        y = y[:10]
+
         async def main():
             print(await decode_to_question(y))
         aio.run(main())
