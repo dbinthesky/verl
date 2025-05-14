@@ -256,7 +256,7 @@ def get_total_score(criteria):
     return sum(scores)
 
 
-async def criteria_get_score(questions, criteria, max_concurrent_requests=32, parse_result_failure_score=-1.0):
+async def criteria_get_score(questions, criteria, max_concurrent_requests=32):
     def postprocess(s, max_score):
         try:
             s = s.strip()
@@ -389,8 +389,7 @@ $
             partial(postprocess, max_score=get_total_score(c)))
 
     results = await agent.run(prompts, max_concurrent_requests, desc="[Judge Question w Criteria]", postprocess_fns=postprocesses)
-    scores = [_[1] if _[1]
-              is not None else parse_result_failure_score for _ in results]
+    scores = [_[1] for _ in results]
     return scores
 
 
@@ -403,7 +402,6 @@ async def decode_to_question(criteria, max_concurrent_requests=32):
                 "[QUESTION]")+len("[QUESTION]"):conclusion.index("[/QUESTION]")].strip()
             return conclusion
         except Exception as err:
-            print(err)
             raise PostprocessError(f'{err}')
 
     TEMPLATE = """
@@ -470,6 +468,54 @@ D. 315
     results = await agent.run(prompts, max_concurrent_requests, desc="[Fabricate QA]", postprocess_fns=[postprocess]*len(prompts))
     return results
 
+    # async def llm_judge_similarity(self,
+    #                                batch_solution_str,
+    #                                batch_ground_truth,
+    #                                ):
+
+    #     base_rewards = [0.0] * len(batch_ground_truth)
+
+    #     prompt_mapper = defaultdict(list)
+    #     logs = []
+    #     for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+    #         solution_str = self.postprocess_solution_fn(solution_str)
+    #         if solution_str is None:
+    #             continue
+
+    #         gt = self.extract_gt_question(ground_truth)
+
+    #         sim_judge_prompt = self.JUDGE_QUESTION_SIMILARITY_FEWSHOTS + "\n\n\n" + self.JUDGE_QUESTION_SIMILARITY_TEMPLATE.format(
+    #             authentic_question=gt,
+    #             fabricate_question=solution_str,
+    #         ).strip()
+    #         logs.append(
+    #             self.JUDGE_QUESTION_SIMILARITY_TEMPLATE.format(
+    #                 authentic_question=gt,
+    #                 fabricate_question=solution_str).strip()
+    #         )
+
+    #         prompt_mapper[sim_judge_prompt].append(i)
+
+    #         max_concurrent_requests = 48
+    #         prompts = list(prompt_mapper.keys())
+
+    #     if len(logs) > 0:
+    #         print("="*40 + "[Judge Prompt Display]" + "="*40)
+    #         print(repr(random.choice(logs)))
+    #         print("="*40 + "[Judge Prompt Display]" + "="*40)
+
+    #     results = await agent.run(prompts, max_concurrent_requests, desc="[Judge QA Similarity]", postprocess_fns=[self.parse_llm_judge_sim_result]*len(prompts))
+    #     for prompt, response in results:
+    #         if response is not None:
+    #             indices = prompt_mapper[prompt]
+    #             for index in indices:
+    #                 try:
+    #                     score = response
+    #                     base_rewards[index] += score / 4.0
+
+    #                 except Exception as err:
+    #                     continue
+    #     return base_rewards
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Criteria构造
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
