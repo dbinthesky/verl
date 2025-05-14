@@ -7,6 +7,7 @@ from fabricate_qa import (
     agent,
     criteria_parse_solution_fn,
     get_total_score,
+    decode_to_question,
     criteria_get_score
 )
 
@@ -64,7 +65,20 @@ class TestCriteria(unittest.TestCase):
         async def main():
             print(await criteria_get_score(x, y))
         aio.run(main())
-        # print(get_total_score(criteria_parse_solution_fn(solution_str)))
+
+    def test_decode_to_question(self):
+        batch_solution_str, batch_ground_truth = load_criteria()
+
+        x, y = [], []
+        for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
+            criteria = criteria_parse_solution_fn(solution_str)
+            if criteria is not None:
+                x.append(random.choice(gt["negatives"]))
+                y.append(criteria)
+
+        async def main():
+            print(await decode_to_question(y))
+        aio.run(main())
 
 
 if __name__ == '__main__':

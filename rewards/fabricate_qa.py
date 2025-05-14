@@ -262,7 +262,7 @@ async def criteria_get_score(questions, criteria, max_concurrent_requests=32, pa
             s = s.strip()
             conclusion = s.split("\n")[-1]
             conclusion = conclusion[conclusion.index(
-                "最终得分：")+len("最终得分：")].strip()
+                "最终得分：")+len("最终得分："):].strip()
             score = int(conclusion)
             if score > max_score:
                 raise PostprocessError(
@@ -392,6 +392,81 @@ $
     scores = [_[1] if _[1]
               is not None else parse_result_failure_score for _ in results]
     return scores
+
+
+async def decode_to_question(criteria, max_concurrent_requests=32):
+    def postprocess(s):
+        try:
+            thought = re.findall(r'think>.*</think>', s, re.DOTALL)[0]
+            conclusion = s.replace(thought, "")
+            conclusion = conclusion[conclusion.index(
+                "[QUESTION]")+len("[QUESTION]"):conclusion.index("[/QUESTION]")].strip()
+        except Exception as err:
+            raise PostprocessError(f'{err}')
+
+    TEMPLATE = """
+# 目标概述 
+你是一个出题大师，你的任务是基于一个题目打分表，你需要构建一道题目，完美符合打分表内的所有项目。即构造的题目，如果用打分表进行打分，将会获得满分。
+
+## 回答格式要求
+```
+<think>
+... ...
+<think>
+
+[QUESTION]
+{构造好的问题}}
+[/QUESTION]
+
+```
+
+下面是一个具体的例子：
+
+
+[打分表]
+[CRITERIA]
+- [SCORE=2] 题目是否属于选择题型
+- [SCORE=2] 题目是否涉及土木工程领域的地基处理
+- [SCORE=2] 题目是否要求计算复合地基的承载力
+- [SCORE=2] 题目是否提供所有必要参数（如桩长、桩径、强度、折减系数等）
+- [SCORE=2] 题目是否涉及多个折减系数的综合应用
+- [SCORE=2] 题目是否要求考虑桩间距和排列方式的影响
+- [SCORE=2] 题目是否需要综合运用公式进行数值计算
+- [SCORE=1] 题目是否涉及桩端土和桩间土的承载力计算
+- [SCORE=1] 题目是否要求选择一个合适的承载力值
+- [SCORE=1] 题目是否包含清晰的题干描述
+- [SCORE=1] 题目是否设置合理的选项
+- [SCORE=1] 题目是否考查记忆和理解能力
+- [SCORE=1] 题目是否考查应用和分析能力
+- [SCORE=1] 题目是否考查创造能力
+[/CRITERIA]
+
+
+[输出]
+<think>
+用户让我构造一道符合打分表所有项目的选择题，涉及土木工程的地基处理，特别是复合地基承载力计算。首先，我需要确保题目是选择题型，所以格式上要有选项。接下来，必须涵盖地基处理，复合地基承载力计算，所以题干需要包括桩长、桩径、强度、折减系数等参数。打分表提到多个折减系数的综合应用，比如桩间土和桩身强度的折减，还有桩间距和排列方式的影响，比如正方形布置，桩间距影响面积置换率。
+然后，需要考虑桩端土和桩间土的承载力计算，可能需要分别计算桩体承载力和桩间土承载力，再用面积置换率综合。题目需要数值计算，所以要给出具体的数值，比如桩长 10m，桩径 0.5m，压缩模量，天然地基承载力，折减系数等。选项设置要合理，正确答案需要通过公式计算得出，其他选项可以是计算过程中的中间值或错误应用公式的结果。
+还要考查记忆、理解、应用、分析和创造能力，虽然创造能力在选择题中可能较难，但通过综合运用多个公式和考虑不同因素，可以体现分析和应用能力。题干描述要清晰，参数齐全，比如明确桩的布置方式，计算复合地基承载力特征值，并选择合适的选项。需要检查每个打分点是否覆盖，比如选择题型、地基处理、复合地基计算、必要参数、多个折减系数、桩间距和排列、数值计算、桩端和桩间土计算、选择合适值、清晰题干、合理选项，以及考查多种能力。确保每个评分项都满足，特别是分数高的项目，如前几项每个 2 分的点，必须全部涵盖。最后，组织题干和选项，确保计算过程正确，选项中的正确答案符合公式应用，比如复合地基承载力公式是桩体承载力乘以置换率加上桩间土承载力乘以（1 - 置换率），置换率根据桩间距和桩径计算，正方形布置时置换率为桩径平方除以桩间距平方。
+</think>
+
+[QUESTION]
+某多层建筑采用水泥粉煤灰碎石桩（CFG 桩）复合地基，正方形布桩，桩径 d=0.5m，桩间距 s=1.5m，桩长 L=10m。已知桩体试块抗压强度平均值 f_cu=30MPa，桩间土承载力特征值 f_sk=120kPa，桩间土承载力折减系数 β=0.9，桩体强度折减系数 η=0.8，桩端天然地基土承载力特征值 q_p=800kPa，桩侧阻力忽略不计。按《建筑地基处理技术规范》计算，该复合地基的承载力特征值（kPa）最接近下列哪个选项？
+A. 210
+B. 245
+C. 280
+D. 315
+[/QUESTION]
+
+"""
+
+    prompts = []
+    for c in criteria:
+        prompt = TEMPLATE + \
+            f'\n\n现在需要你基于下面打分表构造一道完美符合要求的问题。\n\n[打分表]\n{c}\n\n[输出]\n'
+        prompts.append(prompt)
+
+    results = await agent.run(prompts, max_concurrent_requests, desc="[Fabricate QA]", postprocess_fns=[postprocess]*len(prompts))
+    return results
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Criteria构造
