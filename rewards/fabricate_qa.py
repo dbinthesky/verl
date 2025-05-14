@@ -468,54 +468,99 @@ D. 315
     results = await agent.run(prompts, max_concurrent_requests, desc="[Fabricate QA]", postprocess_fns=[postprocess]*len(prompts))
     return results
 
-    # async def llm_judge_similarity(self,
-    #                                batch_solution_str,
-    #                                batch_ground_truth,
-    #                                ):
 
-    #     base_rewards = [0.0] * len(batch_ground_truth)
+async def question_similarity(authentic, fabricate, max_concurrent_requests=32):
+    TEMPLATE = """### 问题相似程度评价标准（1-5分）  
 
-    #     prompt_mapper = defaultdict(list)
-    #     logs = []
-    #     for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-    #         solution_str = self.postprocess_solution_fn(solution_str)
-    #         if solution_str is None:
-    #             continue
+| **相似等级** | **判定标准**                                                                 |  
+|--------------|------------------------------------------------------------------------------|  
+| **1分**      | 完全不同：题目类型、核心条件、求解目标、解题思路毫无关联，无任何共同要素。       |  
+| **2分**      | 弱相关：仅单一维度相关（如同属数学题中的几何/代数大类），其余要素无重合。         |  
+| **3分**      | 部分相似：题目类型相同（如均为“三维立方体隐藏块计数”），但核心条件、目标或步骤存在关键差异（如可见面数不同、求解方向相反）。 |  
+| **4分**      | 高度相似：题目类型、求解目标、解题框架完全一致，仅数据或参数不同（如隐藏块数值、矩阵元素等），核心步骤和逻辑完全复用。 |  
+| **5分**      | 完全相同：题目内容（数据、表述、目标、步骤）完全一致，无任何差异。               |  
 
-    #         gt = self.extract_gt_question(ground_truth)
 
-    #         sim_judge_prompt = self.JUDGE_QUESTION_SIMILARITY_FEWSHOTS + "\n\n\n" + self.JUDGE_QUESTION_SIMILARITY_TEMPLATE.format(
-    #             authentic_question=gt,
-    #             fabricate_question=solution_str,
-    #         ).strip()
-    #         logs.append(
-    #             self.JUDGE_QUESTION_SIMILARITY_TEMPLATE.format(
-    #                 authentic_question=gt,
-    #                 fabricate_question=solution_str).strip()
-    #         )
+### 使用说明  
+1. **类型优先**：若题目类型不同（如几何vs代数），直接≤2分；类型相同是≥3分的前提。  
+2. **核心要素判断**：  
+   - **1分**：无任何交集（如几何题vs代数题）。  
+   - **2分**：仅同属大类别（如同为数学题，但具体子类型不同，如几何vs数列）。  
+   - **3分**：子类型相同但存在关键差异（如可见面数不同、递推公式不同）。  
+   - **4分**：子类型、目标、解题逻辑一致，仅数据不同（如求同一类型问题的不同参数解）。  
+   - **5分**：题目完全复现，无任何改动。  
 
-    #         prompt_mapper[sim_judge_prompt].append(i)
+### 输出格式  
+<think>
+... ...
+</think>
+[CONCLUSION START]  
+SIMILARITY=*  
+[CONCLUSION END]  
+```  
+（*处填写1-5的整数，需严格符合上述判定标准）
 
-    #         max_concurrent_requests = 48
-    #         prompts = list(prompt_mapper.keys())
 
-    #     if len(logs) > 0:
-    #         print("="*40 + "[Judge Prompt Display]" + "="*40)
-    #         print(repr(random.choice(logs)))
-    #         print("="*40 + "[Judge Prompt Display]" + "="*40)
 
-    #     results = await agent.run(prompts, max_concurrent_requests, desc="[Judge QA Similarity]", postprocess_fns=[self.parse_llm_judge_sim_result]*len(prompts))
-    #     for prompt, response in results:
-    #         if response is not None:
-    #             indices = prompt_mapper[prompt]
-    #             for index in indices:
-    #                 try:
-    #                     score = response
-    #                     base_rewards[index] += score / 4.0
+下面是具体的例子
 
-    #                 except Exception as err:
-    #                     continue
-    #     return base_rewards
+[原问题]
+Find the minimum value of\n\\[x^2 + 2xy + 3y^2 - 6x - 2y,\\]over all real numbers $x$ and $y.$
+
+[对比问题]
+Find the minimum value of the quadratic function \\( f(x) = x^2 - 6x + 7 \\).
+
+[输出]
+<think>
+用户让我比较两个数学问题的相似程度。首先，我需要仔细看一下两个问题的内容。原问题是求一个二元二次多项式的最小值，变量是 x 和 y，表达式是 x² + 2xy + 3y² - 6x - 2y。待评价的问题是求一元二次函数 f (x) = x² - 6x + 7 的最小值。
+首先根据评价标准，类型优先。原问题是二元二次函数求最值，属于多元微积分或代数中的二次型问题，可能需要用偏导数或者配方法。待评价问题是一元二次函数，直接可以用配方法或者求导，变量只有一个 x。题目类型不同，一个是二元，一个是一元，所以类型不同。根据使用说明，类型不同的话直接≤2 分。接下来看核心要素，原问题是二元，涉及两个变量和交叉项 xy，而待评价问题是一元，没有交叉项，解题思路也不一样，一元的更简单，只需要处理一个变量。所以它们的共同点可能只是同属代数中的二次函数求最值，但具体子类型不同，一个是多元，一个是一元。根据标准，同属大类别（代数），但具体子类型不同，所以应该是 2 分。因为 2 分的判定是仅单一维度相关，同属数学题中的代数大类，其余要素无重合。这里类型不同，所以符合 2 分的条件。
+</think>
+[CONCLUSION START]  
+SIMILARITY=2  
+[CONCLUSION END]
+
+
+
+[原问题]
+Find the inverse of the matrix\n\\[\\begin{pmatrix} 5 & -4 \\\\ 0 & 1 \\end{pmatrix}.\\]If the inverse does not exist, then enter the zero matrix.
+
+[对比问题]
+What is the inverse of the matrix \\(\\begin{pmatrix} 2 & 1 \\\\ 3 & 4 \\end{pmatrix}\\)?
+
+[输出]
+<think>
+用户让我比较两个矩阵求逆的问题的相似程度。首先，根据类型优先原则，两个问题都是求矩阵的逆，属于同一题目类型，所以类型相同，至少 3 分以上。接下来看核心要素：原问题是求一个 2x2 矩阵的逆，对比问题也是 2x2 矩阵，求解目标都是求逆矩阵，解题框架都是使用矩阵求逆的方法，比如伴随矩阵法或者行变换。两者的不同在于矩阵中的数据不同，原问题的矩阵是 [[5,-4],[0,1]]，对比问题是 [[2,1],[3,4]]。根据判定标准，4 分的情况是题目类型、求解目标、解题框架一致，仅数据或参数不同，核心步骤和逻辑完全复用。这里显然符合 4 分的条件，因为只是矩阵元素不同，解题方法完全一样，没有关键差异。所以相似等级应该是 4 分。
+</think>
+[CONCLUSION START]
+SIMILARITY=4
+[CONCLUSION END]
+
+
+
+"""
+
+    def postprocess(s):
+        try:
+            thought = re.findall(r'think>.*</think>', s, re.DOTALL)[0]
+            conclusion = s.replace(thought, "")
+            conclusion = conclusion[conclusion.index(
+                "[CONCLUSION START]")+len("[CONCLUSION START]"):conclusion.index("[CONCLUSION END]")].strip()
+
+            score = int(re.findall(r'SIMILARITY=(\d+)', conclusion)[0].strip())
+            if score not in (1, 2, 3, 4, 5):
+                raise PostprocessError(f'invalid similarity score={score}')
+            return score
+        except Exception as err:
+            raise PostprocessError(f'{err}')
+
+    prompts = []
+    for a, b in zip(authentic, fabricate):
+        prompt = TEMPLATE + \
+            f'\n\n现在需要你比较下面两个问题的相似度。\n\n[原问题]\n{a}\n\n[对比问题]\n{b}\n\n[输出]\n'
+        prompts.append(prompt)
+
+    results = await agent.run(prompts, max_concurrent_requests, desc="[Fabricate QA]", postprocess_fns=[postprocess]*len(prompts))
+    return results
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Criteria构造
 # ------------------------------------------------------------------------------------------------------------------------------------------------------

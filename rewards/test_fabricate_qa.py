@@ -8,7 +8,8 @@ from fabricate_qa import (
     criteria_parse_solution_fn,
     get_total_score,
     decode_to_question,
-    criteria_get_score
+    criteria_get_score,
+    question_similarity
 )
 
 
@@ -80,6 +81,20 @@ class TestCriteria(unittest.TestCase):
 
         async def main():
             print(await decode_to_question(y))
+        aio.run(main())
+
+    def test_question_similarity(self):
+        batch_solution_str, batch_ground_truth = load_criteria()
+
+        x, y = [], []
+        for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
+            criteria = criteria_parse_solution_fn(solution_str)
+            if criteria is not None:
+                x.append(gt["positive"])
+                y.append(random.choice(gt["negatives"]))
+
+        async def main():
+            print(await question_similarity(x, y))
         aio.run(main())
 
 
