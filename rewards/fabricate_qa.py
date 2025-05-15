@@ -25,9 +25,9 @@ RM_URLS = [
     "http://10.130.0.174:5020"
 ]
 VERIFIER_MODEL_NAME = "qwen25_72B_instruct"
-VERIFIER_MODEL_PATH = "http://10.130.247.138:8000/v1"
+VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
-MAX_CONCURRENT = 32
+MAX_CONCURRENT = 128
 
 
 class APIError(Exception):
@@ -122,8 +122,8 @@ agent = Agent(**{
     "api_keys": "EMPTY",
     "request_kwargs": {
         "temperature": 0.7,
-        "timeout": 180,
-        "max_tokens": 4096,
+        "timeout": 360,
+        "max_tokens": 16384,
     },
 })
 
@@ -245,7 +245,9 @@ def criteria_parse_solution_fn(solution_str: str):
         conclusion = conclusion[conclusion.index(
             "[CRITERIA]"):conclusion.index("[/CRITERIA]")+len("[/CRITERIA]")].strip()
         scores = re.findall(r'\[SCORE=(\d+)\]', conclusion)
-        if not all(int(_) > 0 and int(_) <= 5 for _ in scores):
+        if len(scores) > 20:
+            return None
+        if not all(int(_) > 0 and int(_) <= 3 for _ in scores):
             return None
     except Exception as err:
         return None
@@ -273,114 +275,7 @@ async def criteria_get_score(questions, criteria, max_concurrent_requests=32):
         except Exception as err:
             raise PostprocessError(f'{err}')
 
-    TEMPLATE = """
-# 目标概述 
-给定一道题目，和一个要点评分表，你需要严格按照要点评分表的内容和分值，逐项对问题进行打分，并在最后给出最终分数。
-
-## 回答格式要求
-1. 你应当逐项按照列点的方式，对问题和评价项目进行比较，计算单个项目的分值，注意分值应当是整数，避免小数的出现，例如0.5
-2. 包含计算总分的计算步骤
-3. 在回答的最后部分，必须以“最终得分：***”这样的格式，给出总分
-
-
-下面提供你一个具体的范例，你需要参考范例进行回答
-
-
-[题目]
-For a certain site, cement-mixed columns are planned to be used for ground reinforcement. It is known that the foundation depth is 2.0m, the diameter of the mixing column is 600mm, the column length is 14.0m, and the column strength is $f_{\\mathrm{cu}}=0.8\\, \\mathrm{MPa}$. The column strength reduction factor is taken as $\\eta=0.3$, the inter-column soil bearing capacity reduction factor is $\\beta=0.6$, and the column end soil bearing capacity reduction factor is $\\alpha=0.4$. The center-to-center spacing of the mixing columns is 1.0m, arranged in an equilateral triangular pattern. Which of the following options is appropriate for the characteristic value of the bearing capacity of the composite foundation with mixed columns?
-
-[打分表]
-[CRITERIA]
-- [SCORE=2] 题目是否属于选择题型
-- [SCORE=2] 题目是否涉及土木工程领域的地基处理
-- [SCORE=2] 题目是否要求计算复合地基的承载力
-- [SCORE=2] 题目是否提供所有必要参数（如桩长、桩径、强度、折减系数等）
-- [SCORE=2] 题目是否涉及多个折减系数的综合应用
-- [SCORE=2] 题目是否要求考虑桩间距和排列方式的影响
-- [SCORE=2] 题目是否需要综合运用公式进行数值计算
-- [SCORE=1] 题目是否涉及桩端土和桩间土的承载力计算
-- [SCORE=1] 题目是否要求选择一个合适的承载力值
-- [SCORE=1] 题目是否包含清晰的题干描述
-- [SCORE=1] 题目是否设置合理的选项
-- [SCORE=1] 题目是否考查记忆和理解能力
-- [SCORE=1] 题目是否考查应用和分析能力
-- [SCORE=1] 题目是否考查创造能力
-[/CRITERIA]
-
-
-[输出]
-### 评分表逐项打分（列点格式）  
-1. **题目是否属于选择题型**  
-   - 得分：2  
-   - 说明：题目以“Which of the following options is appropriate...”结尾，明确要求从选项中选择答案，属于选择题型。  
-
-2. **题目是否涉及土木工程领域的地基处理**  
-   - 得分：2  
-   - 说明：题目描述水泥搅拌桩（cement-mixed columns）用于地基加固（ground reinforcement），属于土木工程地基处理范畴。  
-
-3. **题目是否要求计算复合地基的承载力**  
-   - 得分：2  
-   - 说明：问题目标为求解“复合地基承载力特征值”（characteristic value of the bearing capacity of the composite foundation），需进行承载力计算。  
-
-4. **题目是否提供所有必要参数**  
-   - 得分：2  
-   - 说明：题目完整提供了桩长（14.0m）、桩径（600mm）、桩体强度（\(f_{\mathrm{cu}}=0.8\,\mathrm{MPa}\)）、折减系数（\(\eta=0.3, \beta=0.6, \alpha=0.4\)）、桩间距（1.0m）及排列方式（等边三角形），无参数缺失。  
-
-5. **题目是否涉及多个折减系数的综合应用**  
-   - 得分：2  
-   - 说明：涉及桩体强度折减系数 \(\eta\)、桩间土承载力折减系数 \(\beta\)、桩端土承载力折减系数 \(\alpha\)，需在公式中综合考虑各系数的作用。  
-
-6. **题目是否要求考虑桩间距和排列方式的影响**  
-   - 得分：2  
-   - 说明：桩间距（1.0m）和等边三角形排列用于计算置换率 \(m\)（即桩的面积占总地基面积的比例），直接影响复合地基承载力公式中的权重分配。  
-
-7. **题目是否需要综合运用公式进行数值计算**  
-   - 得分：2  
-   - 说明：需应用复合地基承载力公式（如 \(f_{\mathrm{spk}} = m \cdot \eta \cdot f_{\mathrm{cu}} + \beta(1-m) \cdot f_{\mathrm{sk}}\)，其中 \(f_{\mathrm{sk}}\) 可能涉及桩端土承载力），并结合几何参数计算置换率，属于数值计算类问题。  
-
-8. **题目是否涉及桩端土和桩间土的承载力计算**  
-   - 得分：1  
-   - 说明：桩间土承载力通过 \(\beta(1-m) \cdot f_{\mathrm{sk}}\) 体现，桩端土承载力通过桩体承载力公式中的桩端阻力项（需考虑 \(\alpha\) 折减）间接涉及，考查两者的协同作用。  
-
-9. **题目是否要求选择一个合适的承载力值**  
-   - 得分：1  
-   - 说明：题目要求从选项中选择“合适的”承载力特征值，属于结果选择类问题，需结合计算结果匹配选项。  
-
-10. **题目是否包含清晰的题干描述**  
-    - 得分：1  
-    - 说明：题干明确列出所有参数、工程背景（地基加固）及问题目标，无歧义或模糊表述，信息完整。  
-
-11. **题目是否设置合理的选项**  
-    - 得分：1  
-    - 说明：虽然题目未列出具体选项，但作为标准选择题，默认选项设置合理（如涵盖计算可能的误差范围或常见错误值）。  
-
-12. **题目是否考查记忆和理解能力**  
-    - 得分：1  
-    - 说明：需记忆复合地基承载力公式的结构及各参数定义（如折减系数的物理意义），考查对基本概念的理解。  
-
-13. **题目是否考查应用和分析能力**  
-    - 得分：1  
-    - 说明：需将公式应用于具体参数，分析桩间距和排列方式对置换率的影响，以及折减系数如何调整桩体和土体的承载力贡献。  
-
-14. **题目是否考查创造能力**  
-    - 得分：0  
-    - 说明：问题为公式直接应用，无需创新方法或创造性思维，仅需按步骤计算，故不涉及创造能力考查。  
-
-
-### 最终分数计算  
-利用乘法运算（几个相同的数相加用乘法表示更简便）将所有得分相加：
-$
-\begin{align*}
-\begin{align*}
-&2 + 2 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 0\\
-=&2\times7 + 1\times6+0\\
-=&14 + 6+0\\
-=&20+0\\
-=&20
-\end{align*}
-
-最终得分：20
-"""
+    TEMPLATE = '# 目标概述 \n给定一道题目，和一个要点评分表，你需要严格按照要点评分表的内容和分值，逐项对问题进行打分，并在最后给出最终分数。\n\n## 回答格式要求\n1. 你应当逐项按照列点的方式，对问题和评价项目进行比较，计算单个项目的分值，注意分值应当是整数，避免小数的出现，例如0.5\n2. 包含计算总分的计算步骤\n3. 在回答的最后部分，必须以“最终得分：***”这样的格式，给出总分\n\n\n下面提供你具体的范例，你需要参考范例进行回答\n\n\n[题目]\nFor a certain site, cement-mixed columns are planned to be used for ground reinforcement. It is known that the foundation depth is 2.0m, the diameter of the mixing column is 600mm, the column length is 14.0m, and the column strength is $f_{\\\\mathrm{cu}}=0.8\\\\, \\\\mathrm{MPa}$. The column strength reduction factor is taken as $\\\\eta=0.3$, the inter-column soil bearing capacity reduction factor is $\\\\beta=0.6$, and the column end soil bearing capacity reduction factor is $\\\\alpha=0.4$. The center-to-center spacing of the mixing columns is 1.0m, arranged in an equilateral triangular pattern. Which of the following options is appropriate for the characteristic value of the bearing capacity of the composite foundation with mixed columns?\n\n[打分表]\n[CRITERIA]\n- [SCORE=2] 题目是否属于选择题型\n- [SCORE=2] 题目是否涉及土木工程领域的地基处理\n- [SCORE=2] 题目是否要求计算复合地基的承载力\n- [SCORE=2] 题目是否提供所有必要参数（如桩长、桩径、强度、折减系数等）\n- [SCORE=2] 题目是否涉及多个折减系数的综合应用\n- [SCORE=2] 题目是否要求考虑桩间距和排列方式的影响\n- [SCORE=2] 题目是否需要综合运用公式进行数值计算\n- [SCORE=1] 题目是否涉及桩端土和桩间土的承载力计算\n- [SCORE=1] 题目是否要求选择一个合适的承载力值\n- [SCORE=1] 题目是否包含清晰的题干描述\n- [SCORE=1] 题目是否设置合理的选项\n- [SCORE=1] 题目是否考查记忆和理解能力\n- [SCORE=1] 题目是否考查应用和分析能力\n- [SCORE=1] 题目是否考查创造能力\n[/CRITERIA]\n\n\n[输出]\n### 评分表逐项打分（列点格式）  \n1. **题目是否属于选择题型**  \n   - 得分：2  \n   - 说明：题目以“Which of the following options is appropriate...”结尾，明确要求从选项中选择答案，属于选择题型。  \n\n2. **题目是否涉及土木工程领域的地基处理**  \n   - 得分：2  \n   - 说明：题目描述水泥搅拌桩（cement-mixed columns）用于地基加固（ground reinforcement），属于土木工程地基处理范畴。  \n\n3. **题目是否要求计算复合地基的承载力**  \n   - 得分：2  \n   - 说明：问题目标为求解“复合地基承载力特征值”（characteristic value of the bearing capacity of the composite foundation），需进行承载力计算。  \n\n4. **题目是否提供所有必要参数**  \n   - 得分：2  \n   - 说明：题目完整提供了桩长（14.0m）、桩径（600mm）、桩体强度（\\(f_{\\mathrm{cu}}=0.8\\,\\mathrm{MPa}\\)）、折减系数（\\(\\eta=0.3, \\beta=0.6, \\alpha=0.4\\)）、桩间距（1.0m）及排列方式（等边三角形），无参数缺失。  \n\n5. **题目是否涉及多个折减系数的综合应用**  \n   - 得分：2  \n   - 说明：涉及桩体强度折减系数 \\(\\eta\\)、桩间土承载力折减系数 \\(\\beta\\)、桩端土承载力折减系数 \\(\\alpha\\)，需在公式中综合考虑各系数的作用。  \n\n6. **题目是否要求考虑桩间距和排列方式的影响**  \n   - 得分：2  \n   - 说明：桩间距（1.0m）和等边三角形排列用于计算置换率 \\(m\\)（即桩的面积占总地基面积的比例），直接影响复合地基承载力公式中的权重分配。  \n\n7. **题目是否需要综合运用公式进行数值计算**  \n   - 得分：2  \n   - 说明：需应用复合地基承载力公式（如 \\(f_{\\mathrm{spk}} = m \\cdot \\eta \\cdot f_{\\mathrm{cu}} + \\beta(1-m) \\cdot f_{\\mathrm{sk}}\\)，其中 \\(f_{\\mathrm{sk}}\\) 可能涉及桩端土承载力），并结合几何参数计算置换率，属于数值计算类问题。  \n\n8. **题目是否涉及桩端土和桩间土的承载力计算**  \n   - 得分：1  \n   - 说明：桩间土承载力通过 \\(\\beta(1-m) \\cdot f_{\\mathrm{sk}}\\) 体现，桩端土承载力通过桩体承载力公式中的桩端阻力项（需考虑 \\(\\alpha\\) 折减）间接涉及，考查两者的协同作用。  \n\n9. **题目是否要求选择一个合适的承载力值**  \n   - 得分：1  \n   - 说明：题目要求从选项中选择“合适的”承载力特征值，属于结果选择类问题，需结合计算结果匹配选项。  \n\n10. **题目是否包含清晰的题干描述**  \n    - 得分：1  \n    - 说明：题干明确列出所有参数、工程背景（地基加固）及问题目标，无歧义或模糊表述，信息完整。  \n\n11. **题目是否设置合理的选项**  \n    - 得分：1  \n    - 说明：虽然题目未列出具体选项，但作为标准选择题，默认选项设置合理（如涵盖计算可能的误差范围或常见错误值）。  \n\n12. **题目是否考查记忆和理解能力**  \n    - 得分：1  \n    - 说明：需记忆复合地基承载力公式的结构及各参数定义（如折减系数的物理意义），考查对基本概念的理解。  \n\n13. **题目是否考查应用和分析能力**  \n    - 得分：1  \n    - 说明：需将公式应用于具体参数，分析桩间距和排列方式对置换率的影响，以及折减系数如何调整桩体和土体的承载力贡献。  \n\n14. **题目是否考查创造能力**  \n    - 得分：0  \n    - 说明：问题为公式直接应用，无需创新方法或创造性思维，仅需按步骤计算，故不涉及创造能力考查。  \n\n\n### 最终分数计算  \n利用乘法运算（几个相同的数相加用乘法表示更简便）将所有得分相加：\n$\n\\begin{align*}\n\\begin{align*}\n&2 + 2 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 0\\\\\n=&2\\times7 + 1\\times6+0\\\\\n=&14 + 6+0\\\\\n=&20+0\\\\\n=&20\n\\end{align*}\n\n最终得分：20\n\n\n\n[题目]\nUsing a magnetoelectric induction speed sensor to measure vibration at $f = 50 \\\\, \\\\text{Hz}$, the amplitude error should be less than $5\\\\%$, and the damping ratio is $\\\\xi = 0.6$. What should be the natural frequency of the sensor?\n\n[打分表]\n[CRITERIA]\n- [SCORE=2] 题目是否属于计算题类型，需应用特定公式进行计算\n- [SCORE=2] 题目是否涉及机械工程或物理学领域，特别是振动分析\n- [SCORE=2] 题目是否考察传感器的频率响应特性\n- [SCORE=2] 是否涉及阻尼比（ξ）的相关计算或概念理解\n- [SCORE=2] 是否需要在给定误差范围内计算参数\n- [SCORE=2] 题干描述是否清晰明确，提供了足够的已知条件\n- [SCORE=2] 问题是否明确，指向一个具体的计算目标\n- [SCORE=2] 是否考查学生对模态分析或机械振动的理解\n- [SCORE=2] 是否涉及传感器测量原理的基本理解\n- [SCORE=1] 题目是否需要应用特定公式或方程进行计算\n- [SCORE=1] 是否需要进行误差分析或计算误差范围\n- [SCORE=1] 是否涉及传感器的频率响应曲线或特性\n- [SCORE=1] 是否考查传感器的选择与应用原则\n- [SCORE=1] 是否需要考虑传感器的动态特性\n- [SCORE=1] 是否涉及振动测量中的基本概念或术语\n- [SCORE=1] 是否需要进行单位换算或量纲分析\n- [SCORE=1] 题目是否提供了明确的技术参数或性能指标\n- [SCORE=1] 是否涉及传感器测量误差的评估方法\n- [SCORE=1] 是否需要综合运用传感器与振动分析的知识点\n- [SCORE=1] 是否考查传感器在动态测量中的应用能力\n- [SCORE=1] 是否涉及传感器的选择与应用原则\n- [SCORE=1] 是否需要考虑传感器的安装与使用注意事项\n- [SCORE=1] 是否涉及传感器测量中的噪声与干扰问题\n[/CRITERIA]\n\n\n[输出]\n### 评分表逐项打分（列点格式）  \n1. **题目是否属于计算题类型，需应用特定公式进行计算**  \n   - 得分：2  \n   - 说明：题目要求根据给定的振动频率、阻尼比和振幅误差计算传感器的固有频率，需应用频率响应特性公式，属于计算题类型。  \n\n2. **题目是否涉及机械工程或物理学领域，特别是振动分析**  \n   - 得分：2  \n   - 说明：磁电感应速度传感器用于振动测量，涉及机械工程中的振动分析领域。  \n\n3. **题目是否考察传感器的频率响应特性**  \n   - 得分：2  \n   - 说明：题目中明确提到振动频率 \\(f = 50 \\, \\\\text{Hz}\\)、阻尼比 \\(\\xi = 0.6\\) 和振幅误差要求，直接关联传感器的频率响应特性分析。  \n\n4. **是否涉及阻尼比（ξ）的相关计算或概念理解**  \n   - 得分：2  \n   - 说明：阻尼比 \\(\\xi = 0.6\\) 是频率响应公式中的关键参数，需用于计算固有频率与振幅误差的关系。  \n\n5. **是否需要在给定误差范围内计算参数**  \n   - 得分：2  \n   - 说明：题目要求振幅误差小于 \\(5\\%\\)，需通过误差约束条件反推传感器的固有频率。  \n\n6. **题干描述是否清晰明确，提供了足够的已知条件**  \n   - 得分：2  \n   - 说明：题干明确给出振动频率、阻尼比、误差要求及目标参数（固有频率），信息完整无歧义。  \n\n7. **问题是否明确，指向一个具体的计算目标**  \n   - 得分：2  \n   - 说明：问题直接询问“传感器的固有频率应为多少”，目标明确，指向单一计算结果。  \n\n8. **是否考查学生对模态分析或机械振动的理解**  \n   - 得分：2  \n   - 说明：频率响应分析是模态分析的核心内容，需理解固有频率、阻尼比与振幅误差的动态关系。  \n\n9. **是否涉及传感器测量原理的基本理解**  \n   - 得分：2  \n   - 说明：磁电感应传感器的测量原理基于电磁感应，其频率响应特性是正确使用传感器的基础。  \n\n10. **题目是否需要应用特定公式或方程进行计算**  \n    - 得分：1  \n    - 说明：需应用幅频特性公式 \\(|H(\\omega)| = \\\\frac{1}{\\sqrt{(1 - (\\omega/\\omega_n)^2)^2 + (2\\xi\\omega/\\omega_n)^2}}\\)，通过误差条件建立方程求解 \\(\\omega_n\\)。  \n\n11. **是否需要进行误差分析或计算误差范围**  \n    - 得分：1  \n    - 说明：需将振幅误差 \\(|H(\\omega)| \\leq 1.05\\)（或 \\(0.95 \\leq |H(\\omega)| \\leq 1.05\\)）转化为数学约束条件，分析固有频率的取值范围。  \n\n12. **是否涉及传感器的频率响应曲线或特性**  \n    - 得分：1  \n    - 说明：振幅误差与频率的关系通过频率响应曲线的幅频特性体现，需理解曲线形状对误差的影响。  \n\n13. **是否考查传感器的选择与应用原则**  \n    - 得分：1  \n    - 说明：根据测量需求（频率、误差）选择合适固有频率的传感器，属于传感器应用原则的考查。  \n\n14. **是否需要考虑传感器的动态特性**  \n    - 得分：1  \n    - 说明：频率响应特性属于传感器的动态特性，需分析其在动态测量中的表现。  \n\n15. **是否涉及振动测量中的基本概念或术语**  \n    - 得分：1  \n    - 说明：题目涉及振动频率、固有频率、阻尼比、振幅误差等振动测量的核心概念。  \n\n16. **是否需要进行单位换算或量纲分析**  \n    - 得分：0  \n    - 说明：题目中频率单位为 \\(\\\\text{Hz}\\)，参数单位统一，无需进行单位换算或量纲分析。  \n\n17. **题目是否提供了明确的技术参数或性能指标**  \n    - 得分：1  \n    - 说明：提供了振动频率（\\(50 \\, \\text{Hz}\\)）、阻尼比（\\(0.6\\)）、振幅误差限制（\\(<5\\%\\)）等明确技术指标。  \n\n18. **是否涉及传感器测量误差的评估方法**  \n    - 得分：1  \n    - 说明：通过幅频特性公式评估不同固有频率下的振幅误差，属于误差评估方法的应用。  \n\n19. **是否需要综合运用传感器与振动分析的知识点**  \n    - 得分：1  \n    - 说明：需结合传感器的频率响应特性（传感器知识）与振动系统的幅频特性分析（振动分析知识）完成计算。  \n\n20. **是否考查传感器在动态测量中的应用能力**  \n    - 得分：1  \n    - 说明：振动测量属于动态测量范畴，题目考查如何通过传感器参数设计满足动态测量的精度要求。  \n\n21. **是否涉及传感器的选择与应用原则**（重复项，按条目保留评分）  \n    - 得分：1  \n    - 说明：同第13项，仍属于传感器选择与应用原则的考查。  \n\n22. **是否需要考虑传感器的安装与使用注意事项**  \n    - 得分：0  \n    - 说明：题干未提及传感器的安装方式、环境条件等使用注意事项。  \n\n23. **是否涉及传感器测量中的噪声与干扰问题**  \n    - 得分：0  \n    - 说明：题目未涉及噪声源、抗干扰措施等相关内容。  \n\n\n\n### 最终分数计算  \n利用乘法运算（几个相同的数相加用乘法表示更简便）将所有得分相加：  \n$\n\\\\begin{align*}\n&2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 0 + 1 + 1 + 1 + 1 + 1 + 0 + 0\\\\\n=&2 \\\\times 9 + 1 \\\\times 11 + 0 \\times 3\\\\\n=&18 + 11 + 0\\\\\n=&29 + 0\\\\\n=&29\n\\end{align*}\n$  \n\n最终得分：29'
 
     prompts, postprocesses = [], []
     for q, c in zip(questions, criteria):
@@ -700,6 +595,15 @@ class QwQLongCoTCreateCriteriaComputeScore(object):
 
         return scores
 
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+        async def main():
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+        return aio.run(main())
+
     async def _compute_score(self,
                              batch_data_sources,
                              batch_solution_str,
@@ -726,7 +630,7 @@ class QwQLongCoTCreateCriteriaComputeScore(object):
             else:
                 final_results.append(score1+score2)
 
-            if self.split == "valid" or (self.split == "train" and random.random() < 0.01):
+            if self.split == "valid" or (self.split == "train" and random.random() < 0.1):
                 log = True
                 log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
             else:
@@ -756,6 +660,14 @@ class QwQLongCoTCreateCriteriaComputeScore(object):
         if len(s) > 1500:
             return f'{s[:700]}... [省略] ...{s[-800:]}'
         return s
+
+
+_qwq_longcot_create_criteria_compute_score_train = QwQLongCoTCreateCriteriaComputeScore(
+    split="train", max_concurrent_requests=MAX_CONCURRENT)
+_qwq_longcot_create_criteria_compute_score_valid = QwQLongCoTCreateCriteriaComputeScore(
+    split="valid", max_concurrent_requests=MAX_CONCURRENT)
+qwq_longcot_create_criteria_compute_score_train = _qwq_longcot_create_criteria_compute_score_train.compute_score
+qwq_longcot_create_criteria_compute_score_valid = _qwq_longcot_create_criteria_compute_score_valid.compute_score
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Criteria构造
 # ------------------------------------------------------------------------------------------------------------------------------------------------------

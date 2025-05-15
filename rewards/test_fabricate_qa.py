@@ -10,7 +10,8 @@ from fabricate_qa import (
     decode_to_question,
     criteria_get_score,
     question_similarity,
-    QwQLongCoTCreateCriteriaComputeScore
+    QwQLongCoTCreateCriteriaComputeScore,
+    qwq_longcot_create_criteria_compute_score_valid
 )
 
 
@@ -115,12 +116,16 @@ class TestCriteria(unittest.TestCase):
         batch_solution_str = batch_solution_str[:10]
         batch_ground_truth = batch_ground_truth[:10]
 
-        async def main():
-            print(await task._compute_score(
-                [None]*len(batch_solution_str),
-                batch_solution_str,
-                batch_ground_truth))
-        aio.run(main())
+        # async def main():
+        #     print(await qwq_longcot_create_criteria_compute_score_valid(
+        #         [None]*len(batch_solution_str),
+        #         batch_solution_str,
+        #         batch_ground_truth))
+        # aio.run(main())
+        qwq_longcot_create_criteria_compute_score_valid(
+            [None]*len(batch_solution_str),
+            batch_solution_str,
+            batch_ground_truth)
 
 
 if __name__ == '__main__':
