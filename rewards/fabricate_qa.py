@@ -799,9 +799,11 @@ class QwQLongCoTFabricateQAComputeScore(object):
 
     def __init__(self,
                  split="train",
-                 parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
+                 parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD,
+                 max_concurrent_requests=MAX_CONCURRENT):
         self.split = split
         self.parse_result_failure_score = parse_result_failure_score
+        self.max_concurrent_requests = max_concurrent_requests
 
     async def process_queue(self, queue, semaphore):
         """处理单个队列，确保队列内任务串行执行"""
