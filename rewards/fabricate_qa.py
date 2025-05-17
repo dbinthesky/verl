@@ -38,7 +38,6 @@ RM_URLS = [
     "http://10.130.2.51:29538",
 ]
 
-# VERIFIER_MODEL_NAME = "qwen25_72B_instruct"
 VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0517"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
@@ -956,6 +955,39 @@ class QwQLongCoTFabricateQAComputeScore(object):
             else:
                 full_rewards.append([self.parse_result_failure_score])
         return full_rewards
+
+    async def llm_as_judge_criteria_checklist(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        max_concurrent_requests=32,
+    ):
+        questions, criteria = [], []
+
+        indices = []
+        for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            fabricate = fabricate_parse_solution_fn(solution_str)
+            if fabricate is not None:
+                questions.append(fabricate)
+                criteria.append(gt["criteria"])
+                indices.append(i)
+
+        results = await criteria_get_score(
+            questions, criteria, max_concurrent_requests=max_concurrent_requests)
+
+        final_rewards = []
+        for i in range(len(batch_ground_truth)):
+            # 解析错误
+            if i not in indices:
+                final_rewards.append(self.parse_result_failure_score)
+            else:
+                sim = results[indices.index(i)]
+                if sim is None:
+                    sim = 0.0
+                score = 1.0 if sim >= batch_ground_truth[i]["criteria_threshold"] else sim
+                final_rewards.append(score)
+        return final_rewards
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 问题合成
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
