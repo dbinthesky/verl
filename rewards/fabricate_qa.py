@@ -819,7 +819,7 @@ class QwQLongCoTFabricateQAComputeScore(object):
             batch_solution_str,
             batch_ground_truth,
             urls=RM_URLS):
-        """"""
+        """ 真题/合成题RM判断相似度 """
         judges = []
         indices = []
 
@@ -876,7 +876,7 @@ class QwQLongCoTFabricateQAComputeScore(object):
             batch_ground_truth,
             urls=RM_URLS,
     ):
-        """"""
+        """ Criteria Checklist逐项基于RM进行打分 """
         addition_judges = []
         new_batch_solution_strs = []
         indices = []
