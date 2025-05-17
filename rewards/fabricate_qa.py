@@ -1,4 +1,5 @@
 import re
+import json
 import jieba
 import random
 import requests
@@ -24,7 +25,8 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 RM_URLS = [
     "http://10.130.0.174:5020"
 ]
-VERIFIER_MODEL_NAME = "qwen25_72B_instruct"
+# VERIFIER_MODEL_NAME = "qwen25_72B_instruct"
+VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0517"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 MAX_CONCURRENT = 128
@@ -97,6 +99,10 @@ class Agent:
                     "role": "user", "content": messages
                 }], **self.request_kwargs,
             )
+            # FIXME: Agent Logger
+            with open("/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/agent2.log", "a+") as f:
+                f.write(
+                    f'{json.dumps({"message": messages, "result": response.choices[0].message.content}, ensure_ascii=False)}\n')
             return postprocess_fn(response.choices[0].message.content)
         except PostprocessError as e:
             print(
@@ -475,7 +481,8 @@ class QwQLongCoTCreateCriteriaComputeScore(object):
         batch_solution_str,
         batch_ground_truth,
         max_concurrent_requests=32,
-        diff_threshold=0.1
+        diff_threshold=0.1,
+        return_single_score=True
     ):
         """
             计算Criteria是否可以准确区分出真题/合成题
@@ -499,7 +506,8 @@ class QwQLongCoTCreateCriteriaComputeScore(object):
                     criteria.append(criterion)
                     indices.append((i, "negative"))
 
-        results = await criteria_get_score(questions, criteria, max_concurrent_requests=max_concurrent_requests)
+        results = await criteria_get_score(
+            questions, criteria, max_concurrent_requests=max_concurrent_requests)
 
         pos = {}
         neg = defaultdict(list)
@@ -539,10 +547,13 @@ class QwQLongCoTCreateCriteriaComputeScore(object):
                     else:
                         score1[i] = 0.0
 
-        total_score = []
-        for x, y in zip(score1, score2):
-            total_score.append(x+y)
-        return total_score
+        if return_single_score:
+            total_score = []
+            for x, y in zip(score1, score2):
+                total_score.append(x+y)
+            return total_score
+        else:
+            return score1, score2
 
     async def calc_compression_ratio_reward(
             self,

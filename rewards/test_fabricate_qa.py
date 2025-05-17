@@ -128,8 +128,65 @@ class TestCriteria(unittest.TestCase):
             batch_ground_truth)
 
 
+def load_criteria_infer():
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/super_gpqa_aio_noneasy_train_0513_criteria_output.jsonl"
+
+    def preprocess(batch):
+        batch_solution_str, batch_ground_truth = [], []
+        for elem in batch:
+            batch_solution_str.append(
+                elem["self_improvement"]["responses"][0]["response"]["text"])
+            batch_ground_truth.append(
+                {
+                    "positive": elem["self_improvement"]["question"],
+                    "negatives": elem["self_improvement"]["fabricate_questions"]
+                }
+            )
+        return batch_solution_str, batch_ground_truth, batch
+
+    batch = []
+    with open(filename, "rt") as f:
+        for line in f:
+            example = json.loads(line)
+            batch.append(example)
+
+            if len(batch) == 1024:
+                yield preprocess(batch)
+                batch = []
+    if len(batch):
+        yield preprocess(batch)
+
+
+async def offline_compute_score():
+    with open("/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/_super_gpqa_aio_noneasy_train_0513_criteria_output2.jsonl", "wt") as g:
+        max_concurrent_requests = 256
+        task = QwQLongCoTCreateCriteriaComputeScore(split="train")
+        for batch_solution_str, batch_ground_truth, batch_examples in load_criteria_infer():
+            data_sources = [None] * len(batch_solution_str)
+            score1, score2 = await task.calc_classify_acc_reward(
+                data_sources,
+                batch_solution_str, batch_ground_truth,
+                max_concurrent_requests=max_concurrent_requests,
+                return_single_score=False
+            )
+            calc_compression_ratio_reward = await task.calc_compression_ratio_reward(
+                data_sources,
+                batch_solution_str, batch_ground_truth,
+                max_concurrent_requests=max_concurrent_requests
+            )
+            for example, _score1, _score2, _score3 in zip(batch_examples, score1, score2, calc_compression_ratio_reward):
+                example["calc_compression_ratio_reward"] = _score3
+                example["classify_acc_reward"] = _score1
+                example["gt_match_score"] = _score2
+                g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
+
+
 if __name__ == '__main__':
     # async def main():
     #     await create_mock_data()
     # aio.run(main())
-    unittest.main()
+    # unittest.main()
+
+    async def main():
+        await offline_compute_score()
+    aio.run(main())
