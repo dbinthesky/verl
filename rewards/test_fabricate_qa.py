@@ -2,6 +2,7 @@ import json
 import random
 import string
 import unittest
+import aiohttp
 import pandas as pd
 import asyncio as aio
 from fabricate_qa import (
@@ -14,7 +15,8 @@ from fabricate_qa import (
     QwQLongCoTCreateCriteriaComputeScore,
     qwq_longcot_create_criteria_compute_score_valid,
     FabricateQATooLongPenalty,
-    fabricate_parse_solution_fn
+    fabricate_parse_solution_fn,
+    QwQLongCoTFabricateQAComputeScore
 )
 
 
@@ -85,6 +87,18 @@ class TestFabricateQA(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data()
         for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
             print(penalty_fn.get_penalty_or_reward(solution_str, ground_truth))
+
+    def test_rm_similarity(self):
+        async def main():
+            batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
+                num=100)
+            task = QwQLongCoTFabricateQAComputeScore(split="valid")
+            results = await task.rm_similarity(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth
+            )
+            print(results)
+        aio.run(main())
 
 
 class TestCriteria(unittest.TestCase):

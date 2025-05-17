@@ -2,14 +2,15 @@ import re
 import json
 import jieba
 import random
+import aiohttp
 import requests
 import numpy as np
 import tqdm.asyncio
 import asyncio as aio
 from functools import partial
-from functools import partial
+from asyncio import Semaphore
 from abc import abstractmethod
-from typing import Any, Dict, Callable
+from typing import Any, Dict, Callable, List
 from tqdm import tqdm as tqdm_nonasync
 from collections import namedtuple, defaultdict
 from sacremoses import MosesTokenizer, MosesDetokenizer
@@ -26,8 +27,16 @@ en_mt = MosesTokenizer(lang='en')
 
 
 RM_URLS = [
-    "http://10.130.0.174:5020"
+    "http://10.130.2.51:25473",
+    "http://10.130.2.51:25954",
+    "http://10.130.2.51:32560",
+    "http://10.130.2.51:33547",
+    "http://10.130.2.51:28764",
+    "http://10.130.2.51:34113",
+    "http://10.130.2.51:33871",
+    "http://10.130.2.51:29538",
 ]
+
 # VERIFIER_MODEL_NAME = "qwen25_72B_instruct"
 VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0517"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
@@ -178,29 +187,32 @@ def postprocess_solution(solution_str):
     return solution_str
 
 
-def rm_request_with_retry(RM_URLS, data, max_retries=3, retry_delay=1, suffix="/reward"):
+async def rm_request_with_retry(urls, data, max_retries=3, retry_delay=5, suffix="/reward"):
     retries = 0
     while retries < max_retries:
         try:
-            url = random.choice(RM_URLS)
-            response = requests.post(f'{url}{suffix}', json=data, timeout=600)
-            response.raise_for_status()  # 如果状态码不是 200，抛出异常
-            return response.json()
-        except requests.RequestException as e:
+            url = random.choice(urls)
+            async with aiohttp.ClientSession() as session:
+                async with session.post(f'{url}{suffix}', json=data, timeout=aiohttp.ClientTimeout(total=3000)) as response:
+                    response.raise_for_status()
+                    return await response.json()
+        except (aiohttp.ClientError, aiohttp.ClientResponseError) as e:
             print(f"请求(数据总量={len(data)})失败，错误信息: {e}，重试第 {retries + 1} 次...")
             retries += 1
             if retries < max_retries:
-                time.sleep(retry_delay)
+                await asyncio.sleep(retry_delay)
     print("达到最大重试次数，请求失败。")
     return None
 
 
-def compute_rm_score(
+async def compute_rm_score(
+        urls: List[str],
         batch_solution_str,
         batch_ground_truth,
         postprocess_solution_fn,
-        parse_result_failure_score=-3.0,
-        judge_prompt_key="ground_truth"
+        parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD,
+        judge_prompt_key="ground_truth",
+        desc=""
 ):
     input_datas = []
     rewards = {}
@@ -220,8 +232,8 @@ def compute_rm_score(
         input_datas.append(input_data)
 
     if len(input_datas) > 0:
-        for batch in tqdm_nonasync(batchify(input_datas, n=128), desc=f'[RM][{RM_URLS}] batchify inference (batch=128)'):
-            output_datas = rm_request_with_retry(RM_URLS, batch)
+        for batch in tqdm_nonasync(batchify(input_datas, n=32), desc=f'[RM{desc}][{urls}] batchify inference (batch=32)'):
+            output_datas = await rm_request_with_retry(urls, batch)
             for _ in output_datas['reward']:
                 _id = int(_["id"])
                 rewards[_id] = _["rm_score"]
@@ -326,7 +338,7 @@ async def decode_to_question(criteria, max_concurrent_requests=32):
             raise PostprocessError(f'{err}')
 
     TEMPLATE = """
-# 目标概述 
+# 目标概述
 你是一个出题大师，你的任务是基于一个题目打分表，你需要构建一道题目，完美符合打分表内的所有项目。即构造的题目，如果用打分表进行打分，将会获得满分。
 
 ## 回答格式要求
@@ -391,34 +403,34 @@ D. 315
 
 
 async def question_similarity(authentic, fabricate, max_concurrent_requests=32):
-    TEMPLATE = """### 问题相似程度评价标准（1-5分）  
+    TEMPLATE = """### 问题相似程度评价标准（1-5分）
 
-| **相似等级** | **判定标准**                                                                 |  
-|--------------|------------------------------------------------------------------------------|  
-| **1分**      | 完全不同：题目类型、核心条件、求解目标、解题思路毫无关联，无任何共同要素。       |  
-| **2分**      | 弱相关：仅单一维度相关（如同属数学题中的几何/代数大类），其余要素无重合。         |  
-| **3分**      | 部分相似：题目类型相同（如均为“三维立方体隐藏块计数”），但核心条件、目标或步骤存在关键差异（如可见面数不同、求解方向相反）。 |  
-| **4分**      | 高度相似：题目类型、求解目标、解题框架完全一致，仅数据或参数不同（如隐藏块数值、矩阵元素等），核心步骤和逻辑完全复用。 |  
-| **5分**      | 完全相同：题目内容（数据、表述、目标、步骤）完全一致，无任何差异。               |  
+| **相似等级** | **判定标准**                                                                 |
+|--------------|------------------------------------------------------------------------------|
+| **1分**      | 完全不同：题目类型、核心条件、求解目标、解题思路毫无关联，无任何共同要素。       |
+| **2分**      | 弱相关：仅单一维度相关（如同属数学题中的几何/代数大类），其余要素无重合。         |
+| **3分**      | 部分相似：题目类型相同（如均为“三维立方体隐藏块计数”），但核心条件、目标或步骤存在关键差异（如可见面数不同、求解方向相反）。 |
+| **4分**      | 高度相似：题目类型、求解目标、解题框架完全一致，仅数据或参数不同（如隐藏块数值、矩阵元素等），核心步骤和逻辑完全复用。 |
+| **5分**      | 完全相同：题目内容（数据、表述、目标、步骤）完全一致，无任何差异。               |
 
 
-### 使用说明  
-1. **类型优先**：若题目类型不同（如几何vs代数），直接≤2分；类型相同是≥3分的前提。  
-2. **核心要素判断**：  
-   - **1分**：无任何交集（如几何题vs代数题）。  
-   - **2分**：仅同属大类别（如同为数学题，但具体子类型不同，如几何vs数列）。  
-   - **3分**：子类型相同但存在关键差异（如可见面数不同、递推公式不同）。  
-   - **4分**：子类型、目标、解题逻辑一致，仅数据不同（如求同一类型问题的不同参数解）。  
-   - **5分**：题目完全复现，无任何改动。  
+### 使用说明
+1. **类型优先**：若题目类型不同（如几何vs代数），直接≤2分；类型相同是≥3分的前提。
+2. **核心要素判断**：
+   - **1分**：无任何交集（如几何题vs代数题）。
+   - **2分**：仅同属大类别（如同为数学题，但具体子类型不同，如几何vs数列）。
+   - **3分**：子类型相同但存在关键差异（如可见面数不同、递推公式不同）。
+   - **4分**：子类型、目标、解题逻辑一致，仅数据不同（如求同一类型问题的不同参数解）。
+   - **5分**：题目完全复现，无任何改动。
 
-### 输出格式  
+### 输出格式
 <think>
 ... ...
 </think>
-[CONCLUSION START]  
-SIMILARITY=*  
-[CONCLUSION END]  
-```  
+[CONCLUSION START]
+SIMILARITY=*
+[CONCLUSION END]
+```
 （*处填写1-5的整数，需严格符合上述判定标准）
 
 
@@ -436,8 +448,8 @@ Find the minimum value of the quadratic function \\( f(x) = x^2 - 6x + 7 \\).
 用户让我比较两个数学问题的相似程度。首先，我需要仔细看一下两个问题的内容。原问题是求一个二元二次多项式的最小值，变量是 x 和 y，表达式是 x² + 2xy + 3y² - 6x - 2y。待评价的问题是求一元二次函数 f (x) = x² - 6x + 7 的最小值。
 首先根据评价标准，类型优先。原问题是二元二次函数求最值，属于多元微积分或代数中的二次型问题，可能需要用偏导数或者配方法。待评价问题是一元二次函数，直接可以用配方法或者求导，变量只有一个 x。题目类型不同，一个是二元，一个是一元，所以类型不同。根据使用说明，类型不同的话直接≤2 分。接下来看核心要素，原问题是二元，涉及两个变量和交叉项 xy，而待评价问题是一元，没有交叉项，解题思路也不一样，一元的更简单，只需要处理一个变量。所以它们的共同点可能只是同属代数中的二次函数求最值，但具体子类型不同，一个是多元，一个是一元。根据标准，同属大类别（代数），但具体子类型不同，所以应该是 2 分。因为 2 分的判定是仅单一维度相关，同属数学题中的代数大类，其余要素无重合。这里类型不同，所以符合 2 分的条件。
 </think>
-[CONCLUSION START]  
-SIMILARITY=2  
+[CONCLUSION START]
+SIMILARITY=2
 [CONCLUSION END]
 
 
@@ -745,6 +757,120 @@ class FabricateQATooLongPenalty(PenaltyOrReward):
         solution_size = len(tokenize(solution_str, lang_code))
 
         return self.penalty_base * min(max(solution_size-limit, 0) / limit, 5.)
+
+
+class QwQLongCoTFabricateQAComputeScore(object):
+    JUDGE_CRITERIA_RM_SIMILARITY = """Just create a question for me directly.
+
+# JUDGE CRITERIA
+1. Your response (the created question) must be the following:
+```
+{question}
+```
+2. Respond only with the created question directly (which means your response should only be a question, without other irrelevant words), any content that is irrelevant to the question, including the analysis and answer of the question, or any acceptance of the idea of formulating the question should not appear.
+3. Question type should comply with the following requirement:
+{question_type}
+"""
+
+    def __init__(self,
+                 split="train",
+                 parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
+        self.split = split
+        self.parse_result_failure_score = parse_result_failure_score
+
+    async def process_queue(self, queue, semaphore):
+        """处理单个队列，确保队列内任务串行执行"""
+        async with semaphore:  # 限制并发队列数量
+            results = []
+            for task in queue:
+                result = await task
+                results.append(result)
+            return results
+
+    async def run_tasks_in_queues(self, tasks, n):
+        """将任务分成n个队列并行执行"""
+        # 创建n个队列
+        queues = [[] for _ in range(n)]
+
+        # 平均分配任务到各个队列
+        for i, task in enumerate(tasks):
+            queues[i % n].append(task)
+
+        # 创建信号量限制并发队列数量
+        semaphore = Semaphore(n)
+
+        # 并行处理所有队列
+        queue_results = await aio.gather(
+            *[self.process_queue(queue, semaphore) for queue in queues]
+        )
+
+        # 展平结果列表（保持原始顺序）
+        flattened_results = []
+        for i in range(len(tasks)):
+            queue_idx = i % n
+            task_idx = i // n
+            flattened_results.append(queue_results[queue_idx][task_idx])
+
+        return flattened_results
+
+    async def rm_similarity(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            urls=RM_URLS):
+        """
+            评价除去处思考过程后的改写内容
+        """
+        judges = []
+        indices = []
+
+        fabricate_questions = []
+        for index, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            sol = fabricate_parse_solution_fn(sol)
+            if sol is None:
+                continue
+            fabricate_questions.append(sol)
+
+            lang_code = gt["lang_code"]
+            judges.append({
+                "ground_truth": self.JUDGE_CRITERIA_RM_SIMILARITY.format(
+                    question=gt["authentic_question"],
+                    question_type=gt["question_type"]
+                )
+            })
+            indices.append(index)
+
+        tasks = []
+        n = len(urls)
+
+        for i, batch in enumerate(batchify(zip(judges, fabricate_questions), n=64)):
+            _judges = [_[0] for _ in batch]
+            mini_batch_solution_str = [_[1] for _ in batch]
+            tasks.append(
+                compute_rm_score(
+                    batch_solution_str=mini_batch_solution_str,
+                    batch_ground_truth=_judges,
+                    postprocess_solution_fn=lambda x: x,
+                    parse_result_failure_score=self.parse_result_failure_score,
+                    desc="-rm_similarity",
+                    urls=[urls[i % n]]
+                )
+            )
+
+        results = await self.run_tasks_in_queues(tasks, n=n)
+        rewards = []
+        for _ in results:
+            rewards.extend(_)
+
+        full_rewards = []
+        for i in range(len(batch_solution_str)):
+            if i in indices:
+                full_rewards.append(rewards[indices.index(i)])
+            else:
+                full_rewards.append(self.parse_result_failure_score)
+        return full_rewards
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 问题合成
