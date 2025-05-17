@@ -1040,6 +1040,15 @@ class QwQLongCoTFabricateQAComputeScore(object):
                 final_rewards.append(score)
         return final_rewards
 
+    def log_solution(self, solution):
+        norm = fabricate_parse_solution_fn(solution)
+        if norm is None:
+            return repr(self.clip_string(solution))
+        return repr(self.clip_string(norm))
+
+    def log_ground_truth(self, ground_truth):
+        return repr(self.clip_string(ground_truth["authentic_question"]))
+
     async def _compute_score(self,
                              batch_data_sources,
                              batch_solution_str,
@@ -1072,66 +1081,57 @@ class QwQLongCoTFabricateQAComputeScore(object):
         final_results = []
 
         for i in range(len(batch_solution_str)):
+            score = rm_similarity[i] + rm_checklist[i] + \
+                llm_as_judge_criteria_checklist[i]
+
+            if llm_as_judge_criteria_checklist[i] == 1:
+                score += llm_as_judge_similarity[i]
+
             penalty_log_str = []
+            for name, _penalty in penalty.items():
+                penalty_log_str.append(
+                    f'{name}={_penalty[i]:.2f}')
+                score += _penalty[i]
 
-        #     normed_score1.append(llm_judge_sim_rewards[i])
-        #     normed_score2.append(rm_rewards[i])
+            final_results.append(score)
+        if self.split == "valid" or (self.split == "train" and random.random() < 0.05):
+            log = True
+            log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
+        else:
+            log = False
 
-        #     for name, _penalty in penalty.items():
-        #         if i in _penalty:
-        #             normed_penalty[name][i] = _penalty[i]
-        #             penalty_log_str.append(
-        #                 f'{name}={_penalty[i]:.2f}')
+        if log:
+            print(
+                f"--------------------------------{log_flag}--------------------------------")
+            print(
+                f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
+            print(
+                f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
+            print(
+                f'[Final Reward]={score:.3f}|rm_similarity={rm_similarity[i]:.3f}|rm_checklist={rm_checklist[i]:.3f}|llm_as_judge_criteria_checklist={llm_as_judge_criteria_checklist[i]:.3f}|llm_as_judge_similarity={llm_as_judge_similarity[i]:.3f}|{"|".join(penalty_log_str)}\n')
+        return final_results
 
-        # for i in range(len(batch_solution_str)):
-        #     if np.std(normed_score1) != 0:
-        #         score1 = (
-        #             normed_score1[i] - np.mean(normed_score1))/np.std(normed_score1)
-        #     else:
-        #         score1 = normed_score1[i]
-        #     if np.std(normed_score2) != 0:
-        #         score2 = (
-        #             normed_score2[i] - np.mean(normed_score2))/np.std(normed_score2)
-        #     else:
-        #         score2 = normed_score2[i]
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+        async def main():
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+        return asyncio.run(main())
 
-        #     score = score1 + score2
+    def clip_string(self, s: str):
+        if len(s) > 1500:
+            return f'{s[:700]}... [省略] ...{s[-800:]}'
+        return s
 
-        #     for name, _penalty in normed_penalty.items():
-        #         if name == "LengthPenalty":
-        #             score += _penalty[i]
-        #         elif name == "BLEU":
-        #             bleu_score = _penalty[i]
-        #             if np.std(list(_penalty.values())) != 0:
-        #                 norm_bleu = (
-        #                     bleu_score-np.mean(list(_penalty.values()))) / np.std(list(_penalty.values()))
-        #                 score += norm_bleu
-        #             else:
-        #                 norm_bleu = bleu_score
-        #                 score += norm_bleu
 
-        #     final_results.append(score)
-
-        #     if self.split == "valid":
-        #         print(
-        #             f"--------------------------------[VALID]--------------------------------")
-        #         print(
-        #             f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
-        #         print(
-        #             f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
-        #         print(
-        #             f'[TOTAL={score:.3f}] | RM={normed_score2[i]:.3f} | LLM={normed_score1[i]:.3f} | {" | ".join(penalty_log_str)}\n')
-        #     elif self.split == "train" and random.random() < 0.01:
-        #         print(
-        #             f"--------------------------------[TRAIN]--------------------------------")
-        #         print(
-        #             f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
-        #         print(
-        #             f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
-        #         print(
-        #             f'[TOTAL={score:.3f}] | RM={normed_score2[i]:.3f} | LLM={normed_score1[i]:.3f} | {" | ".join(penalty_log_str)}\n')
-        # return final_results
-
+_qwq_longcot_fabricate_qa_compute_score_train = QwQLongCoTFabricateQAComputeScore(
+    split="train")
+_qwq_longcot_fabricate_qa_compute_score_valid = QwQLongCoTFabricateQAComputeScore(
+    split="valid")
+qwq_longcot_fabricate_qa_compute_score_train = _qwq_longcot_fabricate_qa_compute_score_train.compute_score
+qwq_longcot_fabricate_qa_compute_score_valid = _qwq_longcot_fabricate_qa_compute_score_valid.compute_score
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 问题合成
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
