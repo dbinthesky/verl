@@ -1,5 +1,6 @@
 import json
 import random
+import string
 import unittest
 import pandas as pd
 import asyncio as aio
@@ -11,8 +12,15 @@ from fabricate_qa import (
     criteria_get_score,
     question_similarity,
     QwQLongCoTCreateCriteriaComputeScore,
-    qwq_longcot_create_criteria_compute_score_valid
+    qwq_longcot_create_criteria_compute_score_valid,
+    FabricateQATooLongPenalty,
+    fabricate_parse_solution_fn
 )
+
+
+def generate_random_string(n):
+    all_characters = string.ascii_letters + string.digits + " "
+    return ''.join(random.choice(all_characters) for _ in range(n))
 
 
 def load_criteria():
@@ -22,6 +30,21 @@ def load_criteria():
     with open(filename, "rt") as f:
         data = json.load(f)
     batch_solution_str, batch_ground_truth = data["batch_solution_str"], data["batch_ground_truth"]
+    return batch_solution_str, batch_ground_truth
+
+
+def load_qwq_fabricate_qa_data(num=100):
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/super_gpqa_aio_noneasy_test_0517.parquet"
+    batch_solution_str, batch_ground_truth = [], []
+
+    df = pd.read_parquet(filename)
+    for _, row in df.iterrows():
+        row = row.to_dict()
+        batch_ground_truth.append(row["reward_model"])
+        gt = row["reward_model"]["authentic_question"]
+
+        batch_solution_str.append(
+            f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>{gt}\n{generate_random_string(2000)}</question>')
     return batch_solution_str, batch_ground_truth
 
 
@@ -52,6 +75,16 @@ async def create_mock_data():
     with open("fabricate_qa_criteria.json", "wt") as f:
         json.dump({"batch_ground_truth": batch_ground_truth,
                   "batch_solution_str": batch_solution_str}, f, ensure_ascii=False)
+
+
+class TestFabricateQA(unittest.TestCase):
+    def test_fabricate_qa_too_long_penalty(self):
+        penalty_fn = FabricateQATooLongPenalty(
+            postprocess_solution_fn=fabricate_parse_solution_fn,
+        )
+        batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data()
+        for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
+            print(penalty_fn.get_penalty_or_reward(solution_str, ground_truth))
 
 
 class TestCriteria(unittest.TestCase):
@@ -185,8 +218,8 @@ if __name__ == '__main__':
     # async def main():
     #     await create_mock_data()
     # aio.run(main())
-    # unittest.main()
+    unittest.main()
 
-    async def main():
-        await offline_compute_score()
-    aio.run(main())
+    # async def main():
+    #     await offline_compute_score()
+    # aio.run(main())

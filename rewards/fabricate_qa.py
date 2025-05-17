@@ -12,6 +12,7 @@ from abc import abstractmethod
 from typing import Any, Dict, Callable
 from tqdm import tqdm as tqdm_nonasync
 from collections import namedtuple, defaultdict
+from sacremoses import MosesTokenizer, MosesDetokenizer
 
 
 from openai import OpenAI, RateLimitError, AsyncOpenAI, RateLimitError
@@ -21,6 +22,8 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+en_mt = MosesTokenizer(lang='en')
+
 
 RM_URLS = [
     "http://10.130.0.174:5020"
@@ -30,6 +33,14 @@ VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0517"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 MAX_CONCURRENT = 128
+
+
+def tokenize(s, lang_code):
+    if lang_code == "en":
+        tokenized_text = en_mt.tokenize(s.lower())
+    elif lang_code == "zh":
+        tokenized_text = list(jieba.cut(s))
+    return tokenized_text
 
 
 class APIError(Exception):
@@ -222,6 +233,13 @@ def compute_rm_score(
         else:
             final_results.append(0.)
     return final_results
+
+
+class PenaltyOrReward(object):
+    @abstractmethod
+    def get_penalty_or_reward(self, solution_str, ground_truth, lang_code=None):
+        raise NotImplementedError
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # BASE
@@ -681,4 +699,53 @@ qwq_longcot_create_criteria_compute_score_train = _qwq_longcot_create_criteria_c
 qwq_longcot_create_criteria_compute_score_valid = _qwq_longcot_create_criteria_compute_score_valid.compute_score
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Criteria构造
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# 问题合成
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+def fabricate_parse_solution_fn(solution_str: str):
+    solution_str = postprocess_solution(solution_str)
+    try:
+        thought = re.findall(r'<think>.*</think>',
+                             solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+    try:
+        conclusion = re.findall(r'<question>(.*)</question>',
+                                solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+
+    if ("<question>" in conclusion) or ("</question>" in conclusion):
+        return None
+
+    return conclusion.strip()
+
+
+class FabricateQATooLongPenalty(PenaltyOrReward):
+    def __init__(self,
+                 postprocess_solution_fn,
+                 penalty_base=-0.1,
+                 ):
+        self.postprocess_solution_fn = postprocess_solution_fn
+        self.penalty_base = penalty_base
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        solution_str = self.postprocess_solution_fn(solution_str)
+        if solution_str is None:
+            return 0.
+
+        lang_code = ground_truth["lang_code"]
+        authentic_question = ground_truth["authentic_question"]
+
+        limit = len(tokenize(authentic_question, lang_code))
+        solution_size = len(tokenize(solution_str, lang_code))
+
+        return self.penalty_base * min(max(solution_size-limit, 0) / limit, 5.)
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# 问题合成
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
