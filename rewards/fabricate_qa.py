@@ -840,6 +840,42 @@ class QwQLongCoTFabricateQAComputeScore(object):
 
         return flattened_results
 
+    async def llm_as_judge_similarity(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        max_concurrent_requests=32,
+    ):
+        indices = []
+        fabricates, authentics = [], []
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            fabricate = fabricate_parse_solution_fn(sol)
+            if fabricate is not None:
+                fabricates.append(fabricate)
+                authentics.append(gt["authentic_question"])
+                indices.append(i)
+            else:
+                continue
+
+        similarity = await question_similarity(
+            authentic=authentics,
+            fabricate=fabricates,
+            max_concurrent_requests=max_concurrent_requests
+        )
+        scores = [0.0] * len(batch_solution_str)
+        for sim, index in zip(similarity, indices):
+            if sim is None:
+                pass
+            else:
+                if sim < 4:
+                    pass
+                elif sim == 4:
+                    scores[index] = 0.5
+                else:
+                    scores[index] = 1.0
+        return scores
+
     async def rm_similarity(
             self,
             batch_data_sources,

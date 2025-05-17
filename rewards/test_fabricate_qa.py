@@ -133,6 +133,18 @@ class TestFabricateQA(unittest.TestCase):
             print(results)
         aio.run(main())
 
+    def test_llm_as_judge_similarity(self):
+        async def main():
+            batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
+                num=100)
+            task = QwQLongCoTFabricateQAComputeScore(split="valid")
+            results = await task.llm_as_judge_similarity(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth
+            )
+            print(results)
+        aio.run(main())
+
 
 class TestCriteria(unittest.TestCase):
     def test_criteria_get_score(self):
