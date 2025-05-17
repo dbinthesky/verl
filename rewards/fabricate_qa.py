@@ -4,6 +4,7 @@ import jieba
 import random
 import aiohttp
 import requests
+import sacrebleu
 import numpy as np
 import tqdm.asyncio
 import asyncio as aio
@@ -757,6 +758,31 @@ class FabricateQATooLongPenalty(PenaltyOrReward):
         solution_size = len(tokenize(solution_str, lang_code))
 
         return self.penalty_base * min(max(solution_size-limit, 0) / limit, 5.)
+
+
+class BleuSimilarity(PenaltyOrReward):
+    def __init__(self,
+                 postprocess_solution_fn,
+                 parse_result_failure_score=0.
+                 ):
+        self.postprocess_solution_fn = postprocess_solution_fn
+        self.parse_result_failure_score = parse_result_failure_score
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        try:
+            solution_str = self.postprocess_solution_fn(solution_str)
+            if solution_str is None:
+                return self.parse_result_failure_score
+
+            gt = ground_truth["authentic_question"]
+            lang_code = ground_truth["lang_code"]
+
+            gt_tokens = " ".join(tokenize(gt, lang_code))
+            sl_tokens = " ".join(tokenize(solution_str, lang_code))
+            bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
+            return bleu / 100
+        except Exception as err:
+            return self.parse_result_failure_score
 
 
 class QwQLongCoTFabricateQAComputeScore(object):

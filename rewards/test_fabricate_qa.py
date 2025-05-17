@@ -15,6 +15,7 @@ from fabricate_qa import (
     QwQLongCoTCreateCriteriaComputeScore,
     qwq_longcot_create_criteria_compute_score_valid,
     FabricateQATooLongPenalty,
+    BleuSimilarity,
     fabricate_parse_solution_fn,
     QwQLongCoTFabricateQAComputeScore
 )
@@ -82,6 +83,14 @@ async def create_mock_data():
 class TestFabricateQA(unittest.TestCase):
     def test_fabricate_qa_too_long_penalty(self):
         penalty_fn = FabricateQATooLongPenalty(
+            postprocess_solution_fn=fabricate_parse_solution_fn,
+        )
+        batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data()
+        for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
+            print(penalty_fn.get_penalty_or_reward(solution_str, ground_truth))
+
+    def test_bleu_similarity(self):
+        penalty_fn = BleuSimilarity(
             postprocess_solution_fn=fabricate_parse_solution_fn,
         )
         batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data()
