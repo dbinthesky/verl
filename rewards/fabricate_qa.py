@@ -819,9 +819,7 @@ class QwQLongCoTFabricateQAComputeScore(object):
             batch_solution_str,
             batch_ground_truth,
             urls=RM_URLS):
-        """
-            评价除去处思考过程后的改写内容
-        """
+        """"""
         judges = []
         indices = []
 
@@ -871,7 +869,67 @@ class QwQLongCoTFabricateQAComputeScore(object):
                 full_rewards.append(self.parse_result_failure_score)
         return full_rewards
 
+    async def rm_criteria_checklist(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            urls=RM_URLS,
+    ):
+        """"""
+        addition_judges = []
+        new_batch_solution_strs = []
+        indices = []
+        sizes = []
 
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            sol = fabricate_parse_solution_fn(sol)
+            if sol is None:
+                continue
+
+            checklist = re.findall(r'\[SCORE=\d+\].*\n', gt["criteria"])
+
+            for item in checklist:
+                addition_judges.append(
+                    {"ground_truth": f'Judge whether the given question satisfy the following criteria.\n{item}'})
+                new_batch_solution_strs.append(sol)
+
+            sizes.append(len(checklist))
+            indices.append(i)
+
+        tasks = []
+        n = len(urls)
+
+        for i, batch in enumerate(batchify(zip(addition_judges, new_batch_solution_strs), n=64)):
+            addition_judge = [_[0] for _ in batch]
+            new_batch_solution_str = [_[1] for _ in batch]
+            tasks.append(
+                compute_rm_score(
+                    batch_solution_str=new_batch_solution_str,
+                    batch_ground_truth=addition_judge,
+                    postprocess_solution_fn=lambda x: x,
+                    parse_result_failure_score=self.parse_result_failure_score,
+                    desc="-rm_criteria_checklist",
+                    urls=[urls[i % n]]
+                )
+            )
+        results = await self.run_tasks_in_queues(tasks, n=n)
+        rewards = []
+        for _ in results:
+            rewards.extend(_)
+
+        rewards_group = []
+        for size in sizes:
+            rewards_group.append(rewards[:size])
+            rewards = rewards[size:]
+
+        full_rewards = []
+        for i in range(len(batch_solution_str)):
+            if i in indices:
+                full_rewards.append(np.mean(rewards_group[indices.index(i)]))
+            else:
+                full_rewards.append([self.parse_result_failure_score])
+        return full_rewards
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 问题合成
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
