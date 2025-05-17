@@ -38,7 +38,7 @@ RM_URLS = [
     "http://10.130.2.51:29538",
 ]
 
-VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0517"
+VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 MAX_CONCURRENT = 128
