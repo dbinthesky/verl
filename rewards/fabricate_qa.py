@@ -805,6 +805,19 @@ class QwQLongCoTFabricateQAComputeScore(object):
         self.parse_result_failure_score = parse_result_failure_score
         self.max_concurrent_requests = max_concurrent_requests
 
+        self.length_penalty = FabricateQATooLongPenalty(
+            postprocess_solution_fn=fabricate_parse_solution_fn,
+        )
+        self.bleu_similarity = BleuSimilarity(
+            postprocess_solution_fn=fabricate_parse_solution_fn,
+        )
+
+    def get_penalties(self) -> Dict[str, Callable]:
+        return {
+            "Length": self.length_penalty.get_penalty_or_reward,
+            "Bleu": self.bleu_similarity.get_penalty_or_reward,
+        }
+
     async def process_queue(self, queue, semaphore):
         """处理单个队列，确保队列内任务串行执行"""
         async with semaphore:  # 限制并发队列数量
@@ -1026,6 +1039,99 @@ class QwQLongCoTFabricateQAComputeScore(object):
                 score = 1.0 if sim >= batch_ground_truth[i]["criteria_threshold"] else sim
                 final_rewards.append(score)
         return final_rewards
+
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+        penalty = defaultdict(dict)
+        for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            for key, fn in self.get_penalties().items():
+                penalty[key][i] = fn(solution_str, ground_truth)
+
+        rm_similarity = await self.rm_similarity(batch_data_sources,
+                                                 batch_solution_str,
+                                                 batch_ground_truth,)
+        rm_checklist = await self.rm_criteria_checklist(batch_data_sources,
+                                                        batch_solution_str,
+                                                        batch_ground_truth,)
+        llm_as_judge_criteria_checklist = await self.llm_as_judge_criteria_checklist(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            self.max_concurrent_requests
+        )
+        llm_as_judge_similarity = await self.llm_as_judge_similarity(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            self.max_concurrent_requests
+        )
+
+        final_results = []
+
+        for i in range(len(batch_solution_str)):
+            penalty_log_str = []
+
+        #     normed_score1.append(llm_judge_sim_rewards[i])
+        #     normed_score2.append(rm_rewards[i])
+
+        #     for name, _penalty in penalty.items():
+        #         if i in _penalty:
+        #             normed_penalty[name][i] = _penalty[i]
+        #             penalty_log_str.append(
+        #                 f'{name}={_penalty[i]:.2f}')
+
+        # for i in range(len(batch_solution_str)):
+        #     if np.std(normed_score1) != 0:
+        #         score1 = (
+        #             normed_score1[i] - np.mean(normed_score1))/np.std(normed_score1)
+        #     else:
+        #         score1 = normed_score1[i]
+        #     if np.std(normed_score2) != 0:
+        #         score2 = (
+        #             normed_score2[i] - np.mean(normed_score2))/np.std(normed_score2)
+        #     else:
+        #         score2 = normed_score2[i]
+
+        #     score = score1 + score2
+
+        #     for name, _penalty in normed_penalty.items():
+        #         if name == "LengthPenalty":
+        #             score += _penalty[i]
+        #         elif name == "BLEU":
+        #             bleu_score = _penalty[i]
+        #             if np.std(list(_penalty.values())) != 0:
+        #                 norm_bleu = (
+        #                     bleu_score-np.mean(list(_penalty.values()))) / np.std(list(_penalty.values()))
+        #                 score += norm_bleu
+        #             else:
+        #                 norm_bleu = bleu_score
+        #                 score += norm_bleu
+
+        #     final_results.append(score)
+
+        #     if self.split == "valid":
+        #         print(
+        #             f"--------------------------------[VALID]--------------------------------")
+        #         print(
+        #             f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
+        #         print(
+        #             f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
+        #         print(
+        #             f'[TOTAL={score:.3f}] | RM={normed_score2[i]:.3f} | LLM={normed_score1[i]:.3f} | {" | ".join(penalty_log_str)}\n')
+        #     elif self.split == "train" and random.random() < 0.01:
+        #         print(
+        #             f"--------------------------------[TRAIN]--------------------------------")
+        #         print(
+        #             f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
+        #         print(
+        #             f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
+        #         print(
+        #             f'[TOTAL={score:.3f}] | RM={normed_score2[i]:.3f} | LLM={normed_score1[i]:.3f} | {" | ".join(penalty_log_str)}\n')
+        # return final_results
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 问题合成
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
