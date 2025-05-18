@@ -49,14 +49,14 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/opencompass/models/hf_hub/models--deepseek-ai--DeepSeek-R1-Distill-Qwen-32B_new/snapshots/2d78713b01ecefe27a89fafec248a5dfd731396f"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/opencompass/models/hf_hub/models--deepseek-ai--DeepSeek-R1-Distill-Qwen-14B/snapshots/c79f47acaf303faabb7133b4b7b76f24231f2c8d"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/super_gpqa_aio_noneasy_train_0517.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/super_gpqa_aio_noneasy_test_0517.parquet"
 
-    experiment_name="qwen2_5-7b_qwq_fabricate_qa_supergpqa-dlc-${YYMMDD}-${HHMMSS}"
+    experiment_name="qwen2_5-14b_qwq_fabricate_qa_supergpqa-dlc-${YYMMDD}-${HHMMSS}"
     project_name="verl_grpo_qwq_fabricate_qa_supergpqa"
 
-    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/qwen2_5-32b_qwq_fabricate_qa/${YYMMDD}/${HHMMSS}"
+    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/qwen2_5-14b_qwq_fabricate_qa/${YYMMDD}/${HHMMSS}"
     mkdir -p "${OUTPUT_DIR}"
 }
 setup_path
@@ -95,20 +95,20 @@ run_training() {
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=32 \
+        data.train_batch_size=128 \
         data.max_prompt_length=1024 \
-        data.max_response_length=8192 \
+        data.max_response_length=15360 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
         actor_rollout_ref.actor.optim.lr=1e-6 \
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=32 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=64 \
         actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus)) \
-        actor_rollout_ref.actor.ulysses_sequence_parallel_size=4 \
+        actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=9216 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=16384 \
         actor_rollout_ref.actor.use_kl_loss=False \
         actor_rollout_ref.actor.kl_loss_coef=0.0 \
         actor_rollout_ref.actor.entropy_coeff=0.001 \
