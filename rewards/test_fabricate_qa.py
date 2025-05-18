@@ -9,6 +9,8 @@ from fabricate_qa import (
     agent,
     criteria_parse_solution_fn,
     get_total_score,
+    fabricate_parse_solution_fn,
+    question_constraint,
     decode_to_question,
     criteria_get_score,
     question_similarity,
@@ -17,7 +19,8 @@ from fabricate_qa import (
     FabricateQATooLongPenalty,
     BleuSimilarity,
     fabricate_parse_solution_fn,
-    QwQLongCoTFabricateQAComputeScore
+    QwQLongCoTFabricateQAComputeScore,
+    qwq_longcot_fabricate_qa_compute_score_valid
 )
 
 
@@ -145,17 +148,41 @@ class TestFabricateQA(unittest.TestCase):
             print(results)
         aio.run(main())
 
-    def test_compute_score(self):
+    def test_question_constraint(self):
         async def main():
             batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
                 num=100)
+
+            fabricates = []
+            for _ in batch_solution_str:
+                fabricates.append(fabricate_parse_solution_fn(_))
+
             task = QwQLongCoTFabricateQAComputeScore(split="valid")
-            results = await task._compute_score(
+            results = await task.question_constraint(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth
             )
             print(results)
         aio.run(main())
+
+    def test_compute_score(self):
+        # async def main():
+        #     batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
+        #         num=100)
+        #     task = QwQLongCoTFabricateQAComputeScore(split="valid")
+        #     results = await task._compute_score(
+        #         [None] *
+        #         len(batch_solution_str), batch_solution_str, batch_ground_truth
+        #     )
+        #     print(results)
+        # aio.run(main())
+        batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
+            num=100)
+        results = qwq_longcot_fabricate_qa_compute_score_valid(
+            [None] *
+            len(batch_solution_str), batch_solution_str, batch_ground_truth
+        )
+        print(results)
 
 
 class TestCriteria(unittest.TestCase):

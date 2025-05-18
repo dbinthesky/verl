@@ -496,6 +496,33 @@ SIMILARITY=4
     return [_[1] for _ in results]
 
 
+async def question_constraint(questions, max_concurrent_requests=32):
+    def postprocess(s):
+        conclusion = s[s.index("[CONCLUSION START]"):s.index("[CONCLUSION END]")]
+        conclusion = conclusion[conclusion.index("SATISFICATION="):]
+        if "True" in conclusion:
+            return True
+        elif "False" in conclusion:
+            return False
+        return None
+    TEMPLATE = """判断下面的内容是否是一个提问，不包含其他无关的词语。不应出现任何与问题无关的内容，包括对问题的分析和回答，或对提出问题的构造思路等。
+
+回答格式如下
+[CONCLUSION START]
+SATISFICATION=True/False
+[CONCLUSION END]
+"""
+
+    prompts = []
+    for question in questions:
+        prompt = TEMPLATE + \
+            f'\n\n{question}'
+        prompts.append(prompt)
+
+    results = await agent.run(prompts, max_concurrent_requests, desc="[QA Constraint]", postprocess_fns=[postprocess]*len(prompts))
+    return [_[1] for _ in results]
+
+
 class QwQLongCoTCreateCriteriaComputeScore(object):
     def __init__(self,
                  split="train",
@@ -740,7 +767,7 @@ def fabricate_parse_solution_fn(solution_str: str):
 class FabricateQATooLongPenalty(PenaltyOrReward):
     def __init__(self,
                  postprocess_solution_fn,
-                 penalty_base=-0.1,
+                 penalty_base=-0.5,
                  ):
         self.postprocess_solution_fn = postprocess_solution_fn
         self.penalty_base = penalty_base
@@ -852,6 +879,38 @@ class QwQLongCoTFabricateQAComputeScore(object):
             flattened_results.append(queue_results[queue_idx][task_idx])
 
         return flattened_results
+
+    async def question_constraint(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        max_concurrent_requests=32,
+    ):
+        indices = []
+        fabricates = []
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            fabricate = fabricate_parse_solution_fn(sol)
+            if fabricate is not None:
+                fabricates.append(fabricate)
+                indices.append(i)
+            else:
+                continue
+
+        question_constraints = await question_constraint(
+            questions=fabricates,
+            max_concurrent_requests=max_concurrent_requests
+        )
+        scores = [0.0] * len(batch_solution_str)
+        for is_question, index in zip(question_constraints, indices):
+            if is_question is None:
+                scores[index] = -0.5
+            else:
+                if is_question:
+                    pass
+                else:
+                    scores[index] = -2.0
+        return scores
 
     async def llm_as_judge_similarity(
         self,
@@ -1004,7 +1063,7 @@ class QwQLongCoTFabricateQAComputeScore(object):
             if i in indices:
                 full_rewards.append(np.mean(rewards_group[indices.index(i)]))
             else:
-                full_rewards.append([self.parse_result_failure_score])
+                full_rewards.append(self.parse_result_failure_score)
         return full_rewards
 
     async def llm_as_judge_criteria_checklist(
@@ -1077,12 +1136,18 @@ class QwQLongCoTFabricateQAComputeScore(object):
             batch_ground_truth,
             self.max_concurrent_requests
         )
+        llm_as_regularization = await self.question_constraint(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            self.max_concurrent_requests
+        )
 
         final_results = []
 
         for i in range(len(batch_solution_str)):
             score = rm_similarity[i] + rm_checklist[i] + \
-                llm_as_judge_criteria_checklist[i]
+                llm_as_judge_criteria_checklist[i] + llm_as_regularization[i]
 
             if llm_as_judge_criteria_checklist[i] == 1:
                 score += llm_as_judge_similarity[i]
@@ -1094,21 +1159,22 @@ class QwQLongCoTFabricateQAComputeScore(object):
                 score += _penalty[i]
 
             final_results.append(score)
-        if self.split == "valid" or (self.split == "train" and random.random() < 0.05):
-            log = True
-            log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
-        else:
-            log = False
 
-        if log:
-            print(
-                f"--------------------------------{log_flag}--------------------------------")
-            print(
-                f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
-            print(
-                f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
-            print(
-                f'[Final Reward]={score:.3f}|rm_similarity={rm_similarity[i]:.3f}|rm_checklist={rm_checklist[i]:.3f}|llm_as_judge_criteria_checklist={llm_as_judge_criteria_checklist[i]:.3f}|llm_as_judge_similarity={llm_as_judge_similarity[i]:.3f}|{"|".join(penalty_log_str)}\n')
+            if self.split == "valid" or (self.split == "train" and random.random() < 0.05):
+                log = True
+                log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
+            else:
+                log = False
+
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                print(
+                    f'[Final Reward]={score:.3f}|rm_similarity={rm_similarity[i]:.3f}|rm_checklist={rm_checklist[i]:.3f}|llm_as_judge_criteria_checklist={llm_as_judge_criteria_checklist[i]:.3f}|llm_as_judge_similarity={llm_as_judge_similarity[i]:.3f}|llm_as_regularization={llm_as_regularization[i]:.3f}|{"|".join(penalty_log_str)}\n')
         return final_results
 
     def compute_score(self,
@@ -1118,7 +1184,7 @@ class QwQLongCoTFabricateQAComputeScore(object):
                       ):
         async def main():
             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
-        return asyncio.run(main())
+        return aio.run(main())
 
     def clip_string(self, s: str):
         if len(s) > 1500:

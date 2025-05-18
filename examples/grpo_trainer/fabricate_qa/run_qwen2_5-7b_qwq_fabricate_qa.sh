@@ -49,14 +49,14 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-7B-fabricate_qa_v2"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/super_gpqa_aio_noneasy_train_0414.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/super_gpqa_aio_noneasy_test.parquet"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/qwen2_5-7b_qwq_fabricate_qa-dlc-2025-04-01-10-30-39_grpo_step_30"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/super_gpqa_aio_noneasy_train_0517.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/super_gpqa_aio_noneasy_test_0517.parquet"
 
-    experiment_name="qwen2_5-7b_qwq_fabricate_qa-dlc-${YYMMDD}-${HHMMSS}"
-    project_name="verl_grpo_qwq_fabricate_qa_gpqa"
+    experiment_name="qwen2_5-7b_qwq_fabricate_qa_supergpqa-dlc-${YYMMDD}-${HHMMSS}"
+    project_name="verl_grpo_qwq_fabricate_qa_supergpqa"
 
-    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/${experiment_name}/${YYMMDD}/${HHMMSS}"
+    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/qwen2_5-7b_qwq_fabricate_qa/${YYMMDD}/${HHMMSS}"
     mkdir -p "${OUTPUT_DIR}"
 }
 setup_path
@@ -88,27 +88,27 @@ run_training() {
     # self.config.actor.ppo_micro_batch_size_per_gpu = self.config.actor.ppo_micro_batch_size
 
     python3 -m verl.trainer.main_ppo \
-        custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/rm_w_criteria.py" \
-        custom_reward_function.name=qwq_longcot_fabricate_qa_compute_score_v2_train \
-        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/rm_w_criteria.py" \
-        +custom_valid_reward_function.name=qwq_longcot_fabricate_qa_compute_score_v2_valid \
+        custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
+        custom_reward_function.name=qwq_longcot_fabricate_qa_compute_score_train \
+        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
+        +custom_valid_reward_function.name=qwq_longcot_fabricate_qa_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=128 \
+        data.train_batch_size=64 \
         data.max_prompt_length=1024 \
-        data.max_response_length=31744 \
+        data.max_response_length=15360 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
-        actor_rollout_ref.actor.optim.lr=5e-7 \
+        actor_rollout_ref.actor.optim.lr=1e-6 \
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=128 \
-        actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus * 4)) \
-        actor_rollout_ref.actor.ulysses_sequence_parallel_size=4 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=64 \
+        actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus)) \
+        actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=32768 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=16384 \
         actor_rollout_ref.actor.use_kl_loss=False \
         actor_rollout_ref.actor.kl_loss_coef=0.0 \
         actor_rollout_ref.actor.entropy_coeff=0.001 \
@@ -134,7 +134,7 @@ run_training() {
         +trainer.val_before_train=True \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
-        trainer.save_freq=10 \
+        trainer.save_freq=5 \
         trainer.test_freq=5 \
         trainer.total_epochs=10000 \
         reward_model.reward_manager="custom" "$@"
