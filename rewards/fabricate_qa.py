@@ -507,16 +507,21 @@ async def question_constraint(questions, max_concurrent_requests=32):
         return None
     TEMPLATE = """判断下面的内容是否是一个提问，不包含其他无关的词语。不应出现任何与问题无关的内容，包括对问题的分析和回答，或对提出问题的构造思路等。
 
-回答格式如下
+
+你的回答需要先给出详细的思考过程再最终推导出结果。
+回答格式如下：
+```
+{给出思考过程}
+
 [CONCLUSION START]
 SATISFICATION=True/False
 [CONCLUSION END]
+```
 """
 
     prompts = []
     for question in questions:
-        prompt = TEMPLATE + \
-            f'\n\n{question}'
+        prompt = TEMPLATE + f'\n\n{question}'
         prompts.append(prompt)
 
     results = await agent.run(prompts, max_concurrent_requests, desc="[QA Constraint]", postprocess_fns=[postprocess]*len(prompts))
