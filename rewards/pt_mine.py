@@ -556,8 +556,9 @@ class QwQLongCoTPretrainMiningComputeScore(object):
             for question in questions:
                 addition_judges.append({"ground_truth": judge_prompt})
                 new_batch_solution_strs.append(question)
-            sizes.append(len(questions))
-            indices.append(i)
+            if len(questions) > 0:
+                sizes.append(len(questions))
+                indices.append(i)
 
         tasks = []
         n = len(urls)
@@ -682,7 +683,6 @@ class QwQLongCoTPretrainMiningComputeScore(object):
         scores = sorted(scores, reverse=True)
         scores = scores[:self.max_qa_pairs]
         final_score = 0.0
-        print(scores)
         for i, score in enumerate(scores):
             final_score += score * (1/(1+0.1*(i-1)))
         return final_score
