@@ -1,5 +1,6 @@
 import re
 import math
+import json
 import jieba
 import random
 import aiohttp
@@ -27,6 +28,15 @@ RM_URLS = [
     "http://10.130.1.220:30842",
     "http://10.130.1.220:34782",
     "http://10.130.1.220:34911",
+]
+
+FAISS_SEARCH_URLS = [
+    "http://10.130.0.128:21783",
+    "http://10.130.0.128:24819",
+    "http://10.130.0.79:26169",
+    "http://10.130.0.79:28140",
+    "http://10.130.0.79:23346",
+    "http://10.130.0.128:27029"
 ]
 
 
@@ -124,6 +134,31 @@ async def compute_rm_score(
         else:
             final_results.append(0.)
     return final_results
+
+
+async def faiss_search_scores(
+        urls: List[str],
+        prompts,
+        responses,
+        desc=""
+):
+    input_datas = []
+
+    for i, (p, r) in enumerate(zip(prompts, responses)):
+        input_data = {
+            "prompt": p, "response": r, "id": i
+        }
+        input_datas.append(input_data)
+
+    rewards, nearest_docs, distances = [], [], []
+    if len(input_datas) > 0:
+        for batch in tqdm_nonasync(batchify(input_datas, n=64), desc=f'[RM{desc}][{urls}] batchify inference (batch=64)'):
+            output_datas = await rm_request_with_retry(urls, batch, suffix="/faiss_reward")
+            rewards.extend(output_datas["reward"])
+            nearest_docs.extend(output_datas["nearest_docs"])
+            distances.extend(output_datas["distances"])
+
+    return {"reward": rewards, "nearest_docs": nearest_docs, "distances": distances}
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -408,12 +443,36 @@ class QwQLongCoTPretrainMiningComputeScore(object):
 
     def __init__(self,
                  split="train",
-                 parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD):
+                 parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD,
+                 weights_file="/cpfs01/shared/llm_ddd/tongjian/es_seeds/seed_all_0510.jsonl",
+                 max_qa_pairs=50,
+                 ):
         self.split = split
         self.parse_result_failure_score = parse_result_failure_score
 
         self.recall = CoTRecall(
             postprocess_solution_fn=parse_solution_fn)
+
+        self.seed_weights = {}
+        self.hits = defaultdict(float)
+
+        self.max_qa_pairs = max_qa_pairs
+        self.single_qa_pair_max_reward = 2.0 / max_qa_pairs
+
+        with open(weights_file, "rt") as f:
+            for i, line in enumerate(f):
+                example = json.loads(line)
+                dataset = example["self_improvement"]["dataset"]
+                if dataset == "cmmlu":
+                    self.seed_weights[i] = 0.5
+                elif dataset == "gpqa":
+                    self.seed_weights[i] = 2.0
+                elif dataset == "mmlu":
+                    self.seed_weights[i] = 0.5
+                elif dataset == "mmlu_pro":
+                    self.seed_weights[i] = 1.0
+                elif dataset == "super_gpqa":
+                    self.seed_weights[i] = 2.0
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
@@ -604,129 +663,186 @@ class QwQLongCoTPretrainMiningComputeScore(object):
                 full_rewards.append(default_penalty)
         return full_rewards
 
-    #     async def get_rm_rewards(self,
-    #                              batch_data_sources,
-    #                              batch_solution_str,
-    #                              batch_ground_truth):
-    #         revise_scores = await self.get_revise_rm_rewards(
-    #             batch_data_sources, batch_solution_str, batch_ground_truth)
+    def get_weight(self, doc_id, distance, r0=1.0, r_min=0.1, k=0.05):
+        # 计算衰减  \max\left( R_{\text{min}}, \ R_0 - k \cdot \ln(n + 1) \right)
+        hit = self.hits[doc_id]
+        r_coef = max(r0 - k * math.log(hit + 1), r_min)
+        self.hits[doc_id] += distance
+        weight = self.seed_weights[doc_id]
+        return weight * r_coef
 
-    #         single_question_scores = await self.get_single_question_judge_rm_rewards(
-    #             batch_data_sources, batch_solution_str, batch_ground_truth
-    #         )
-    #         question_diversity_scores = await self.get_question_diversity_rm_rewards(
-    #             batch_data_sources, batch_solution_str, batch_ground_truth
-    #         )
+    def union_reward_for_doc(self, reward):
+        scores = []
+        for r, doc_id, dist in zip(reward["reward"], reward["nearest_docs"], reward["distances"]):
+            weight = self.get_weight(doc_id, dist)
+            score = weight * (r + dist) / 2 * self.single_qa_pair_max_reward
+            scores.append(score)
 
-    #         rewards_union = [0.0] * len(batch_data_sources)
-    #         rewards_split = []
-    #         for i in range(len(batch_data_sources)):
-    #             rewards_split.append(
-    #                 [revise_scores[i], single_question_scores[i], question_diversity_scores[i]])
+        # 边际系数公式
+        scores = sorted(scores, reverse=True)
+        scores = scores[:self.max_qa_pairs]
+        final_score = 0.0
+        print(scores)
+        for i, score in enumerate(scores):
+            final_score += score * (1/(1+0.1*(i-1)))
+        return final_score
 
-    #         for i in range(len(batch_data_sources)):
-    #             # TODO: 参数化
-    #             rewards_union[i] += revise_scores[i] * 2.0 + np.sum(
-    #                 [_ + 0.5 * question_diversity_scores[i] for _ in single_question_scores[i]])
-    #         return rewards_union, rewards_split
+    async def bank_covery_rewards(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        urls=FAISS_SEARCH_URLS,
+        default_penalty=-0.1
+    ):
+        prompts, responses = [], []
+        indices, sizes = [], []
 
-    #     def compute_score(self,
-    #                       batch_data_sources,
-    #                       batch_solution_str,
-    #                       batch_ground_truth,
-    #                       ):
-    #         async def main():
-    #             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
-    #         return asyncio.run(main())
+        for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            qas = parse_solution_fn(sol)
+            for qa in qas:
+                prompts.append(qa[0])
+                responses.append(qa[1])
 
-    #     async def _compute_score(self,
-    #                              batch_data_sources,
-    #                              batch_solution_str,
-    #                              batch_ground_truth,
-    #                              ):
+            if len(qas) > 0:
+                sizes.append(len(qas))
+                indices.append(i)
 
-    #         penalty = defaultdict(dict)
-    #         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-    #             for key, fn in self.get_penalties().items():
-    #                 penalty[key][i] = fn(
-    #                     solution_str, ground_truth, lang_code=ground_truth["lang_code"])
-    #         base_rewards, base_rewards_split = await self.get_rm_rewards(
-    #             batch_data_sources,
-    #             batch_solution_str,
-    #             batch_ground_truth,
-    #         )
+        tasks = []
+        n = len(urls)
 
-    #         final_results = []
-    #         for i in range(len(batch_solution_str)):
-    #             penalty_log_str = []
-    #             _reward = base_rewards[i]
+        for i, batch in enumerate(batchify(zip(prompts, responses), n=64)):
+            _prompts = [_[0] for _ in batch]
+            _responses = [_[1] for _ in batch]
+            tasks.append(
+                faiss_search_scores(
+                    prompts=_prompts,
+                    responses=_responses,
+                    desc="-bank_covery",
+                    urls=[urls[i % n]]
+                )
+            )
 
-    #             for name, _penalty in penalty.items():
-    #                 if i in _penalty:
-    #                     _reward += _penalty[i] * self.get_penalty_coef()[name]
-    #                     try:
-    #                         penalty_log_str.append(
-    #                             f'{name}={_penalty[i]:.3f}*{self.get_penalty_coef()[name]}')
-    #                     except Exception as _:
-    #                         pass
-    #             final_results.append(_reward)
-    #             thought = get_thought(batch_solution_str[i])
+        results = await self.run_tasks_in_queues(tasks, n=n)
+        rewards, nearest_docs, distances = [], [], []
 
-    #             notes_summary = self.get_notes_summary(batch_solution_str[i])
+        for _ in results:
+            rewards.extend(_["reward"])
+            nearest_docs.extend(_["nearest_docs"])
+            distances.extend(_["distances"])
 
-    #             _revise, _single_q, _diversity = base_rewards_split[i]
-    #             if self.split == "valid" or (self.split == "train" and random.random() < 0.01):
-    #                 log = True
-    #                 log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
-    #             else:
-    #                 log = False
+        rewards_group = []
+        for size in sizes:
+            rewards_group.append({
+                "reward": rewards[:size],
+                "nearest_docs": nearest_docs[:size],
+                "distances": distances[:size],
+            })
 
-    #             if log:
-    #                 print(
-    #                     f"--------------------------------{log_flag}--------------------------------")
-    #                 print(
-    #                     f"【Thought】({len(thought)})`{repr(self.clip_string(thought))}`")
-    #                 print(
-    #                     f'【Refine】({batch_ground_truth[i]["lang_code"]})({self.get_document_len(batch_solution_str[i])})`{self.log_solution(batch_solution_str[i])}`')
-    #                 print(
-    #                     f'【Raw】({batch_ground_truth[i]["lang_code"]})({len(batch_ground_truth[i]["ground_truth"])})``{self.log_ground_truth(batch_ground_truth[i])}`')
-    #                 print(
-    #                     f'[Final Reward]={_reward:.3f}|RM_UNION={base_rewards[i]:.3f}|RM_REVISE={_revise:.2f}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
-    #                 for j, note in enumerate(notes_summary):
-    #                     print(
-    #                         f'\t【新增注释{j}】({f"{_single_q[j]:.3f}" if j < len(_single_q) else "<not_found>"}+(0.5*{_diversity:.3f})){repr(note)}')
-    #         return final_results
+            rewards = rewards[size:]
+            nearest_docs = nearest_docs[size:]
+            distances = distances[size:]
 
-    #     def get_notes_summary(self, solution):
-    #         notes_and_conclusions = get_notes_and_conclusions(solution)
-    #         return notes_and_conclusions
+        self.union_reward_for_doc(rewards_group[0])
 
-    #     def log_ground_truth(self, ground_truth):
-    #         return repr(self.clip_string(ground_truth["ground_truth"]))
+        full_rewards = []
+        for i in range(len(batch_solution_str)):
+            if i in indices:
+                full_rewards.append(
+                    self.union_reward_for_doc(rewards_group[indices.index(i)]))
+            else:
+                full_rewards.append(default_penalty)
+        return full_rewards
 
-    #     def log_solution(self, solution):
-    #         norm = parse_doc_w_notes(solution)
-    #         if norm is None:
-    #             return repr(self.clip_string(solution))
-    #         return repr(self.clip_string(norm))
+        def compute_score(self,
+                          batch_data_sources,
+                          batch_solution_str,
+                          batch_ground_truth,
+                          ):
+            async def main():
+                return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+            return asyncio.run(main())
 
-    #     def get_document_len(self, solution):
-    #         norm = parse_doc_w_notes(solution)
-    #         if norm is None:
-    #             return 0
-    #         return len(norm)
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+        penalty = defaultdict(dict)
+        for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            for key, fn in self.get_penalties().items():
+                penalty[key][i] = fn(solution_str, ground_truth)
+        question_diversity = await self.get_question_diversity_rm_rewards(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
+        question_quality = await self.get_single_question_judge_rm_rewards(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
+        bank_covery = await self.bank_covery_rewards(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
 
-    #     def clip_string(self, s: str):
-    #         if len(s) > 1500:
-    #             return f'{s[:700]}... [省略] ...{s[-800:]}'
-    #         return s
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            penalty_log_str = []
+            _reward = question_diversity[i] + \
+                question_quality[i] + bank_covery[i]
 
-    # _qwq_longcot_pretrain_refine_compute_score_train = QwQLongCoTPretrainRefineComputeScore(
-    #     split="train")
-    # _qwq_longcot_pretrain_refine_compute_score_valid = QwQLongCoTPretrainRefineComputeScore(
-    #     split="valid")
-    # qwq_longcot_pretrain_refine_compute_score_train = _qwq_longcot_pretrain_refine_compute_score_train.compute_score
-    # qwq_longcot_pretrain_refine_compute_score_valid = _qwq_longcot_pretrain_refine_compute_score_valid.compute_score
-    # ------------------------------------------------------------------------------------------------------------------------------------------------------
-    # 预训练数据挖掘
-    # ------------------------------------------------------------------------------------------------------------------------------------------------------
+            for name, _penalty in penalty.items():
+                if i in _penalty:
+                    _reward += _penalty[i] * self.get_penalty_coef()[name]
+                    try:
+                        penalty_log_str.append(
+                            f'{name}={_penalty[i]:.3f}*{self.get_penalty_coef()[name]}')
+                    except Exception as _:
+                        pass
+            final_results.append(_reward)
+
+            qas = self.get_qa(batch_solution_str[i])
+
+            if self.split == "valid" or (self.split == "train" and random.random() < 0.01):
+                log = True
+                log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
+            else:
+                log = False
+
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f'【Raw】`{self.log_ground_truth(batch_ground_truth[i])}`')
+                print(
+                    f'[Final Reward]={_reward:.3f}|DIVERSITY={question_diversity[i]:.3f}|QUALITY={question_quality[i]:.3f}|COVERY={bank_covery[i]:.3f}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
+                for j, (q, a) in enumerate(qas):
+                    print(
+                        f'\t【新增提问{j}】Q: {repr(q)} A: {repr(a)}')
+        return final_results
+
+    def get_qa(self, solution):
+        qas = parse_solution_fn(solution)
+        return qas
+
+    def log_ground_truth(self, ground_truth):
+        return repr(self.clip_string(ground_truth["ground_truth"]))
+
+    def clip_string(self, s: str):
+        if len(s) > 1500:
+            return f'{s[:700]}... [省略] ...{s[-800:]}'
+        return s
+
+
+_qwq_longcot_pretrain_mining_compute_score_train = QwQLongCoTPretrainMiningComputeScore(
+    split="train")
+_qwq_longcot_pretrain_mining_compute_score_valid = QwQLongCoTPretrainMiningComputeScore(
+    split="valid")
+qwq_longcot_pretrain_mining_compute_score_train = _qwq_longcot_pretrain_mining_compute_score_train.compute_score
+qwq_longcot_pretrain_mining_compute_score_valid = _qwq_longcot_pretrain_mining_compute_score_valid.compute_score
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# 预训练数据挖掘
+# ------------------------------------------------------------------------------------------------------------------------------------------------------

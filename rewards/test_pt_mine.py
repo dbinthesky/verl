@@ -67,7 +67,19 @@ class TestPretrainMine(unittest.TestCase):
             batch_solution_str, batch_ground_truth = load_pretrain_mine(
                 num=100)
             task = QwQLongCoTPretrainMiningComputeScore(split="valid")
-            results = await task.get_question_diversity_rm_rewards(
+            results = await task.bank_covery_rewards(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth
+            )
+            print(results)
+        aio.run(main())
+
+    def test_compute_score(self):
+        async def main():
+            batch_solution_str, batch_ground_truth = load_pretrain_mine(
+                num=100)
+            task = QwQLongCoTPretrainMiningComputeScore(split="valid")
+            results = await task._compute_score(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth
             )

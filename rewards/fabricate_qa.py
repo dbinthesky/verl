@@ -788,7 +788,8 @@ class FabricateQATooLongPenalty(PenaltyOrReward):
         limit = len(tokenize(authentic_question, lang_code))
         solution_size = len(tokenize(solution_str, lang_code))
 
-        return self.penalty_base * min(max(solution_size-limit, 0) / limit, 5.)
+        # return self.penalty_base * min(max(solution_size-limit, 0) / limit, 5.)
+        return self.penalty_base * min(abs(olution_size-limit) / limit, 5.)
 
 
 class BleuSimilarity(PenaltyOrReward):
