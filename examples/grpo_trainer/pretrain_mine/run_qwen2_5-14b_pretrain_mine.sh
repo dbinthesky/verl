@@ -49,7 +49,8 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/opencompass/models/hf_hub/models--deepseek-ai--DeepSeek-R1-Distill-Qwen-14B/snapshots/c79f47acaf303faabb7133b4b7b76f24231f2c8d"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/opencompass/models/hf_hub/models--deepseek-ai--DeepSeek-R1-Distill-Qwen-14B/snapshots/c79f47acaf303faabb7133b4b7b76f24231f2c8d"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/qwen_25-14b_pretrain_mine-dlc-2025-05-19-12-58-14_grpo_step_40"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_mining/reason_pretrain_v3_8k_train"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/pretrain_mining/reason_pretrain_v3_8k_test.parquet"
 
@@ -125,7 +126,7 @@ run_training() {
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
         trainer.save_freq=10 \
-        trainer.test_freq=5 \
+        trainer.test_freq=10 \
         trainer.total_epochs=10000 \
         reward_model.reward_manager="custom" "$@"
     local training_status=$?
