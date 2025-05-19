@@ -11,8 +11,7 @@ from pt_refine import (
     get_notes_and_conclusions,
 )
 from pt_mine import (
-    parse_solution_fn,
-    CoTRecall,
+    parse_solution_fn,    CoTRecall,
     QwQLongCoTPretrainMiningComputeScore
 )
 
@@ -44,6 +43,7 @@ def load_pretrain_mine(num=100):
     with open(filename, "rt") as f:
         data = json.load(f)
     batch_solution_str, batch_ground_truth = data["batch_solution_str"], data["batch_ground_truth"]
+    batch_solution_str, batch_ground_truth = batch_solution_str[:num], batch_ground_truth[:num]
 
     def postprocess(s):
         notes = re.findall(r'\[Note\] Q: (.*) Think: (.*)\[/Note\]', s)
@@ -80,6 +80,18 @@ class TestPretrainMine(unittest.TestCase):
                 num=100)
             task = QwQLongCoTPretrainMiningComputeScore(split="valid")
             results = await task._compute_score(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth
+            )
+            print(results)
+        aio.run(main())
+
+    def test_question_validation(self):
+        async def main():
+            batch_solution_str, batch_ground_truth = load_pretrain_mine(
+                num=10)
+            task = QwQLongCoTPretrainMiningComputeScore(split="valid")
+            results = await task.question_validation(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth
             )

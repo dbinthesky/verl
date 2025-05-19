@@ -270,7 +270,7 @@ class TestPretrainRefine(unittest.TestCase):
     def test_get_revise_rm_rewards(self):
         async def main():
             batch_solution_str, batch_ground_truth = load_pretrain_refinement(
-                num=100)
+                num=10)
             task = QwQLongCoTPretrainRefineComputeScore(split="valid")
             results = await task.get_single_question_judge_rm_rewards(
                 [None] *

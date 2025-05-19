@@ -7,12 +7,17 @@ import aiohttp
 import asyncio
 import requests
 import numpy as np
+import asyncio as aio
+import tqdm.asyncio
 from functools import partial
 from asyncio import Semaphore
 from abc import abstractmethod
-from typing import Dict, Callable, List
-from collections import defaultdict
 from tqdm import tqdm as tqdm_nonasync
+from typing import Dict, Callable, List, Any
+from collections import defaultdict
+
+from openai import OpenAI, RateLimitError, AsyncOpenAI, RateLimitError
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -40,7 +45,111 @@ FAISS_SEARCH_URLS = [
 ]
 
 
+VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
+VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
+
+
+class APIError(Exception):
+    pass
+
+
+class PostprocessError(Exception):
+    pass
+
+
+class Agent:
+    def __init__(
+        self,
+        system: str | None = None,
+        model: str = "gpt-3.5-turbo",
+        base_url: str | None = None,
+        api_keys: str | list[str] | None = None,
+        request_kwargs: dict[str, Any] = None,
+    ):
+        self.system = system
+        if self.system is None:
+            self.history = []
+        else:
+            self.history = [{"role": "system", "content": self.system}]
+        self.model = model
+        self.base_url = base_url
+
+        if api_keys is not None:
+            pass
+        else:
+            api_keys = [os.getenv("OPENAI_API_KEY", "EMPTY")]
+        self.api_keys = api_keys
+
+        self.request_kwargs = {
+            "max_tokens": 1024,
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "seed": 100745534,
+        }
+        if request_kwargs is not None:
+            self.request_kwargs.update(request_kwargs)
+
+    async def run(self, messages, max_concurrent, desc, postprocess_fns):
+        semaphore = aio.Semaphore(max_concurrent)
+        async with AsyncOpenAI(api_key=self.api_keys, base_url=self.base_url) as client:
+            results = []
+            tasks = [self.process_prompt(client, message, semaphore, postprocess_fn)
+                     for message, postprocess_fn in zip(messages, postprocess_fns)]
+
+            if desc is not None:
+                for f in tqdm.asyncio.tqdm.as_completed(tasks, dynamic_ncols=True, desc=desc):
+                    results.append(await f)
+            else:
+                try:
+                    results = await asyncio.gather(*tasks)
+                except Exception as err:
+                    print(f'[ERROR] asyncio.gather failed: {err}')
+                    return None
+            return results
+
+    @retry(stop=stop_after_attempt(4), wait=wait_exponential(multiplier=1, min=5, max=20))
+    async def chat_completion(self, client, messages, postprocess_fn) -> str | None:
+        response = None
+        try:
+            response = await client.chat.completions.create(
+                model=self.model, messages=[{
+                    "role": "user", "content": messages
+                }], **self.request_kwargs,
+            )
+            # FIXME: Agent Logger
+            with open("/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/agent2.log", "a+") as f:
+                f.write(
+                    f'{json.dumps({"message": messages, "result": response.choices[0].message.content}, ensure_ascii=False)}\n')
+            return postprocess_fn(response.choices[0].message.content)
+        except PostprocessError as e:
+            print(
+                f"[ERROR] failure occurred when parse result: (response={response}), {e}")
+            raise PostprocessError("Failed to generate text")
+        except Exception as e:
+            print(
+                f"[ERROR] failure occurred when call API: {e} (response={response})")
+            raise APIError("Failed to generate text")
+
+    async def process_prompt(self, client, messages, semaphore, postprocess_fn):
+        async with semaphore:
+            try:
+                result = await self.chat_completion(client, messages, postprocess_fn)
+                return messages, result
+            except Exception as err:
+                return messages, None
+
+
+agent = Agent(**{
+    "model": VERIFIER_MODEL_NAME,
+    "base_url": VERIFIER_MODEL_PATH,
+    "api_keys": "EMPTY",
+    "request_kwargs": {
+        "temperature": 0.7,
+        "timeout": 360,
+        "max_tokens": 16384,
+    },
+})
 
 
 class PenaltyOrReward(object):
@@ -167,6 +276,75 @@ async def faiss_search_scores(
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 预训练数据挖掘
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+async def question_validation(questions, max_concurrent_requests=32):
+    _TEMPLATE = """
+### 信息完备性检查（优先级排序）  
+**1. 是否完全脱离上下文依赖（核心优先级）**  
+   - 问题中是否包含"上文数据""前款规则""右图图表"等隐性指代？  
+   - 关键校验点：  
+     ▶ 剥离所有外部上下文后，问题能否独立完整表述？  
+     ▶ 示例：  
+       ❌ 错误："按之前方案，如何优化第二部分？"（依赖未说明的"之前方案"和"第二部分"）  
+       ✅ 正确："基于2025年4月市场调研报告中'Z产品二线城市渗透率下降8%'的数据，如何制定区域渠道优化方案？"  
+
+**2. 前提条件是否明确（基础约束层）**  
+   - 是否隐含未说明的核心假设？（如：资源上限/时间阈值/主体范围/技术边界等）  
+   - 关键校验点：  
+     ▶ 问题涉及的"主体对象"是否明确？（如：针对C端用户/企业客户/内部团队？）  
+     ▶ 约束条件是否清晰？（如：预算≤50万元、实施周期≤2周、需兼容现有系统？）  
+     ▶ 示例：  
+       ❌ 模糊："如何提升营销效果？"（缺少"产品类型""目标用户""现有转化率"等前提）  
+       ✅ 明确："在预算30万元/月、目标用户为25-35岁女性的前提下，如何将D化妆品线上广告ROI从1.2提升至1.8？"  
+
+**3. 核心概念是否定义清晰（语义共识层）**  
+   - 关键术语是否存在多义性？是否需锚定具体场景/指标/范围？  
+   - 关键校验点：  
+     ▶ "用户体验""效率提升""技术优化"等抽象概念是否具化？  
+     ▶ 示例：  
+       ❌ 歧义："优化系统性能"（未明确"响应速度""并发量""故障率"等具体指标）  
+       ✅ 精准："在日均10万次访问量下，如何将系统接口平均响应时间从800ms压缩至500ms以内？"  
+
+**4. 目标指向是否具体可解（执行导向层）**  
+   - 问题是否明确"解决路径的终点"？能否转化为可量化/可操作的任务？  
+   - 关键校验点：  
+     ▶ 避免"如何做好XX"等空泛表述，需包含"在XX场景下，达成XX结果"的结构  
+     ▶ 示例：  
+       ❌ 笼统："如何优化供应链？"  
+       ✅ 可解："在旺季订单量增长40%的预期下，如何通过仓储布局调整将物流时效提升20%？"  
+
+
+现在需要你对下面的问题进行判断，问题是否满足完备性要求。你需要先仔细思考，再得出结论，回复格式如下
+<think>
+... ...
+</think>
+
+[CONCLUSION START]
+COMPLETE=True/False
+[CONCLUSION END]
+"""
+
+    def postprocess(s):
+        conclusion = s[s.index("[CONCLUSION START]"):s.index("[CONCLUSION END]")]
+        conclusion = conclusion[conclusion.index("COMPLETE="):]
+        if "True" in conclusion:
+            return True
+        elif "False" in conclusion:
+            return False
+        return None
+
+    prompts, postprocesses = [], []
+    for q in questions:
+        prompt = _TEMPLATE + \
+            f'\n\n[问题]\n{q}\n\n[输出]\n'
+        prompts.append(prompt)
+        postprocesses.append(postprocess)
+
+    results = await agent.run(prompts, max_concurrent_requests, desc="[Question Validation]", postprocess_fns=postprocesses)
+    scores = [_[1] for _ in results]
+    return scores
+
 
 def parse_solution_fn(solution_str: str):
     try:
@@ -595,6 +773,45 @@ class QwQLongCoTPretrainMiningComputeScore(object):
                 full_rewards.append(default_penalty)
         return full_rewards
 
+    async def question_validation(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        max_concurrent_requests=32,
+    ):
+        questions = []
+
+        indices, sizes = [], []
+        for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            qas = parse_solution_fn(solution_str)
+            questions.extend([_[0] for _ in qas])
+            if len(qas) > 0:
+                indices.append(i)
+                sizes.append(len(qas))
+
+        results = await question_validation(
+            questions, max_concurrent_requests=max_concurrent_requests)
+        rewards = results
+
+        rewards_group = []
+        for size in sizes:
+            rewards_group.append(rewards[:size])
+            rewards = rewards[size:]
+
+        full_rewards = []
+        for i in range(len(batch_solution_str)):
+            if i in indices:
+                group = rewards_group[indices.index(i)]
+                group = [_ for _ in group if _ is not None]
+                if len(group) > 0:
+                    return group.count(True) / len(group)
+                else:
+                    full_rewards.append(0.)
+            else:
+                full_rewards.append(-1.0)
+        return full_rewards
+
     async def get_question_diversity_rm_rewards(
         self,
         batch_data_sources,
@@ -787,12 +1004,17 @@ class QwQLongCoTPretrainMiningComputeScore(object):
             batch_solution_str,
             batch_ground_truth,
         )
+        validation = await self.question_validation(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
 
         final_results = []
         for i in range(len(batch_solution_str)):
             penalty_log_str = []
             _reward = question_diversity[i] + \
-                question_quality[i] + bank_covery[i]
+                question_quality[i] + bank_covery[i] + validation[i]
 
             for name, _penalty in penalty.items():
                 if i in _penalty:
@@ -818,7 +1040,7 @@ class QwQLongCoTPretrainMiningComputeScore(object):
                 print(
                     f'【Raw】`{self.log_ground_truth(batch_ground_truth[i])}`')
                 print(
-                    f'[Final Reward]={_reward:.3f}|DIVERSITY={question_diversity[i]:.3f}|QUALITY={question_quality[i]:.3f}|COVERY={bank_covery[i]:.3f}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
+                    f'[Final Reward]={_reward:.3f}|VALIDATION={validation[i]:.3f}|DIVERSITY={question_diversity[i]:.3f}|QUALITY={question_quality[i]:.3f}|COVERY={bank_covery[i]:.3f}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
                 for j, (q, a) in enumerate(qas):
                     print(
                         f'\t【新增提问{j}】Q: {repr(q)} A: {repr(a)}')
