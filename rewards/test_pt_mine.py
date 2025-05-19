@@ -12,7 +12,8 @@ from pt_refine import (
 )
 from pt_mine import (
     parse_solution_fn,
-    CoTRecall
+    CoTRecall,
+    QwQLongCoTPretrainMiningComputeScore
 )
 
 
@@ -60,6 +61,18 @@ class TestPretrainMine(unittest.TestCase):
         for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
             print(penalty.get_penalty_or_reward(
                 solution_str, ground_truth))
+
+    def test_get_single_question_judge_rm_rewards(self):
+        async def main():
+            batch_solution_str, batch_ground_truth = load_pretrain_mine(
+                num=100)
+            task = QwQLongCoTPretrainMiningComputeScore(split="valid")
+            results = await task.get_question_diversity_rm_rewards(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth
+            )
+            print(results)
+        aio.run(main())
 
 
 if __name__ == '__main__':

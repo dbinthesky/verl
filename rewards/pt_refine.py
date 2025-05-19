@@ -1229,6 +1229,7 @@ The quality of questions is evaluated from the following five dimensions, with e
             评价单条提问质量
         """
         indices = []
+        sizess = []
 
         for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
             lang_code = _gt["lang_code"]
