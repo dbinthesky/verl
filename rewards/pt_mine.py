@@ -754,14 +754,14 @@ class QwQLongCoTPretrainMiningComputeScore(object):
                 full_rewards.append(default_penalty)
         return full_rewards
 
-        def compute_score(self,
-                          batch_data_sources,
-                          batch_solution_str,
-                          batch_ground_truth,
-                          ):
-            async def main():
-                return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
-            return asyncio.run(main())
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+        async def main():
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+        return asyncio.run(main())
 
     async def _compute_score(self,
                              batch_data_sources,
