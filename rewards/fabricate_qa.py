@@ -907,13 +907,13 @@ class QwQLongCoTFabricateQAComputeScore(object):
             questions=fabricates,
             max_concurrent_requests=max_concurrent_requests
         )
-        scores = [0.0] * len(batch_solution_str)
+        scores = [self.parse_result_failure_score] * len(batch_solution_str)
         for is_question, index in zip(question_constraints, indices):
             if is_question is None:
                 scores[index] = -0.5
             else:
                 if is_question:
-                    pass
+                    scores[index] = 0.0
                 else:
                     scores[index] = -2.0
         return scores

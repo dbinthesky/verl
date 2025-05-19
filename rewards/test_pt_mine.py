@@ -8,7 +8,11 @@ from tqdm import tqdm
 import pandas as pd
 import asyncio as aio
 from pt_refine import (
-    get_notes_and_conclusions
+    get_notes_and_conclusions,
+)
+from pt_mine import (
+    parse_solution_fn,
+    CoTRecall
 )
 
 
@@ -49,8 +53,13 @@ def load_pretrain_mine(num=100):
 
 
 class TestPretrainMine(unittest.TestCase):
-    def test_load_data(self):
+    def test_cot_recall(self):
         batch_solution_str, batch_ground_truth = load_pretrain_mine(num=100)
+        penalty = CoTRecall(
+            postprocess_solution_fn=parse_solution_fn)
+        for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
+            print(penalty.get_penalty_or_reward(
+                solution_str, ground_truth))
 
 
 if __name__ == '__main__':
