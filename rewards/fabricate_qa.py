@@ -839,6 +839,7 @@ class QwQLongCoTFabricateQAComputeScore(object):
 
         self.length_penalty = FabricateQATooLongPenalty(
             postprocess_solution_fn=fabricate_parse_solution_fn,
+            penalty_base=-0.25
         )
         self.bleu_similarity = BleuSimilarity(
             postprocess_solution_fn=fabricate_parse_solution_fn,
@@ -1123,12 +1124,12 @@ class QwQLongCoTFabricateQAComputeScore(object):
             for key, fn in self.get_penalties().items():
                 penalty[key][i] = fn(solution_str, ground_truth)
 
-        rm_similarity = await self.rm_similarity(batch_data_sources,
-                                                 batch_solution_str,
-                                                 batch_ground_truth,)
-        rm_checklist = await self.rm_criteria_checklist(batch_data_sources,
-                                                        batch_solution_str,
-                                                        batch_ground_truth,)
+        # rm_similarity = await self.rm_similarity(batch_data_sources,
+        #                                          batch_solution_str,
+        #                                          batch_ground_truth,)
+        # rm_checklist = await self.rm_criteria_checklist(batch_data_sources,
+        #                                                 batch_solution_str,
+        #                                                 batch_ground_truth,)
         llm_as_judge_criteria_checklist = await self.llm_as_judge_criteria_checklist(
             batch_data_sources,
             batch_solution_str,
@@ -1151,8 +1152,9 @@ class QwQLongCoTFabricateQAComputeScore(object):
         final_results = []
 
         for i in range(len(batch_solution_str)):
-            score = rm_similarity[i] + rm_checklist[i] + \
-                llm_as_judge_criteria_checklist[i] + llm_as_regularization[i]
+            # score = rm_similarity[i] + rm_checklist[i] + \
+            #     llm_as_judge_criteria_checklist[i] + llm_as_regularization[i]
+            score = llm_as_regularization[i]
 
             if llm_as_judge_criteria_checklist[i] == 1:
                 score += llm_as_judge_similarity[i]
@@ -1179,7 +1181,9 @@ class QwQLongCoTFabricateQAComputeScore(object):
                 print(
                     f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
                 print(
-                    f'[Final Reward]={score:.3f}|rm_similarity={rm_similarity[i]:.3f}|rm_checklist={rm_checklist[i]:.3f}|llm_as_judge_criteria_checklist={llm_as_judge_criteria_checklist[i]:.3f}|llm_as_judge_similarity={llm_as_judge_similarity[i]:.3f}|llm_as_regularization={llm_as_regularization[i]:.3f}|{"|".join(penalty_log_str)}\n')
+                    f'[Final Reward]={score:.3f}|llm_as_judge_criteria_checklist={llm_as_judge_criteria_checklist[i]:.3f}|llm_as_judge_similarity={llm_as_judge_similarity[i]:.3f}|llm_as_regularization={llm_as_regularization[i]:.3f}|{"|".join(penalty_log_str)}\n')
+                # print(
+                #     f'[Final Reward]={score:.3f}|rm_similarity={rm_similarity[i]:.3f}|rm_checklist={rm_checklist[i]:.3f}|llm_as_judge_criteria_checklist={llm_as_judge_criteria_checklist[i]:.3f}|llm_as_judge_similarity={llm_as_judge_similarity[i]:.3f}|llm_as_regularization={llm_as_regularization[i]:.3f}|{"|".join(penalty_log_str)}\n')
         return final_results
 
     def compute_score(self,
