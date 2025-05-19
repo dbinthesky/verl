@@ -326,7 +326,7 @@ COMPLETE=True/False
 """
 
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]"):s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("COMPLETE="):]
         if "True" in conclusion:
             return True
@@ -773,7 +773,7 @@ class QwQLongCoTPretrainMiningComputeScore(object):
                 full_rewards.append(default_penalty)
         return full_rewards
 
-    async def question_validation(
+    async def _question_validation(
         self,
         batch_data_sources,
         batch_solution_str,
@@ -805,7 +805,7 @@ class QwQLongCoTPretrainMiningComputeScore(object):
                 group = rewards_group[indices.index(i)]
                 group = [_ for _ in group if _ is not None]
                 if len(group) > 0:
-                    return group.count(True) / len(group)
+                    full_rewards.append(group.count(True) / len(group))
                 else:
                     full_rewards.append(0.)
             else:
@@ -1004,17 +1004,18 @@ class QwQLongCoTPretrainMiningComputeScore(object):
             batch_solution_str,
             batch_ground_truth,
         )
-        validation = await self.question_validation(
+        validations = await self._question_validation(
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth,
+            64
         )
 
         final_results = []
         for i in range(len(batch_solution_str)):
             penalty_log_str = []
             _reward = question_diversity[i] + \
-                question_quality[i] + bank_covery[i] + validation[i]
+                question_quality[i] + bank_covery[i] + validations[i]
 
             for name, _penalty in penalty.items():
                 if i in _penalty:
@@ -1040,7 +1041,7 @@ class QwQLongCoTPretrainMiningComputeScore(object):
                 print(
                     f'【Raw】`{self.log_ground_truth(batch_ground_truth[i])}`')
                 print(
-                    f'[Final Reward]={_reward:.3f}|VALIDATION={validation[i]:.3f}|DIVERSITY={question_diversity[i]:.3f}|QUALITY={question_quality[i]:.3f}|COVERY={bank_covery[i]:.3f}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
+                    f'[Final Reward]={_reward:.3f}|VALIDATION={validations[i]:.3f}|DIVERSITY={question_diversity[i]:.3f}|QUALITY={question_quality[i]:.3f}|COVERY={bank_covery[i]:.3f}|{"|".join(penalty_log_str)}[{self.get_penalty_coef()}]\n')
                 for j, (q, a) in enumerate(qas):
                     print(
                         f'\t【新增提问{j}】Q: {repr(q)} A: {repr(a)}')

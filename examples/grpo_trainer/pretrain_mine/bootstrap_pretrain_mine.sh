@@ -2,7 +2,8 @@
 
 DLC_PATH="/cpfs01/shared/public/dlc"
 
-JOB_NAME="internlm_3-8b_pretrain_mine"
+# JOB_NAME="internlm_3-8b_pretrain_mine"
+JOB_NAME="qwen_25-14b_pretrain_mine"
 
 PYARGS="${@:3}"
 
@@ -25,7 +26,8 @@ WORKER_GPU="${WORKER_GPU:-"8"}"
 WORKER_CPU="${WORKER_CPU:-"64"}"
 WORKER_MEMORY="${WORKER_MEMORY:-"1024"}"
 WORKER_IMAGE="pjlab-shanghai-acr-registry-vpc.cn-shanghai.cr.aliyuncs.com/pjlab-eflops/lishuaibin:lishuaibin-xpuyu-trainrlhf"
-RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/pretrain_mine/run_internlm_3-8b_pretrain_mine.sh"
+# RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/pretrain_mine/run_internlm_3-8b_pretrain_mine.sh"
+RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/pretrain_mine/run_qwen_25-14b_pretrain_mine.sh"
 
 
 dlcrun_cmd=$(

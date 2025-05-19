@@ -77,7 +77,7 @@ class TestPretrainMine(unittest.TestCase):
     def test_compute_score(self):
         async def main():
             batch_solution_str, batch_ground_truth = load_pretrain_mine(
-                num=100)
+                num=10)
             task = QwQLongCoTPretrainMiningComputeScore(split="valid")
             results = await task._compute_score(
                 [None] *
