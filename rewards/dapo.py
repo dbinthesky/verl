@@ -15,8 +15,9 @@
 
 import re
 import signal
-from typing import Optional
 import random
+from typing import Optional
+from functools import partial
 
 
 def extract_solution(solution_str):
@@ -346,3 +347,7 @@ def compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, sp
         rewards.append(reward)
 
     return rewards
+
+
+compute_score_train = partial(compute_score, split="train")
+compute_score_valid = partial(compute_score, split="valid")

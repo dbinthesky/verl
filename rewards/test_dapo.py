@@ -7,7 +7,8 @@ import unittest
 from tqdm import tqdm
 import pandas as pd
 from dapo import (
-    compute_score
+    compute_score,
+    compute_score_valid
 )
 
 
@@ -33,9 +34,9 @@ def load_data(num=100):
 class TestDapo(unittest.TestCase):
     def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_data()
-        print(compute_score(
+        print(compute_score_valid(
             [None] *
-            len(batch_solution_str), batch_solution_str, batch_ground_truth, split="valid"
+            len(batch_solution_str), batch_solution_str, batch_ground_truth
         ))
 
 
