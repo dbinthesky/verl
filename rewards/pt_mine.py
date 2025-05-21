@@ -151,6 +151,17 @@ agent = Agent(**{
     },
 })
 
+question_refine_judge_agent = Agent(**{
+    "model": "qwen25_7B_doc2query_question_refine_if_enhance_v0_0_1",
+    "base_url": VERIFIER_MODEL_PATH,
+    "api_keys": "EMPTY",
+    "request_kwargs": {
+        "temperature": 0.7,
+        "timeout": 360,
+        "max_tokens": 16384,
+    },
+})
+
 
 class PenaltyOrReward(object):
     @abstractmethod
@@ -326,7 +337,7 @@ COMPLETE=True/False
 """
 
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]"):s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("COMPLETE="):]
         if "True" in conclusion:
             return True
@@ -1068,4 +1079,364 @@ qwq_longcot_pretrain_mining_compute_score_train = _qwq_longcot_pretrain_mining_c
 qwq_longcot_pretrain_mining_compute_score_valid = _qwq_longcot_pretrain_mining_compute_score_valid.compute_score
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 预训练数据挖掘
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# 问题优化
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+class QwQLongCoTQuestionRefineComputeScore(object):
+    JUDGE_CRITERIA_COT_ZH = """
+### 一、题目完备性评价（5 分）
+#### （一）核心信息完整性（3 分）  
+**研究对象明确性（1 分）**  
+合格：题目内需明确界定研究主体具体属性（如历史时期、地理坐标、设备型号等），禁止使用"某类""某种"等泛指表述。  
+*示例*：  
+原问题："分析桥梁安全性" → 合格表述："分析跨径 30m 的预应力混凝土简支梁桥（设计荷载公路 - I 级，抗震设防烈度 7 度）的结构安全性"。  
+**扣分点**：出现"某地区""某类建筑"等模糊对象，扣 0.5-1 分。  
+
+**术语定义清晰性（1 分）**  
+合格：专业术语需符合行业通用定义或在题目中自洽定义，消除歧义空间。  
+*示例*：  
+"公共建筑"需隐含宗教/民用属性或明确限定（如"民用公共建筑"）。  
+**扣分点**：关键术语存在多学科歧义未界定（如未区分"防御系统"的冷兵器/火器时代背景），扣 0.5-1 分。  
+
+**场景条件完整性（1 分）**  
+合格：题目内需包含时空范围、环境参数、约束条件等（如历史问题需明确朝代节点、技术问题需标注工况参数）。  
+*示例*：  
+"分析传感器补偿方案"需补充"恒温 25℃、湿度 60% 实验室环境""型号 XY-01，测量范围 0-100kPa"等条件。  
+**扣分点**：缺失关键边界条件（如建筑问题无荷载参数、历史问题无时期限定），扣 0.5-1 分。  
+
+#### （二）解题要素自洽性（2 分）  
+**学科范畴明确性（1 分）**  
+合格：题目内需明确一级学科及细分领域（如"城市规划学-历史保护""机械工程-传感器设计"）。  
+**扣分点**：跨学科问题未指定核心分析维度（如同时涉及地理与经济却未明确主学科），扣 0.5-1 分。  
+
+**行业标准关联性（1 分）**  
+合格：工程类问题需隐含行业规范逻辑（如结构安全默认遵循荷载规范），历史类问题需体现时间线逻辑。  
+**扣分点**：需专业知识支撑的问题未隐含基础逻辑（如"分析建筑抗震"未提及设防烈度），扣 0.5-1 分。  
+
+
+### 二、解题思路非泄露性评价（5 分）  
+#### （一）关键步骤开放性（3 分）  
+**分析框架自主性（1.5 分）**  
+合格：题目不得预设具体分析模型或步骤分解（如"分三步分析""按时间顺序论述"）。  
+**扣分点**：题干出现"按...阶段分析""首先...其次..."等引导性表述，扣 1-1.5 分。  
+
+**方法路径多样性（1.5 分）**  
+合格：题目不得指定特定理论工具或技术路线（如"用 SWOT 模型""基于弹性理论"）。  
+**扣分点**：隐含唯一解题方法（如"绘制图表分析""计算标准差"），扣 0.5-1.5 分。  
+
+#### （二）结论导向中立性（2 分）  
+**因果关系开放性（1 分）**  
+合格：题目不得预先设定因果逻辑链（如"由于 XX 导致 XX"），仅要求揭示关系。  
+**扣分点**：出现"解释...如何导致..."等预设因果的表述，扣 0.5-1 分。  
+
+**结论维度自主性（1 分）**  
+合格：题目不得划定结论输出形式（如图表类型、数据精度），仅规定核心任务。  
+**扣分点**：强制要求"绘制时间线""对比分析"等具体形式，扣 0.5-1 分。  
+
+
+### 三、综合评分标准  
+| 分数段 | 完备性等级 | 思路泄露风险 | 改进建议 |  
+|--------|------------|--------------|----------|  
+| 8-10   | 优秀       | 无           | 可直接用于测评 |  
+| 6-7    | 良好       | 低风险       | 补充场景参数/明确术语 |  
+| 4-5    | 合格       | 中度风险     | 修正引导性表述/完善学科范畴 |  
+| 0-3    | 不合格     | 高风险       | 重构问题框架，消除步骤限定 |  
+
+
+### 四、典型问题分析  
+#### （一）完备性不足案例  
+**原问题**：分析城市规划  
+**问题**：未明确研究对象（如具体城市）、时空范围（如历史时期）、学科范畴（如现代规划/历史保护）。  
+**改进**："分析古罗马殖民地卡莫纳（北纬 37°28'，西经 5°38'）在公元前 2 世纪至公元 5 世纪的城市规划演变"  
+
+#### （二）思路泄露案例  
+**原问题**：按史前、青铜、铁器、罗马时期分析卡莫纳城市规划  
+**问题**：直接拆分历史阶段，限定解题步骤。  
+**改进**："分析卡莫纳从史前到罗马帝国时期城市规划的阶段性特征"  
+
+#### （三）平衡案例  
+**合格问题**："在恒温 25℃、湿度 60% 环境下，针对型号 XY-01 的智能传感器（测量范围 0-100kPa），设计温度漂移补偿方案"  
+**要点**：明确对象属性、场景条件及学科任务，未限定分析方法或步骤。  
+
+
+说明：  
+1. 题目必须聚焦自身要素，**不应该涉及文档引用或外部信息依赖**；  
+2. 题目在完备的同时，不应该泄漏解题步骤，不应该指向特定的解题方法；
+
+
+评分案例：
+[问题] 如何设计双馈感应电动机的控制器以实现稳定的控制系统？
+[回答] 由定理1可知,系统(1)可通过反馈控制转变成式(14)的形式,但定理1不能直接求取控制器,需要变换处理。\n  定理2对于PCH系统(1),定义状态误差,配置a,a满足式(11)和(12),若有\n  (15)\n  (16)\n  则有\n  (17)\n  若存在反馈控制\n  =α()\n  满足\n  (18)\n  那么,系统(1)一定可以转换成式(14)所示的闭环状态误差PCH系统形式。
+[打分]
+### ##### 一、题目完备性（满分5分）  
+1. **研究对象明确性**（1分）  
+   - 得分：1分  
+   - 理由：明确指向"双馈感应电动机"（DFIM），属于电机类型中的具体子类，无"某类""某种"等泛指表述。  
+
+2. **术语定义清晰性**（1分）  
+   - 得分：1分  
+   - 理由："双馈感应电动机""控制器""稳定控制系统"均为电力电子与控制工程领域标准术语，无多学科歧义（如未混淆"控制器"与计算机领域的"控制器"概念）。  
+
+3. **场景条件完整性**（1分）  
+   - 得分：0分  
+   - 理由：**缺失3项以上关键量化约束**：  
+     ▶ 电机功率等级（如未明确1.5MW风电用/380V工业用等应用场景）  
+     ▶ 控制性能指标（如未限定转速波动阈值、动态响应时间、转矩脉动范围）  
+     ▶ 运行环境参数（如电网电压波动范围、温度/湿度区间、负载类型）  
+     ▶ 控制目标边界（如未说明"稳定"的具体定义：是指鲁棒稳定性、渐近稳定性还是其他）  
+
+4. **学科范畴明确性**（1分）  
+   - 得分：0.5分  
+   - 理由：虽属于"电气工程→电力电子与电力传动"领域，但未明确**子任务类型**（如"基于硬件设计"或"基于算法优化"），学科边界略模糊。  
+
+5. **行业标准关联性**（1分）  
+   - 得分：0分  
+   - 理由：**未引用任何行业规范或国家标准**（如GB/T 18488-2015《电动汽车用驱动电机系统》或IEC 60034系列电机标准），缺乏工程设计的基准逻辑。  
+
+**题目完备性总分**：1+1+0+0.5+0=**2.5分**  
+
+
+### ##### 二、思路非泄露性（满分5分）  
+1. **分析框架自主性**（1.5分）  
+   - 得分：1.5分  
+   - 理由：未预设"建模→设计→仿真→调试"等步骤分解，允许从数学建模、频域分析、状态空间等自主构建框架。  
+
+2. **方法路径多样性**（1.5分）  
+   - 得分：1.5分  
+   - 理由：未限定"矢量控制""直接转矩控制""滑模控制"等具体技术路线，支持多理论（如经典控制、现代控制、智能控制）应用。  
+
+3. **因果关系开放性**（1分）  
+   - 得分：1分  
+   - 理由：未预设"参数摄动导致不稳定""负载突变引发振荡"等因果链，仅要求实现控制目标，因果分析路径开放。  
+
+4. **结论维度自主性**（1分）  
+   - 得分：1分  
+   - 理由：未强制要求"提供Simulink仿真图""硬件选型清单"等输出形式，结论可涵盖算法设计、参数整定、稳定性证明等多维度。  
+
+**思路非泄露性总分**：1.5+1.5+1+1=**5分**  
+
+
+### ##### 三、最终总分计算  
+\[
+\text{最终总分} = \text{题目完备性得分} + \text{思路非泄露性得分} = 2.5 + 5 = \boxed{7.5 \ \text{分}}
+\]
+"""
+
+    def __init__(self,
+                 split="train",
+                 parse_result_failure_score=-2.0,
+                 max_concurrent_requests=128):
+        self.split = split
+        self.parse_result_failure_score = parse_result_failure_score
+        self.max_concurrent_requests = max_concurrent_requests
+
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+        async def main():
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+        return asyncio.run(main())
+
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+
+        rewards = await self.get_rm_rewards(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            _reward = rewards[i]
+            final_results.append(np.mean(_reward))
+
+            if self.split == "valid" or (self.split == "train" and random.random() < 0.05):
+                log = True
+                log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
+            else:
+                log = False
+
+            notes_summary = self.get_notes_summary(
+                batch_ground_truth[i], batch_solution_str[i])
+
+            if log:
+                print(
+                    f"================================{log_flag}================================")
+                print(
+                    f'[Final Reward]={np.mean(_reward):.3f}\n')
+                for j, (raw, refine) in enumerate(notes_summary):
+                    score = f'{_reward[j]:.3f}' if j < len(
+                        _reward) else "<not_found>"
+                    print(
+                        f'\t【注释{j}修改前】{repr(self.clip_string(raw))}')
+                    print(
+                        f'\t【注释{j}修改后】({score}){repr(self.clip_string(refine))}\n')
+                    print(
+                        '----------------------------------------------------------------')
+        return final_results
+
+    def get_notes_summary(self, ground_truth, solution):
+        notes = ground_truth["notes"]
+        raw = {}
+        for note in notes:
+            question, conclusion = self.get_question(
+                note), self.get_conclusion(note)
+            raw[(question, conclusion)] = note
+
+        refined = {}
+        refinements = self.get_notes_and_conclusions(solution)
+        for refine in refinements:
+            question, conclusion = self.get_question(
+                refine), self.get_conclusion(refine)
+            if (question, conclusion) in raw:
+                refined[(question, conclusion)] = refine
+
+        summary = []
+        for note in notes:
+            question, conclusion = self.get_question(
+                note), self.get_conclusion(note)
+            summary.append((
+                raw[(question, conclusion)], refined.get(
+                    (question, conclusion), "<corrupt>")
+            ))
+        return summary
+
+    def get_conclusion(self, s):
+        return re.findall(r'\[CONCLUSION\](.*?)\[/CONCLUSION\]', s, re.DOTALL)[0].strip()
+
+    def get_question(self, s):
+        if "提问：" in s and "一步步思考：" in s:
+            return s[s.index("提问：")+len("提问："):s.index("一步步思考：")].strip()
+        if "Question:" in s and "Think Step by Step:" in s:
+            return s[s.index("Question:")+len("提问："):s.index("Think Step by Step:")].strip()
+        return None
+
+    def get_notes_and_conclusions(self, s: str):
+        try:
+            notes = re.findall(
+                r'\[EXPLANATION\].*?\[/EXPLANATION\]\n*\[CONCLUSION\].*?\[/CONCLUSION\]', s, re.DOTALL)
+            return notes
+        except Exception as err:
+            return []
+
+    async def llm_as_judge(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth):
+
+        indices = []
+        prompts = []
+
+        for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            try:
+                refined_question = sol[sol.index(
+                    "[QUESTION REFINED]")+len("[QUESTION REFINED]"):sol.index("[/QUESTION REFINED]")].strip()
+                if "{Refined Question}" in refined_question:
+                    continue
+                if not contain_chinese(_gt["raw_question"]):
+                    if contain_chinese(refined_question):
+                        continue
+                if contain_chinese(_gt["raw_question"]):
+                    if not contain_chinese(refined_question):
+                        continue
+            except Exception as err:
+                continue
+            prompts.append(self.JUDGE_CRITERIA_COT_ZH +
+                           f'现在请你针对下面的问题进行题目打分\n\n[问题] {refined_question}\n[回答] {_gt["reference"]}\n[打分]\n')
+            indices.append(i)
+
+        judges = await self._llm_as_judge(
+            prompts=prompts,
+            max_concurrent_requests=self.max_concurrent_requests
+        )
+        scores = [0.0] * len(batch_solution_str)
+        for judge, index in zip(judges, indices):
+            if judge is None:
+                pass
+            else:
+                scores[index] = min(1.0, judge/10.)
+        return scores
+
+    async def _llm_as_judge(self, prompts, max_concurrent_requests=32):
+        def postprocess(s):
+            try:
+                conclusion = s[s.index("最终总分计算"):]
+                score = float(re.findall(
+                    r'boxed{(.*) \\text{分}', conclusion)[0])
+                return score
+            except Exception as err:
+                raise PostprocessError(f'{err}')
+
+        results = await question_refine_judge_agent.run(prompts, max_concurrent_requests, desc="[Question Refine Judge]", postprocess_fns=[postprocess]*len(prompts))
+        return [_[1] for _ in results]
+
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+        async def main():
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+        return asyncio.run(main())
+
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+
+        rewards = await self.llm_as_judge(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            _reward = rewards[i]
+            final_results.append(np.mean(_reward))
+
+            if self.split == "valid" or (self.split == "train" and random.random() < 0.05):
+                log = True
+                log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
+            else:
+                log = False
+
+            if log:
+                try:
+                    sol = batch_solution_str[i]
+                    refined_question = sol[sol.index(
+                        "[QUESTION REFINED]")+len("[QUESTION REFINED]"):sol.index("[/QUESTION REFINED]")].strip()
+                except Exception as err:
+                    refined_question = "<corrupt>"
+
+                print(
+                    f"================================{log_flag}================================")
+                print(
+                    f'[Final Reward]={np.mean(_reward):.3f}\n')
+                print(
+                    f'\t【修改前】{repr(batch_ground_truth[i]["raw_question"])}')
+                print(
+                    f'\t【修改后】{repr(refined_question)}\n')
+        return final_results
+
+
+_qwq_longcot_question_refine_compute_score_train = QwQLongCoTQuestionRefineComputeScore(
+    split="train", parse_result_failure_score=-2.0)
+_qwq_longcot_question_refine_compute_score_valid = QwQLongCoTQuestionRefineComputeScore(
+    split="valid", parse_result_failure_score=-2.0)
+qwq_longcot_question_refine_compute_score_train = _qwq_longcot_question_refine_compute_score_train.compute_score
+qwq_longcot_question_refine_compute_score_valid = _qwq_longcot_question_refine_compute_score_valid.compute_score
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# 问题优化
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
