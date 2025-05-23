@@ -20,7 +20,9 @@ from fabricate_qa import (
     BleuSimilarity,
     fabricate_parse_solution_fn,
     QwQLongCoTFabricateQAComputeScore,
-    qwq_longcot_fabricate_qa_compute_score_valid
+    qwq_longcot_fabricate_qa_compute_score_valid,
+    doc2query_parse_solution_fn,
+    Doc2QueryFormatReward
 )
 
 
@@ -337,7 +339,10 @@ async def offline_compute_score():
 
 class TestDoc2Query(unittest.TestCase):
     def test_compute_score(self):
-        load_doc2query()
+        batch_solution_str, batch_ground_truth = load_doc2query()
+        penalty_fn = Doc2QueryFormatReward()
+        for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
+            print(penalty_fn.get_penalty_or_reward(solution_str, ground_truth))
 
 
 if __name__ == '__main__':

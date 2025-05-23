@@ -498,8 +498,7 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")
-                               :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1217,6 +1216,46 @@ qwq_longcot_fabricate_qa_compute_score_valid = _qwq_longcot_fabricate_qa_compute
 # Doc2Query
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+
+def doc2query_parse_solution_fn(solution_str: str):
+    solution_str = postprocess_solution(solution_str)
+    try:
+        conclusion = re.findall(r'<question>(.*)</question>',
+                                solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+
+    if ("<question>" in conclusion) or ("</question>" in conclusion):
+        return None
+
+    try:
+        question = conclusion[conclusion.index(
+            "Question: ")+len("Question: "):conclusion.index("Options:")].strip()
+        options = conclusion[conclusion.index(
+            "Options:")+len("Options:"):conclusion.index("Answer:")].strip()
+        options = re.findall(r'[A-W]\)\s*(.*)', options)
+        options = [_.strip() for _ in options]
+
+        answer = conclusion[conclusion.index("Answer:"):].strip()
+        answer = re.findall(r'Answer:\s*([A-W])', answer)[0].strip()
+        return question, options, answer
+    except Exception as err:
+        return None
+
+
+class Doc2QueryFormatReward(PenaltyOrReward):
+    def __init__(self, base_reward=0.1):
+        self.base_reward = base_reward
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        solution_str = doc2query_parse_solution_fn(solution_str)
+        if solution_str is None:
+            return 0.
+
+        question, options, answer = solution_str
+        if len(options) == len(ground_truth["options"]):
+            return self.base_reward
+        return self.base_reward / 2.0
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query
