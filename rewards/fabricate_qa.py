@@ -1348,7 +1348,6 @@ class RuleBasedOptionMatch(PenaltyOrReward):
                 score += (match_num/len(targets) * 0.5)
             else:
                 pass
-            print("="*80)
 
             # 选项匹配
             score += 1.5 * \
@@ -1369,6 +1368,93 @@ class RuleBasedOptionMatch(PenaltyOrReward):
         except Exception as err:
             return 0.0
 
+
+class QwQLongCoTDoc2QueryComputeScore(object):
+    def __init__(self,
+                 split="train"):
+        self.split = split
+
+        self.format = Doc2QueryFormatReward()
+        self.question_similarity = QuestionSimilarity()
+        self.rule_base = RuleBasedOptionMatch()
+
+    def get_penalties(self) -> Dict[str, Callable]:
+        return {
+            "Format": self.format.get_penalty_or_reward,
+            "QSim": self.question_similarity.get_penalty_or_reward,
+            "RuleBased": self.rule_base.get_penalty_or_reward,
+        }
+
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+        penalty = defaultdict(dict)
+        for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            for key, fn in self.get_penalties().items():
+                penalty[key][i] = fn(solution_str, ground_truth)
+
+        final_results = []
+
+        for i in range(len(batch_solution_str)):
+            score = 0.0
+            penalty_log_str = []
+            for name, _penalty in penalty.items():
+                penalty_log_str.append(
+                    f'{name}={_penalty[i]:.2f}')
+                score += _penalty[i]
+
+            final_results.append(score)
+
+            if self.split == "valid" or (self.split == "train" and random.random() < 0.05):
+                log = True
+                log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
+            else:
+                log = False
+
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                print(
+                    f'[Final Reward]={score:.3f}|{"|".join(penalty_log_str)}\n')
+        return final_results
+
+    def log_solution(self, solution):
+        norm = doc2query_parse_solution_fn(solution)
+        if norm is None:
+            return repr(self.clip_string(solution))
+        return repr(self.format_question(norm[0], norm[1], norm[2]))
+
+    def format_question(self, question, options, answer):
+        options = sorted(options)
+        options_str = "\n".join([f'{x}) {y}' for x, y in zip(
+            ["A", 'B', "C", 'D', 'E', 'F', 'G', "H", 'J', 'K', "L", "M", "N", "O"], options)])
+        return f'Question: {question}\n\nOptions: {options_str}\n\nAnswer: {answer}'
+
+    def log_ground_truth(self, ground_truth):
+        return repr(self.format_question(
+            ground_truth["question"],
+            ground_truth["options"],
+            ground_truth["answer"])
+        )
+
+    def clip_string(self, s: str):
+        if len(s) > 1500:
+            return f'{s[:700]}... [省略] ...{s[-800:]}'
+        return s
+
+
+_qwq_longcot_doc2query_compute_score_train = QwQLongCoTDoc2QueryComputeScore(
+    split="train")
+_qwq_longcot_doc2query_compute_score_valid = QwQLongCoTDoc2QueryComputeScore(
+    split="valid")
+qwq_longcot_doc2query_compute_score_train = _qwq_longcot_doc2query_compute_score_train.compute_score
+qwq_longcot_doc2query_compute_score_valid = _qwq_longcot_doc2query_compute_score_valid.compute_score
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
