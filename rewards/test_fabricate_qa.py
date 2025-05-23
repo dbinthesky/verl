@@ -54,6 +54,29 @@ def load_qwq_fabricate_qa_data(num=100):
     return batch_solution_str, batch_ground_truth
 
 
+def load_doc2query():
+    path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_test.parquet"
+    batch_solution_str, batch_ground_truth = [], []
+
+    df = pd.read_parquet(path)
+    for _, row in df.iterrows():
+        row = row.to_dict()
+        batch_ground_truth.append(row["reward_model"])
+        gt = row["reward_model"]
+
+        options = []
+        for x, y in zip(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P"], gt["options"]):
+            options.append(f'{x}) {y}')
+        options = "\n".join(options)
+        ans_letter = gt["options"].tolist().index(gt["answer"])
+        ans_letter = ["A", "B", "C", "D", "E", "F", "G", "H",
+                      "I", "J", "K", "L", "M", "N", "O", "P"][ans_letter]
+        batch_solution_str.append(
+            f'<question>\nQuestion: {gt["question"]}\n\nOptions:\n{options}\n\nAnswer: {ans_letter}\n</question>')
+
+    return batch_solution_str, batch_ground_truth
+
+
 async def create_mock_data():
     df = pd.read_parquet(
         "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa_criteria/super_gpqa_aio_noneasy_train_0513_criteria_test_0514.parquet")
@@ -310,6 +333,11 @@ async def offline_compute_score():
                 example["classify_acc_reward"] = _score1
                 example["gt_match_score"] = _score2
                 g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
+
+
+class TestDoc2Query(unittest.TestCase):
+    def test_compute_score(self):
+        load_doc2query()
 
 
 if __name__ == '__main__':
