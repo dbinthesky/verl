@@ -498,7 +498,8 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")
+                               :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1277,7 +1278,96 @@ class QuestionSimilarity(PenaltyOrReward):
             bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
             return bleu / 100
         except Exception as err:
-            return None
+            return 0.0
+
+
+class RuleBasedOptionMatch(PenaltyOrReward):
+    def __init__(self):
+        self.keywords = [
+            # 数学与物理符号
+            '$', '\\frac', '^', '_', '\\sqrt', '\\vec', '\\approx', '\\pm', '\\times', '\\cdot', '/', '=',
+            '(', ')', '[', ']', '→', '\\hat', '%', '\\Delta', '\\odot', '\\rm', '\\ddot', '\\mu', '\\epsilon',
+            '\\mathsf', '\\mathbf', '\\ln', '\\cos', '\\exp', '\\sum', '\\int', '\\partial', '\\infty',
+            '\\pi', '\\zeta', '\\omega', '\\lambda', '\\sigma', '\\rho', '\\theta', '×10^', '×10^-', 'E+', 'E-',
+
+            # 单位与物理量符号
+            'm', 'cm', 'mm', 'in', 'km', 'ft', 's', 'μs', 'ms', 'min', 'h', 'a', 'sec', 'N', 'N/m²', 'Pa', 'kg',
+            'kg/m³', 'm/s', 'm/s²', 'rad/s', 'J', 'kJ', 'GJ', 'W', 'W/m²', 'V', 'nV', 'kV', 'A', 'Ω', 'Hz', 'dB',
+            'C', 'F', 'mol', 'L', 'mL', 'g', 'g/kg', '(liquid)', '(gas)', 'U', 'rpm', 'ppm', 'ppb',
+
+
+            # 编号与结构符号
+            '[ ]', '{ }', '( )', '〈〉', 'Ⅰ', 'Ⅱ', 'III', 'IV', '(1)', '(2)', '①', '②', 'n=', 'N=', 'No.', '→',
+            '+', '=', 'H₂O', 'Mg²⁺',
+
+            # 通用修饰词与状态词
+            'approximately', 'around', 'about', 'respectively', 'perfectly', 'small', 'big', 'non-', 'anti-',
+            '-hinged', '-order', 'dr.', 'national', 'university', 'initial', 'final', 'mean', 'total', 'effective',
+            'original', 'renewed',
+
+            # 其他符号与特殊标记
+            '$', '¥', '€', '%', '‰', '\\', '|', '*', '^T', 'file a request for', 'accounting for', 'originating from'
+        ]
+
+    def get_common_keywords(self, options):
+        common_keywords = [_ for _ in self.keywords if all(
+            _ in option for option in options)]
+        return common_keywords
+
+    def get_common_words(self, options):
+        if len(options[0].split(" ")) > 1:
+            words = options[0].split(" ")
+            return [_ for _ in words if all(_ in option for option in options)]
+        else:
+            common_tokens = [options[0][:i] for i in range(len(options[0])) if all(
+                options[0][:i] in option for option in options)]
+            if len(common_tokens) > 0 and common_tokens[-1] != '':
+                return [common_tokens[-1]]
+            else:
+                return []
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        try:
+            raw_solution_str = solution_str
+            solution_str = doc2query_parse_solution_fn(solution_str)
+            if solution_str is None:
+                return 0.0
+
+            question, options, answer = solution_str
+            options_sol = [_.lower().strip() for _ in options]
+            options_gt = [_.lower().strip() for _ in ground_truth["options"]]
+
+            targets = set(self.get_common_keywords(options_gt) +
+                          self.get_common_words(options_gt))
+
+            score = 0.0
+            # 共同词缀奖励
+            if len(targets) > 0:
+                match_num = len([_ for _ in targets if all(
+                    _ in option for option in options_sol)])
+                score += (match_num/len(targets) * 0.5)
+            else:
+                pass
+            print("="*80)
+
+            # 选项匹配
+            score += 1.5 * \
+                len([_ for _ in options_sol if _ in options_gt]) / len(options_gt)
+
+            # 答案匹配
+            try:
+                sol_answer = options_sol[ord(answer) - ord('A')]
+                gt_tokens = " ".join(
+                    tokenize(ground_truth["answer"].lower(), "en"))
+                sl_tokens = " ".join(tokenize(sol_answer.lower(), "en"))
+                bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
+
+                score += 0.5 * bleu / 100
+            except Exception as err:
+                pass
+            return score
+        except Exception as err:
+            return 0.0
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query
