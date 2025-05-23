@@ -1257,6 +1257,28 @@ class Doc2QueryFormatReward(PenaltyOrReward):
             return self.base_reward
         return self.base_reward / 2.0
 
+
+class QuestionSimilarity(PenaltyOrReward):
+    def __init__(self):
+        pass
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        try:
+            solution_str = doc2query_parse_solution_fn(solution_str)
+            if solution_str is None:
+                return 0.0
+
+            question, options, answer = solution_str
+
+            gt = ground_truth["question"]
+
+            gt_tokens = " ".join(tokenize(gt.lower(), "en"))
+            sl_tokens = " ".join(tokenize(question.lower(), "en"))
+            bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
+            return bleu / 100
+        except Exception as err:
+            return None
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query
 # ------------------------------------------------------------------------------------------------------------------------------------------------------

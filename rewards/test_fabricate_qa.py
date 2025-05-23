@@ -22,7 +22,8 @@ from fabricate_qa import (
     QwQLongCoTFabricateQAComputeScore,
     qwq_longcot_fabricate_qa_compute_score_valid,
     doc2query_parse_solution_fn,
-    Doc2QueryFormatReward
+    Doc2QueryFormatReward,
+    QuestionSimilarity
 )
 
 
@@ -340,7 +341,7 @@ async def offline_compute_score():
 class TestDoc2Query(unittest.TestCase):
     def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_doc2query()
-        penalty_fn = Doc2QueryFormatReward()
+        penalty_fn = QuestionSimilarity()
         for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
             print(penalty_fn.get_penalty_or_reward(solution_str, ground_truth))
 
