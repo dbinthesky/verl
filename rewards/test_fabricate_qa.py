@@ -61,7 +61,7 @@ def load_qwq_fabricate_qa_data(num=100):
 
 
 def load_doc2query():
-    path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_test.parquet"
+    path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_test"
     batch_solution_str, batch_ground_truth = [], []
 
     df = pd.read_parquet(path)
@@ -77,9 +77,10 @@ def load_doc2query():
         ans_letter = gt["options"].tolist().index(gt["answer"])
         ans_letter = ["A", "B", "C", "D", "E", "F", "G", "H",
                       "I", "J", "K", "L", "M", "N", "O", "P"][ans_letter]
+        # batch_solution_str.append(
+        #     f'<question>\nQuestion: {gt["question"]}\n\nOptions:\n{options}\n\nAnswer: {ans_letter}\n</question>')
         batch_solution_str.append(
-            f'<question>\nQuestion: {gt["question"]}\n\nOptions:\n{options}\n\nAnswer: {ans_letter}\n</question>')
-
+            f'<question>\nQuestion: {gt["question"]}\n\nOptions:\n\nAnswer: {ans_letter}\n</question>')
     return batch_solution_str, batch_ground_truth
 
 
@@ -345,8 +346,8 @@ class TestDoc2Query(unittest.TestCase):
     def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_doc2query()
         task = QwQLongCoTDoc2QueryComputeScore(split="valid")
-        qwq_longcot_doc2query_compute_score_valid([None]*len(batch_solution_str),
-                           batch_solution_str, batch_ground_truth)
+        print(qwq_longcot_doc2query_compute_score_valid([None]*len(batch_solution_str),
+                                                        batch_solution_str, batch_ground_truth))
 
 
 if __name__ == '__main__':

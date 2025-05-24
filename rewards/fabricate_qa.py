@@ -1,4 +1,5 @@
 import re
+import sys
 import json
 import jieba
 import random
@@ -498,8 +499,7 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")
-                               :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]"):s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1254,6 +1254,7 @@ class Doc2QueryFormatReward(PenaltyOrReward):
             return 0.
 
         question, options, answer = solution_str
+
         if len(options) == len(ground_truth["options"]):
             return self.base_reward
         return self.base_reward / 2.0
@@ -1343,9 +1344,12 @@ class RuleBasedOptionMatch(PenaltyOrReward):
             score = 0.0
             # 共同词缀奖励
             if len(targets) > 0:
-                match_num = len([_ for _ in targets if all(
-                    _ in option for option in options_sol)])
-                score += (match_num/len(targets) * 0.5)
+                gt_match, sol_match = 0, 0
+                for _ in targets:
+                    gt_match += len([opt for opt in options_gt if _ in opt])
+                    sol_match += len([opt for opt in options_sol if _ in opt])
+
+                score += (sol_match/gt_match * 0.5)
             else:
                 pass
 
@@ -1407,21 +1411,22 @@ class QwQLongCoTDoc2QueryComputeScore(object):
 
             final_results.append(score)
 
-            if self.split == "valid" or (self.split == "train" and random.random() < 0.05):
+            if (self.split == "valid" and random.random() < 0.1) or (self.split == "train" and random.random() < 0.01):
                 log = True
                 log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
             else:
                 log = False
 
-            if log:
-                print(
-                    f"--------------------------------{log_flag}--------------------------------")
-                print(
-                    f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
-                print(
-                    f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
-                print(
-                    f'[Final Reward]={score:.3f}|{"|".join(penalty_log_str)}\n')
+            difficulty = batch_ground_truth[i]["difficulty"]
+            # if log:
+            #     print(
+            #         f"--------------------------------{log_flag}--------------------------------")
+            #     print(
+            #         f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
+            #     print(
+            #         f"【Ground Truth】({difficulty})`{self.log_ground_truth(batch_ground_truth[i])}`")
+            #     print(
+            #         f'[Final Reward]={score:.3f}|{"|".join(penalty_log_str)}\n')
         return final_results
 
     def log_solution(self, solution):
