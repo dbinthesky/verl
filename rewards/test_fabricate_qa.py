@@ -1,3 +1,4 @@
+import re
 import json
 import random
 import string
@@ -5,6 +6,8 @@ import unittest
 import aiohttp
 import pandas as pd
 import asyncio as aio
+from tqdm import tqdm
+from collections import defaultdict
 from fabricate_qa import (
     agent,
     criteria_parse_solution_fn,
@@ -77,10 +80,10 @@ def load_doc2query():
         ans_letter = gt["options"].tolist().index(gt["answer"])
         ans_letter = ["A", "B", "C", "D", "E", "F", "G", "H",
                       "I", "J", "K", "L", "M", "N", "O", "P"][ans_letter]
-        # batch_solution_str.append(
-        #     f'<question>\nQuestion: {gt["question"]}\n\nOptions:\n{options}\n\nAnswer: {ans_letter}\n</question>')
         batch_solution_str.append(
-            f'<question>\nQuestion: {gt["question"]}\n\nOptions:\n\nAnswer: {ans_letter}\n</question>')
+            f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\n{options}\n\nAnswer: {ans_letter}\n</question><｜end▁of▁sentence｜>')
+        # batch_solution_str.append(
+        #     f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\n\nAnswer: {ans_letter}\n</question>')
     return batch_solution_str, batch_ground_truth
 
 
@@ -350,12 +353,136 @@ class TestDoc2Query(unittest.TestCase):
                                                         batch_solution_str, batch_ground_truth))
 
 
+def doc2query_format_filter(path):
+    outputs = []
+    with open(path, "rt") as f:
+        for line in f:
+            example = json.loads(line)
+            prompt = example["self_improvement"]["chat_completion"]
+            option_num = int(re.findall(
+                r'- Number of options: (\d+)', prompt)[0].strip())
+            difficulty = re.findall(
+                r'- Difficulty level: (\w+)', prompt)[0].strip()
+
+            response = example["self_improvement"]["responses"][0]["response"]["text"]
+            result = doc2query_parse_solution_fn(response)
+            if result is None:
+                continue
+            question, options, answer = result
+            if len(options) != option_num:
+                continue
+            try:
+                ans_index = ['A', 'B', 'C', 'D', 'E', 'F', 'G',
+                             'H', 'I', 'J', 'K', 'L', 'M'].index(answer)
+            except Exception as err:
+                continue
+            if not (ans_index <= (len(options)-1)):
+                continue
+            prompt = prompt[prompt.index("<|im_start|>user") +
+                            len("<|im_start|>user"):prompt.index("<|im_end|>\n<|im_start|>assistant")].strip()
+
+            output = {
+                "system": "You are a helpful assistant and an expert in creating a question. Now your task is to create a question. You first thinks about the reasoning process in the mind and then provides the user with the answer. Show your reasoning process in <think> </think> tags, and your final question creation in <question> </question> tags. Remember the part in <question> </question> tags MUST only be the question you created ** WITHOUT ** any explanation or solution.",
+                "instruction": prompt,
+                "input": "",
+                "output": response
+            }
+            outputs.append(output)
+
+    with open("/cpfs01/shared/llm_ddd/tongjian/synthetic/sft/fabricate_qa_v2.json", "rt") as f:
+        mix = json.load(f)
+        print(len(mix))
+
+    mix.extend(outputs)
+    random.shuffle(mix)
+
+    with open("/cpfs01/shared/llm_ddd/tongjian/synthetic/sft/fabricate_qa_v3.json", "wt") as f:
+        json.dump(mix, f, ensure_ascii=False)
+    print(len(mix))
+
+
+def doc2query_bon_merge(path, output):
+    outputs = []
+    scorer = RuleBasedOptionMatch()
+    group = defaultdict(list)
+
+    pbar = tqdm(total=736928)
+
+    with open(path, "rt") as f:
+        for line in f:
+            example = json.loads(line)
+            pbar.update(1)
+            prompt = example["self_improvement"]["chat_completion"]
+            response = example["self_improvement"]["responses"][0]["response"]["text"]
+            result = doc2query_parse_solution_fn(response)
+            if result is None:
+                continue
+            question, options, answer = result
+            try:
+                ans_index = ['A', 'B', 'C', 'D', 'E', 'F', 'G',
+                             'H', 'I', 'J', 'K', 'L', 'M'].index(answer)
+            except Exception as err:
+                continue
+            if not (ans_index <= (len(options)-1)):
+                continue
+
+            score = scorer.get_penalty_or_reward(response, {
+                "question": example["self_improvement"]["question"],
+                "answer": example["self_improvement"]["answer"],
+                "options": example["self_improvement"]["options"],
+                "difficulty": example["self_improvement"]["difficulty"],
+            })
+            group[example["uuid"]].append({
+                "response": response,
+                "score": score
+            })
+
+    done = {}
+    with open(output, 'wt') as g:
+        with open(path, "rt") as f:
+            for line in f:
+                example = json.loads(line)
+                if example["uuid"] not in done:
+                    done[example["uuid"]] = True
+                    del example["self_improvement"]["responses"]
+                    example["self_improvement"]["responses"] = group[example["uuid"]]
+                    g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
+
+
+def doc2query_difficulty_filter(path, output):
+    pbar = tqdm(total=736928)
+
+    with open(output, "wt") as g:
+        with open(path, "rt") as f:
+            for line in f:
+                example = json.loads(line)
+                pbar.update(1)
+                responses = example["self_improvement"]["responses"]
+
+                threshold = 0.5
+                filtered = [_ for _ in responses if _["score"] > threshold]
+                if len(filtered) < 7 and len(filtered):
+                    del example["self_improvement"]["responses"]
+                    del example["self_improvement"]["chat_completion"]
+                    g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
+
+
 if __name__ == '__main__':
     # async def main():
     #     await create_mock_data()
     # aio.run(main())
-    unittest.main()
+    # unittest.main()
 
     # async def main():
     #     await offline_compute_score()
     # aio.run(main())
+
+    # doc2query_difficulty_filter(
+    #     path="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/super_gpqa_train_bo32.jsonl",
+    #     output="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/super_gpqa_train_bo32_results.jsonl",
+    # )
+
+    doc2query_difficulty_filter(
+        path="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/super_gpqa_train_bo32.jsonl",
+        output="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/super_gpqa_train_pass6@32.jsonl",
+    )

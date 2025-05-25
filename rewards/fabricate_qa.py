@@ -184,7 +184,9 @@ def contain_chinese(string):
 
 def postprocess_solution(solution_str):
     if "<|im_end|>" in solution_str:
-        return solution_str[:solution_str.index("<|im_end|>")]
+        return solution_str[:solution_str.index("<|im_end|>")].strip()
+    if "<｜end▁of▁sentence｜>" in solution_str:
+        return solution_str[:solution_str.index("<｜end▁of▁sentence｜>")].strip()
     return solution_str
 
 
@@ -261,12 +263,6 @@ class PenaltyOrReward(object):
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Criteria构造
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-def postprocess_solution(solution_str):
-    if "<|im_end|>" in solution_str:
-        return solution_str[:solution_str.index("<|im_end|>")]
-    return solution_str
 
 
 def criteria_parse_solution_fn(solution_str: str):
@@ -499,7 +495,8 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]"):s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")
+                               :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -758,6 +755,10 @@ def fabricate_parse_solution_fn(solution_str: str):
                              solution_str, re.DOTALL)[0]
     except Exception as err:
         return None
+
+    if ("<question>" in solution_str) or ("</question>" in solution_str):
+        return None
+
     try:
         conclusion = re.findall(r'<question>(.*)</question>',
                                 solution_str, re.DOTALL)[0]
@@ -1220,6 +1221,20 @@ qwq_longcot_fabricate_qa_compute_score_valid = _qwq_longcot_fabricate_qa_compute
 
 def doc2query_parse_solution_fn(solution_str: str):
     solution_str = postprocess_solution(solution_str)
+
+    if not solution_str.startswith("<think>"):
+        return None
+
+    if not solution_str.endswith("</question>"):
+        return None
+
+    try:
+        thought = re.findall(r'<think>.*</think>',
+                             solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+
+    solution_str = solution_str.replace(thought, "")
     try:
         conclusion = re.findall(r'<question>(.*)</question>',
                                 solution_str, re.DOTALL)[0]
@@ -1346,16 +1361,27 @@ class RuleBasedOptionMatch(PenaltyOrReward):
             if len(targets) > 0:
                 gt_match, sol_match = 0, 0
                 for _ in targets:
-                    gt_match += len([opt for opt in options_gt if _ in opt])
-                    sol_match += len([opt for opt in options_sol if _ in opt])
+                    this_gt_match = len(
+                        [opt for opt in options_gt if _ in opt])
+                    gt_match += this_gt_match
+                    # 确保 this_sol_match 不会超过 this_gt_match
+                    this_sol_match = min(
+                        len([opt for opt in options_sol if _ in opt]), this_gt_match)
+                    sol_match += this_sol_match
 
                 score += (sol_match/gt_match * 0.5)
             else:
                 pass
 
             # 选项匹配
+            option_gt_matched = {_: False for _ in options_gt}
+            for _ in options_sol:
+                if _ in options_gt:
+                    option_gt_matched[_] = True
+
             score += 1.5 * \
-                len([_ for _ in options_sol if _ in options_gt]) / len(options_gt)
+                len([k for k, v in option_gt_matched.items() if v]) / \
+                len(option_gt_matched)
 
             # 答案匹配
             try:
@@ -1418,15 +1444,15 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 log = False
 
             difficulty = batch_ground_truth[i]["difficulty"]
-            # if log:
-            #     print(
-            #         f"--------------------------------{log_flag}--------------------------------")
-            #     print(
-            #         f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
-            #     print(
-            #         f"【Ground Truth】({difficulty})`{self.log_ground_truth(batch_ground_truth[i])}`")
-            #     print(
-            #         f'[Final Reward]={score:.3f}|{"|".join(penalty_log_str)}\n')
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f"【Ground Truth】({difficulty})`{self.log_ground_truth(batch_ground_truth[i])}`")
+                print(
+                    f'[Final Reward]={score:.3f}|{"|".join(penalty_log_str)}\n')
         return final_results
 
     def log_solution(self, solution):
