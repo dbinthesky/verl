@@ -1,3 +1,4 @@
+import os
 import re
 import json
 import random
@@ -64,15 +65,17 @@ def load_qwq_fabricate_qa_data(num=100):
 
 
 def load_doc2query():
-    path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_test"
+    path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_test_pass6@32_rag"
     batch_solution_str, batch_ground_truth = [], []
 
     df = pd.read_parquet(path)
-    for _, row in df.iterrows():
+    for i, row in df.iterrows():
         row = row.to_dict()
         batch_ground_truth.append(row["reward_model"])
         gt = row["reward_model"]
 
+        if i > 2:
+            break
         options = []
         for x, y in zip(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P"], gt["options"]):
             options.append(f'{x}) {y}')
@@ -346,6 +349,18 @@ async def offline_compute_score():
 
 
 class TestDoc2Query(unittest.TestCase):
+
+    def test_get_difficulty_reward(self):
+        async def main():
+            batch_solution_str, batch_ground_truth = load_doc2query()
+            task = QwQLongCoTDoc2QueryComputeScore(split="valid")
+            results = await task.get_difficulty_reward(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth
+            )
+            print(results)
+        aio.run(main())
+
     def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_doc2query()
         task = QwQLongCoTDoc2QueryComputeScore(split="valid")
@@ -467,6 +482,54 @@ def doc2query_difficulty_filter(path, output):
                     g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
 
 
+def doc2query_postprocess(path, output):
+    task = QwQLongCoTDoc2QueryComputeScore(split="valid")
+
+    with open(output, "wt") as g:
+        for filename in tqdm(os.listdir(path)):
+            filename = os.path.join(path, filename)
+            with open(filename, "rt") as f:
+                for line in f:
+                    example = json.loads(line)
+                    response = example["self_improvement"]["responses"][0]["response"]["text"]
+                    result = doc2query_parse_solution_fn(
+                        response, remove_option_letter=False)
+                    if result is None:
+                        continue
+                    question, options, answer = result
+                    try:
+                        ans_index = task.MULTICHOICE_LETTER.index(answer)
+                    except Exception as err:
+                        continue
+                    if len(options) < 4:
+                        continue
+                    if ans_index > len(options) - 1 or not options[ans_index].startswith(f'{answer})'):
+                        continue
+                    result = doc2query_parse_solution_fn(
+                        response, remove_option_letter=True)
+                    question, options, answer = result
+                    example["self_improvement"]["synthetic_qa_prompt"] = example["self_improvement"]["chat_completion"]
+                    del example["self_improvement"]["chat_completion"]
+                    example["self_improvement"]["synthetic_qa_response"] = response
+                    example["self_improvement"]["question"] = question
+                    answer_content = options[ans_index]
+
+                    random.shuffle(options)
+
+                    try:
+                        example["self_improvement"]["options"] = options
+                        example["self_improvement"]["answer"] = answer_content
+                        example["self_improvement"]["answer_letter"] = task.MULTICHOICE_LETTER[options.index(
+                            answer_content)]
+                        example["self_improvement"]["prompt"] = 'Answer the following multiple choice question. There is only one correct answer. The last line of your response should be in the format "Answer: $LETTER" (without quotes), where LETTER is one of the option letters.\n\n' + task.format_question(
+                            question=question, options=options, answer=None
+                        )
+
+                        g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
+                    except Exception as err:
+                        continue
+
+
 if __name__ == '__main__':
     # async def main():
     #     await create_mock_data()
@@ -482,7 +545,12 @@ if __name__ == '__main__':
     #     output="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/super_gpqa_train_bo32_results.jsonl",
     # )
 
-    doc2query_difficulty_filter(
-        path="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/super_gpqa_train_bo32.jsonl",
-        output="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/super_gpqa_train_pass6@32.jsonl",
+    # doc2query_difficulty_filter(
+    #     path="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/super_gpqa_train_bo32.jsonl",
+    #     output="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/super_gpqa_train_pass6@32.jsonl",
+    # )
+
+    doc2query_postprocess(
+        path="/cpfs01/shared/llm_ddd/tongjian/pretrain_archive/doc2query_supergpqa_recall_0520.output",
+        output="/cpfs01/shared/llm_ddd/tongjian/doc2query/doc2query_supergpqa_recall_0520_qa_0526.jsonl"
     )

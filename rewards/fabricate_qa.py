@@ -495,8 +495,7 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")
-                               :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]"):s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1217,9 +1216,19 @@ qwq_longcot_fabricate_qa_compute_score_valid = _qwq_longcot_fabricate_qa_compute
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+respondent_agent = Agent(**{
+    "model": "DeepSeek-V3-0324",
+    "base_url": "https://sd0aol21lef3ta500v4sg.apigateway-cn-beijing.volceapi.com/mlp/s-20250503111624-d4jbs/v1",
+    "api_keys": "EMPTY",
+    "request_kwargs": {
+        "temperature": 0.9,
+        "timeout": 120,
+        "max_tokens": 8192,
+    }
+})
 
 
-def doc2query_parse_solution_fn(solution_str: str):
+def doc2query_parse_solution_fn(solution_str: str, remove_option_letter=True):
     solution_str = postprocess_solution(solution_str)
 
     if not solution_str.startswith("<think>"):
@@ -1249,7 +1258,10 @@ def doc2query_parse_solution_fn(solution_str: str):
             "Question: ")+len("Question: "):conclusion.index("Options:")].strip()
         options = conclusion[conclusion.index(
             "Options:")+len("Options:"):conclusion.index("Answer:")].strip()
-        options = re.findall(r'[A-W]\)\s*(.*)', options)
+        if remove_option_letter:
+            options = re.findall(r'[A-W]\)\s*(.*)', options)
+        else:
+            options = re.findall(r'([A-W]\)\s*.*)', options)
         options = [_.strip() for _ in options]
 
         answer = conclusion[conclusion.index("Answer:"):].strip()
@@ -1400,13 +1412,17 @@ class RuleBasedOptionMatch(PenaltyOrReward):
 
 
 class QwQLongCoTDoc2QueryComputeScore(object):
+    MULTICHOICE_LETTER = ('A', 'B', 'C', 'D', 'E', 'F', 'G',
+                          'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q')
+
     def __init__(self,
-                 split="train"):
+                 split="train", add_difficulty_rewards=False):
         self.split = split
 
         self.format = Doc2QueryFormatReward()
         self.question_similarity = QuestionSimilarity()
         self.rule_base = RuleBasedOptionMatch()
+        self.add_difficulty_rewards = add_difficulty_rewards
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
@@ -1415,11 +1431,107 @@ class QwQLongCoTDoc2QueryComputeScore(object):
             "RuleBased": self.rule_base.get_penalty_or_reward,
         }
 
-    def compute_score(self,
-                      batch_data_sources,
-                      batch_solution_str,
-                      batch_ground_truth,
-                      ):
+    async def get_difficulty_reward(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth, max_concurrent_requests=64, repeat=5):
+        def postprocess(s):
+            try:
+                s = s.strip()
+                conclusion = s.split("\n")[-1]
+                conclusion = conclusion[conclusion.index(
+                    "Answer:")+len("Answer:"):].strip()
+                if conclusion not in self.MULTICHOICE_LETTER:
+                    raise PostprocessError(
+                        f'{conclusion} is not valid')
+                return conclusion
+            except Exception as err:
+                raise PostprocessError(f'{err}')
+
+        prompts = []
+        wo_content_prompts, w_content_prompts = {}, {}
+
+        for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            result = doc2query_parse_solution_fn(solution_str)
+
+            if result is not None:
+                question, options, answer = result
+
+                instruct = 'Answer the following multiple choice question. There is only one correct answer. The last line of your response should be in the format "Answer: $LETTER" (without quotes), where LETTER is one of the option letters. You must first think step by step with very detail thinking process.'
+                prompt = f'{instruct}\n\n' + self.format_question(
+                    question, options, answer=None)
+                wo_content_prompts[prompt] = i
+
+                prompts.extend([prompt]*repeat)
+                prompt = f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n' + f'{instruct}\n\n' + self.format_question(
+                    question, options, answer=None)
+                w_content_prompts[prompt] = i
+
+                prompts.extend([prompt]*repeat)
+
+        results = await respondent_agent.run(prompts, max_concurrent_requests, desc="[Call Respondent]", postprocess_fns=[postprocess]*len(prompts))
+
+        wo_contents, w_contents = defaultdict(list), defaultdict(list)
+
+        for prompt, conclusion in results:
+            if prompt in wo_content_prompts:
+                index = wo_content_prompts[prompt]
+                wo_contents[index].append(conclusion)
+            elif prompt in w_content_prompts:
+                index = w_content_prompts[prompt]
+                w_contents[index].append(conclusion)
+            else:
+                raise NotImplementedError
+
+        full_rewards = []
+        for i in range(len(batch_solution_str)):
+            if i in wo_contents:
+                base_score = 0.0
+
+                wo_content, w_content = wo_contents[i], w_contents[i]
+
+                wo_content = [_ for _ in wo_content if _ is not None]
+                w_content = [_ for _ in w_content if _ is not None]
+
+                ans = batch_ground_truth[i]["options"].tolist().index(
+                    batch_ground_truth[i]["answer"])
+                ans = self.MULTICHOICE_LETTER[ans]
+
+                wo_content_correct = [_ for _ in wo_content if _ == ans]
+                w_content_correct = [_ for _ in w_content if _ == ans]
+                print(wo_content_correct)
+                print(w_content_correct)
+
+                # 完全做不对
+                if len(wo_content_correct) == 0 or len(w_content_correct) == 0:
+                    pass
+                # 全对
+                elif len(wo_content_correct) == len(wo_content):
+                    pass
+                else:
+                    # [无参考] 正确率1/5-4/5区间
+                    if len(wo_content_correct) >= 1 and len(wo_content_correct) <= 4:
+                        if len(wo_content_correct) == 4:
+                            base_score += 0.25
+                        else:
+                            base_score += 0.5
+
+                        diff = (len(w_content_correct) / len(w_content)
+                                ) - ((len(wo_content_correct))/(len(wo_content)))
+                        diff = max(diff, 0.0)
+                        base_score += diff
+
+                full_rewards.append(base_score)
+            else:
+                full_rewards.append(0.0)
+        return full_rewards
+
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
         penalty = defaultdict(dict)
         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
             for key, fn in self.get_penalties().items():
@@ -1427,8 +1539,19 @@ class QwQLongCoTDoc2QueryComputeScore(object):
 
         final_results = []
 
+        if self.add_difficulty_rewards:
+            difficulty_rewards = await self.get_difficulty_reward(
+                batch_data_sources,
+                batch_solution_str,
+                batch_ground_truth,
+            )
+
         for i in range(len(batch_solution_str)):
-            score = 0.0
+            if self.add_difficulty_rewards:
+                score = difficulty_rewards[i]
+            else:
+                score = 0.0
+
             penalty_log_str = []
             for name, _penalty in penalty.items():
                 penalty_log_str.append(
@@ -1437,7 +1560,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
 
             final_results.append(score)
 
-            if (self.split == "valid" and random.random() < 0.1) or (self.split == "train" and random.random() < 0.01):
+            if (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
                 log = True
                 log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
             else:
@@ -1451,9 +1574,22 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                     f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
                 print(
                     f"【Ground Truth】({difficulty})`{self.log_ground_truth(batch_ground_truth[i])}`")
-                print(
-                    f'[Final Reward]={score:.3f}|{"|".join(penalty_log_str)}\n')
+                if self.add_difficulty_rewards:
+                    print(
+                        f'[Final Reward]={score:.3f}|Difficulty={difficulty_rewards[i]:.3f}|{"|".join(penalty_log_str)}\n')
+                else:
+                    print(
+                        f'[Final Reward]={score:.3f}|{"|".join(penalty_log_str)}\n')
         return final_results
+
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+        async def main():
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+        return aio.run(main())
 
     def log_solution(self, solution):
         norm = doc2query_parse_solution_fn(solution)
@@ -1462,10 +1598,12 @@ class QwQLongCoTDoc2QueryComputeScore(object):
         return repr(self.format_question(norm[0], norm[1], norm[2]))
 
     def format_question(self, question, options, answer):
-        options = sorted(options)
         options_str = "\n".join([f'{x}) {y}' for x, y in zip(
-            ["A", 'B', "C", 'D', 'E', 'F', 'G', "H", 'J', 'K', "L", "M", "N", "O"], options)])
-        return f'Question: {question}\n\nOptions: {options_str}\n\nAnswer: {answer}'
+            self.MULTICHOICE_LETTER, options)])
+        if answer is not None:
+            return f'Question: {question}\n\nOptions:\n{options_str}\n\nAnswer: {answer}'
+        else:
+            return f'Question: {question}\n\nOptions:\n{options_str}'
 
     def log_ground_truth(self, ground_truth):
         return repr(self.format_question(
@@ -1481,9 +1619,9 @@ class QwQLongCoTDoc2QueryComputeScore(object):
 
 
 _qwq_longcot_doc2query_compute_score_train = QwQLongCoTDoc2QueryComputeScore(
-    split="train")
+    split="train", add_difficulty_rewards=True)
 _qwq_longcot_doc2query_compute_score_valid = QwQLongCoTDoc2QueryComputeScore(
-    split="valid")
+    split="valid", add_difficulty_rewards=True)
 qwq_longcot_doc2query_compute_score_train = _qwq_longcot_doc2query_compute_score_train.compute_score
 qwq_longcot_doc2query_compute_score_valid = _qwq_longcot_doc2query_compute_score_valid.compute_score
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
