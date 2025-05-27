@@ -1222,8 +1222,8 @@ respondent_agent = Agent(**{
     "api_keys": "EMPTY",
     "request_kwargs": {
         "temperature": 0.9,
-        "timeout": 120,
-        "max_tokens": 8192,
+        "timeout": 180,
+        "max_tokens": 4096,
     }
 })
 
@@ -1435,7 +1435,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
             self,
             batch_data_sources,
             batch_solution_str,
-            batch_ground_truth, max_concurrent_requests=64, repeat=5):
+            batch_ground_truth, max_concurrent_requests=256, repeat=5):
         def postprocess(s):
             try:
                 s = s.strip()
@@ -1500,8 +1500,6 @@ class QwQLongCoTDoc2QueryComputeScore(object):
 
                 wo_content_correct = [_ for _ in wo_content if _ == ans]
                 w_content_correct = [_ for _ in w_content if _ == ans]
-                print(wo_content_correct)
-                print(w_content_correct)
 
                 # 完全做不对
                 if len(wo_content_correct) == 0 or len(w_content_correct) == 0:

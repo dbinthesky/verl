@@ -74,7 +74,7 @@ def load_doc2query():
         batch_ground_truth.append(row["reward_model"])
         gt = row["reward_model"]
 
-        if i > 2:
+        if i > 100:
             break
         options = []
         for x, y in zip(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P"], gt["options"]):
@@ -501,7 +501,7 @@ def doc2query_postprocess(path, output):
                         ans_index = task.MULTICHOICE_LETTER.index(answer)
                     except Exception as err:
                         continue
-                    if len(options) < 4:
+                    if len(options) < 40:
                         continue
                     if ans_index > len(options) - 1 or not options[ans_index].startswith(f'{answer})'):
                         continue
