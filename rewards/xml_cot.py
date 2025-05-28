@@ -15,7 +15,7 @@ from abc import abstractmethod
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, Callable, List
 from tqdm import tqdm as tqdm_nonasync
-from collections import namedtuple, defaultdict
+from collections import namedtuple, defaultdict, deque
 from sacremoses import MosesTokenizer, MosesDetokenizer
 
 
@@ -242,6 +242,29 @@ def xml_cot_parse_solution_fn(solution_str):
         return None
 
     return root
+
+
+def tree_depth(element):
+    # 如果没有子节点，深度为1
+    if len(element) == 0:
+        return 1
+    # 否则，深度为子树的最大深度加1
+    max_child_depth = max(tree_depth(child) for child in element)
+    return max_child_depth + 1
+
+
+def tree_width(root):
+    if not root:
+        return 0
+    max_width = 0
+    queue = deque([root])
+    while queue:
+        level_size = len(queue)
+        max_width = max(max_width, level_size)
+        for _ in range(level_size):
+            current = queue.popleft()
+            queue.extend(current)
+    return max_width
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # XML CoT
 # ------------------------------------------------------------------------------------------------------------------------------------------------------

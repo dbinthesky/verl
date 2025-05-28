@@ -5,7 +5,8 @@ import string
 import random
 import unittest
 from xml_cot import (
-    xml_cot_parse_solution_fn
+    xml_cot_parse_solution_fn,
+    tree_depth, tree_width
 )
 
 
@@ -33,7 +34,11 @@ class TestXMLCoT(unittest.TestCase):
     def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_xml_cot()
         for sol in batch_solution_str:
-            print(xml_cot_parse_solution_fn(sol))
+            root = xml_cot_parse_solution_fn(sol)
+            print(sol)
+            print(tree_depth(root), tree_width(root))
+            print('='*80)
+            break
             # task = CoTEnhanceComputeScore(
             #     split="valid", parse_result_failure_score=-10.)
             # task.compute_score(
