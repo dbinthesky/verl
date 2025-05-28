@@ -9,6 +9,7 @@ from xml_cot import (
     xml_cot_parse_solution_fn,
     tree_depth, tree_width,
     XMLCoTComputeScore,
+    xml_cot_compute_score_valid
 )
 
 
@@ -44,8 +45,13 @@ class TestXMLCoT(unittest.TestCase):
 
     def test_thought_reward(self):
         batch_solution_str, batch_ground_truth = load_xml_cot()
-        task = XMLCoTComputeScore(split="valid")
-        results = task.thought_reward(
+        # task = XMLCoTComputeScore(split="valid")
+        # results = task.thought_reward(
+        #     [None] *
+        #     len(batch_solution_str), batch_solution_str, batch_ground_truth
+        # )
+        # print(results)
+        results = xml_cot_compute_score_valid(
             [None] *
             len(batch_solution_str), batch_solution_str, batch_ground_truth
         )

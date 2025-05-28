@@ -203,15 +203,6 @@ def get_conclusion(solution_str: str):
     return solution_str[solution_str.index(thought)+len(thought):].strip()
 
 
-# def recursive_traverse(element, depth=0):
-#     # 打印当前元素（缩进显示层级）
-#     indent = "  " * depth
-#     print(f"{indent}标签: {element.tag}, 属性: {element.attrib}, 文本: {element.text.strip() if element.text else None}")
-
-#     # 递归遍历子元素
-#     for child in element:
-#         recursive_traverse(child, depth + 1)
-
 def xml_cot_parse_solution_fn(solution_str):
     try:
         thought = get_thought(solution_str)
@@ -367,28 +358,6 @@ EVAL_TEMPLATE_TEMPLATE = """
 
 #### **输出：**  
 """
-
-
-# class ThoughtReward(PenaltyOrReward):
-#     def __init__(self):
-#         pass
-
-# def get_penalty_or_reward(self, solution_str, ground_truth):
-#     root = xml_cot_parse_solution_fn(solution_str)
-#     if root is None:
-#         return 0.
-
-#     width, depth = tree_width(root), tree_depth(root)
-#     tags = collect_tags(root)
-#     print(width, depth, tags)
-# lang_code = ground_truth["lang_code"]
-# authentic_question = ground_truth["authentic_question"]
-
-# limit = len(tokenize(authentic_question, lang_code))
-# solution_size = len(tokenize(solution_str, lang_code))
-
-# # return self.penalty_base * min(max(solution_size-limit, 0) / limit, 5.)
-# return self.penalty_base * min(abs(solution_size-limit) / limit, 5.)
 
 
 class XMLCoTComputeScore(object):
@@ -555,6 +524,14 @@ class XMLCoTComputeScore(object):
                 print(
                     f'[Final Reward]={_reward:.3f}|ACC={accuracy[i]:.3f}|THOUGHT={thought_reward[i]:.3f}\n')
                 print(f'【Solution】\n{batch_solution_str[i]}')
+
+
+_xml_cot_compute_score_train = XMLCoTComputeScore(
+    split="train")
+_xml_cot_compute_score_valid = XMLCoTComputeScore(
+    split="valid")
+xml_cot_compute_score_train = _xml_cot_compute_score_train.compute_score
+xml_cot_compute_score_valid = _xml_cot_compute_score_valid.compute_score
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # XML CoT
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
