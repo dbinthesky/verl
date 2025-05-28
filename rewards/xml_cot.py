@@ -28,7 +28,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
+VERIFIER_MODEL_NAME = "qwen25_32B_instruct"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 MAX_CONCURRENT = 128
@@ -267,7 +267,16 @@ def tree_width(root):
     return max_width
 
 
-EVAL_TEMPLATE = """### **基于标准答案判断回答是否正确**  
+def collect_tags(element, tags=None):
+    if tags is None:
+        tags = set()
+    tags.add(element.tag)
+    for child in element:
+        collect_tags(child, tags)
+    return tags
+
+
+EVAL_PROMPT = """### **基于标准答案判断回答是否正确**  
 任务描述：请根据提供的**题目**、**用户回答**和**标准答案**，判断用户回答是否正确，并按照指定格式输出结果。需严格对比答案核心要点，若用户回答与标准答案**完全一致**，则判定为正确，否则为错误。
 
 
@@ -311,7 +320,75 @@ EVAL_TEMPLATE = """### **基于标准答案判断回答是否正确**
   "判断结果": "正确/错误",
 }
 ```
+
+
+
+下面是一个具体的例子：
+
+
+#### **输入：**  
+```json
+{
+  "题目": "In a square region of side length 1, filled with fluid in steady, irrotational flow, the velocity potential function φ satisfies Laplace’s equation ∇²φ = 0. The boundary conditions are φ = 0 on all four sides. What is the value of φ(0.5, 0.5) obtained by the Gauss-Seidel iterative method after 100 iterations, starting with φ = 0 at all points? Express your answer to two decimal places.",
+  "标准答案": "\\boxed{0.00}",
+  "用户回答": "To solve for the value of \\(\\phi(0.5, 0.5)\\) in a square region with side length 1, using the Gauss-Seidel iterative method under the given boundary conditions, we follow these steps:\n\n### 1. **Discretization of the Domain**\n   - Divide the square into a grid with spacing \\(h\\). For simplicity, let's choose \\(h = 0.1\\), resulting in a \\(10 \\times 10\\) grid (including boundary points).\n   - The interior points where \\(\\phi\\) needs to be computed are from \\(i = 1\\) to \\(9\\) and \\(j = 1\\) to \\(9\\) (since \\(\\phi = 0\\) on the boundaries).\n\n### 2. **Laplace’s Equation in Finite Differences**\n   Laplace’s equation \\(\\nabla^2 \\phi = 0\\) in 2D is approximated as:\n   \\[\n   \\phi_{i,j} = \\frac{1}{4} \\left( \\phi_{i+1,j} + \\phi_{i-1,j} + \\phi_{i,j+1} + \\phi_{i,j-1} \\right)\n   \\]\n   This is the Gauss-Seidel update formula for each interior point.\n\n### 3. **Gauss-Seidel Iteration**\n   - Initialize \\(\\phi_{i,j} = 0\\) for all interior points.\n   - Perform 100 iterations, updating each \\(\\phi_{i,j}\\) using the latest available values of its neighbors (Gauss-Seidel method).\n\n### 4. **Focus on \\(\\phi(0.5, 0.5)\\)**\n   - The point \\((0.5, 0.5)\\) corresponds to the grid point \\((5, 5)\\) when \\(h = 0.1\\).\n   - After 100 iterations, the value at this point converges to approximately **0.25**.\n\n### **Final Answer**\n\\[\n\\boxed{0.25}\n\\]\n\n**Note:** The exact value can also be derived analytically for this symmetric problem. The solution to Laplace’s equation with \\(\\phi = 0\\) on all boundaries in a unit square is a series expansion, and at the center \\((0.5, 0.5)\\), the dominant term gives \\(\\phi \\approx 0.25\\). The Gauss-Seidel method approximates this well after sufficient iterations.",
+}
+```
+
+#### **输出：**  
+为了判断用户的回答是否正确，我们对问题进行分析并与标准答案对比：  
+
+1. **问题分析**：  
+   该问题要求在边长为1的正方形区域内求解拉普拉斯方程（∇²φ = 0），其中流体作稳定无旋流动，速度势函数φ满足**齐次狄利克雷边界条件**（所有四条边上φ = 0）。在偏微分方程理论中，这是一个基本结论：当所有边界值均为零时，拉普拉斯方程的唯一解是全域内的**平凡解**φ = 0。  
+
+2. **用户回答评估**：  
+   用户声称通过高斯-赛德尔迭代法进行100次迭代后，φ(0.5, 0.5) ≈ 0.25。这一结果与齐次边界条件下的理论预期矛盾。误差可能源于对边界条件的误读（例如，错误假设边界值非零，如非齐次边界条件问题）。但题目明确所有边界φ = 0，因此唯一有效解为全域φ = 0。  
+
+3. **与标准答案的关键对比**：  
+   标准答案为**0.00**，而用户答案为**0.25**。由于问题要求严格遵循边界条件及拉普拉斯方程解的唯一性，用户的结果显然错误。  
+
+```json
+{
+  "判断结果": "错误"
+}
+```
+
+
+
+现在你需要按相同的步骤判断下面的回答是否正确：
+   
 """
+
+EVAL_TEMPLATE_TEMPLATE = """
+#### **输入：**
+```json
+{content}
+```
+
+#### **输出：**  
+"""
+
+
+# class ThoughtReward(PenaltyOrReward):
+#     def __init__(self):
+#         pass
+
+# def get_penalty_or_reward(self, solution_str, ground_truth):
+#     root = xml_cot_parse_solution_fn(solution_str)
+#     if root is None:
+#         return 0.
+
+#     width, depth = tree_width(root), tree_depth(root)
+#     tags = collect_tags(root)
+#     print(width, depth, tags)
+# lang_code = ground_truth["lang_code"]
+# authentic_question = ground_truth["authentic_question"]
+
+# limit = len(tokenize(authentic_question, lang_code))
+# solution_size = len(tokenize(solution_str, lang_code))
+
+# # return self.penalty_base * min(max(solution_size-limit, 0) / limit, 5.)
+# return self.penalty_base * min(abs(solution_size-limit) / limit, 5.)
 
 
 class XMLCoTComputeScore(object):
@@ -320,26 +397,78 @@ class XMLCoTComputeScore(object):
         self.split = split
         self.parse_result_failure_score = parse_result_failure_score
 
+    def f(self, n):
+        return 1 / (1 + np.exp(-n))
+
+    def thought_reward(self,
+                       batch_data_sources,
+                       batch_solution_str,
+                       batch_ground_truth
+                       ):
+
+        roots = []
+        for i in range(len(batch_solution_str)):
+            root = xml_cot_parse_solution_fn(batch_solution_str[i])
+            roots.append(root)
+
+        widths, depths = [], []
+        for root in roots:
+            if root is not None:
+                width, depth = tree_width(root), tree_depth(root)
+                widths.append(width)
+                depths.append(depth)
+
+        base_score = 0.025
+
+        full_rewards = []
+        for i in range(len(batch_solution_str)):
+            root = roots[i]
+            if root is not None:
+                width, depth = tree_width(root), tree_depth(root)
+                if len(widths) == 0:
+                    full_rewards.append(0.0)
+                else:
+                    full_rewards.append(
+                        base_score *
+                        self.f((width-np.mean(widths))/np.std(widths)) +
+                        base_score *
+                        self.f((depth-np.mean(depths))/np.std(depths))
+                    )
+            else:
+                full_rewards.append(0.0)
+        return full_rewards
+
     async def get_accuracy(
             self,
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth, max_concurrent_requests=256, majority_vote=3):
-        #     def postprocess(s):
-        #         try:
-        #             s = s.strip()
-        #             conclusion = s.split("\n")[-1]
-        #             conclusion = conclusion[conclusion.index(
-        #                 "Answer:")+len("Answer:"):].strip()
-        #             if conclusion not in self.MULTICHOICE_LETTER:
-        #                 raise PostprocessError(
-        #                     f'{conclusion} is not valid')
-        #             return conclusion
-        #         except Exception as err:
-        #             raise PostprocessError(f'{err}')
+        def postprocess(s):
+            try:
+                conclusion = s.strip()
 
-        #     prompts = []
-        #     wo_content_prompts, w_content_prompts = {}, {}
+                conclusion = conclusion[conclusion.index(
+                    "```json")+len("```json"):].strip()
+                conclusion = conclusion[:conclusion.index("```")].strip()
+                try:
+                    conclusion = json.loads(conclusion)
+                    if conclusion["判断结果"] not in ("正确", "错误"):
+                        raise PostprocessError(f'corrupt')
+                    return conclusion["判断结果"] == "正确"
+                except Exception as err:
+                    try:
+                        conclusion = re.findall(
+                            r'\"判断结果\": \"(.*)\"', conclusion)[0]
+                        if not conclusion in ("正确", "错误"):
+                            raise PostprocessError(f'corrupt')
+                        return conclusion == "正确"
+                    except Exception as err:
+                        raise PostprocessError(f'{err}')
+            except Exception as err:
+                raise PostprocessError(f'{err}')
+
+        results_mapper = {}
+        prompts = []
 
         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
             root = xml_cot_parse_solution_fn(solution_str)
@@ -349,76 +478,83 @@ class XMLCoTComputeScore(object):
                     child for child in root if child.tag == "conclusion"][0]
 
                 conclusion = conclusion.text.strip()
-                print(conclusion)
-                print("="*80)
-                #             question, options, answer = result
+                prompt = EVAL_PROMPT + EVAL_TEMPLATE_TEMPLATE.format(
+                    content=json.dumps({"题目": gt["prompt"], "标准答案": gt["ground_truth"], "用户回答": conclusion}, ensure_ascii=False, indent="  "))
 
-                #             instruct = 'Answer the following multiple choice question. There is only one correct answer. The last line of your response should be in the format "Answer: $LETTER" (without quotes), where LETTER is one of the option letters. You must first think step by step with very detail thinking process.'
-                #             prompt = f'{instruct}\n\n' + self.format_question(
-                #                 question, options, answer=None)
-                #             wo_content_prompts[prompt] = i
+                results_mapper[prompt] = i
+                prompts.append(prompt)
 
-                #             prompts.extend([prompt]*repeat)
-                #             prompt = f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n' + f'{instruct}\n\n' + self.format_question(
-                #                 question, options, answer=None)
-                #             w_content_prompts[prompt] = i
+        prompts = prompts * majority_vote
 
-                #             prompts.extend([prompt]*repeat)
+        results = await agent.run(prompts, max_concurrent_requests, desc="[VERIFY]", postprocess_fns=[postprocess]*len(prompts))
 
-                #     results = await respondent_agent.run(prompts, max_concurrent_requests, desc="[Call Respondent]", postprocess_fns=[postprocess]*len(prompts))
+        judges = defaultdict(list)
+        for prompt, conclusion in results:
+            judges[results_mapper[prompt]].append(conclusion)
 
-                #     wo_contents, w_contents = defaultdict(list), defaultdict(list)
+        full_rewards = []
+        for i in range(len(batch_solution_str)):
+            if i in judges:
+                scores = [_ for _ in judges[i] if _ is not None]
+                correct_votes = scores.count(True)
+                wrong_votes = scores.count(False)
+                if correct_votes > wrong_votes:
+                    full_rewards.append(1.0)
+                else:
+                    full_rewards.append(0.0)
+            else:
+                full_rewards.append(self.parse_result_failure_score)
+        return full_rewards
 
-                #     for prompt, conclusion in results:
-                #         if prompt in wo_content_prompts:
-                #             index = wo_content_prompts[prompt]
-                #             wo_contents[index].append(conclusion)
-                #         elif prompt in w_content_prompts:
-                #             index = w_content_prompts[prompt]
-                #             w_contents[index].append(conclusion)
-                #         else:
-                #             raise NotImplementedError
+    def log_ground_truth(self, gt):
+        return repr(gt["ground_truth"])
 
-                #     full_rewards = []
-                #     for i in range(len(batch_solution_str)):
-                #         if i in wo_contents:
-                #             base_score = 0.0
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+        async def main():
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+        return aio.run(main())
 
-                #             wo_content, w_content = wo_contents[i], w_contents[i]
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
 
-                #             wo_content = [_ for _ in wo_content if _ is not None]
-                #             w_content = [_ for _ in w_content if _ is not None]
+        thought_reward = self.thought_reward(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
+        accuracy = await self.get_accuracy(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
 
-                #             ans = batch_ground_truth[i]["options"].tolist().index(
-                #                 batch_ground_truth[i]["answer"])
-                #             ans = self.MULTICHOICE_LETTER[ans]
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            _reward = accuracy[i] + thought_reward[i]
 
-                #             wo_content_correct = [_ for _ in wo_content if _ == ans]
-                #             w_content_correct = [_ for _ in w_content if _ == ans]
+            if (self.split == "valid" and random.random() < 0.05) or (self.split == "train" and random.random() < 0.01):
+                log = True
+                log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
+            else:
+                log = False
 
-                #             # 完全做不对
-                #             if len(wo_content_correct) == 0 or len(w_content_correct) == 0:
-                #                 pass
-                #             # 全对
-                #             elif len(wo_content_correct) == len(wo_content):
-                #                 pass
-                #             else:
-                #                 # [无参考] 正确率1/5-4/5区间
-                #                 if len(wo_content_correct) >= 1 and len(wo_content_correct) <= 4:
-                #                     if len(wo_content_correct) == 4:
-                #                         base_score += 0.25
-                #                     else:
-                #                         base_score += 0.5
-
-                #                     diff = (len(w_content_correct) / len(w_content)
-                #                             ) - ((len(wo_content_correct))/(len(wo_content)))
-                #                     diff = max(diff, 0.0)
-                #                     base_score += diff
-
-                #             full_rewards.append(base_score)
-                #         else:
-                #             full_rewards.append(0.0)
-                #     return full_rewards
-                # ------------------------------------------------------------------------------------------------------------------------------------------------------
-                # XML CoT
-                # ------------------------------------------------------------------------------------------------------------------------------------------------------
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f'【Prompt】`{repr(batch_ground_truth[i]["prompt"])}`')
+                print(
+                    f'【Answer】`{self.log_ground_truth(batch_ground_truth[i])}`')
+                print(
+                    f'[Final Reward]={_reward:.3f}|ACC={accuracy[i]:.3f}|THOUGHT={thought_reward[i]:.3f}\n')
+                print(f'【Solution】\n{batch_solution_str[i]}')
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# XML CoT
+# ------------------------------------------------------------------------------------------------------------------------------------------------------

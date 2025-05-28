@@ -8,7 +8,7 @@ import asyncio as aio
 from xml_cot import (
     xml_cot_parse_solution_fn,
     tree_depth, tree_width,
-    XMLCoTComputeScore
+    XMLCoTComputeScore,
 )
 
 
@@ -24,6 +24,7 @@ def load_xml_cot():
             batch_ground_truth.append(
                 {
                     "ground_truth": example["self_improvement"]["reference_meta"]["final_answer"],
+                    "prompt": example["self_improvement"]["prompt"]
                 }
             )
             if len(batch_ground_truth) == 128:
@@ -34,28 +35,21 @@ def load_xml_cot():
 
 class TestXMLCoT(unittest.TestCase):
     def test_compute_score(self):
-        async def main():
-            batch_solution_str, batch_ground_truth = load_xml_cot()
-            task = XMLCoTComputeScore(split="valid")
-            results = await task.get_accuracy(
-                [None] *
-                len(batch_solution_str), batch_solution_str, batch_ground_truth
-            )
-            print(results)
-        aio.run(main())
+        task = XMLCoTComputeScore(split="valid")
+        batch_solution_str, batch_ground_truth = load_xml_cot()
+        task.compute_score(
+            [None] *
+            len(batch_solution_str), batch_solution_str, batch_ground_truth
+        )
 
-        # for sol in batch_solution_str:
-        #     root = xml_cot_parse_solution_fn(sol)
-        #     print(sol)
-        #     print(tree_depth(root), tree_width(root))
-        #     print('='*80)
-        #     break
-        #     # task = CoTEnhanceComputeScore(
-        #     #     split="valid", parse_result_failure_score=-10.)
-        #     # task.compute_score(
-        #     #     [None] *
-        #     #     len(batch_solution_str), batch_solution_str, batch_ground_truth
-        #     # )
+    def test_thought_reward(self):
+        batch_solution_str, batch_ground_truth = load_xml_cot()
+        task = XMLCoTComputeScore(split="valid")
+        results = task.thought_reward(
+            [None] *
+            len(batch_solution_str), batch_solution_str, batch_ground_truth
+        )
+        print(results)
 
 
 if __name__ == '__main__':
