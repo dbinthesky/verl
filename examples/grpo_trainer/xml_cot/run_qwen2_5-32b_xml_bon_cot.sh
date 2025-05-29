@@ -50,8 +50,8 @@ setup_path() {
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_enhance_0529"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/xml_cot/250528_train.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/xml_cot/aime_2024_2025.parquet"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/xml_cot/dapo_math_17k_bo32_train.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/xml_cot/aime_2024_2025_bo64.parquet"
 
     experiment_name="qwen2_5-32b_xml_cot-${YYMMDD}-${HHMMSS}"
     project_name="xml_cot"
@@ -95,8 +95,8 @@ run_training() {
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=64 \
-        data.max_prompt_length=2048 \
+        data.train_batch_size=32 \
+        data.max_prompt_length=8192 \
         data.max_response_length=8192 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
@@ -104,11 +104,11 @@ run_training() {
         actor_rollout_ref.actor.optim.lr=1e-6 \
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=64 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=32 \
         actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus)) \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=4 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=10240 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=16384 \
         actor_rollout_ref.actor.use_kl_loss=False \
         actor_rollout_ref.actor.kl_loss_coef=0.0 \
         actor_rollout_ref.actor.entropy_coeff=0.001 \
@@ -122,7 +122,7 @@ run_training() {
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
         actor_rollout_ref.rollout.temperature=0.9 \
-        actor_rollout_ref.rollout.n=16 \
+        actor_rollout_ref.rollout.n=8 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=32 \
         +actor_rollout_ref.rollout.n_val=1 \

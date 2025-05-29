@@ -443,15 +443,18 @@ class XMLCoTComputeScore(object):
             root = xml_cot_parse_solution_fn(solution_str)
 
             if root is not None:
-                conclusion = [
-                    child for child in root if child.tag == "conclusion"][0]
+                try:
+                    conclusion = [
+                        child for child in root if child.tag == "conclusion"][0]
 
-                conclusion = conclusion.text.strip()
-                prompt = EVAL_PROMPT + EVAL_TEMPLATE_TEMPLATE.format(
-                    content=json.dumps({"题目": gt["prompt"], "标准答案": gt["ground_truth"], "用户回答": conclusion}, ensure_ascii=False, indent="  "))
+                    conclusion = conclusion.text.strip()
+                    prompt = EVAL_PROMPT + EVAL_TEMPLATE_TEMPLATE.format(
+                        content=json.dumps({"题目": gt["prompt"], "标准答案": gt["ground_truth"], "用户回答": conclusion}, ensure_ascii=False, indent="  "))
 
-                results_mapper[prompt] = i
-                prompts.append(prompt)
+                    results_mapper[prompt] = i
+                    prompts.append(prompt)
+                except Exception as err:
+                    continue
 
         prompts = prompts * majority_vote
 
@@ -493,11 +496,6 @@ class XMLCoTComputeScore(object):
                              batch_ground_truth,
                              ):
 
-        thought_reward = self.thought_reward(
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-        )
         accuracy = await self.get_accuracy(
             batch_data_sources,
             batch_solution_str,
@@ -506,7 +504,8 @@ class XMLCoTComputeScore(object):
 
         final_results = []
         for i in range(len(batch_solution_str)):
-            _reward = accuracy[i] + thought_reward[i]
+            _reward = accuracy[i]
+            final_results.append(_reward)
 
             if (self.split == "valid" and random.random() < 0.05) or (self.split == "train" and random.random() < 0.01):
                 log = True
@@ -522,8 +521,9 @@ class XMLCoTComputeScore(object):
                 print(
                     f'【Answer】`{self.log_ground_truth(batch_ground_truth[i])}`')
                 print(
-                    f'[Final Reward]={_reward:.3f}|ACC={accuracy[i]:.3f}|THOUGHT={thought_reward[i]:.3f}\n')
+                    f'[Final Reward]={_reward:.3f}|ACC={accuracy[i]:.3f}\n')
                 print(f'【Solution】\n{batch_solution_str[i]}')
+        return final_results
 
 
 _xml_cot_compute_score_train = XMLCoTComputeScore(
