@@ -120,10 +120,6 @@ class Agent:
                     "role": "user", "content": messages
                 }], **self.request_kwargs,
             )
-            # FIXME: Agent Logger
-            with open("/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/agent2.log", "a+") as f:
-                f.write(
-                    f'{json.dumps({"message": messages, "result": response.choices[0].message.content}, ensure_ascii=False)}\n')
             return postprocess_fn(response.choices[0].message.content)
         except PostprocessError as e:
             print(
@@ -495,7 +491,8 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]"):s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")
+                               :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1216,9 +1213,19 @@ qwq_longcot_fabricate_qa_compute_score_valid = _qwq_longcot_fabricate_qa_compute
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# respondent_agent = Agent(**{
+#     "model": "DeepSeek-V3-0324",
+#     "base_url": "https://sd0aol21lef3ta500v4sg.apigateway-cn-beijing.volceapi.com/mlp/s-20250503111624-d4jbs/v1",
+#     "api_keys": "EMPTY",
+#     "request_kwargs": {
+#         "temperature": 0.9,
+#         "timeout": 180,
+#         "max_tokens": 4096,
+#     }
+# })
 respondent_agent = Agent(**{
-    "model": "DeepSeek-V3-0324",
-    "base_url": "https://sd0aol21lef3ta500v4sg.apigateway-cn-beijing.volceapi.com/mlp/s-20250503111624-d4jbs/v1",
+    "model": "qwen25_32B_instruct",
+    "base_url": "http://10.130.133.200:8000/v1",
     "api_keys": "EMPTY",
     "request_kwargs": {
         "temperature": 0.9,
@@ -1381,7 +1388,7 @@ class RuleBasedOptionMatch(PenaltyOrReward):
                         len([opt for opt in options_sol if _ in opt]), this_gt_match)
                     sol_match += this_sol_match
 
-                score += (sol_match/gt_match * 0.5)
+                score += (sol_match/gt_match * 0.1)
             else:
                 pass
 
@@ -1391,7 +1398,7 @@ class RuleBasedOptionMatch(PenaltyOrReward):
                 if _ in options_gt:
                     option_gt_matched[_] = True
 
-            score += 1.5 * \
+            score += 0.2 * \
                 len([k for k, v in option_gt_matched.items() if v]) / \
                 len(option_gt_matched)
 
@@ -1403,7 +1410,7 @@ class RuleBasedOptionMatch(PenaltyOrReward):
                 sl_tokens = " ".join(tokenize(sol_answer.lower(), "en"))
                 bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
 
-                score += 0.5 * bleu / 100
+                score += 0.1 * bleu / 100
             except Exception as err:
                 pass
             return score
@@ -1435,7 +1442,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
             self,
             batch_data_sources,
             batch_solution_str,
-            batch_ground_truth, max_concurrent_requests=256, repeat=5):
+            batch_ground_truth, max_concurrent_requests=256, repeat=8):
         def postprocess(s):
             try:
                 s = s.strip()
@@ -1498,6 +1505,16 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                     batch_ground_truth[i]["answer"])
                 ans = self.MULTICHOICE_LETTER[ans]
 
+                # 不带参考 模型也有机会rollout对 否则问题可能过于长尾
+                if wo_content.count(ans) < 1:  # 至少对一次
+                    full_rewards.append(base_score)
+                    continue
+
+                # 带参考 应该比 不带参考 显著好
+                if w_content.count(ans) - wo_content.count(ans) < 2:
+                    full_rewards.append(base_score)
+                    continue
+
                 wo_content_correct = [_ for _ in wo_content if _ == ans]
                 w_content_correct = [_ for _ in w_content if _ == ans]
 
@@ -1509,16 +1526,29 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                     pass
                 else:
                     # [无参考] 正确率1/5-4/5区间
-                    if len(wo_content_correct) >= 1 and len(wo_content_correct) <= 4:
-                        if len(wo_content_correct) == 4:
-                            base_score += 0.25
-                        else:
-                            base_score += 0.5
+                    if len(wo_content_correct) >= 1 and len(wo_content_correct)/len(wo_content) <= 0.7:
+                        wo_acc = len(wo_content_correct)/len(wo_content)
+                        # 难度越大越好(min_threshold=0.2)
+                        base_score += 1-max(wo_acc, 0.2)
 
+                        # 有/无参考正确率差异越大越好
                         diff = (len(w_content_correct) / len(w_content)
                                 ) - ((len(wo_content_correct))/(len(wo_content)))
                         diff = max(diff, 0.0)
                         base_score += diff
+
+                        # 有参考 majority vote是正确答案加分
+                        w_content_majority_votes = defaultdict(int)
+                        for v in w_content:
+                            w_content_majority_votes[v] += 1
+
+                        w_content_majority_votes = sorted(
+                            w_content_majority_votes.items(), key=lambda x: x[1], reverse=True)
+                        try:
+                            if w_content_majority_votes[0][0] == ans:
+                                base_score += 0.5
+                        except Exception as err:
+                            pass
 
                 full_rewards.append(base_score)
             else:

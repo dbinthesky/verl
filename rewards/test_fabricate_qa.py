@@ -74,7 +74,7 @@ def load_doc2query():
         batch_ground_truth.append(row["reward_model"])
         gt = row["reward_model"]
 
-        if i > 100:
+        if i > 2:
             break
         options = []
         for x, y in zip(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P"], gt["options"]):
