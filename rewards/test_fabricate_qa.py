@@ -30,7 +30,8 @@ from fabricate_qa import (
     QuestionSimilarity,
     RuleBasedOptionMatch,
     QwQLongCoTDoc2QueryComputeScore,
-    qwq_longcot_doc2query_compute_score_valid
+    qwq_longcot_doc2query_compute_score_valid,
+    batchify
 )
 
 
@@ -482,6 +483,46 @@ def doc2query_difficulty_filter(path, output):
                     g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
 
 
+def doc2query_fabricate_qa_difficulty_reward(path, output):
+
+    for filename in tqdm(os.listdir(path)):
+        basename = os.path.basename(filename)
+        outputs = []
+        filename = os.path.join(path, filename)
+        with open(filename, "rt") as f:
+            for line in f:
+                example = json.loads(line)
+                outputs.append(
+                    (
+                        example, example["self_improvement"]["responses"][0]["response"]["text"],
+                        {
+                            "document": example["content"],
+                        }
+                    )
+                )
+        output_path = f'{output}_{basename}'
+        if os.path.exists(output_path):
+            continue
+
+        async def main():
+            task = QwQLongCoTDoc2QueryComputeScore(
+                split="valid", difficulty_bon=4)
+            with open(output_path, "wt") as f:
+                for batch in batchify(outputs, n=1024):
+                    examples = [_[0] for _ in batch]
+                    batch_solution_str, batch_ground_truth = [
+                        _[1] for _ in batch], [_[2] for _ in batch]
+                    results, pass_rates = await task.get_difficulty_reward(
+                        [None] *
+                        len(batch_solution_str), batch_solution_str, batch_ground_truth, repeat=4
+                    )
+                    for example, result, pass_rate in zip(examples, results, pass_rates):
+                        example["self_improvement"]["difficulty_reward"] = result
+                        example["self_improvement"]["pass_rate"] = pass_rate
+                        f.write(f'{json.dumps(example, ensure_ascii=False)}\n')
+        aio.run(main())
+
+
 def doc2query_postprocess(path, output):
     task = QwQLongCoTDoc2QueryComputeScore(split="valid")
 
@@ -550,7 +591,12 @@ if __name__ == '__main__':
     #     output="/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/super_gpqa_train_pass6@32.jsonl",
     # )
 
-    doc2query_postprocess(
-        path="/cpfs01/shared/llm_ddd/tongjian/pretrain_archive/doc2query_supergpqa_recall_0520.output",
-        output="/cpfs01/shared/llm_ddd/tongjian/doc2query/doc2query_supergpqa_recall_0520_qa_0526.jsonl"
+    # doc2query_postprocess(
+    #     path="/cpfs01/shared/llm_ddd/tongjian/pretrain_archive/doc2query_supergpqa_recall_0520.output",
+    #     output="/cpfs01/shared/llm_ddd/tongjian/doc2query/doc2query_supergpqa_recall_0520_qa_0526.jsonl"
+    # )
+
+    doc2query_fabricate_qa_difficulty_reward(
+        path="/cpfs01/shared/llm_ddd/tongjian/sft/self_improvement/high_equation_20k_rft_input_r8.output",
+        output="shit"
     )

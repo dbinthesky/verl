@@ -491,8 +491,7 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")
-                               :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]"):s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1223,6 +1222,7 @@ qwq_longcot_fabricate_qa_compute_score_valid = _qwq_longcot_fabricate_qa_compute
 #         "max_tokens": 4096,
 #     }
 # })
+
 respondent_agent = Agent(**{
     "model": "qwen25_32B_instruct",
     "base_url": "http://10.130.133.200:8000/v1",
@@ -1423,13 +1423,14 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                           'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q')
 
     def __init__(self,
-                 split="train", add_difficulty_rewards=False):
+                 split="train", add_difficulty_rewards=False, difficulty_bon=8):
         self.split = split
 
         self.format = Doc2QueryFormatReward()
         self.question_similarity = QuestionSimilarity()
         self.rule_base = RuleBasedOptionMatch()
         self.add_difficulty_rewards = add_difficulty_rewards
+        self.difficulty_bon = difficulty_bon
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
@@ -1442,7 +1443,8 @@ class QwQLongCoTDoc2QueryComputeScore(object):
             self,
             batch_data_sources,
             batch_solution_str,
-            batch_ground_truth, max_concurrent_requests=256, repeat=8):
+            batch_ground_truth, max_concurrent_requests=128, repeat=8):
+
         def postprocess(s):
             try:
                 s = s.strip()
@@ -1477,7 +1479,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
 
                 prompts.extend([prompt]*repeat)
 
-        results = await respondent_agent.run(prompts, max_concurrent_requests, desc="[Call Respondent]", postprocess_fns=[postprocess]*len(prompts))
+        results = await respondent_agent.run(prompts, max_concurrent_requests, desc=f"[Respond Bo{self.difficulty_bon} {respondent_agent.base_url}]", postprocess_fns=[postprocess]*len(prompts))
 
         wo_contents, w_contents = defaultdict(list), defaultdict(list)
 
@@ -1492,6 +1494,8 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 raise NotImplementedError
 
         full_rewards = []
+        pass_rates = []
+
         for i in range(len(batch_solution_str)):
             if i in wo_contents:
                 base_score = 0.0
@@ -1501,9 +1505,21 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 wo_content = [_ for _ in wo_content if _ is not None]
                 w_content = [_ for _ in w_content if _ is not None]
 
-                ans = batch_ground_truth[i]["options"].tolist().index(
-                    batch_ground_truth[i]["answer"])
-                ans = self.MULTICHOICE_LETTER[ans]
+                # 正确回答
+                result = doc2query_parse_solution_fn(solution_str)
+                if result is not None:
+                    _, _, answer = result
+                else:
+                    answer = ""
+                ans = answer
+                wo_content_correct = [_ for _ in wo_content if _ == ans]
+                w_content_correct = [_ for _ in w_content if _ == ans]
+
+                pass_rates.append({
+                    "wo_content": len(wo_content_correct) / len(wo_content) if len(wo_content) else 0.,
+                    "w_content": len(w_content_correct) / len(w_content) if len(w_content) else 0.
+
+                })
 
                 # 不带参考 模型也有机会rollout对 否则问题可能过于长尾
                 if wo_content.count(ans) < 1:  # 至少对一次
@@ -1511,12 +1527,9 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                     continue
 
                 # 带参考 应该比 不带参考 显著好
-                if w_content.count(ans) - wo_content.count(ans) < 2:
+                if w_content.count(ans) - wo_content.count(ans) < self.difficulty_bon/4:
                     full_rewards.append(base_score)
                     continue
-
-                wo_content_correct = [_ for _ in wo_content if _ == ans]
-                w_content_correct = [_ for _ in w_content if _ == ans]
 
                 # 完全做不对
                 if len(wo_content_correct) == 0 or len(w_content_correct) == 0:
@@ -1525,7 +1538,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 elif len(wo_content_correct) == len(wo_content):
                     pass
                 else:
-                    # [无参考] 正确率1/5-4/5区间
+                    # 无参考正确率在一定区间
                     if len(wo_content_correct) >= 1 and len(wo_content_correct)/len(wo_content) <= 0.7:
                         wo_acc = len(wo_content_correct)/len(wo_content)
                         # 难度越大越好(min_threshold=0.2)
@@ -1552,8 +1565,9 @@ class QwQLongCoTDoc2QueryComputeScore(object):
 
                 full_rewards.append(base_score)
             else:
+                pass_rates.append({})
                 full_rewards.append(0.0)
-        return full_rewards
+        return full_rewards, pass_rates
 
     async def _compute_score(self,
                              batch_data_sources,
@@ -1568,10 +1582,11 @@ class QwQLongCoTDoc2QueryComputeScore(object):
         final_results = []
 
         if self.add_difficulty_rewards:
-            difficulty_rewards = await self.get_difficulty_reward(
+            difficulty_rewards, pass_rates = await self.get_difficulty_reward(
                 batch_data_sources,
                 batch_solution_str,
                 batch_ground_truth,
+                self.difficulty_bon
             )
 
         for i in range(len(batch_solution_str)):
@@ -1599,15 +1614,15 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 print(
                     f"--------------------------------{log_flag}--------------------------------")
                 print(
-                    f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
+                    f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
                 print(
                     f"【Ground Truth】({difficulty})`{self.log_ground_truth(batch_ground_truth[i])}`")
                 if self.add_difficulty_rewards:
                     print(
-                        f'[Final Reward]={score:.3f}|Difficulty={difficulty_rewards[i]:.3f}|{"|".join(penalty_log_str)}\n')
+                        f'[Pass@{self.difficulty_bon}]={pass_rates[i]}|[Final Reward]={score:.3f}|Difficulty={difficulty_rewards[i]:.3f}|{"|".join(penalty_log_str)}\n')
                 else:
                     print(
-                        f'[Final Reward]={score:.3f}|{"|".join(penalty_log_str)}\n')
+                        f'[Pass@{self.difficulty_bon}]={pass_rates[i]}|[Final Reward]={score:.3f}|{"|".join(penalty_log_str)}\n')
         return final_results
 
     def compute_score(self,
