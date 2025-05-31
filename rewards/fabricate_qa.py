@@ -492,7 +492,8 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")
+                               :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1215,16 +1216,6 @@ qwq_longcot_fabricate_qa_compute_score_valid = _qwq_longcot_fabricate_qa_compute
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
-RESPONDENT_AGENTS = [
-    ("http://10.130.0.245", (5005, 5006, 5007, 5008)),
-    ("http://10.130.1.49", (5005, 5006, 5007, 5008)),
-    ("http://10.130.0.186", (5005, 5006, 5007, 5008)),
-    ("http://10.130.0.209", (5005, 5006, 5007, 5008)),
-    ("http://10.130.1.226", (5005, 5006, 5007, 5008)),
-    ("http://10.130.1.90", (5005, 5006, 5007, 5008)),
-    ("http://10.130.1.5", (5005, 5006, 5007, 5008)),
-    ("http://10.130.0.237", (5005, 5006, 5007, 5008)),
-]
 
 
 def doc2query_parse_solution_fn(solution_str: str, remove_option_letter=True):
@@ -1430,8 +1421,6 @@ class QwQLongCoTDoc2QueryComputeScore(object):
         self.add_difficulty_rewards = add_difficulty_rewards
         self.difficulty_bon = difficulty_bon
 
-        self.respondent_agent_urls = RESPONDENT_AGENTS
-
     def get_penalties(self) -> Dict[str, Callable]:
         return {
             "Format": self.format.get_penalty_or_reward,
@@ -1483,11 +1472,69 @@ class QwQLongCoTDoc2QueryComputeScore(object):
         return flattened_results
 
     def get_respondent_urls(self):
-        outputs = []
-        for url in self.respondent_agent_urls:
-            (ip, ports) = url
-            outputs.extend([f'{ip}:{port}' for port in ports])
-        return outputs
+        suffixes = [
+            "10.130.1.226:5380",
+            "10.130.0.21:5303",
+            "10.130.0.21:5249",
+            "10.130.0.21:5286",
+            "10.130.0.21:5219",
+            "10.130.1.226:5345",
+            "10.130.1.226:5217",
+            "10.130.1.49:5230",
+            "10.130.0.186:5402",
+            "10.130.0.245:5468",
+            "10.130.1.49:5501",
+            "10.130.0.245:5334",
+            "10.130.0.186:5503",
+            "10.130.0.245:5505",
+            "10.130.0.245:5500",
+            "10.130.0.209:5454",
+            "10.130.0.209:5482",
+            "10.130.0.245:5507",
+            "10.130.0.245:5303",
+            "10.130.0.245:5467",
+            "10.130.0.245:5484",
+            "10.130.0.209:5390",
+            "10.130.0.209:5307",
+            "10.130.1.226:5222",
+            "10.130.1.90:5300",
+            "10.130.1.90:5361",
+            "10.130.1.226:5421",
+            "10.130.1.226:5369",
+            "10.130.1.90:5316",
+            "10.130.0.186:5219",
+            "10.130.0.186:5478",
+            "10.130.1.90:5284",
+            "10.130.1.5:5397",
+            "10.130.1.49:5295",
+            "10.130.1.49:5282",
+            "10.130.1.49:5314",
+            "10.130.1.49:5241",
+            "10.130.1.49:5303",
+            "10.130.1.5:5253",
+            "10.130.1.49:5291",
+            "10.130.1.90:5508",
+            "10.130.1.90:5213",
+            "10.130.1.226:5249",
+            "10.130.1.226:5273",
+            "10.130.1.90:5293",
+            "10.130.1.90:5477",
+            "10.130.0.186:5359",
+            "10.130.0.186:5465",
+            "10.130.0.186:5207",
+            "10.130.0.186:5282",
+            "10.130.1.5:5281",
+            "10.130.1.5:5426",
+            "10.130.1.5:5447",
+            "10.130.1.5:5369",
+            "10.130.1.5:5259",
+            "10.130.1.5:5452",
+            "10.130.0.209:5285",
+            "10.130.0.209:5393",
+            "10.130.0.209:5310",
+            "10.130.0.209:5335",
+        ]
+        return [f'http://{_}' for _ in suffixes]
 
     def response_postprocess(self, s):
         ans = None
