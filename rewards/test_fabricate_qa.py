@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import json
 import random
 import string
@@ -75,7 +76,7 @@ def load_doc2query(num=40):
         batch_ground_truth.append(row["reward_model"])
         gt = row["reward_model"]
 
-        if i > num:
+        if i > num-1:
             break
         try:
             options = []
@@ -368,32 +369,37 @@ class TestDoc2Query(unittest.TestCase):
 
     def test_chat_completion_with_retry(self):
         async def main():
-            batch_solution_str, batch_ground_truth = load_doc2query()
+            batch_solution_str, batch_ground_truth = load_doc2query(32*8)
             task = QwQLongCoTDoc2QueryComputeScore(split="valid")
             prompts = []
+
+            instruct = 'Answer the following multiple choice question. There is only one correct answer. The last line of your response should be in the format "Answer: $LETTER" (without quotes), where LETTER is one of the option letters. You must first think step by step with very detail thinking process.'
+
             for _ in batch_solution_str:
                 result = doc2query_parse_solution_fn(_)
                 if result is None:
                     continue
                 question, options, answer = result
-                prompts.append(task.format_question(question, options, None))
+                prompts.append(task.format_question(
+                    question, options, None) + f"\n\n{instruct}")
 
             # results = await task.chat_completion_with_retry(
             #     "http://10.130.0.245:5002", prompts
             # )
-            #   ("http://10.130.0.245", (5002, 5001, 5005, 5006)),
-            prompts = prompts * 10
+            prompts = prompts * 1
+            s1 = time.time()
             results = await task.generate_responses(
                 prompts
             )
-            for p, r in zip(prompts, results):
-                print(p)
-                print(r)
-                print("="*80)
+            # for p, r in zip(prompts, results):
+            #     print(p)
+            #     print(r)
+            #     print("="*80)
+            # print(f'Finish: {time.time()-s1}s')
         aio.run(main())
 
     def test_compute_score(self):
-        batch_solution_str, batch_ground_truth = load_doc2query()
+        batch_solution_str, batch_ground_truth = load_doc2query(32)
 
         task = QwQLongCoTDoc2QueryComputeScore(split="valid")
         print(qwq_longcot_doc2query_compute_score_valid([None]*len(batch_solution_str),

@@ -1,6 +1,7 @@
 import re
 import sys
 import json
+import uuid
 import jieba
 import random
 import aiohttp
@@ -875,6 +876,8 @@ class QwQLongCoTFabricateQAComputeScore(object):
         queue_results = await aio.gather(
             *[self.process_queue(queue, semaphore) for queue in queues]
         )
+        # queue_results = tqdm.asyncio.tqdm.as_completed(
+        #     *[self.process_queue(queue, semaphore) for queue in queues], dynamic_ncols=True, desc=f'[Generate Responses]')
 
         # 展平结果列表（保持原始顺序）
         flattened_results = []
@@ -1214,10 +1217,14 @@ qwq_longcot_fabricate_qa_compute_score_valid = _qwq_longcot_fabricate_qa_compute
 # Doc2Query
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 RESPONDENT_AGENTS = [
-    ("http://10.130.1.226", (5005, 5006, 5007, 5008)),
-    ("http://10.130.0.186", (5005, 5006, 5007, 5008)),
+    ("http://10.130.0.245", (5005, 5006, 5007, 5008)),
     ("http://10.130.1.49", (5005, 5006, 5007, 5008)),
+    ("http://10.130.0.186", (5005, 5006, 5007, 5008)),
+    ("http://10.130.0.209", (5005, 5006, 5007, 5008)),
     ("http://10.130.1.226", (5005, 5006, 5007, 5008)),
+    ("http://10.130.1.90", (5005, 5006, 5007, 5008)),
+    ("http://10.130.1.5", (5005, 5006, 5007, 5008)),
+    ("http://10.130.0.237", (5005, 5006, 5007, 5008)),
 ]
 
 
@@ -1438,7 +1445,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
         while retries < max_retries:
             try:
                 async with aiohttp.ClientSession() as session:
-                    async with session.post(f'{url}{suffix}', json=data, timeout=aiohttp.ClientTimeout(total=3000)) as response:
+                    async with session.post(f'{url}{suffix}', json=data, timeout=aiohttp.ClientTimeout(total=2400)) as response:
                         response.raise_for_status()
                         return await response.json()
             except (aiohttp.ClientError, aiohttp.ClientResponseError) as e:
@@ -1450,38 +1457,29 @@ class QwQLongCoTDoc2QueryComputeScore(object):
         print("达到最大重试次数，请求失败。")
         return None
 
-    async def process_queue(self, queue, semaphore):
-        """处理单个队列，确保队列内任务串行执行"""
-        async with semaphore:  # 限制并发队列数量
-            results = []
-            for task in queue:
-                result = await task
-                results.append(result)
-            return results
-
-    async def run_tasks_in_queues(self, tasks, n):
+    async def run_tasks_in_queues(self, tasks):
         """将任务分成n个队列并行执行"""
+        n = len(self.get_respondent_urls())
+
         # 创建n个队列
         queues = [[] for _ in range(n)]
 
         # 平均分配任务到各个队列
         for i, task in enumerate(tasks):
-            queues[i % n].append(task)
+            queue_id = i % n
+            queues[queue_id].append(task)
 
-        # 创建信号量限制并发队列数量
-        semaphore = Semaphore(n)
-
-        # 并行处理所有队列
-        queue_results = await aio.gather(
-            *[self.process_queue(queue, semaphore) for queue in queues]
-        )
-
-        # 展平结果列表（保持原始顺序）
+        parallel_tasks = []
+        for i, queue in enumerate(queues):
+            parallel_tasks.append(self.chat_completion_with_retry(
+                url=self.get_respondent_urls()[i],
+                data=queue
+            ))
         flattened_results = []
-        for i in range(len(tasks)):
-            queue_idx = i % n
-            task_idx = i // n
-            flattened_results.append(queue_results[queue_idx][task_idx])
+        for f in tqdm.asyncio.tqdm.as_completed(parallel_tasks, dynamic_ncols=True, desc=f'[Generate Responses]'):
+            results = await f
+            for result in results:
+                flattened_results.append(result)
 
         return flattened_results
 
@@ -1492,24 +1490,49 @@ class QwQLongCoTDoc2QueryComputeScore(object):
             outputs.extend([f'{ip}:{port}' for port in ports])
         return outputs
 
+    def response_postprocess(self, s):
+        ans = None
+        try:
+            s = s.strip()
+            conclusion = s.split("\n")[-1]
+            conclusion = conclusion[conclusion.index(
+                "Answer:")+len("Answer:"):].strip()
+            if conclusion not in self.MULTICHOICE_LETTER:
+                ans = None
+            else:
+                ans = conclusion
+        except Exception as err:
+            ans = None
+
+        if ans is None:
+            matched = re.findall(r'Answer:\s*([A-W])', s)
+            if len(matched) > 0:
+                return matched[0]
+            return None
+        return ans
+
     async def generate_responses(self, prompts):
-        tasks = []
-        n = len(self.get_respondent_urls())
+        prompts_w_ids = [{"prompt": _, "uuid": uuid.uuid4().hex}
+                         for _ in prompts]
+        ids = [_["uuid"] for _ in prompts_w_ids]
 
-        for i, batch in enumerate(batchify(prompts, n=64)):
-            tasks.append(
-                self.chat_completion_with_retry(
-                    url=self.get_respondent_urls()[i % n],
-                    data=batch
+        random.shuffle(prompts_w_ids)
+        results = await self.run_tasks_in_queues(prompts_w_ids)
+
+        post_results = {}
+        for result in results:
+            if result and "uuid" in result and "response" in result:
+                post_results[result["uuid"]] = (
+                    result["prompt"],
+                    self.response_postprocess(result["response"])
                 )
-            )
-
-        results = await self.run_tasks_in_queues(tasks, n=n)
 
         outputs = []
-        for _ in results:
-            outputs.extend(_["outputs"])
-        return outputs
+        for prompt, _uuid in zip(prompts, ids):
+            if _uuid in post_results:
+                outputs.append(post_results[_uuid])
+            else:
+                outputs.append((prompt, None))
 
     async def get_difficulty_reward(
             self,
@@ -1551,7 +1574,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
 
                 prompts.extend([prompt]*repeat)
 
-        results = await respondent_agent.run(prompts, max_concurrent_requests, desc=f"[Respond Bo{self.difficulty_bon} {respondent_agent.base_url}]", postprocess_fns=[postprocess]*len(prompts))
+        results = await self.generate_responses(prompts)
 
         wo_contents, w_contents = defaultdict(list), defaultdict(list)
         for prompt, conclusion in results:
