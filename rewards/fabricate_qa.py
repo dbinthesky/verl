@@ -491,7 +491,7 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]"):s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1214,18 +1214,18 @@ qwq_longcot_fabricate_qa_compute_score_valid = _qwq_longcot_fabricate_qa_compute
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # respondent_agent = Agent(**{
 #     "model": "DeepSeek-V3-0324",
-#     "base_url": "https://sd0aol21lef3ta500v4sg.apigateway-cn-beijing.volceapi.com/mlp/s-20250503111624-d4jbs/v1",
+#     "base_url": "https://sd0rainnf2h21nr3724fg.apigateway-cn-beijing.volceapi.com/v1",
 #     "api_keys": "EMPTY",
 #     "request_kwargs": {
 #         "temperature": 0.9,
 #         "timeout": 180,
-#         "max_tokens": 4096,
+#         "max_tokens": 2048,
 #     }
 # })
 
 respondent_agent = Agent(**{
     "model": "qwen25_32B_instruct",
-    "base_url": "http://10.130.133.200:8000/v1",
+    "base_url": "http://10.130.138.40:8000/v1",
     "api_keys": "EMPTY",
     "request_kwargs": {
         "temperature": 0.9,
@@ -1289,6 +1289,8 @@ class Doc2QueryFormatReward(PenaltyOrReward):
 
         question, options, answer = solution_str
 
+        if ground_truth.get("options", None) is None:
+            return 0.0
         if len(options) == len(ground_truth["options"]):
             return self.base_reward
         return self.base_reward / 2.0
@@ -1299,6 +1301,8 @@ class QuestionSimilarity(PenaltyOrReward):
         pass
 
     def get_penalty_or_reward(self, solution_str, ground_truth):
+        if ground_truth.get("question", None) is None:
+            return 0.0
         try:
             solution_str = doc2query_parse_solution_fn(solution_str)
             if solution_str is None:
@@ -1362,6 +1366,8 @@ class RuleBasedOptionMatch(PenaltyOrReward):
                 return []
 
     def get_penalty_or_reward(self, solution_str, ground_truth):
+        if ground_truth.get("options", None) is None:
+            return 0.0
         try:
             raw_solution_str = solution_str
             solution_str = doc2query_parse_solution_fn(solution_str)
@@ -1443,7 +1449,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
             self,
             batch_data_sources,
             batch_solution_str,
-            batch_ground_truth, max_concurrent_requests=128, repeat=8):
+            batch_ground_truth, max_concurrent_requests=64, repeat=8):
 
         def postprocess(s):
             try:
@@ -1459,40 +1465,38 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 raise PostprocessError(f'{err}')
 
         prompts = []
-        wo_content_prompts, w_content_prompts = {}, {}
+        wo_content_prompts, w_content_prompts = defaultdict(
+            list), defaultdict(list)
 
         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
             result = doc2query_parse_solution_fn(solution_str)
-
             if result is not None:
                 question, options, answer = result
 
                 instruct = 'Answer the following multiple choice question. There is only one correct answer. The last line of your response should be in the format "Answer: $LETTER" (without quotes), where LETTER is one of the option letters. You must first think step by step with very detail thinking process.'
                 prompt = f'{instruct}\n\n' + self.format_question(
                     question, options, answer=None)
-                wo_content_prompts[prompt] = i
+                wo_content_prompts[prompt].append(i)
 
                 prompts.extend([prompt]*repeat)
                 prompt = f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n' + f'{instruct}\n\n' + self.format_question(
                     question, options, answer=None)
-                w_content_prompts[prompt] = i
+                w_content_prompts[prompt].append(i)
 
                 prompts.extend([prompt]*repeat)
 
         results = await respondent_agent.run(prompts, max_concurrent_requests, desc=f"[Respond Bo{self.difficulty_bon} {respondent_agent.base_url}]", postprocess_fns=[postprocess]*len(prompts))
 
         wo_contents, w_contents = defaultdict(list), defaultdict(list)
-
         for prompt, conclusion in results:
             if prompt in wo_content_prompts:
-                index = wo_content_prompts[prompt]
-                wo_contents[index].append(conclusion)
+                for index in wo_content_prompts[prompt]:
+                    wo_contents[index].append(conclusion)
             elif prompt in w_content_prompts:
-                index = w_content_prompts[prompt]
-                w_contents[index].append(conclusion)
+                for index in w_content_prompts[prompt]:
+                    w_contents[index].append(conclusion)
             else:
                 raise NotImplementedError
-
         full_rewards = []
         pass_rates = []
 
@@ -1516,9 +1520,8 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 w_content_correct = [_ for _ in w_content if _ == ans]
 
                 pass_rates.append({
-                    "wo_content": len(wo_content_correct) / len(wo_content) if len(wo_content) else 0.,
-                    "w_content": len(w_content_correct) / len(w_content) if len(w_content) else 0.
-
+                    "wo_content": f'{len(wo_content_correct)}/{len(wo_content)} {wo_content}, ans={ans}',
+                    "w_content": f'{len(w_content_correct)}/{len(w_content)} {w_content}, ans={ans}',
                 })
 
                 # 不带参考 模型也有机会rollout对 否则问题可能过于长尾
@@ -1615,8 +1618,11 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                     f"--------------------------------{log_flag}--------------------------------")
                 print(
                     f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
-                print(
-                    f"【Ground Truth】({difficulty})`{self.log_ground_truth(batch_ground_truth[i])}`")
+                try:
+                    print(
+                        f"【Ground Truth】({difficulty})`{self.log_ground_truth(batch_ground_truth[i])}`")
+                except Exception as err:
+                    pass
                 if self.add_difficulty_rewards:
                     print(
                         f'[Pass@{self.difficulty_bon}]={pass_rates[i]}|[Final Reward]={score:.3f}|Difficulty={difficulty_rewards[i]:.3f}|{"|".join(penalty_log_str)}\n')

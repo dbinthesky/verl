@@ -7,6 +7,7 @@ set -euo pipefail
 # ------------------------------
 setup_env() {
     export WANDB_API_KEY="2e3700316fecb744b594dff815d1b11fbe514d24"
+    # export WANDB_MODE="offline"
     export VERL_PPO_LOGGING_LEVEL='DEBUG'
     export VLLM_ATTENTION_BACKEND="XFORMERS"
     export VLLM_USE_MODELSCOPE="False"
@@ -49,8 +50,9 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-14B-fabricate_qa_v3"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_train_qwen25_32b_bon_w_wo_content_250529_iscalc_rag"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-14B-fabricate_qa_v4/checkpoint-76"
+    # TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_train_qwen25_32b_bon_w_wo_content_250529_iscalc_rag"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_iscalc_high_equation_mix"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_test"
 
     experiment_name="qwen2_5-14b_qwq_doc2query_supergpqa-${YYMMDD}-${HHMMSS}"

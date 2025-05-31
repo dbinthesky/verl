@@ -436,7 +436,7 @@ class XMLCoTComputeScore(object):
             except Exception as err:
                 raise PostprocessError(f'{err}')
 
-        results_mapper = {}
+        results_mapper = defaultdict(list)
         prompts = []
 
         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
@@ -451,7 +451,7 @@ class XMLCoTComputeScore(object):
                     prompt = EVAL_PROMPT + EVAL_TEMPLATE_TEMPLATE.format(
                         content=json.dumps({"题目": gt["prompt"], "标准答案": gt["ground_truth"], "用户回答": conclusion}, ensure_ascii=False, indent="  "))
 
-                    results_mapper[prompt] = i
+                    results_mapper[prompt].append(i)
                     prompts.append(prompt)
                 except Exception as err:
                     continue
@@ -462,7 +462,8 @@ class XMLCoTComputeScore(object):
 
         judges = defaultdict(list)
         for prompt, conclusion in results:
-            judges[results_mapper[prompt]].append(conclusion)
+            for index in results_mapper[prompt]:
+                judges[index].append(conclusion)
 
         full_rewards = []
         for i in range(len(batch_solution_str)):

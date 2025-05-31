@@ -66,7 +66,7 @@ def load_qwq_fabricate_qa_data(num=100):
 
 
 def load_doc2query():
-    path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_test_pass6@32_rag"
+    path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_iscalc_high_equation_mix"
     batch_solution_str, batch_ground_truth = [], []
 
     df = pd.read_parquet(path)
@@ -75,19 +75,23 @@ def load_doc2query():
         batch_ground_truth.append(row["reward_model"])
         gt = row["reward_model"]
 
-        if i > 2:
+        if i > 40:
             break
-        options = []
-        for x, y in zip(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P"], gt["options"]):
-            options.append(f'{x}) {y}')
-        options = "\n".join(options)
-        ans_letter = gt["options"].tolist().index(gt["answer"])
-        ans_letter = ["A", "B", "C", "D", "E", "F", "G", "H",
-                      "I", "J", "K", "L", "M", "N", "O", "P"][ans_letter]
-        batch_solution_str.append(
-            f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\n{options}\n\nAnswer: {ans_letter}\n</question><｜end▁of▁sentence｜>')
-        # batch_solution_str.append(
-        #     f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\n\nAnswer: {ans_letter}\n</question>')
+        try:
+            options = []
+            for x, y in zip(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P"], gt["options"]):
+                options.append(f'{x}) {y}')
+            options = "\n".join(options)
+            ans_letter = gt["options"].tolist().index(gt["answer"])
+            ans_letter = ["A", "B", "C", "D", "E", "F", "G", "H",
+                          "I", "J", "K", "L", "M", "N", "O", "P"][ans_letter]
+            batch_solution_str.append(
+                f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\n{options}\n\nAnswer: {ans_letter}\n</question><｜end▁of▁sentence｜>')
+            # batch_solution_str.append(
+            #     f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\n\nAnswer: {ans_letter}\n</question>')
+        except Exception as err:
+            batch_solution_str.append(
+                f'<think>***</think><question>\nQuestion: Using a 0.1000 mol/L NaOH solution to titrate a 0.1000 mol/L formic acid solution, what is the pH at the stoichiometric point? \n\nOptions:\nA) 5.67\nB) 8.23\nC) 9.88\nD) 12.46\nE) 10.11\nF) 11.07\nG) 7.22\nH) 6.35\nI) 3.47\nJ) 4.55\n\nAnswer: A\n</question><｜end▁of▁sentence｜>')
     return batch_solution_str, batch_ground_truth
 
 
@@ -364,6 +368,7 @@ class TestDoc2Query(unittest.TestCase):
 
     def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_doc2query()
+
         task = QwQLongCoTDoc2QueryComputeScore(split="valid")
         print(qwq_longcot_doc2query_compute_score_valid([None]*len(batch_solution_str),
                                                         batch_solution_str, batch_ground_truth))
