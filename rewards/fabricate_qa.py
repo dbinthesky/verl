@@ -1540,19 +1540,6 @@ class QwQLongCoTDoc2QueryComputeScore(object):
             batch_solution_str,
             batch_ground_truth, max_concurrent_requests=64, repeat=8):
 
-        def postprocess(s):
-            try:
-                s = s.strip()
-                conclusion = s.split("\n")[-1]
-                conclusion = conclusion[conclusion.index(
-                    "Answer:")+len("Answer:"):].strip()
-                if conclusion not in self.MULTICHOICE_LETTER:
-                    raise PostprocessError(
-                        f'{conclusion} is not valid')
-                return conclusion
-            except Exception as err:
-                raise PostprocessError(f'{err}')
-
         prompts = []
         wo_content_prompts, w_content_prompts = defaultdict(
             list), defaultdict(list)
@@ -1599,7 +1586,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 w_content = [_ for _ in w_content if _ is not None]
 
                 # 正确回答
-                result = doc2query_parse_solution_fn(solution_str)
+                result = doc2query_parse_solution_fn(batch_solution_str[i])
                 if result is not None:
                     _, _, answer = result
                 else:
