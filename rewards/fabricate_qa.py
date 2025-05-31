@@ -492,8 +492,7 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")
-                               :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1476,7 +1475,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 data=queue
             ))
         flattened_results = []
-        for f in tqdm.asyncio.tqdm.as_completed(parallel_tasks, dynamic_ncols=True, desc=f'[Generate Responses]'):
+        for f in tqdm.asyncio.tqdm.as_completed(parallel_tasks, dynamic_ncols=True, desc=f'[Generate {len(tasks)} Responses]'):
             results = await f
             for result in results:
                 flattened_results.append(result)
@@ -1533,6 +1532,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 outputs.append(post_results[_uuid])
             else:
                 outputs.append((prompt, None))
+        return outputs
 
     async def get_difficulty_reward(
             self,
@@ -1605,6 +1605,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 else:
                     answer = ""
                 ans = answer
+
                 wo_content_correct = [_ for _ in wo_content if _ == ans]
                 w_content_correct = [_ for _ in w_content if _ == ans]
 
