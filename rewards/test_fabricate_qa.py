@@ -378,11 +378,18 @@ class TestDoc2Query(unittest.TestCase):
                 question, options, answer = result
                 prompts.append(task.format_question(question, options, None))
 
-            results = await task.chat_completion_with_retry(
-                "http://10.130.0.31:5007", prompts
+            # results = await task.chat_completion_with_retry(
+            #     "http://10.130.0.245:5002", prompts
+            # )
+            #   ("http://10.130.0.245", (5002, 5001, 5005, 5006)),
+            prompts = prompts * 10
+            results = await task.generate_responses(
+                prompts
             )
-
-            print(results)
+            for p, r in zip(prompts, results):
+                print(p)
+                print(r)
+                print("="*80)
         aio.run(main())
 
     def test_compute_score(self):

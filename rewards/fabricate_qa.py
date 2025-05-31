@@ -491,7 +491,8 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]"):s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")
+                               :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1212,27 +1213,12 @@ qwq_longcot_fabricate_qa_compute_score_valid = _qwq_longcot_fabricate_qa_compute
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
-# respondent_agent = Agent(**{
-#     "model": "DeepSeek-V3-0324",
-#     "base_url": "https://sd0rainnf2h21nr3724fg.apigateway-cn-beijing.volceapi.com/v1",
-#     "api_keys": "EMPTY",
-#     "request_kwargs": {
-#         "temperature": 0.9,
-#         "timeout": 180,
-#         "max_tokens": 2048,
-#     }
-# })
-
-respondent_agent = Agent(**{
-    "model": "qwen25_32B_instruct",
-    "base_url": "http://10.130.138.40:8000/v1",
-    "api_keys": "EMPTY",
-    "request_kwargs": {
-        "temperature": 0.9,
-        "timeout": 180,
-        "max_tokens": 4096,
-    }
-})
+RESPONDENT_AGENTS = [
+    ("http://10.130.1.226", (5005, 5006, 5007, 5008)),
+    ("http://10.130.0.186", (5005, 5006, 5007, 5008)),
+    ("http://10.130.1.49", (5005, 5006, 5007, 5008)),
+    ("http://10.130.1.226", (5005, 5006, 5007, 5008)),
+]
 
 
 def doc2query_parse_solution_fn(solution_str: str, remove_option_letter=True):
@@ -1438,6 +1424,8 @@ class QwQLongCoTDoc2QueryComputeScore(object):
         self.add_difficulty_rewards = add_difficulty_rewards
         self.difficulty_bon = difficulty_bon
 
+        self.respondent_agent_urls = RESPONDENT_AGENTS
+
     def get_penalties(self) -> Dict[str, Callable]:
         return {
             "Format": self.format.get_penalty_or_reward,
@@ -1458,51 +1446,70 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                     f"请求(数据总量={len(data)})失败，错误信息: {e}，重试第 {retries + 1} 次...")
                 retries += 1
                 if retries < max_retries:
-                    await asyncio.sleep(retry_delay)
+                    await aio.sleep(retry_delay)
         print("达到最大重试次数，请求失败。")
         return None
 
-    # async def generate_responses(
-    #         urls: List[str],
-    #         batch_solution_str,
-    #         batch_ground_truth,
-    #         postprocess_solution_fn,
-    #         parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD,
-    #         judge_prompt_key="ground_truth",
-    #         desc=""
-    # ):
-    #     pass
-    #     input_datas = []
-    #     rewards = {}
+    async def process_queue(self, queue, semaphore):
+        """处理单个队列，确保队列内任务串行执行"""
+        async with semaphore:  # 限制并发队列数量
+            results = []
+            for task in queue:
+                result = await task
+                results.append(result)
+            return results
 
-    #     for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-    #         solution_str = postprocess_solution_fn(solution_str)
-    #         if solution_str is None:
-    #             rewards[i] = parse_result_failure_score
-    #             continue
-    #         if ground_truth is None:
-    #             rewards[i] = parse_result_failure_score
-    #             continue
+    async def run_tasks_in_queues(self, tasks, n):
+        """将任务分成n个队列并行执行"""
+        # 创建n个队列
+        queues = [[] for _ in range(n)]
 
-    #         input_data = {
-    #             "prompt": ground_truth[judge_prompt_key], "response": solution_str, "id": i
-    #         }
-    #         input_datas.append(input_data)
+        # 平均分配任务到各个队列
+        for i, task in enumerate(tasks):
+            queues[i % n].append(task)
 
-    #     if len(input_datas) > 0:
-    #         for batch in tqdm_nonasync(batchify(input_datas, n=64), desc=f'[RM{desc}][{urls}] batchify inference (batch=64)'):
-    #             output_datas = await rm_request_with_retry(urls, batch)
-    #             for _ in output_datas['reward']:
-    #                 _id = int(_["id"])
-    #                 rewards[_id] = _["rm_score"]
+        # 创建信号量限制并发队列数量
+        semaphore = Semaphore(n)
 
-    #     final_results = []
-    #     for i in range(len(batch_solution_str)):
-    #         if i in rewards:
-    #             final_results.append(rewards[i])
-    #         else:
-    #             final_results.append(0.)
-    #     return final_results
+        # 并行处理所有队列
+        queue_results = await aio.gather(
+            *[self.process_queue(queue, semaphore) for queue in queues]
+        )
+
+        # 展平结果列表（保持原始顺序）
+        flattened_results = []
+        for i in range(len(tasks)):
+            queue_idx = i % n
+            task_idx = i // n
+            flattened_results.append(queue_results[queue_idx][task_idx])
+
+        return flattened_results
+
+    def get_respondent_urls(self):
+        outputs = []
+        for url in self.respondent_agent_urls:
+            (ip, ports) = url
+            outputs.extend([f'{ip}:{port}' for port in ports])
+        return outputs
+
+    async def generate_responses(self, prompts):
+        tasks = []
+        n = len(self.get_respondent_urls())
+
+        for i, batch in enumerate(batchify(prompts, n=64)):
+            tasks.append(
+                self.chat_completion_with_retry(
+                    url=self.get_respondent_urls()[i % n],
+                    data=batch
+                )
+            )
+
+        results = await self.run_tasks_in_queues(tasks, n=n)
+
+        outputs = []
+        for _ in results:
+            outputs.extend(_["outputs"])
+        return outputs
 
     async def get_difficulty_reward(
             self,
