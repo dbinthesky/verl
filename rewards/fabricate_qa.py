@@ -491,7 +491,7 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]"):s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1444,6 +1444,65 @@ class QwQLongCoTDoc2QueryComputeScore(object):
             "QSim": self.question_similarity.get_penalty_or_reward,
             "RuleBased": self.rule_base.get_penalty_or_reward,
         }
+
+    async def chat_completion_with_retry(self, url, data, max_retries=3, retry_delay=5, suffix="/generate"):
+        retries = 0
+        while retries < max_retries:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(f'{url}{suffix}', json=data, timeout=aiohttp.ClientTimeout(total=3000)) as response:
+                        response.raise_for_status()
+                        return await response.json()
+            except (aiohttp.ClientError, aiohttp.ClientResponseError) as e:
+                print(
+                    f"请求(数据总量={len(data)})失败，错误信息: {e}，重试第 {retries + 1} 次...")
+                retries += 1
+                if retries < max_retries:
+                    await asyncio.sleep(retry_delay)
+        print("达到最大重试次数，请求失败。")
+        return None
+
+    # async def generate_responses(
+    #         urls: List[str],
+    #         batch_solution_str,
+    #         batch_ground_truth,
+    #         postprocess_solution_fn,
+    #         parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD,
+    #         judge_prompt_key="ground_truth",
+    #         desc=""
+    # ):
+    #     pass
+    #     input_datas = []
+    #     rewards = {}
+
+    #     for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+    #         solution_str = postprocess_solution_fn(solution_str)
+    #         if solution_str is None:
+    #             rewards[i] = parse_result_failure_score
+    #             continue
+    #         if ground_truth is None:
+    #             rewards[i] = parse_result_failure_score
+    #             continue
+
+    #         input_data = {
+    #             "prompt": ground_truth[judge_prompt_key], "response": solution_str, "id": i
+    #         }
+    #         input_datas.append(input_data)
+
+    #     if len(input_datas) > 0:
+    #         for batch in tqdm_nonasync(batchify(input_datas, n=64), desc=f'[RM{desc}][{urls}] batchify inference (batch=64)'):
+    #             output_datas = await rm_request_with_retry(urls, batch)
+    #             for _ in output_datas['reward']:
+    #                 _id = int(_["id"])
+    #                 rewards[_id] = _["rm_score"]
+
+    #     final_results = []
+    #     for i in range(len(batch_solution_str)):
+    #         if i in rewards:
+    #             final_results.append(rewards[i])
+    #         else:
+    #             final_results.append(0.)
+    #     return final_results
 
     async def get_difficulty_reward(
             self,

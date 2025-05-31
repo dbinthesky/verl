@@ -65,7 +65,7 @@ def load_qwq_fabricate_qa_data(num=100):
     return batch_solution_str, batch_ground_truth
 
 
-def load_doc2query():
+def load_doc2query(num=40):
     path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_iscalc_high_equation_mix"
     batch_solution_str, batch_ground_truth = [], []
 
@@ -75,7 +75,7 @@ def load_doc2query():
         batch_ground_truth.append(row["reward_model"])
         gt = row["reward_model"]
 
-        if i > 40:
+        if i > num:
             break
         try:
             options = []
@@ -363,6 +363,25 @@ class TestDoc2Query(unittest.TestCase):
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth
             )
+            print(results)
+        aio.run(main())
+
+    def test_chat_completion_with_retry(self):
+        async def main():
+            batch_solution_str, batch_ground_truth = load_doc2query()
+            task = QwQLongCoTDoc2QueryComputeScore(split="valid")
+            prompts = []
+            for _ in batch_solution_str:
+                result = doc2query_parse_solution_fn(_)
+                if result is None:
+                    continue
+                question, options, answer = result
+                prompts.append(task.format_question(question, options, None))
+
+            results = await task.chat_completion_with_retry(
+                "http://10.130.0.31:5007", prompts
+            )
+
             print(results)
         aio.run(main())
 
