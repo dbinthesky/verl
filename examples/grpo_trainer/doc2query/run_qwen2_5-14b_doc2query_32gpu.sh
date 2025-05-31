@@ -54,7 +54,7 @@ setup_path() {
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-14B-fabricate_qa_v4"
     # TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_train_qwen25_32b_bon_w_wo_content_250529_iscalc_rag"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_iscalc_high_equation_mix"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_iscalc_high_equation_mix_0531"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_test"
 
     experiment_name="qwen2_5-14b_qwq_doc2query_supergpqa-${YYMMDD}-${HHMMSS}"
@@ -126,7 +126,7 @@ run_training() {
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.85 \
         actor_rollout_ref.rollout.temperature=1.0 \
-        actor_rollout_ref.rollout.n=4 \
+        actor_rollout_ref.rollout.n=8 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
@@ -138,7 +138,7 @@ run_training() {
         +trainer.val_before_train=True \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
-        trainer.save_freq=10 \
+        trainer.save_freq=15 \
         trainer.test_freq=5 \
         trainer.total_epochs=10000 \
         reward_model.reward_manager="custom" "$@"

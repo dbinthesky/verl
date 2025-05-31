@@ -1649,7 +1649,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 })
 
                 # 不带参考 模型也有机会rollout对 否则问题可能过于长尾
-                if wo_content.count(ans) < 1:  # 至少对一次
+                if wo_content.count(ans) < self.difficulty_bon/4:  # 至少对两次
                     full_rewards.append(base_score)
                     continue
 
