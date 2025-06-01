@@ -67,7 +67,8 @@ def load_qwq_fabricate_qa_data(num=100):
 
 
 def load_doc2query(num=40):
-    path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_iscalc_high_equation_mix"
+    # path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_iscalc_high_equation_mix"
+    path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/temp.parquet"
     batch_solution_str, batch_ground_truth = [], []
 
     df = pd.read_parquet(path)
@@ -92,7 +93,9 @@ def load_doc2query(num=40):
             #     f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\n\nAnswer: {ans_letter}\n</question>')
         except Exception as err:
             batch_solution_str.append(
-                f'<think>***</think><question>\nQuestion: Using a 0.1000 mol/L NaOH solution to titrate a 0.1000 mol/L formic acid solution, what is the pH at the stoichiometric point? \n\nOptions:\nA) 5.67\nB) 8.23\nC) 9.88\nD) 12.46\nE) 10.11\nF) 11.07\nG) 7.22\nH) 6.35\nI) 3.47\nJ) 4.55\n\nAnswer: A\n</question><｜end▁of▁sentence｜>')
+                f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\nA) {gt["answer"]}\nAnswer: A\n</question><｜end▁of▁sentence｜>')
+            # batch_solution_str.append(
+            #     f'<think>***</think><question>\nQuestion: Using a 0.1000 mol/L NaOH solution to titrate a 0.1000 mol/L formic acid solution, what is the pH at the stoichiometric point? \n\nOptions:\nA) 5.67\nB) 8.23\nC) 9.88\nD) 12.46\nE) 10.11\nF) 11.07\nG) 7.22\nH) 6.35\nI) 3.47\nJ) 4.55\n\nAnswer: A\n</question><｜end▁of▁sentence｜>')
     return batch_solution_str, batch_ground_truth
 
 
@@ -218,6 +221,7 @@ class TestFabricateQA(unittest.TestCase):
         #     )
         #     print(results)
         # aio.run(main())
+        bg = time.time()
         batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
             num=100)
         results = qwq_longcot_fabricate_qa_compute_score_valid(
@@ -225,6 +229,7 @@ class TestFabricateQA(unittest.TestCase):
             len(batch_solution_str), batch_solution_str, batch_ground_truth
         )
         print(results)
+        print(f'Finish {time.time()-bg}')
 
 
 class TestCriteria(unittest.TestCase):
@@ -386,7 +391,7 @@ class TestDoc2Query(unittest.TestCase):
             # results = await task.chat_completion_with_retry(
             #     "http://10.130.0.245:5002", prompts
             # )
-            prompts = prompts * 1
+            prompts = prompts * 16
             s1 = time.time()
             results = await task.generate_responses(
                 prompts
