@@ -68,7 +68,7 @@ def load_qwq_fabricate_qa_data(num=100):
 
 def load_doc2query(num=40):
     # path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_iscalc_high_equation_mix"
-    path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/temp.parquet"
+    path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_test"
     batch_solution_str, batch_ground_truth = [], []
 
     df = pd.read_parquet(path)

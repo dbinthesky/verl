@@ -2,6 +2,7 @@ import re
 import sys
 import json
 import uuid
+import copy
 import jieba
 import random
 import aiohttp
@@ -492,7 +493,7 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]"):s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1482,107 +1483,106 @@ class QwQLongCoTDoc2QueryComputeScore(object):
 
     def get_respondent_urls(self):
         suffixes = [
-            # "10.130.0.21:5473",
-            # "10.130.0.21:5497",
-            # "10.130.1.226:5492",
-            # "10.130.1.226:5306",
-            # "10.130.1.226:5426",
-            # "10.130.1.226:5408",
-            # "10.130.0.21:5487",
-            # "10.130.0.21:5328",
-            # "10.130.1.226:5332",
-            # "10.130.1.226:5240",
-            # "10.130.1.226:5260",
-            # "10.130.1.226:5369",
-            # "10.130.1.90:5313",
-            # "10.130.1.90:5491",
-            # "10.130.1.90:5424",
-            # "10.130.1.90:5394",
-            # "10.130.1.90:5482",
-            # "10.130.1.90:5334",
-            # "10.130.1.90:5479",
-            # "10.130.1.90:5364",
-            # "10.130.1.200:5415",
-            # "10.130.1.200:5282",
-            # "10.130.1.203:5483",
-            # "10.130.1.203:5312",
-            # "10.130.1.220:5311",
-            # "10.130.1.220:5406",
-            # "10.130.1.200:5274",
-            # "10.130.1.200:5254",
-            # "10.130.1.200:5280",
-            # "10.130.1.200:5383",
-            # "10.130.1.220:5219",
-            # "10.130.1.220:5310",
-            # "10.130.1.203:5238",
-            # "10.130.1.200:5479",
-            # "10.130.1.200:5250",
-            # "10.130.1.203:5249",
-            # "10.130.1.203:5333",
-            # "10.130.1.203:5482",
-            # "10.130.1.203:5279",
-            # "10.130.1.203:5366",
-            # "10.130.1.5:5242",
-            # "10.130.1.5:5332",
-            # "10.130.1.5:5303",
-            # "10.130.1.5:5413",
-            # "10.130.0.245:5423",
-            # "10.130.0.245:5261",
-            # "10.130.0.245:5305",
-            # "10.130.0.245:5445",
-            # "10.130.1.5:5290",
-            # "10.130.0.245:5454",
-            # "10.130.0.245:5489",
-            # "10.130.0.245:5395",
-            # "10.130.0.245:5431",
-            # "10.130.1.5:5360",
-            # "10.130.1.5:5256",
-            # "10.130.1.5:5367",
-            # "10.130.1.220:5333",
-            # "10.130.1.220:5236",
-            # "10.130.1.150:5298",
-            # "10.130.1.220:5474",
-            # "10.130.1.220:5340",
-            # "10.130.1.138:5228",
-            # "10.130.1.138:5386",
-            # "10.130.1.150:5367",
-            # "10.130.1.223:5240",
-            # "10.130.1.150:5238",
-            # "10.130.1.223:5305",
-            # "10.130.1.150:5386",
-            # "10.130.1.223:5230",
-            # "10.130.1.223:5336",
-            # "10.130.1.150:5315",
-            # "10.130.1.223:5316",
-            # "10.130.1.138:5299",
-            # "10.130.1.138:5284",
-            # "10.130.1.223:5422",
-            # "10.130.1.223:5296",
-            # "10.130.1.223:5461",
-            # "10.130.1.150:5483",
-            # "10.130.1.150:5278",
-            # "10.130.1.150:5271",
-            # "10.130.1.225:5238",
-            # "10.130.1.225:5475",
-            # "10.130.1.225:5354",
-            # "10.130.1.225:5409",
-            # "10.130.1.225:5472",
-            # "10.130.1.225:5435",
-            # "10.130.1.225:5480",
-            # "10.130.1.225:5431",
-            # "10.130.1.138:5214",
-            # "10.130.1.138:5404",
-            # "10.130.1.138:5429",
-            # "10.130.1.138:5311",
-            # "10.130.1.162:5490",
-            # "10.130.1.162:5215",
-            # "10.130.1.162:5441",
-            # "10.130.1.162:5245",
-            # "10.130.1.162:5381",
-            # "10.130.1.162:5350",
-            # "10.130.1.162:5409",
-            # "10.130.1.162:5485",
-
+            "10.130.0.21:5473",
+            "10.130.0.21:5497",
+            "10.130.1.226:5492",
+            "10.130.1.226:5306",
+            "10.130.1.226:5426",
+            "10.130.1.226:5408",
+            "10.130.0.21:5487",
+            "10.130.0.21:5328",
+            "10.130.1.226:5332",
+            "10.130.1.226:5240",
+            "10.130.1.226:5260",
+            "10.130.1.226:5369",
+            "10.130.1.90:5313",
+            "10.130.1.90:5491",
+            "10.130.1.90:5424",
+            "10.130.1.90:5394",
+            "10.130.1.90:5482",
+            "10.130.1.90:5334",
+            "10.130.1.90:5479",
+            "10.130.1.90:5364",
+            "10.130.1.200:5415",
+            "10.130.1.200:5282",
+            "10.130.1.203:5483",
+            "10.130.1.203:5312",
+            "10.130.1.220:5311",
+            "10.130.1.220:5406",
+            "10.130.1.200:5274",
+            "10.130.1.200:5254",
+            "10.130.1.200:5280",
+            "10.130.1.200:5383",
+            "10.130.1.220:5219",
+            "10.130.1.220:5310",
+            "10.130.1.203:5238",
+            "10.130.1.200:5479",
+            "10.130.1.200:5250",
+            "10.130.1.203:5249",
+            "10.130.1.203:5333",
+            "10.130.1.203:5482",
+            "10.130.1.203:5279",
+            "10.130.1.203:5366",
+            "10.130.1.5:5242",
+            "10.130.1.5:5332",
+            "10.130.1.5:5303",
+            "10.130.1.5:5413",
+            "10.130.0.245:5423",
+            "10.130.0.245:5261",
+            "10.130.0.245:5305",
+            "10.130.0.245:5445",
+            "10.130.1.5:5290",
+            "10.130.0.245:5454",
+            "10.130.0.245:5489",
+            "10.130.0.245:5395",
+            "10.130.0.245:5431",
+            "10.130.1.5:5360",
+            "10.130.1.5:5256",
+            "10.130.1.5:5367",
+            "10.130.1.220:5333",
+            "10.130.1.220:5236",
+            "10.130.1.150:5298",
+            "10.130.1.220:5474",
+            "10.130.1.220:5340",
+            "10.130.1.138:5228",
+            "10.130.1.138:5386",
+            "10.130.1.150:5367",
+            "10.130.1.223:5240",
+            "10.130.1.150:5238",
+            "10.130.1.223:5305",
+            "10.130.1.150:5386",
+            "10.130.1.223:5230",
+            "10.130.1.223:5336",
+            "10.130.1.150:5315",
+            "10.130.1.223:5316",
+            "10.130.1.138:5299",
+            "10.130.1.138:5284",
+            "10.130.1.223:5422",
+            "10.130.1.223:5296",
+            "10.130.1.223:5461",
+            "10.130.1.150:5483",
+            "10.130.1.150:5278",
+            "10.130.1.150:5271",
+            "10.130.1.225:5238",
+            "10.130.1.225:5475",
+            "10.130.1.225:5354",
+            "10.130.1.225:5409",
+            "10.130.1.225:5472",
+            "10.130.1.225:5435",
+            "10.130.1.225:5480",
+            "10.130.1.225:5431",
+            "10.130.1.138:5214",
+            "10.130.1.138:5404",
+            "10.130.1.138:5429",
+            "10.130.1.138:5311",
+            "10.130.1.162:5490",
+            "10.130.1.162:5215",
+            "10.130.1.162:5441",
+            "10.130.1.162:5245",
+            "10.130.1.162:5381",
+            "10.130.1.162:5350",
+            "10.130.1.162:5409",
+            "10.130.1.162:5485",
 
             "10.130.0.241:5291",
             "10.130.0.241:5491",
@@ -1703,6 +1703,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
         for result in results:
             if result and "uuid" in result and "response" in result:
                 print(result["prompt"])
+                print('-'*80)
                 post_results[result["uuid"]] = (
                     result["prompt"],
                     self.response_postprocess(result["response"])
@@ -1731,14 +1732,19 @@ class QwQLongCoTDoc2QueryComputeScore(object):
             if result is not None:
                 question, options, answer = result
 
-                instruct = 'Answer the following multiple choice question. There is only one correct answer. The last line of your response should be in the format "Answer: $LETTER" (without quotes), where LETTER is one of the option letters. You must first think step by step with very detail thinking process.'
-                prompt = f'{instruct}\n\n' + self.format_question(
-                    question, options, answer=None)
+                lang_code = gt["lang_code"]
+                if lang_code == "zh":
+                    instruct = '回答以下单项选择题。只有一个正确答案。你回应的最后一行必须采用 “Answer: $LETTER” 的格式（不带引号），其中 LETTER 为选项字母之一。你必须首先通过非常详细的思考过程逐步分析。'
+                else:
+                    instruct = 'Answer the following multiple choice question. There is only one correct answer. The last line of your response should be in the format "Answer: $LETTER" (without quotes), where LETTER is one of the option letters. You must first think step by step with very detail thinking process.'
+
+                prompt = f'{instruct}\n\n' + self.prepare_question_for_test(
+                    question, options, lang_code=lang_code)
                 wo_content_prompts[prompt].append(i)
 
                 prompts.extend([prompt]*repeat)
-                prompt = f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n' + f'{instruct}\n\n' + self.format_question(
-                    question, options, answer=None)
+                prompt = f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n' + f'{instruct}\n\n' + self.prepare_question_for_test(
+                    question, options, lang_code=lang_code)
                 w_content_prompts[prompt].append(i)
 
                 prompts.extend([prompt]*repeat)
@@ -1910,6 +1916,31 @@ class QwQLongCoTDoc2QueryComputeScore(object):
             self.MULTICHOICE_LETTER, options)])
         if answer is not None:
             return f'Question: {question}\n\nOptions:\n{options_str}\n\nAnswer: {answer}'
+        else:
+            return f'Question: {question}\n\nOptions:\n{options_str}'
+
+    def prepare_question_for_test(self, question, options, lang_code):
+        if lang_code == "zh":
+            na = '以上都不对'
+        else:
+            na = 'None of the above'
+
+        new_options = copy.deepcopy(options)
+        if na not in new_options:
+            new_options.append(na)
+
+        if lang_code == "zh":
+            error = '题目存在错误（包括条件不完整、表述矛盾、无法确定、数据不足 / 前提矛盾或问题设定有缺陷 / 表述不当等等各种错误 / 同时存在多个正确答案、无法单选）'
+        else:
+            error = 'The question contains errors (cases including incomplete conditions, contradictory statements, Cannot be determined/Unable to determine, insufficient data/contradictory premises or problem is flawed/ill-posed, multiple correct answers simultaneously or etc.)'
+
+        new_options.append(error)
+
+        options_str = "\n".join([f'{x}) {y}' for x, y in zip(
+            self.MULTICHOICE_LETTER, new_options)])
+
+        if lang_code == "zh":
+            return f'问题：{question}\n\n选项：\n{options_str}'
         else:
             return f'Question: {question}\n\nOptions:\n{options_str}'
 
