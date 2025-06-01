@@ -44,7 +44,7 @@ RM_URLS = [
 VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
-MAX_CONCURRENT = 128
+MAX_CONCURRENT = 192
 
 
 def tokenize(s, lang_code):
@@ -493,7 +493,7 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]"):s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1436,9 +1436,9 @@ class QwQLongCoTDoc2QueryComputeScore(object):
             "base_url": "http://10.130.138.40:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
-                "temperature": 0.7,
+                "temperature": 0.9,
                 "timeout": 360,
-                "max_tokens": 16384,
+                "max_tokens": 2048,
             },
         })
 
@@ -1547,7 +1547,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
             self,
             batch_data_sources,
             batch_solution_str,
-            batch_ground_truth, max_concurrent_requests=256, repeat=8):
+            batch_ground_truth, max_concurrent_requests=MAX_CONCURRENT, repeat=8):
 
         prompts = []
         wo_content_prompts, w_content_prompts = defaultdict(
@@ -1580,20 +1580,17 @@ class QwQLongCoTDoc2QueryComputeScore(object):
         for (k, v) in _results:
             results_mapper[k].append(v)
 
-        results = []
-        for prompt in prompts:
-            results.append((prompt, results_mapper.get(prompt, None)))
-
         wo_contents, w_contents = defaultdict(list), defaultdict(list)
-        for prompt, conclusion in results:
-            if prompt in wo_content_prompts:
-                for index in wo_content_prompts[prompt]:
+        for k in results_mapper.keys():
+            if k in wo_content_prompts:
+                for index in wo_content_prompts[k]:
                     wo_contents[index].extend(conclusion)
-            elif prompt in w_content_prompts:
-                for index in w_content_prompts[prompt]:
+            elif k in w_content_prompts:
+                for index in w_content_prompts[k]:
                     w_contents[index].extend(conclusion)
             else:
                 raise NotImplementedError
+
         full_rewards = []
         pass_rates = []
 
@@ -1687,7 +1684,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 batch_data_sources,
                 batch_solution_str,
                 batch_ground_truth,
-                max_concurrent_requests=256,
+                max_concurrent_requests=MAX_CONCURRENT,
                 repeat=self.difficulty_bon
             )
 
