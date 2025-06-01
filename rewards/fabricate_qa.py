@@ -1588,10 +1588,10 @@ class QwQLongCoTDoc2QueryComputeScore(object):
         for prompt, conclusion in results:
             if prompt in wo_content_prompts:
                 for index in wo_content_prompts[prompt]:
-                    wo_contents[index].append(conclusion)
+                    wo_contents[index].extend(conclusion)
             elif prompt in w_content_prompts:
                 for index in w_content_prompts[prompt]:
-                    w_contents[index].append(conclusion)
+                    w_contents[index].extend(conclusion)
             else:
                 raise NotImplementedError
         full_rewards = []
