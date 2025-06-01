@@ -44,7 +44,7 @@ RM_URLS = [
 VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
-MAX_CONCURRENT = 256
+MAX_CONCURRENT = 192
 
 
 def tokenize(s, lang_code):
@@ -1272,21 +1272,22 @@ def doc2query_parse_solution_fn(solution_str: str, remove_option_letter=True):
 
 
 class Doc2QueryFormatReward(PenaltyOrReward):
-    def __init__(self, base_reward=0.1):
+    def __init__(self, base_reward=0.1, penalty=-2.0):
         self.base_reward = base_reward
+        self.penalty = penalty
 
     def get_penalty_or_reward(self, solution_str, ground_truth):
         solution_str = doc2query_parse_solution_fn(solution_str)
         if solution_str is None:
-            return 0.
+            return self.penalty
 
         question, options, answer = solution_str
 
         if ground_truth.get("options", None) is None:
-            return 0.0
+            return self.penalty
         if len(options) == len(ground_truth["options"]):
             return self.base_reward
-        return self.base_reward / 2.0
+        return self.penalty / 2.0
 
 
 class QuestionSimilarity(PenaltyOrReward):
@@ -1431,15 +1432,25 @@ class QwQLongCoTDoc2QueryComputeScore(object):
         self.add_difficulty_rewards = add_difficulty_rewards
         self.difficulty_bon = difficulty_bon
 
+        # self.agent = Agent(**{
+        #     "model": "qwen25_32B_instruct",
+        #     "base_url": "http://10.130.138.40:8000/v1",
+        #     "api_keys": "EMPTY",
+        #     "request_kwargs": {
+        #         "temperature": 0.9,
+        #         "timeout": 360,
+        #         "max_tokens": 2048,
+        #     },
+        # })
         self.agent = Agent(**{
-            "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.138.40:8000/v1",
+            "model": "DeepSeek-V3-0324",
+            "base_url": "https://sd0rainnf2h21nr3724fg.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.9,
-                "timeout": 360,
+                "timeout": 40,
                 "max_tokens": 2048,
-            },
+            }
         })
 
     def get_penalties(self) -> Dict[str, Callable]:
