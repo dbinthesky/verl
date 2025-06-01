@@ -44,7 +44,7 @@ RM_URLS = [
 VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
-MAX_CONCURRENT = 192
+MAX_CONCURRENT = 256
 
 
 def tokenize(s, lang_code):
@@ -1581,13 +1581,13 @@ class QwQLongCoTDoc2QueryComputeScore(object):
             results_mapper[k].append(v)
 
         wo_contents, w_contents = defaultdict(list), defaultdict(list)
-        for k in results_mapper.keys():
+        for k, v in results_mapper.items():
             if k in wo_content_prompts:
                 for index in wo_content_prompts[k]:
-                    wo_contents[index].extend(conclusion)
+                    wo_contents[index].extend(v)
             elif k in w_content_prompts:
                 for index in w_content_prompts[k]:
-                    w_contents[index].extend(conclusion)
+                    w_contents[index].extend(v)
             else:
                 raise NotImplementedError
 
