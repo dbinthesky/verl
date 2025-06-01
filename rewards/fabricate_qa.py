@@ -1431,6 +1431,17 @@ class QwQLongCoTDoc2QueryComputeScore(object):
         self.add_difficulty_rewards = add_difficulty_rewards
         self.difficulty_bon = difficulty_bon
 
+        self.agent = Agent(**{
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.138.40:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.7,
+                "timeout": 360,
+                "max_tokens": 16384,
+            },
+        })
+
     def get_penalties(self) -> Dict[str, Callable]:
         return {
             "Format": self.format.get_penalty_or_reward,
@@ -1536,7 +1547,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
             self,
             batch_data_sources,
             batch_solution_str,
-            batch_ground_truth, max_concurrent_requests=64, repeat=8):
+            batch_ground_truth, max_concurrent_requests=256, repeat=8):
 
         prompts = []
         wo_content_prompts, w_content_prompts = defaultdict(
@@ -1564,7 +1575,14 @@ class QwQLongCoTDoc2QueryComputeScore(object):
 
                 prompts.extend([prompt]*repeat)
 
-        results = await self.generate_responses(prompts)
+        _results = await self.agent.run(prompts, max_concurrent_requests, desc="[Generate Responses]", postprocess_fns=[self.response_postprocess] * len(prompts))
+        results_mapper = defaultdict(list)
+        for (k, v) in _results:
+            results_mapper[k].append(v)
+
+        results = []
+        for prompt in prompts:
+            results.append((prompt, results_mapper.get(prompt, None)))
 
         wo_contents, w_contents = defaultdict(list), defaultdict(list)
         for prompt, conclusion in results:
@@ -1669,7 +1687,8 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 batch_data_sources,
                 batch_solution_str,
                 batch_ground_truth,
-                self.difficulty_bon
+                max_concurrent_requests=256,
+                repeat=self.difficulty_bon
             )
 
         for i in range(len(batch_solution_str)):
