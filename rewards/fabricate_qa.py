@@ -493,8 +493,7 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")
-                               :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1220,6 +1219,9 @@ qwq_longcot_fabricate_qa_compute_score_valid = _qwq_longcot_fabricate_qa_compute
 
 
 def doc2query_parse_solution_fn(solution_str: str, remove_option_letter=True):
+    # FIXME: QwQ tokenizer config
+    solution_str = f'<think>\n{solution_str}'
+
     if solution_str.count("</question>") > 1:
         return None
 
@@ -1631,6 +1633,27 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                     "w_content": f'{len(w_content_correct)}/{len(w_content)} {w_content}, ans={ans}',
                 })
 
+                try:
+                    if wo_content.count(self.MULTICHOICE_LETTER[len(
+                            _options)]) >= self.difficulty_bon/4:
+                        base_score -= 3.0
+                    if wo_content.count(self.MULTICHOICE_LETTER[len(
+                            _options)+1]) >= self.difficulty_bon/4:
+                        base_score -= 3.0
+
+                    # 无参考 majority vote
+                    wo_content_majority_votes = defaultdict(int)
+                    for v in wo_content:
+                        wo_content_majority_votes[v] += 1
+                    wo_content_majority_votes = sorted(
+                        wo_content_majority_votes.items(), key=lambda x: x[1], reverse=True)
+                    if len(wo_content_majority_votes) > 0:
+                        wo_majority_vote_ans = wo_content_majority_votes[0][0]
+                        if ans == self.MULTICHOICE_LETTER[len(_options)] or ans == self.MULTICHOICE_LETTER[len(_options)+1]:
+                            base_score -= 3.0
+                except Exception as err:
+                    pass
+
                 # 不带参考 模型也有机会rollout对 否则问题可能过于长尾
                 if wo_content.count(ans) < self.difficulty_bon/4:  # 至少对两次
                     full_rewards.append(base_score)
@@ -1670,21 +1693,6 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                         try:
                             if w_content_majority_votes[0][0] == ans:
                                 base_score += 0.5
-                        except Exception as err:
-                            pass
-
-                        try:
-                            # 无参考 majority vote
-                            wo_content_majority_votes = defaultdict(int)
-                            for v in wo_content:
-                                wo_content_majority_votes[v] += 1
-                            wo_content_majority_votes = sorted(
-                                wo_content_majority_votes.items(), key=lambda x: x[1], reverse=True)
-                            if len(wo_content_majority_votes) > 0:
-                                wo_majority_vote_ans = wo_content_majority_votes[0][0]
-
-                                if ans == self.MULTICHOICE_LETTER[len(_options)] or ans == self.MULTICHOICE_LETTER[len(_options)+1]:
-                                    base_score -= 1.0
                         except Exception as err:
                             pass
 

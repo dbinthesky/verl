@@ -102,7 +102,7 @@ def load_doc2query(num=40):
             # batch_solution_str.append(
             #     f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\nA) {gt["answer"]}\nAnswer: A\n</question><｜end▁of▁sentence｜>')
             batch_solution_str.append(
-                f'<think>***</think><question>\nQuestion: Using a 0.1000 mol/L NaOH solution to titrate a 0.1000 mol/L formic acid solution, what is the pH at the stoichiometric point? \n\nOptions:\nA) 5.67\nB) 8.23\nC) 9.88\nD) 12.46\nE) 10.11\nF) 11.07\nG) 7.22\nH) 6.35\nI) 3.47\n\nAnswer: A\n</question><｜end▁of▁sentence｜>')
+                f'<think>***</think><question>\nQuestion: Using a 0.1000 mol/L NaOH solution to titrate a 0.1000 mol/L formic acid solution, what is the pH at the stoichiometric point? \n\nOptions:\nA) 5.67\nB) 8.23\nC) 9.88\nD) 12.46\nE) 10.11\nF) 11.07\nG) 7.22\nH) 6.35\nI) 3.47\bJ) 3.47\n\nAnswer: A\n</question><｜end▁of▁sentence｜>')
     return batch_solution_str, batch_ground_truth
 
 
@@ -367,7 +367,6 @@ async def offline_compute_score():
 
 
 class TestDoc2Query(unittest.TestCase):
-
     def test_get_difficulty_reward(self):
         async def main():
             batch_solution_str, batch_ground_truth = load_doc2query()

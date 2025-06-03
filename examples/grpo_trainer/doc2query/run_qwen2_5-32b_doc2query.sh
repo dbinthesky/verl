@@ -54,7 +54,8 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-fabricate_qa_v5/checkpoint-37"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/opencompass/models/hf_hub/QwQ-32B"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-fabricate_qa_v6/checkpoint-172"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_iscalc_high_equation_mix_0602"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_test_100"
 
@@ -100,7 +101,7 @@ run_training() {
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=64 \
+        data.train_batch_size=32 \
         data.max_prompt_length=8192 \
         data.max_response_length=8192 \
         data.filter_overlong_prompts=True \
@@ -109,7 +110,7 @@ run_training() {
         actor_rollout_ref.actor.optim.lr=1e-6 \
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=64 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=32 \
         actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus)) \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=4 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
@@ -140,7 +141,7 @@ run_training() {
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
         trainer.save_freq=5 \
-        trainer.test_freq=5 \
+        trainer.test_freq=10 \
         trainer.total_epochs=10000 \
         reward_model.reward_manager="custom" "$@"
     local training_status=$?
