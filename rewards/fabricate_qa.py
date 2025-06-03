@@ -44,7 +44,8 @@ RM_URLS = [
 VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
-MAX_CONCURRENT = 192
+# MAX_CONCURRENT = 192
+MAX_CONCURRENT = 128
 
 
 def tokenize(s, lang_code):
@@ -1435,32 +1436,32 @@ class QwQLongCoTDoc2QueryComputeScore(object):
         self.add_difficulty_rewards = add_difficulty_rewards
         self.difficulty_bon = difficulty_bon
 
+        # self.agent = Agent(**{
+        #     "model": "qwen25_32B_instruct",
+        #     "base_url": "http://10.130.138.40:8000/v1",
+        #     "api_keys": "EMPTY",
+        #     "request_kwargs": {
+        #         "temperature": 0.9,
+        #         "timeout": 360,
+        #         "max_tokens": 2048,
+        #     },
+        # })
         self.agent = Agent(**{
-            "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.138.40:8000/v1",
+            "model": "DeepSeek-V3-0324",
+            "base_url": "https://sd0rainnf2h21nr3724fg.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.9,
                 "timeout": 360,
                 "max_tokens": 2048,
-            },
+            }
         })
-        # self.agent = Agent(**{
-        #     "model": "DeepSeek-V3-0324",
-        #     "base_url": "https://sd0rainnf2h21nr3724fg.apigateway-cn-beijing.volceapi.com/v1",
-        #     "api_keys": "EMPTY",
-        #     "request_kwargs": {
-        #         "temperature": 0.9,
-        #         "timeout": 40,
-        #         "max_tokens": 2048,
-        #     }
-        # })
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
             "Format": self.format.get_penalty_or_reward,
-            "QSim": self.question_similarity.get_penalty_or_reward,
-            "RuleBased": self.rule_base.get_penalty_or_reward,
+            # "QSim": self.question_similarity.get_penalty_or_reward,
+            # "RuleBased": self.rule_base.get_penalty_or_reward,
         }
 
     async def chat_completion_with_retry(self, url, data, max_retries=3, retry_delay=5, suffix="/generate"):
@@ -1589,7 +1590,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
 
                 prompts.extend([prompt]*repeat)
 
-        _results = await self.agent.run(prompts, max_concurrent_requests, desc="[Generate Responses]", postprocess_fns=[self.response_postprocess] * len(prompts))
+        _results = await self.agent.run(prompts, max_concurrent_requests, desc=f"[Generate Responses {self.agent.model}]", postprocess_fns=[self.response_postprocess] * len(prompts))
         results_mapper = defaultdict(list)
         for (k, v) in _results:
             results_mapper[k].append(v)
