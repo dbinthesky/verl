@@ -67,8 +67,8 @@ def load_qwq_fabricate_qa_data(num=100):
 
 
 def load_doc2query(num=40):
-    # path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_iscalc_high_equation_mix"
-    path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_test"
+    path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_iscalc_high_equation_mix_0602"
+    # path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_test"
     batch_solution_str, batch_ground_truth = [], []
 
     df = pd.read_parquet(path)
@@ -95,14 +95,14 @@ def load_doc2query(num=40):
             # batch_solution_str.append(
             #     f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\n\nAnswer: {ans_letter}\n</question>')
         except Exception as err:
-            raise NotImplementedError
-            batch_solution_str.append(
-                '<think>\nOkay, so I need to create a question. Let me start by thinking about what kind of question I can come up with. The user\'s prompt says the question should be about something I\'m an expert in, which is creating a question. Hmm, that\'s a bit meta. Maybe I should think of a common problem-solving scenario or a favorite topic. \n\nWait, maybe a common math problem? Like, how to find the roots of a quadratic equation? But maybe something more engaging. Alternatively, perhaps a riddle? Like, "Why was the math book sad?" But that\'s a bit too open-ended.\n\nAlternatively, maybe something that requires some logical thinking. Let me think. Maybe a puzzle involving sequences. Like, "What is the next... [省略] ...ly, "What is the value of 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2?" which is 20. \n\nHmm. \n\nHmm, I think I\'ll go with the question "What is the value of 2^3 + 3^2?" as it\'s straightforward and requires basic exponent arithmetic. \n\nAlternatively, the question could be: "What is the value of the sum of the first 10 positive integers?" but that requires remembering the formula. \n\nHmm. Maybe the question is better as "What is the value of 2^3 * 2^2?" which is 8 * 4 = 32. \n\nHmm. \n\nHmm, after considering various options, I think the question "What is the value of 2^3 + 3^2?" is good because it\'s concise, requires applying exponents, and is a common question in math education. \n\nTherefore, I\'ll present that as my question.\n</think>\n\n<question>\nWhat is the value of \\(2^3 + 3^2\\)?\n</question><|im_end|>'
-            )
+            # raise NotImplementedError
+            # batch_solution_str.append(
+            #     '<think>\nOkay, so I need to create a question. Let me start by thinking about what kind of question I can come up with. The user\'s prompt says the question should be about something I\'m an expert in, which is creating a question. Hmm, that\'s a bit meta. Maybe I should think of a common problem-solving scenario or a favorite topic. \n\nWait, maybe a common math problem? Like, how to find the roots of a quadratic equation? But maybe something more engaging. Alternatively, perhaps a riddle? Like, "Why was the math book sad?" But that\'s a bit too open-ended.\n\nAlternatively, maybe something that requires some logical thinking. Let me think. Maybe a puzzle involving sequences. Like, "What is the next... [省略] ...ly, "What is the value of 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2?" which is 20. \n\nHmm. \n\nHmm, I think I\'ll go with the question "What is the value of 2^3 + 3^2?" as it\'s straightforward and requires basic exponent arithmetic. \n\nAlternatively, the question could be: "What is the value of the sum of the first 10 positive integers?" but that requires remembering the formula. \n\nHmm. Maybe the question is better as "What is the value of 2^3 * 2^2?" which is 8 * 4 = 32. \n\nHmm. \n\nHmm, after considering various options, I think the question "What is the value of 2^3 + 3^2?" is good because it\'s concise, requires applying exponents, and is a common question in math education. \n\nTherefore, I\'ll present that as my question.\n</think>\n\n<question>\nWhat is the value of \\(2^3 + 3^2\\)?\n</question><|im_end|>'
+            # )
             # batch_solution_str.append(
             #     f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\nA) {gt["answer"]}\nAnswer: A\n</question><｜end▁of▁sentence｜>')
-            # batch_solution_str.append(
-            #     f'<think>***</think><question>\nQuestion: Using a 0.1000 mol/L NaOH solution to titrate a 0.1000 mol/L formic acid solution, what is the pH at the stoichiometric point? \n\nOptions:\nA) 5.67\nB) 8.23\nC) 9.88\nD) 12.46\nE) 10.11\nF) 11.07\nG) 7.22\nH) 6.35\nI) 3.47\nJ) 4.55\n\nAnswer: A\n</question><｜end▁of▁sentence｜>')
+            batch_solution_str.append(
+                f'<think>***</think><question>\nQuestion: Using a 0.1000 mol/L NaOH solution to titrate a 0.1000 mol/L formic acid solution, what is the pH at the stoichiometric point? \n\nOptions:\nA) 5.67\nB) 8.23\nC) 9.88\nD) 12.46\nE) 10.11\nF) 11.07\nG) 7.22\nH) 6.35\nI) 3.47\n\nAnswer: A\n</question><｜end▁of▁sentence｜>')
     return batch_solution_str, batch_ground_truth
 
 

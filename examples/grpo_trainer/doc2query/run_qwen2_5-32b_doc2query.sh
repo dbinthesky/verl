@@ -7,6 +7,9 @@ set -euo pipefail
 # ------------------------------
 setup_env() {
     export WANDB_API_KEY="2e3700316fecb744b594dff815d1b11fbe514d24"
+    export WANDB_BASE_URL=https://api.bandw.top
+
+    # export WANDB_MODE="offline"
     export VERL_PPO_LOGGING_LEVEL='DEBUG'
     export VLLM_ATTENTION_BACKEND="XFORMERS"
     export VLLM_USE_MODELSCOPE="False"
@@ -27,6 +30,8 @@ setup_proxy() {
     export https_proxy="https://${PROXY_CREDENTIALS}@${PROXY_URL}"
     export HTTP_PROXY="${https_proxy}"
     export HTTPS_PROXY="${https_proxy}"
+
+    # export no_proxy="localhost,127.0.0.1,*local,10.130.133.200"
 }
 # setup_proxy
 
@@ -49,9 +54,9 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-fabricate_qa_v3/checkpoint-50"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_train_pass6@32"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_test"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-fabricate_qa_v5/checkpoint-37"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_iscalc_high_equation_mix_0602"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_test_100"
 
     experiment_name="qwen2_5-32b_qwq_doc2query_supergpqa-${YYMMDD}-${HHMMSS}"
     project_name="doc2query_supergpqa"
@@ -121,10 +126,10 @@ run_training() {
         actor_rollout_ref.rollout.name="vllm" \
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
-        actor_rollout_ref.rollout.temperature=0.9 \
+        actor_rollout_ref.rollout.temperature=1.0 \
         actor_rollout_ref.rollout.n=16 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
-        actor_rollout_ref.rollout.log_prob_micro_batch_size=32 \
+        actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
         algorithm.kl_ctrl.kl_coef=0.000 \
         algorithm.lam=0.95 \
@@ -157,6 +162,7 @@ setup_ray() {
     export MASTER_PORT=${MASTER_PORT:-$(shuf -i 20001-29999 -n 1)}
     export WORLD_SIZE=${WORLD_SIZE:-1}
     export RANK=${RANK:-0}
+    # export no_proxy="localhost,127.0.0.1,*local,10.130.133.200"
 
     echo "Ray Cluster Configuration:"
     echo "MASTER_ADDR: $MASTER_ADDR"

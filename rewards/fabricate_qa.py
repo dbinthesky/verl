@@ -493,7 +493,8 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")
+                               :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1283,9 +1284,9 @@ class Doc2QueryFormatReward(PenaltyOrReward):
 
         question, options, answer = solution_str
 
-        if ground_truth.get("options", None) is None:
+        if ground_truth.get("option_num", None) is None:
             return self.penalty
-        if len(options) == len(ground_truth["options"]):
+        if len(options) == ground_truth["option_num"]:
             return self.base_reward
         return self.penalty / 2.0
 
@@ -1432,26 +1433,26 @@ class QwQLongCoTDoc2QueryComputeScore(object):
         self.add_difficulty_rewards = add_difficulty_rewards
         self.difficulty_bon = difficulty_bon
 
-        # self.agent = Agent(**{
-        #     "model": "qwen25_32B_instruct",
-        #     "base_url": "http://10.130.138.40:8000/v1",
-        #     "api_keys": "EMPTY",
-        #     "request_kwargs": {
-        #         "temperature": 0.9,
-        #         "timeout": 360,
-        #         "max_tokens": 2048,
-        #     },
-        # })
         self.agent = Agent(**{
-            "model": "DeepSeek-V3-0324",
-            "base_url": "https://sd0rainnf2h21nr3724fg.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.138.40:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.9,
-                "timeout": 40,
+                "timeout": 360,
                 "max_tokens": 2048,
-            }
+            },
         })
+        # self.agent = Agent(**{
+        #     "model": "DeepSeek-V3-0324",
+        #     "base_url": "https://sd0rainnf2h21nr3724fg.apigateway-cn-beijing.volceapi.com/v1",
+        #     "api_keys": "EMPTY",
+        #     "request_kwargs": {
+        #         "temperature": 0.9,
+        #         "timeout": 40,
+        #         "max_tokens": 2048,
+        #     }
+        # })
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
@@ -1617,9 +1618,9 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 # 正确回答
                 result = doc2query_parse_solution_fn(batch_solution_str[i])
                 if result is not None:
-                    _, _, answer = result
+                    _, _options, answer = result
                 else:
-                    answer = ""
+                    answer, _options = "", []
                 ans = answer
 
                 wo_content_correct = [_ for _ in wo_content if _ == ans]
@@ -1672,6 +1673,21 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                         except Exception as err:
                             pass
 
+                        try:
+                            # 无参考 majority vote
+                            wo_content_majority_votes = defaultdict(int)
+                            for v in wo_content:
+                                wo_content_majority_votes[v] += 1
+                            wo_content_majority_votes = sorted(
+                                wo_content_majority_votes.items(), key=lambda x: x[1], reverse=True)
+                            if len(wo_content_majority_votes) > 0:
+                                wo_majority_vote_ans = wo_content_majority_votes[0][0]
+
+                                if ans == self.MULTICHOICE_LETTER[len(_options)] or ans == self.MULTICHOICE_LETTER[len(_options)+1]:
+                                    base_score -= 1.0
+                        except Exception as err:
+                            pass
+
                 full_rewards.append(base_score)
             else:
                 pass_rates.append({})
@@ -1720,11 +1736,13 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 log = False
 
             difficulty = batch_ground_truth[i]["difficulty"]
+            domain = batch_ground_truth[i]["domain"]
+
             if log:
                 print(
                     f"--------------------------------{log_flag}--------------------------------")
                 print(
-                    f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
+                    f"【Solution】({domain})`{self.log_solution(batch_solution_str[i])}`")
                 try:
                     print(
                         f"【Ground Truth】({difficulty})`{self.log_ground_truth(batch_ground_truth[i])}`")

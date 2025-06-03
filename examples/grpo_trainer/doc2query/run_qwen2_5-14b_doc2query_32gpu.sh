@@ -53,7 +53,7 @@ setup_path() {
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-14B-fabricate_qa_v4"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/qwen2_5-14b_qwq_doc2query_supergpqa-2025-06-01-07-16-01_grpo_step_5"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/qwen2_5-14b_qwq_doc2query_supergpqa-2025-06-01-11-42-26_grpo_step_10"
     # TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_train_qwen25_32b_bon_w_wo_content_250529_iscalc_rag"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_iscalc_high_equation_mix_0531"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_test"
