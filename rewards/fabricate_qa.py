@@ -1276,12 +1276,13 @@ def doc2query_parse_solution_fn(solution_str: str, remove_option_letter=True):
 
 
 class Doc2QueryFormatReward(PenaltyOrReward):
-    def __init__(self, base_reward=0.1, penalty=-2.0):
+    def __init__(self, base_reward=0.1, penalty=-2.0, doc2query_parse_solution_fn=doc2query_parse_solution_fn):
         self.base_reward = base_reward
         self.penalty = penalty
+        self.doc2query_parse_solution_fn = doc2query_parse_solution_fn
 
     def get_penalty_or_reward(self, solution_str, ground_truth):
-        solution_str = doc2query_parse_solution_fn(solution_str)
+        solution_str = self.doc2query_parse_solution_fn(solution_str)
         if solution_str is None:
             return self.penalty
 
@@ -1295,17 +1296,18 @@ class Doc2QueryFormatReward(PenaltyOrReward):
 
 
 class QuestionSimilarity(PenaltyOrReward):
-    def __init__(self):
-        pass
+    def __init__(self, doc2query_parse_solution_fn=doc2query_parse_solution_fn):
+        self.doc2query_parse_solution_fn = doc2query_parse_solution_fn
 
     def get_penalty_or_reward(self, solution_str, ground_truth):
         if ground_truth.get("question", None) is None:
             return 0.0
         try:
-            solution_str = doc2query_parse_solution_fn(solution_str)
+            solution_str = self.doc2query_parse_solution_fn(solution_str)
+            print("fucking!!!!", solution_str)
+
             if solution_str is None:
                 return 0.0
-
             question, options, answer = solution_str
 
             gt = ground_truth["question"]
@@ -1319,7 +1321,9 @@ class QuestionSimilarity(PenaltyOrReward):
 
 
 class RuleBasedOptionMatch(PenaltyOrReward):
-    def __init__(self):
+    def __init__(self, doc2query_parse_solution_fn=doc2query_parse_solution_fn):
+        self.doc2query_parse_solution_fn = doc2query_parse_solution_fn
+
         self.keywords = [
             # 数学与物理符号
             '$', '\\frac', '^', '_', '\\sqrt', '\\vec', '\\approx', '\\pm', '\\times', '\\cdot', '/', '=',
@@ -1368,7 +1372,7 @@ class RuleBasedOptionMatch(PenaltyOrReward):
             return 0.0
         try:
             raw_solution_str = solution_str
-            solution_str = doc2query_parse_solution_fn(solution_str)
+            solution_str = self.doc2query_parse_solution_fn(solution_str)
             if solution_str is None:
                 return 0.0
 
@@ -1427,12 +1431,16 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                           'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T')
 
     def __init__(self,
-                 split="train", add_difficulty_rewards=False, difficulty_bon=8):
+                 split="train", add_difficulty_rewards=False, difficulty_bon=8, parse_solution_fn=doc2query_parse_solution_fn):
         self.split = split
+        self.doc2query_parse_solution_fn = parse_solution_fn
 
-        self.format = Doc2QueryFormatReward()
-        self.question_similarity = QuestionSimilarity()
-        self.rule_base = RuleBasedOptionMatch()
+        self.format = Doc2QueryFormatReward(
+            doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
+        self.question_similarity = QuestionSimilarity(
+            doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
+        self.rule_base = RuleBasedOptionMatch(
+            doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
         self.add_difficulty_rewards = add_difficulty_rewards
         self.difficulty_bon = difficulty_bon
 
@@ -1460,8 +1468,8 @@ class QwQLongCoTDoc2QueryComputeScore(object):
     def get_penalties(self) -> Dict[str, Callable]:
         return {
             "Format": self.format.get_penalty_or_reward,
-            # "QSim": self.question_similarity.get_penalty_or_reward,
-            # "RuleBased": self.rule_base.get_penalty_or_reward,
+            "QSim": self.question_similarity.get_penalty_or_reward,
+            "RuleBased": self.rule_base.get_penalty_or_reward,
         }
 
     async def chat_completion_with_retry(self, url, data, max_retries=3, retry_delay=5, suffix="/generate"):
@@ -1569,7 +1577,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
             list), defaultdict(list)
 
         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-            result = doc2query_parse_solution_fn(solution_str)
+            result = self.doc2query_parse_solution_fn(solution_str)
             if result is not None:
                 question, options, answer = result
 
@@ -1619,7 +1627,8 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 w_content = [_ for _ in w_content if _ is not None]
 
                 # 正确回答
-                result = doc2query_parse_solution_fn(batch_solution_str[i])
+                result = self.doc2query_parse_solution_fn(
+                    batch_solution_str[i])
                 if result is not None:
                     _, _options, answer = result
                 else:
@@ -1775,7 +1784,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
         return aio.run(main())
 
     def log_solution(self, solution):
-        norm = doc2query_parse_solution_fn(solution)
+        norm = self.doc2query_parse_solution_fn(solution)
         if norm is None:
             return repr(self.clip_string(solution))
         return repr(self.format_question(norm[0], norm[1], norm[2]))
@@ -1834,4 +1843,69 @@ qwq_longcot_doc2query_compute_score_train = _qwq_longcot_doc2query_compute_score
 qwq_longcot_doc2query_compute_score_valid = _qwq_longcot_doc2query_compute_score_valid.compute_score
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# Doc2Query V2
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+def doc2query_v2_parse_solution_fn(solution_str: str, remove_option_letter=True):
+    solution_str = f'<think>\n{solution_str}'
+
+    if solution_str.count("</question>") > 1:
+        return None
+
+    if solution_str.count("</think>") > 1:
+        return None
+
+    solution_str = postprocess_solution(solution_str)
+
+    if not solution_str.startswith("<think>"):
+        return None
+
+    if not solution_str.endswith("</question>"):
+        return None
+
+    try:
+        thought = re.findall(r'<think>.*</think>',
+                             solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+
+    solution_str = solution_str.replace(thought, "")
+
+    try:
+        conclusion = re.findall(r'<question>(.*)</question>',
+                                solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+
+    if ("<question>" in conclusion) or ("</question>" in conclusion):
+        return None
+
+    try:
+        question = conclusion[conclusion.index(
+            "Question: ")+len("Question: "):conclusion.index("Answer:")].strip()
+
+        answer = conclusion[conclusion.index(
+            "Answer:")+len("Answer:"):conclusion.index("Answer Type:")].strip()
+
+        answer_type = conclusion[conclusion.index("Answer Type:"):].strip()
+        return question, answer, answer_type
+    except Exception as err:
+        return None
+
+
+class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
+    def __init__(self,
+                 split="train", add_difficulty_rewards=False, difficulty_bon=8, parse_solution_fn=doc2query_v2_parse_solution_fn):
+        print("maina", parse_solution_fn)
+        super().__init__(
+            split=split, add_difficulty_rewards=add_difficulty_rewards, difficulty_bon=difficulty_bon, parse_solution_fn=parse_solution_fn
+        )
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# Doc2Query V2
 # ------------------------------------------------------------------------------------------------------------------------------------------------------

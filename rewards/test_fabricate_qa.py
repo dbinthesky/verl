@@ -31,6 +31,7 @@ from fabricate_qa import (
     QuestionSimilarity,
     RuleBasedOptionMatch,
     QwQLongCoTDoc2QueryComputeScore,
+    QwQLongCoTDoc2QueryV2ComputeScore,
     qwq_longcot_doc2query_compute_score_valid,
     batchify
 )
@@ -63,6 +64,27 @@ def load_qwq_fabricate_qa_data(num=100):
 
         batch_solution_str.append(
             f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>{gt}\n{generate_random_string(2000)}</question>')
+    return batch_solution_str, batch_ground_truth
+
+
+def load_doc2query_v2(num=40):
+    path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v2/iscalc_numeric_high_equation_mix_0604"
+    batch_solution_str, batch_ground_truth = [], []
+
+    df = pd.read_parquet(path)
+    for i, row in df.iterrows():
+        row = row.to_dict()
+        batch_ground_truth.append(row["reward_model"])
+        gt = row["reward_model"]
+
+        if i > num-1:
+            break
+        try:
+            batch_solution_str.append(
+                f'<think>***</think><question>\nQuestion: {gt["question"]}\\n\nAnswer: {gt["answer"]}\n\nAnswer Type:{gt["answer_type"]}\n</question><｜end▁of▁sentence｜>')
+        except Exception as err:
+            batch_solution_str.append(
+                f'<think>***</think><question>\nQuestion: Using a 0.1000 mol/L NaOH solution to titrate a 0.1000 mol/L formic acid solution, what is the pH at the stoichiometric point? \n\nOptions:\nA) 5.67\nB) 8.23\nC) 9.88\nD) 12.46\nE) 10.11\nF) 11.07\nG) 7.22\nH) 6.35\nI) 3.47\bJ) 3.47\n\nAnswer: A\n</question><｜end▁of▁sentence｜>')
     return batch_solution_str, batch_ground_truth
 
 
@@ -364,6 +386,19 @@ async def offline_compute_score():
                 example["classify_acc_reward"] = _score1
                 example["gt_match_score"] = _score2
                 g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
+
+
+class TestDoc2QueryV2(unittest.TestCase):
+    def test_question_similarity(self):
+        batch_solution_str, batch_ground_truth = load_doc2query_v2()
+
+        x, y = [], []
+        task = QwQLongCoTDoc2QueryV2ComputeScore(split="valid")
+        for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
+            score = task.get_penalties()["QSim"](solution_str, gt)
+            print(solution_str)
+            print(score)
+            print("="*80)
 
 
 class TestDoc2Query(unittest.TestCase):
