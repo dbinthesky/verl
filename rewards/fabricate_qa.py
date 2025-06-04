@@ -2202,6 +2202,57 @@ class AnswerFeatureMatch(PenaltyOrReward):
             return 0.0
 
 
+def last_boxed_only_string(string):
+    idx = string.rfind("\\boxed")
+    if idx < 0:
+        idx = string.rfind("\\fbox")
+        if idx < 0:
+            return None
+
+    i = idx
+    right_brace_idx = None
+    num_left_braces_open = 0
+    while i < len(string):
+        if string[i] == "{":
+            num_left_braces_open += 1
+        if string[i] == "}":
+            num_left_braces_open -= 1
+            if num_left_braces_open == 0:
+                right_brace_idx = i
+                break
+        i += 1
+
+    if right_brace_idx == None:
+        retval = None
+    else:
+        retval = string[idx:right_brace_idx + 1]
+
+    return retval
+
+
+def remove_boxed(s):
+    left = "\\boxed{"
+    try:
+        assert s[:len(left)] == left
+        assert s[-1] == "}"
+        return s[len(left):-1]
+    except:
+        return None
+
+
+def extract_answer(passage: str) -> str:
+    if "\\boxed" in passage:
+        return extract_boxed_answer(passage)
+    return None
+
+
+def extract_boxed_answer(solution: str) -> str:
+    """Extract the answer from inside a LaTeX \\boxed{} command"""
+    solution = last_boxed_only_string(solution)
+    solution = remove_boxed(solution)
+    return solution
+
+
 class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
     def __init__(self,
                  split="train", add_difficulty_rewards=False, difficulty_bon=8, parse_solution_fn=doc2query_v2_parse_solution_fn):
@@ -2234,38 +2285,38 @@ class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
    - 单位与数值间留空格：`2.91 m` ✅，`2.91m` ❌。
    - 复合单位用斜杠表示：`kJ/(mol·K)` ✅，禁止使用乘方形式（如 `kJ·mol⁻¹·K⁻¹` ❌）。
 """
-        WithUnitSymbol_en = """Specifications for Numerical Answers with Unit Symbols (WithUnitSymbol)  
-1. **Numerical Representation**  
-   - The problem instructions must clearly specify the number of decimal places to retain or the number of significant figures for scientific notation.  
-   - Use scientific notation for large numbers to avoid redundant spaces, e.g., `$5.27×10^{5}\ \text{Pa}$`.  
+        WithUnitSymbol_en = """Specifications for Numerical Answers with Unit Symbols (WithUnitSymbol)
+1. **Numerical Representation**
+   - The problem instructions must clearly specify the number of decimal places to retain or the number of significant figures for scientific notation.
+   - Use scientific notation for large numbers to avoid redundant spaces, e.g., `$5.27×10^{5}\ \text{Pa}$`.
 
-2. **Unit Specifications**  
-   - The problem instructions must clearly require the unit for the returned answer.  
-   - Use International System (SI) unit symbols with strict case distinction:  
-     - Uppercase: N (newton), Pa (pascal), J (joule), W (watt), Hz (hertz), etc.  
-     - Lowercase: m (meter), kg (kilogram), s (second), mol (mole), etc.  
-   - Leave a space between the numerical value and the unit: `2.91 m` ✅, `2.91m` ❌.  
+2. **Unit Specifications**
+   - The problem instructions must clearly require the unit for the returned answer.
+   - Use International System (SI) unit symbols with strict case distinction:
+     - Uppercase: N (newton), Pa (pascal), J (joule), W (watt), Hz (hertz), etc.
+     - Lowercase: m (meter), kg (kilogram), s (second), mol (mole), etc.
+   - Leave a space between the numerical value and the unit: `2.91 m` ✅, `2.91m` ❌.
    - Represent composite units with a slash: `kJ/(mol·K)` ✅, and avoid exponential forms (e.g., `kJ·mol⁻¹·K⁻¹` ❌).
 """
-        NumericalAnswer_zh = """数值答案 (NumericalAnswer) 规范要求  
-1. **类型允许**：  
-  - **整数**：正整数，无前导零（如 \(5, 275, 144\)）。  
-  - **浮点数**：由整数部分、小数点和小数部分组成，整数部分可为 \(0\) 或正整数（无前导零），**小数部分固定保留3位**（如 \(0.210, 40.200, 5.500\)）。  
-  - **禁止分数形式**，必须转换为小数形式（如 \(5/12\) 需表示为 \(0.417\)）。  
+        NumericalAnswer_zh = """数值答案 (NumericalAnswer) 规范要求
+1. **类型允许**：
+  - **整数**：正整数，无前导零（如 \(5, 275, 144\)）。
+  - **浮点数**：由整数部分、小数点和小数部分组成，整数部分可为 \(0\) 或正整数（无前导零），**小数部分固定保留3位**（如 \(0.210, 40.200, 5.500\)）。
+  - **禁止分数形式**，必须转换为小数形式（如 \(5/12\) 需表示为 \(0.417\)）。
 
-2. **格式限制**：  
-  - 不允许包含空格、逗号、单位（如“元”）等无关字符。  
+2. **格式限制**：
+  - 不允许包含空格、逗号、单位（如“元”）等无关字符。
   - 所有答案需用 \(\\boxed{}\) 包裹（如 \(\\boxed{5}\)、\(\\boxed{0.210}\)）。
 """
         NumericalAnswer_en = """
-Specifications for Numerical Answers (NumericalAnswer)  
-1. **Permitted Types**:  
-   - **Integers**: Positive integers without leading zeros (e.g., \(5, 275, 144\)).  
-   - **Floating-point numbers**: Composed of an integer part, a decimal point, and a fractional part. The integer part can be \(0\) or a positive integer (no leading zeros), and the **fractional part must be fixed to 3 decimal places** (e.g., \(0.210, 40.200, 5.500\)).  
-   - **Fractional forms are prohibited** and must be converted to decimal form (e.g., \(5/12\) should be expressed as \(0.417\)).  
+Specifications for Numerical Answers (NumericalAnswer)
+1. **Permitted Types**:
+   - **Integers**: Positive integers without leading zeros (e.g., \(5, 275, 144\)).
+   - **Floating-point numbers**: Composed of an integer part, a decimal point, and a fractional part. The integer part can be \(0\) or a positive integer (no leading zeros), and the **fractional part must be fixed to 3 decimal places** (e.g., \(0.210, 40.200, 5.500\)).
+   - **Fractional forms are prohibited** and must be converted to decimal form (e.g., \(5/12\) should be expressed as \(0.417\)).
 
-2. **Format Restrictions**:  
-   - No irrelevant characters such as spaces, commas, or units (e.g., "yuan") are allowed.  
+2. **Format Restrictions**:
+   - No irrelevant characters such as spaces, commas, or units (e.g., "yuan") are allowed.
    - All answers must be enclosed in \(\\boxed{}\) (e.g., \(\\boxed{5}\), \(\\boxed{0.210}\)).
 """
         return {
@@ -2298,6 +2349,21 @@ Specifications for Numerical Answers (NumericalAnswer)
                 return conclusion
             except Exception as err:
                 raise PostprocessError(f'parse conclusion failure')
+
+    def verify(self, conclusion, answer, answer_type):
+        if answer_type == "WithUnitSymbol":
+            score = 1.0 if answer in conclusion else 0.0
+            if score > 0:
+                return score
+            return 1.0 if all(part in conclusion for part in answer.split(" ")) else 0.0
+        elif answer_type == "NumericalAnswer":
+            gt = extract_answer(answer)
+            if gt is None:
+                return 0.0
+            if extract_answer(conclusion) == gt:
+                return 1.0
+            else:
+                return 0.0
 
     async def get_difficulty_reward(
             self,
@@ -2337,8 +2403,6 @@ Specifications for Numerical Answers (NumericalAnswer)
                 prompts.extend([prompt]*repeat)
 
         _results = await self.agent.run(prompts, max_concurrent_requests, desc=f"[Generate Responses {self.agent.model}]", postprocess_fns=[self.response_postprocess] * len(prompts))
-        print()
-        raise NotImplementedError
         results_mapper = defaultdict(list)
         for (k, v) in _results:
             results_mapper[k].append(v)
@@ -2366,91 +2430,74 @@ Specifications for Numerical Answers (NumericalAnswer)
                 wo_content = [_ for _ in wo_content if _ is not None]
                 w_content = [_ for _ in w_content if _ is not None]
 
-                # 正确回答
-                result = self.doc2query_parse_solution_fn(
+                # 标准答案
+                question, answer, answer_type = self.doc2query_parse_solution_fn(
                     batch_solution_str[i])
-                if result is not None:
-                    _, _options, answer = result
-                else:
-                    answer, _options = "", []
-                ans = answer
 
-                wo_content_correct = [_ for _ in wo_content if _ == ans]
-                w_content_correct = [_ for _ in w_content if _ == ans]
+                wo_content_scores = [self.verify(_, answer, answer_type)
+                                     for _ in wo_content]
+                w_content_scores = [self.verify(_, answer, answer_type)
+                                    for _ in w_content]
 
                 pass_rates.append({
-                    "wo_content": f'{len(wo_content_correct)}/{len(wo_content)} {wo_content}, ans={ans}',
-                    "w_content": f'{len(w_content_correct)}/{len(w_content)} {w_content}, ans={ans}',
+                    "wo_content": f'{np.sum(wo_content_scores)}/{len(wo_content_scores)}',
+                    "w_content": f'{np.sum(w_content_scores)}/{len(w_content_scores)}',
                 })
 
                 try:
-                    if wo_content.count(self.MULTICHOICE_LETTER[len(
-                            _options)]) >= self.difficulty_bon/4:
-                        base_score -= 3.0
-                    if wo_content.count(self.MULTICHOICE_LETTER[len(
-                            _options)+1]) >= self.difficulty_bon/4:
-                        base_score -= 3.0
+                    if len(wo_content_scores) == 0 or len(w_content_scores) == 0:
+                        full_rewards.append(base_score)
+                        continue
 
-                    # 无参考 majority vote
-                    wo_content_majority_votes = defaultdict(int)
-                    for v in wo_content:
-                        wo_content_majority_votes[v] += 1
-                    wo_content_majority_votes = sorted(
-                        wo_content_majority_votes.items(), key=lambda x: x[1], reverse=True)
-                    if len(wo_content_majority_votes) > 0:
-                        wo_majority_vote_ans = wo_content_majority_votes[0][0]
-                        if ans == self.MULTICHOICE_LETTER[len(_options)] or ans == self.MULTICHOICE_LETTER[len(_options)+1]:
-                            base_score -= 3.0
+                    # 题目过于简单或困难
+                    if np.mean(wo_content_scores) > 0.75 or np.mean(wo_content_scores) < 0.05:
+                        full_rewards.append(base_score)
+                        continue
+
+                    # 带参考 应该比 不带参考 显著好
+                    if not (np.mean(w_content_scores) - np.mean(wo_content_scores) > 1/self.difficulty_bon):
+                        full_rewards.append(base_score)
+                        continue
+
+                    # 题目难度在合理区间
+
+                    # 难度系数
+                    difficulty_reward = 1.0 - \
+                        max(np.mean(wo_content_scores), 0.0)
+
+                    # 有/无参考正确率差异(并非越大越好，有参考达到majority vote为上限)
+                    rag_reward = max(0.0, min(np.mean(
+                        w_content_scores) - np.mean(wo_content_scores), 0.75-np.mean(wo_content_scores)))
+
+                    # 有参考置信度
+                    confidence_reward = 1.0 if np.mean(
+                        w_content_scores) >= 0.75 else np.mean(
+                        w_content_scores)
+
+                    base_score += difficulty_reward + rag_reward + confidence_reward
                 except Exception as err:
                     pass
-
-                # 不带参考 模型也有机会rollout对 否则问题可能过于长尾
-                if wo_content.count(ans) < self.difficulty_bon/4:  # 至少对两次
-                    full_rewards.append(base_score)
-                    continue
-
-                # 带参考 应该比 不带参考 显著好
-                if w_content.count(ans) - wo_content.count(ans) < self.difficulty_bon/4:
-                    full_rewards.append(base_score)
-                    continue
-
-                # 完全做不对
-                if len(wo_content_correct) == 0 or len(w_content_correct) == 0:
-                    pass
-                # 全对
-                elif len(wo_content_correct) == len(wo_content):
-                    pass
-                else:
-                    # 无参考正确率在一定区间
-                    if len(wo_content_correct) >= 1 and len(wo_content_correct)/len(wo_content) <= 0.75:
-                        wo_acc = len(wo_content_correct)/len(wo_content)
-                        # 难度越大越好(min_threshold=0.2)
-                        base_score += 1-max(wo_acc, 0.2)
-
-                        # 有/无参考正确率差异越大越好
-                        diff = (len(w_content_correct) / len(w_content)
-                                ) - ((len(wo_content_correct))/(len(wo_content)))
-                        diff = max(diff, 0.0)
-                        base_score += diff
-
-                        # 有参考 majority vote是正确答案加分
-                        w_content_majority_votes = defaultdict(int)
-                        for v in w_content:
-                            w_content_majority_votes[v] += 1
-
-                        w_content_majority_votes = sorted(
-                            w_content_majority_votes.items(), key=lambda x: x[1], reverse=True)
-                        try:
-                            if w_content_majority_votes[0][0] == ans:
-                                base_score += 0.5
-                        except Exception as err:
-                            pass
 
                 full_rewards.append(base_score)
             else:
                 pass_rates.append({})
                 full_rewards.append(0.0)
         return full_rewards, pass_rates
+
+    def log_solution(self, solution):
+        norm = self.doc2query_parse_solution_fn(solution)
+        if norm is None:
+            return repr(self.clip_string(solution))
+        return repr(self.format_question(norm[0], norm[1]))
+
+    def format_question(self, question, answer):
+        return f'Question: {question}\nAnswer: {answer}'
+
+    def log_ground_truth(self, ground_truth):
+        return repr(self.format_question(
+            ground_truth["question"],
+            ground_truth["answer"])
+        )
 
     async def _compute_score(self,
                              batch_data_sources,
@@ -2480,46 +2527,50 @@ Specifications for Numerical Answers (NumericalAnswer)
             repeat=self.difficulty_bon
         )
 
-        # for i in range(len(batch_solution_str)):
-        #     if self.add_difficulty_rewards:
-        #         score = difficulty_rewards[i]
-        #     else:
-        #         score = 0.0
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            scores = copy.deepcopy(penalty[i])
+            scores.append(difficulty_rewards[i])
+            cur_score = 0
+            for _score in scores:
+                if _score < 0:
+                    cur_score = _score
+                    break
+                else:
+                    cur_score += _score
 
-        #     penalty_log_str = []
-        #     for name, _penalty in penalty.items():
-        #         penalty_log_str.append(
-        #             f'{name}={_penalty[i]:.2f}')
-        #         score += _penalty[i]
+            penalty_log_str = f'Parse/Format/AnsFeature/QSim={penalty[i]}'
 
-        #     final_results.append(score)
+            final_results.append(cur_score)
 
-        #     if (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
-        #         log = True
-        #         log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
-        #     else:
-        #         log = False
+            if (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+                log = True
+                log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
+            else:
+                log = False
 
-        #     difficulty = batch_ground_truth[i]["difficulty"]
-        #     domain = batch_ground_truth[i]["domain"]
+            domain = batch_ground_truth[i]["domain"]
 
-        #     if log:
-        #         print(
-        #             f"--------------------------------{log_flag}--------------------------------")
-        #         print(
-        #             f"【Solution】({domain})`{self.log_solution(batch_solution_str[i])}`")
-        #         try:
-        #             print(
-        #                 f"【Ground Truth】({difficulty})`{self.log_ground_truth(batch_ground_truth[i])}`")
-        #         except Exception as err:
-        #             pass
-        #         if self.add_difficulty_rewards:
-        #             print(
-        #                 f'[Pass@{self.difficulty_bon}]={pass_rates[i]}|[Final Reward]={score:.3f}|Difficulty={difficulty_rewards[i]:.3f}|{"|".join(penalty_log_str)}\n')
-        #         else:
-        #             print(
-        #                 f'[Pass@{self.difficulty_bon}]={pass_rates[i]}|[Final Reward]={score:.3f}|{"|".join(penalty_log_str)}\n')
-        # return final_results
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f"【Solution】({domain})`{self.log_solution(batch_solution_str[i])}`")
+                try:
+                    print(
+                        f"【Ground Truth】({difficulty})`{self.log_ground_truth(batch_ground_truth[i])}`")
+                except Exception as err:
+                    print(
+                        f'[Final Reward]={cur_score:.3f}|[Pass@{self.difficulty_bon}]={pass_rates[i]}|{penalty_log_str}\n')
+        return final_results
+
+
+_qwq_longcot_doc2query_v2_compute_score_train = QwQLongCoTDoc2QueryV2ComputeScore(
+    split="train", add_difficulty_rewards=True)
+_qwq_longcot_doc2query_v2_compute_score_valid = QwQLongCoTDoc2QueryV2ComputeScore(
+    split="valid", add_difficulty_rewards=True)
+qwq_longcot_doc2query_v2_compute_score_train = _qwq_longcot_doc2query_v2_compute_score_train.compute_score
+qwq_longcot_doc2query_v2_compute_score_valid = _qwq_longcot_doc2query_v2_compute_score_valid.compute_score
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query V2
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
