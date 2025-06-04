@@ -395,7 +395,8 @@ class TestDoc2QueryV2(unittest.TestCase):
         x, y = [], []
         task = QwQLongCoTDoc2QueryV2ComputeScore(split="valid")
         for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
-            score = task.get_penalties()["QSim"](solution_str, gt)
+            # QSim\Format\AnsFeature
+            score = task.get_penalties()["AnsFeature"](solution_str, gt)
             print(solution_str)
             print(score)
             print("="*80)

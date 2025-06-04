@@ -15,6 +15,7 @@ from functools import partial
 from asyncio import Semaphore
 from abc import abstractmethod
 from typing import Any, Dict, Callable, List
+from decimal import Decimal, ROUND_HALF_UP
 from tqdm import tqdm as tqdm_nonasync
 from collections import namedtuple, defaultdict
 from sacremoses import MosesTokenizer, MosesDetokenizer
@@ -494,7 +495,8 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")
+                               :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1304,7 +1306,6 @@ class QuestionSimilarity(PenaltyOrReward):
             return 0.0
         try:
             solution_str = self.doc2query_parse_solution_fn(solution_str)
-            print("fucking!!!!", solution_str)
 
             if solution_str is None:
                 return 0.0
@@ -1891,20 +1892,336 @@ def doc2query_v2_parse_solution_fn(solution_str: str, remove_option_letter=True)
         answer = conclusion[conclusion.index(
             "Answer:")+len("Answer:"):conclusion.index("Answer Type:")].strip()
 
-        answer_type = conclusion[conclusion.index("Answer Type:"):].strip()
+        answer_type = conclusion[conclusion.index(
+            "Answer Type:")+len("Answer Type:"):].strip()
         return question, answer, answer_type
     except Exception as err:
         return None
 
 
+class AnswerFormat(object):
+    @abstractmethod
+    def verify(self, answer: str) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
+    def rectify(self, answer: str) -> str:
+        raise NotImplementedError
+
+
+class NumericalAnswer(object):
+    def __init__(self):
+        pass
+
+    def initial_recognize(self, answer) -> bool:
+        """
+        检测数值字符串是否符合规范要求。
+        返回 True（符合）或 False（不符合）。
+        """
+        # 去除首尾空格
+        s = answer.strip()
+
+        # 正则表达式：分数（支持符号和前导零）
+        pattern_fraction = r'^[+-]?\d+/[1-9]\d*$'  # 允许符号，分子可为任意整数，分母无lead zero
+
+        # 正则表达式：浮点数（支持多种格式）
+        # 支持 123.45, .45, 123., -0.5 等格式
+        pattern_float = r'^[+-]?(\d+\.\d*|\.\d+)$'
+
+        # 正则表达式：整数（支持符号和前导零）
+        pattern_int = r'^[+-]?0$|^[+-]?[1-9]\d*$'  # 允许符号，允许单独的0或无lead zero的整数
+
+        if re.fullmatch(pattern_fraction, s):
+            return True
+        elif re.fullmatch(pattern_float, s):
+            return True
+        elif re.fullmatch(pattern_int, s):
+            return True
+        else:
+            return False
+
+    def rectify(self, answer):
+        """处理数字，判断整数/小数并格式化（四舍五入保留三位小数）"""
+        num = answer
+        # 处理分数形式
+        if isinstance(num, str) and '/' in num:
+            try:
+                numerator, denominator = map(int, num.split('/'))
+                value = numerator / denominator
+                return f'\\boxed' + "{" + format_decimal(value) + "}"
+            except:
+                return f'\\boxed' + "{" + num + "}"  # 转换失败返回原始值
+
+        # 处理二进制字符串
+        if isinstance(num, str) and num.startswith('0b'):
+            try:
+                return f'\\boxed' + "{" + str(int(num, 2)) + "}"
+            except:
+                return f'\\boxed' + "{" + num + "}"  # 转换失败返回原始值
+
+        # 处理普通字符串表示的数字
+        try:
+            value = float(num)
+            return f'\\boxed' + "{" + self.format_decimal(value) + "}"
+        except:
+            return f'\\boxed' + "{" + num + "}"  # 非数字类型直接返回
+
+    def format_decimal(self, value):
+        """核心格式化函数：使用Decimal进行精确四舍五入"""
+        # 使用Decimal进行精确计算
+        decimal_value = Decimal(str(value))
+
+        # 四舍五入保留三位小数
+        rounded = decimal_value.quantize(
+            Decimal('0.001'), rounding=ROUND_HALF_UP)
+
+        # 判断是否为整数
+        if rounded == rounded.to_integral_value():
+            return int(rounded)
+        else:
+            # 转换为字符串，确保保留三位小数
+            return f"{rounded:.3f}"
+
+    def extra_constraint(self, answer):
+        if answer in ('\\boxed{0}', '\\boxed{1}', '\\boxed{3}', '\\boxed{4}', '\\boxed{5}', '\\boxed{6}'):
+            return False
+        return True
+
+    def verify(self, answer):
+        """
+        检测答案是否符合 \boxed{} 格式及数值规范（整数/浮点数）
+
+        参数：
+        answer_str (str)：待检测的答案字符串（如 "\boxed{5}", "boxed{0.210}", "\boxed{5/12}" 等）
+
+        返回：
+        (bool, str)：第一个元素为是否通过校验，第二个元素为错误提示（若失败）
+        """
+        answer_str = answer
+        # 1. 校验 \boxed{} 格式
+        boxed_pattern = r'^\\boxed\{(.*?)\}$'
+        match = re.match(boxed_pattern, answer_str)
+        if not match:
+            # return False, "格式错误：答案需用 \\boxed{} 包裹，且大括号内无空格"
+            return False
+
+        # 提取数值内容
+        content = match.group(1).strip()
+        if not content:
+            # return False, "格式错误：\\boxed{} 内内容为空"
+            return False
+
+        # 2. 校验数值规范（复用之前的数值校验逻辑）
+        # 去除可能的残留空格（确保数值部分无空格）
+        cleaned_content = content.replace(' ', '')
+        result = self.verify_numeric_content(cleaned_content)  # 调用数值校验函数
+
+        # 3. 特定校验（避免构造0、1、2等常见答案）
+        if not self.extra_constraint(cleaned_content):
+            return False
+        return result[0]
+
+    def verify_numeric_content(self, content):
+        """
+        单独校验数值内容是否符合规范（整数/浮点数，禁止分数）
+        """
+        # 去除无关字符（仅保留数字和小数点）
+        cleaned = re.sub(r'[^\d.]', '', content)
+
+        # 检查是否为分数（先于数值校验，避免误判）
+        if '/' in content:
+            return False, "禁止使用分数形式，请转换为小数"
+
+        # 校验整数或浮点数
+        if re.match(r'^\d+$', cleaned):
+            # 整数校验：无前导零
+            if len(cleaned) > 1 and cleaned.startswith('0'):
+                return False, "整数包含前导零"
+            return True, "格式正确"
+        elif re.match(r'^\d*\.\d+$', cleaned):
+            # 拆分整数部分和小数部分
+            parts = cleaned.split('.')
+            if len(parts) != 2:
+                return False, "浮点数格式错误（需包含一个小数点）"
+
+            int_part, float_part = parts
+            # 整数部分校验：0 或正整数（无前导零）
+            if int_part != '0' and (len(int_part) > 1 and int_part.startswith('0')):
+                return False, "整数部分包含前导零"
+            # 小数部分校验：固定3位
+            if len(float_part) != 3:
+                return False, f"小数部分应为3位（当前{len(float_part)}位）"
+            return True, "格式正确"
+        else:
+            return False, "无效数值格式（需为整数或3位小数）"
+
+
+class WithUnitSymbol(object):
+    def __init__(self):
+        pass
+
+    def initial_recognize(self, answer) -> bool:
+        return self.is_valid_with_unit(answer)
+
+    def verify(self, answer):
+        return self.is_valid_with_unit(answer)
+
+    def is_valid_with_unit(self, answer: str) -> bool:
+        """
+        验证答案是否符合数值与单位格式规范
+        增强对科学计数法多种表示形式的支持
+        """
+        pattern = re.compile(r'''
+            ^                   # 字符串起始
+            ([+-]?)             # 可选的正负号
+            (                   # 数值部分
+                \d+\.?\d*       # 整数或小数（如123, 123.4）
+                |               # 或
+                \.\d+           # 纯小数（如.456）
+            )
+            (?:                 # 科学计数法部分（可选，非捕获组）
+                \s*             # 允许乘号前有空格
+                [×x*·\s]        # 允许乘号为×、x、*、·或空格
+                \s*             # 允许乘号后有空格
+                10\^[+-]?\d+    # 10的指数部分（如10^-15）
+            )?                  # 科学计数法结束
+            \s+                 # 至少一个空格分隔数值与单位
+            (                   # 单位部分
+                [A-Za-z]+       # 基础单位（如m, Pa, mol）
+                (?:             # 可选的SI前缀（如k, m, μ）
+                    [yzafpnμmcdhkMGTPEZY]
+                )?
+                (?:             # 分子中多个单位用·连接（如kJ·mol）
+                    \u00B7[A-Za-z]+
+                )*
+                (?:             # 分母部分（可选）
+                    /           # 斜杠分隔符
+                    (?:         # 分母两种格式：括号内或直接跟单位
+                        \([A-Za-z]+(?:\u00B7[A-Za-z]+)*\)  # 括号内的单位（如(mol·K)）
+                        |       # 或
+                        [A-Za-z]+(?:\u00B7[A-Za-z]+)*      # 直接跟单位（如mol·K）
+                    )
+                )?
+            )
+            $                   # 字符串结束
+        ''', re.VERBOSE | re.UNICODE)  # 启用详细模式和Unicode匹配
+
+        return bool(pattern.match(answer.strip()))
+
+
+class Doc2QueryV2FormatReward(PenaltyOrReward):
+    def __init__(self, doc2query_parse_solution_fn=doc2query_v2_parse_solution_fn):
+        self.doc2query_parse_solution_fn = doc2query_parse_solution_fn
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        solution_str = self.doc2query_parse_solution_fn(solution_str)
+        if solution_str is None:
+            return self.penalty
+
+        question, answer, answer_type = solution_str
+
+        if answer_type not in ("NumericalAnswer", "WithUnitSymbol"):
+            return -1.5
+        if answer_type == "NumericalAnswer":
+            parser = NumericalAnswer()
+        elif answer_type == "WithUnitSymbol":
+            parser = WithUnitSymbol()
+        else:
+            raise NotImplementedError
+
+        try:
+            if parser.verify(answer):
+                return 0.0
+            else:
+                return -1.0
+        except Exception as err:
+            return -1.0
+
+
+class AnswerFeatureMatch(PenaltyOrReward):
+    def __init__(self, doc2query_parse_solution_fn=doc2query_parse_solution_fn):
+        self.doc2query_parse_solution_fn = doc2query_parse_solution_fn
+
+        self.keywords = [
+            # 数学与物理符号
+            '\\box', '$', '\\frac', '^', '_', '\\sqrt', '\\vec', '\\approx', '\\pm', '\\times', '\\cdot', '/', '=',
+            '(', ')', '[', ']', '→', '\\hat', '%', '\\Delta', '\\odot', '\\rm', '\\ddot', '\\mu', '\\epsilon',
+            '\\mathsf', '\\mathbf', '\\ln', '\\cos', '\\exp', '\\sum', '\\int', '\\partial', '\\infty',
+            '\\pi', '\\zeta', '\\omega', '\\lambda', '\\sigma', '\\rho', '\\theta', '×10^', '×10^-', 'E+', 'E-',
+
+            # 单位与物理量符号
+            'm', 'cm', 'mm', 'in', 'km', 'ft', 's', 'μs', 'ms', 'min', 'h', 'a', 'sec', 'N', 'N/m²', 'Pa', 'kg',
+            'kg/m³', 'm/s', 'm/s²', 'rad/s', 'J', 'kJ', 'GJ', 'W', 'W/m²', 'V', 'nV', 'kV', 'A', 'Ω', 'Hz', 'dB',
+            'C', 'F', 'mol', 'L', 'mL', 'g', 'g/kg', '(liquid)', '(gas)', 'U', 'rpm', 'ppm', 'ppb',
+
+
+            # 编号与结构符号
+            '[ ]', '{ }', '( )', '〈〉', 'Ⅰ', 'Ⅱ', 'III', 'IV', '(1)', '(2)', '①', '②', 'n=', 'N=', 'No.', '→',
+            '+', '=', 'H₂O', 'Mg²⁺',
+
+            # 通用修饰词与状态词
+            'approximately', 'around', 'about', 'respectively', 'perfectly', 'small', 'big', 'non-', 'anti-',
+            '-hinged', '-order', 'dr.', 'national', 'university', 'initial', 'final', 'mean', 'total', 'effective',
+            'original', 'renewed',
+
+            # 其他符号与特殊标记
+            '$', '¥', '€', '%', '‰', '\\', '|', '*', '^T', 'file a request for', 'accounting for', 'originating from'
+        ]
+
+    def get_common_keywords(self, answer):
+        common_keywords = [_ for _ in self.keywords if _ in answer]
+        return common_keywords
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        if ground_truth.get("answer", None) is None:
+            return 0.0
+        try:
+            raw_solution_str = solution_str
+            solution_str = self.doc2query_parse_solution_fn(solution_str)
+
+            if solution_str is None:
+                return 0.0
+
+            gt_ans = ground_truth["answer"]
+
+            question, answer, answer_type = solution_str
+            targets = set(self.get_common_keywords(gt_ans))
+            score = 0.0
+            # 共同词缀奖励
+            if len(targets) > 0:
+                gt_match, sol_match = 0, 0
+                for _ in targets:
+                    if _ in gt_ans:
+                        gt_match += 1
+                    if _ in answer:
+                        sol_match += 1
+                score += max((sol_match/gt_match * 0.02), 0.02)
+            else:
+                pass
+            return score
+        except Exception as err:
+            return 0.0
+
+
 class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
     def __init__(self,
                  split="train", add_difficulty_rewards=False, difficulty_bon=8, parse_solution_fn=doc2query_v2_parse_solution_fn):
-        print("maina", parse_solution_fn)
         super().__init__(
             split=split, add_difficulty_rewards=add_difficulty_rewards, difficulty_bon=difficulty_bon, parse_solution_fn=parse_solution_fn
         )
+        self.format = Doc2QueryV2FormatReward(
+            doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
+        self.answer_feature = AnswerFeatureMatch(
+            doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
 
+    def get_penalties(self) -> Dict[str, Callable]:
+        return {
+            "Format": self.format.get_penalty_or_reward,
+            "QSim": self.question_similarity.get_penalty_or_reward,
+            "AnsFeature": self.answer_feature.get_penalty_or_reward,
+        }
+# 解析出错 -2.0
+# 答案分析 -1.5  -> -1.0
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query V2
