@@ -2219,15 +2219,248 @@ class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
             "QSim": self.question_similarity.get_penalty_or_reward,
             "AnsFeature": self.answer_feature.get_penalty_or_reward,
         }
-# 解析出错 -2.0
-# 答案分析 -1.5 ～ -1.0
-# 答案特征 0 ～ 0.02
+
+    def get_answer_format(self, answer_type, lang_code):
+        WithUnitSymbol_zh = """带单位数值 (WithUnitSymbol) 规范要求
+1. **数值表示**
+   - 问题指令必须明确要求保留的小数点位数 科学计数法位数。
+   - 大数用科学计数法，避免冗余空格，如 `$5.27×10^{5}\ \\text{Pa}$`。
+
+2. **单位规范**
+   - 问题指令必须明确要求返回答案的单位。
+   - 单位符号用国际标准（SI），大小写严格区分：
+     - 大写：N（牛）、Pa（帕）、J（焦）、W（瓦）、Hz（赫）等。
+     - 小写：m（米）、kg（千克）、s（秒）、mol（摩）等。
+   - 单位与数值间留空格：`2.91 m` ✅，`2.91m` ❌。
+   - 复合单位用斜杠表示：`kJ/(mol·K)` ✅，禁止使用乘方形式（如 `kJ·mol⁻¹·K⁻¹` ❌）。
+"""
+        WithUnitSymbol_en = """Specifications for Numerical Answers with Unit Symbols (WithUnitSymbol)  
+1. **Numerical Representation**  
+   - The problem instructions must clearly specify the number of decimal places to retain or the number of significant figures for scientific notation.  
+   - Use scientific notation for large numbers to avoid redundant spaces, e.g., `$5.27×10^{5}\ \text{Pa}$`.  
+
+2. **Unit Specifications**  
+   - The problem instructions must clearly require the unit for the returned answer.  
+   - Use International System (SI) unit symbols with strict case distinction:  
+     - Uppercase: N (newton), Pa (pascal), J (joule), W (watt), Hz (hertz), etc.  
+     - Lowercase: m (meter), kg (kilogram), s (second), mol (mole), etc.  
+   - Leave a space between the numerical value and the unit: `2.91 m` ✅, `2.91m` ❌.  
+   - Represent composite units with a slash: `kJ/(mol·K)` ✅, and avoid exponential forms (e.g., `kJ·mol⁻¹·K⁻¹` ❌).
+"""
+        NumericalAnswer_zh = """数值答案 (NumericalAnswer) 规范要求  
+1. **类型允许**：  
+  - **整数**：正整数，无前导零（如 \(5, 275, 144\)）。  
+  - **浮点数**：由整数部分、小数点和小数部分组成，整数部分可为 \(0\) 或正整数（无前导零），**小数部分固定保留3位**（如 \(0.210, 40.200, 5.500\)）。  
+  - **禁止分数形式**，必须转换为小数形式（如 \(5/12\) 需表示为 \(0.417\)）。  
+
+2. **格式限制**：  
+  - 不允许包含空格、逗号、单位（如“元”）等无关字符。  
+  - 所有答案需用 \(\\boxed{}\) 包裹（如 \(\\boxed{5}\)、\(\\boxed{0.210}\)）。
+"""
+        NumericalAnswer_en = """
+Specifications for Numerical Answers (NumericalAnswer)  
+1. **Permitted Types**:  
+   - **Integers**: Positive integers without leading zeros (e.g., \(5, 275, 144\)).  
+   - **Floating-point numbers**: Composed of an integer part, a decimal point, and a fractional part. The integer part can be \(0\) or a positive integer (no leading zeros), and the **fractional part must be fixed to 3 decimal places** (e.g., \(0.210, 40.200, 5.500\)).  
+   - **Fractional forms are prohibited** and must be converted to decimal form (e.g., \(5/12\) should be expressed as \(0.417\)).  
+
+2. **Format Restrictions**:  
+   - No irrelevant characters such as spaces, commas, or units (e.g., "yuan") are allowed.  
+   - All answers must be enclosed in \(\\boxed{}\) (e.g., \(\\boxed{5}\), \(\\boxed{0.210}\)).
+"""
+        return {
+            "WithUnitSymbol": WithUnitSymbol_zh,
+            "NumericalAnswer": NumericalAnswer_zh
+        }[answer_type] if lang_code == "zh" else {
+            "WithUnitSymbol": WithUnitSymbol_en,
+            "NumericalAnswer": NumericalAnswer_en
+        }[answer_type]
+
+    def response_postprocess(self, s):
+        try:
+            s = s.strip()
+            conclusion = s
+            if "最终答案是" in conclusion:
+                conclusion = conclusion[conclusion.index(
+                    "最终答案是")+len("最终答案是"):].strip()
+                return conclusion
+            else:
+                conclusion = conclusion[conclusion.index(
+                    "the final answer is")+len("the final answer is"):].strip()
+                return conclusion
+        except Exception as err:
+            try:
+                s = s.strip()
+                conclusion = s.split("\n")[-1].strip()
+
+                if len(conclusion) < 5:
+                    conclusion = "\n".join(s.split("\n")[-3:]).strip()
+                return conclusion
+            except Exception as err:
+                raise PostprocessError(f'parse conclusion failure')
+
+    async def get_difficulty_reward(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth, max_concurrent_requests=MAX_CONCURRENT, repeat=8):
+
+        prompts = []
+        wo_content_prompts, w_content_prompts = defaultdict(
+            list), defaultdict(list)
+
+        for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            result = self.doc2query_parse_solution_fn(solution_str)
+            if result is not None:
+                question, answer, answer_type = result
+                ans_format_strict = self.format.get_penalty_or_reward(
+                    solution_str, gt
+                )
+                # 答案格式不符合规范
+                if ans_format_strict < 0.0:
+                    continue
+
+                lang_code = gt["lang_code"]
+                if lang_code == "zh":
+                    instruct = f'仔细一步步思考，并回答下面的问题。你回应的最后一行必须采用 “... 最终答案是 $ANSWER 的格式（不带引号），其中 $ANSWER 的格式要求需要满足下面的说明。\n\n{self.get_answer_format(answer_type, lang_code)}'
+                else:
+                    instruct = f'Think step by step in detail and answer the following questions. The last line of your response must be in the format "... the final answer is $ANSWER" (without quotes), where the format requirements for $ANSWER need to meet the instructions below.\n\n{self.get_answer_format(answer_type, lang_code)}'
+
+                prompt = f'{instruct}\n\n' + question
+                wo_content_prompts[prompt].append(i)
+
+                prompts.extend([prompt]*repeat)
+                prompt = f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n' + \
+                    f'{instruct}\n\n' + question
+                w_content_prompts[prompt].append(i)
+
+                prompts.extend([prompt]*repeat)
+
+        _results = await self.agent.run(prompts, max_concurrent_requests, desc=f"[Generate Responses {self.agent.model}]", postprocess_fns=[self.response_postprocess] * len(prompts))
+        print()
+        raise NotImplementedError
+        results_mapper = defaultdict(list)
+        for (k, v) in _results:
+            results_mapper[k].append(v)
+
+        wo_contents, w_contents = defaultdict(list), defaultdict(list)
+        for k, v in results_mapper.items():
+            if k in wo_content_prompts:
+                for index in wo_content_prompts[k]:
+                    wo_contents[index].extend(v)
+            elif k in w_content_prompts:
+                for index in w_content_prompts[k]:
+                    w_contents[index].extend(v)
+            else:
+                raise NotImplementedError
+
+        full_rewards = []
+        pass_rates = []
+
+        for i in range(len(batch_solution_str)):
+            if i in wo_contents:
+                base_score = 0.0
+
+                wo_content, w_content = wo_contents[i], w_contents[i]
+
+                wo_content = [_ for _ in wo_content if _ is not None]
+                w_content = [_ for _ in w_content if _ is not None]
+
+                # 正确回答
+                result = self.doc2query_parse_solution_fn(
+                    batch_solution_str[i])
+                if result is not None:
+                    _, _options, answer = result
+                else:
+                    answer, _options = "", []
+                ans = answer
+
+                wo_content_correct = [_ for _ in wo_content if _ == ans]
+                w_content_correct = [_ for _ in w_content if _ == ans]
+
+                pass_rates.append({
+                    "wo_content": f'{len(wo_content_correct)}/{len(wo_content)} {wo_content}, ans={ans}',
+                    "w_content": f'{len(w_content_correct)}/{len(w_content)} {w_content}, ans={ans}',
+                })
+
+                try:
+                    if wo_content.count(self.MULTICHOICE_LETTER[len(
+                            _options)]) >= self.difficulty_bon/4:
+                        base_score -= 3.0
+                    if wo_content.count(self.MULTICHOICE_LETTER[len(
+                            _options)+1]) >= self.difficulty_bon/4:
+                        base_score -= 3.0
+
+                    # 无参考 majority vote
+                    wo_content_majority_votes = defaultdict(int)
+                    for v in wo_content:
+                        wo_content_majority_votes[v] += 1
+                    wo_content_majority_votes = sorted(
+                        wo_content_majority_votes.items(), key=lambda x: x[1], reverse=True)
+                    if len(wo_content_majority_votes) > 0:
+                        wo_majority_vote_ans = wo_content_majority_votes[0][0]
+                        if ans == self.MULTICHOICE_LETTER[len(_options)] or ans == self.MULTICHOICE_LETTER[len(_options)+1]:
+                            base_score -= 3.0
+                except Exception as err:
+                    pass
+
+                # 不带参考 模型也有机会rollout对 否则问题可能过于长尾
+                if wo_content.count(ans) < self.difficulty_bon/4:  # 至少对两次
+                    full_rewards.append(base_score)
+                    continue
+
+                # 带参考 应该比 不带参考 显著好
+                if w_content.count(ans) - wo_content.count(ans) < self.difficulty_bon/4:
+                    full_rewards.append(base_score)
+                    continue
+
+                # 完全做不对
+                if len(wo_content_correct) == 0 or len(w_content_correct) == 0:
+                    pass
+                # 全对
+                elif len(wo_content_correct) == len(wo_content):
+                    pass
+                else:
+                    # 无参考正确率在一定区间
+                    if len(wo_content_correct) >= 1 and len(wo_content_correct)/len(wo_content) <= 0.75:
+                        wo_acc = len(wo_content_correct)/len(wo_content)
+                        # 难度越大越好(min_threshold=0.2)
+                        base_score += 1-max(wo_acc, 0.2)
+
+                        # 有/无参考正确率差异越大越好
+                        diff = (len(w_content_correct) / len(w_content)
+                                ) - ((len(wo_content_correct))/(len(wo_content)))
+                        diff = max(diff, 0.0)
+                        base_score += diff
+
+                        # 有参考 majority vote是正确答案加分
+                        w_content_majority_votes = defaultdict(int)
+                        for v in w_content:
+                            w_content_majority_votes[v] += 1
+
+                        w_content_majority_votes = sorted(
+                            w_content_majority_votes.items(), key=lambda x: x[1], reverse=True)
+                        try:
+                            if w_content_majority_votes[0][0] == ans:
+                                base_score += 0.5
+                        except Exception as err:
+                            pass
+
+                full_rewards.append(base_score)
+            else:
+                pass_rates.append({})
+                full_rewards.append(0.0)
+        return full_rewards, pass_rates
 
     async def _compute_score(self,
                              batch_data_sources,
                              batch_solution_str,
                              batch_ground_truth,
                              ):
+        # 解析出错 -2.0
+        # 答案分析 -1.5 ～ -1.0
+        # 答案特征 0 ～ 0.02
+
         penalty = defaultdict(list)
         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
             parsed = self.doc2query_parse_solution_fn(solution_str)
@@ -2239,17 +2472,13 @@ class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
                 penalty[i].append(self.get_penalties()[key]
                                   (solution_str, ground_truth))
 
-        print(penalty)
-        # final_results = []
-
-        # if self.add_difficulty_rewards:
-        #     difficulty_rewards, pass_rates = await self.get_difficulty_reward(
-        #         batch_data_sources,
-        #         batch_solution_str,
-        #         batch_ground_truth,
-        #         max_concurrent_requests=MAX_CONCURRENT,
-        #         repeat=self.difficulty_bon
-        #     )
+        difficulty_rewards, pass_rates = await self.get_difficulty_reward(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            max_concurrent_requests=MAX_CONCURRENT,
+            repeat=self.difficulty_bon
+        )
 
         # for i in range(len(batch_solution_str)):
         #     if self.add_difficulty_rewards:
