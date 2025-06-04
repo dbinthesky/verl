@@ -1436,26 +1436,26 @@ class QwQLongCoTDoc2QueryComputeScore(object):
         self.add_difficulty_rewards = add_difficulty_rewards
         self.difficulty_bon = difficulty_bon
 
-        # self.agent = Agent(**{
-        #     "model": "qwen25_32B_instruct",
-        #     "base_url": "http://10.130.138.40:8000/v1",
-        #     "api_keys": "EMPTY",
-        #     "request_kwargs": {
-        #         "temperature": 0.9,
-        #         "timeout": 360,
-        #         "max_tokens": 2048,
-        #     },
-        # })
         self.agent = Agent(**{
-            "model": "DeepSeek-V3-0324",
-            "base_url": "https://sd0rainnf2h21nr3724fg.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.138.40:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.9,
                 "timeout": 360,
                 "max_tokens": 2048,
-            }
+            },
         })
+        # self.agent = Agent(**{
+        #     "model": "DeepSeek-V3-0324",
+        #     "base_url": "https://sd0rainnf2h21nr3724fg.apigateway-cn-beijing.volceapi.com/v1",
+        #     "api_keys": "EMPTY",
+        #     "request_kwargs": {
+        #         "temperature": 0.9,
+        #         "timeout": 360,
+        #         "max_tokens": 2048,
+        #     }
+        # })
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
@@ -1799,7 +1799,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
             new_options.append(na)
 
         if lang_code == "zh":
-            error = '题目存在错误（包括条件不完整、表述矛盾、无法确定、数据不足 / 前提矛盾或问题设定有缺陷 / 表述不当等等各种错误 / 同时存在多个正确答案、无法单选）'
+            error = '题目存在错误（包括题目信息不完整 / 前提矛盾或问题设定有缺陷 / 表述不当等等各种错误 / 同时存在多个正确答案、无法单选）'
         else:
             error = 'The question contains errors (cases including incomplete conditions, contradictory statements, Cannot be determined/Unable to determine, insufficient data/contradictory premises or problem is flawed/ill-posed, multiple correct answers simultaneously or etc.)'
 
