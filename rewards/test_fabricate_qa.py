@@ -401,6 +401,13 @@ class TestDoc2QueryV2(unittest.TestCase):
             print(score)
             print("="*80)
 
+    def test_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_doc2query_v2(32)
+
+        task = QwQLongCoTDoc2QueryV2ComputeScore(split="valid")
+        print(task.compute_score([None]*len(batch_solution_str),
+                                 batch_solution_str, batch_ground_truth))
+
 
 class TestDoc2Query(unittest.TestCase):
     def test_get_difficulty_reward(self):

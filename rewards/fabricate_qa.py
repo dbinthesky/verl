@@ -495,8 +495,7 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")
-                               :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -2221,8 +2220,77 @@ class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
             "AnsFeature": self.answer_feature.get_penalty_or_reward,
         }
 # 解析出错 -2.0
-# 答案分析 -1.5  -> -1.0
+# 答案分析 -1.5 ～ -1.0
+# 答案特征 0 ～ 0.02
 
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+        penalty = defaultdict(list)
+        for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            parsed = self.doc2query_parse_solution_fn(solution_str)
+            if parsed is None:
+                penalty[i].append(-2.0)
+            else:
+                penalty[i].append(0.0)
+            for key in ("Format", "AnsFeature", "QSim"):
+                penalty[i].append(self.get_penalties()[key]
+                                  (solution_str, ground_truth))
+
+        print(penalty)
+        # final_results = []
+
+        # if self.add_difficulty_rewards:
+        #     difficulty_rewards, pass_rates = await self.get_difficulty_reward(
+        #         batch_data_sources,
+        #         batch_solution_str,
+        #         batch_ground_truth,
+        #         max_concurrent_requests=MAX_CONCURRENT,
+        #         repeat=self.difficulty_bon
+        #     )
+
+        # for i in range(len(batch_solution_str)):
+        #     if self.add_difficulty_rewards:
+        #         score = difficulty_rewards[i]
+        #     else:
+        #         score = 0.0
+
+        #     penalty_log_str = []
+        #     for name, _penalty in penalty.items():
+        #         penalty_log_str.append(
+        #             f'{name}={_penalty[i]:.2f}')
+        #         score += _penalty[i]
+
+        #     final_results.append(score)
+
+        #     if (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+        #         log = True
+        #         log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
+        #     else:
+        #         log = False
+
+        #     difficulty = batch_ground_truth[i]["difficulty"]
+        #     domain = batch_ground_truth[i]["domain"]
+
+        #     if log:
+        #         print(
+        #             f"--------------------------------{log_flag}--------------------------------")
+        #         print(
+        #             f"【Solution】({domain})`{self.log_solution(batch_solution_str[i])}`")
+        #         try:
+        #             print(
+        #                 f"【Ground Truth】({difficulty})`{self.log_ground_truth(batch_ground_truth[i])}`")
+        #         except Exception as err:
+        #             pass
+        #         if self.add_difficulty_rewards:
+        #             print(
+        #                 f'[Pass@{self.difficulty_bon}]={pass_rates[i]}|[Final Reward]={score:.3f}|Difficulty={difficulty_rewards[i]:.3f}|{"|".join(penalty_log_str)}\n')
+        #         else:
+        #             print(
+        #                 f'[Pass@{self.difficulty_bon}]={pass_rates[i]}|[Final Reward]={score:.3f}|{"|".join(penalty_log_str)}\n')
+        # return final_results
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query V2
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
