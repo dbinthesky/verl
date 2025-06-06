@@ -2455,7 +2455,7 @@ Specifications for Numerical Answers (NumericalAnswer)
                         continue
 
                     # 题目过于简单或困难
-                    if np.mean(wo_content_scores) >= 0.5 or np.mean(wo_content_scores) < (1.0/16) or np.mean(wo_content_scores) == 0.:
+                    if np.mean(wo_content_scores) > 0.5 or np.mean(wo_content_scores) < (1.0/16) or np.mean(wo_content_scores) == 0.:
                         full_rewards.append(base_score)
                         continue
 
