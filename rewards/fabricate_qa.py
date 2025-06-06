@@ -1981,10 +1981,10 @@ class NumericalAnswer(object):
             # 转换为字符串，确保保留三位小数
             return f"{rounded:.3f}"
 
-    def satisfy_extra_constraint(self, answer):
+    def exclude_common_answer_pattern(self, answer):
         if answer in (
             '\\boxed{-1}', '\\boxed{0}', '\\boxed{1}', '\\boxed{3}',
-            '\\boxed{4}', '\\boxed{5}', '\\boxed{6}', '\\boxed{1.000}',
+            '\\boxed{4}', '\\boxed{5}', '\\boxed{6}', '\\boxed{1.000}', '\\boxed{0.000}',
                 '\\boxed{2.000}', '\\boxed{3.000}'):
             return False
         return True
@@ -2019,7 +2019,7 @@ class NumericalAnswer(object):
         result = self.verify_numeric_content(cleaned_content)  # 调用数值校验函数
 
         # 3. 特定校验（避免构造0、1、2等常见答案）
-        if not self.satisfy_extra_constraint(answer_str):
+        if not self.exclude_common_answer_pattern(answer_str):
             return False
         return result[0]
 
