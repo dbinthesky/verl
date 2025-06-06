@@ -497,8 +497,7 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")
-                               :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -2465,9 +2464,9 @@ Specifications for Numerical Answers (NumericalAnswer)
 
                     # 题目难度在合理区间
 
-                    # 难度系数
-                    difficulty_reward = 1.0 - \
-                        max(np.mean(wo_content_scores), 0.0)
+                    # 难度系数 (最大0.8)
+                    difficulty_reward = max(1.0 -
+                                            max(np.mean(wo_content_scores), 0.0), 0.8)
 
                     # 有/无参考正确率差异(并非越大越好，有参考达到majority vote为上限)
                     rag_reward = max(0.0, min(np.mean(

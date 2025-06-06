@@ -55,7 +55,7 @@ setup_path() {
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-fabricate_qa_v7_instruct"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/doc2query_v2/qwen2_5-32b_qwq_doc2query_v2-2025-06-06-03-25-51/2025-06-06/03-25-51/global_step_20/actor"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/qwen2_5-32b_qwq_doc2query_v2-2025-06-06-03-25-51_grpo_step_20"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v2/iscalc_numeric_high_equation_mix_0604"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v2/high_equation_rl_8k_0602_test"
 
