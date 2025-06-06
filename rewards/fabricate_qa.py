@@ -2478,7 +2478,8 @@ Specifications for Numerical Answers (NumericalAnswer)
                         w_content_scores) >= 0.75 else np.mean(
                         w_content_scores)
 
-                    base_score += difficulty_reward + rag_reward + confidence_reward
+                    # 总分计算
+                    base_score += 2 * difficulty_reward + rag_reward + confidence_reward
                 except Exception as err:
                     pass
 
