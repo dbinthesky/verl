@@ -45,8 +45,8 @@ RM_URLS = [
 VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
-# MAX_CONCURRENT = 192
-MAX_CONCURRENT = 128
+MAX_CONCURRENT = 192
+# MAX_CONCURRENT = 160
 
 
 def tokenize(s, lang_code):
@@ -187,6 +187,8 @@ def postprocess_solution(solution_str):
         return solution_str[:solution_str.index("<|im_end|>")].strip()
     if "<｜end▁of▁sentence｜>" in solution_str:
         return solution_str[:solution_str.index("<｜end▁of▁sentence｜>")].strip()
+    if "<|endoftext|>" in solution_str:
+        return solution_str[:solution_str.index("<|endoftext|>")].strip()
     return solution_str
 
 
@@ -495,7 +497,8 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")
+                               :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1851,8 +1854,6 @@ qwq_longcot_doc2query_compute_score_valid = _qwq_longcot_doc2query_compute_score
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 def doc2query_v2_parse_solution_fn(solution_str: str, remove_option_letter=True):
-    solution_str = f'<think>\n{solution_str}'
-
     if solution_str.count("</question>") > 1:
         return None
 
@@ -1864,8 +1865,8 @@ def doc2query_v2_parse_solution_fn(solution_str: str, remove_option_letter=True)
     if not solution_str.startswith("<think>"):
         return None
 
-    if not solution_str.endswith("</question>"):
-        return None
+    # if not solution_str.endswith("</question>"):
+    #     return None
 
     try:
         thought = re.findall(r'<think>.*</think>',
@@ -1880,7 +1881,6 @@ def doc2query_v2_parse_solution_fn(solution_str: str, remove_option_letter=True)
                                 solution_str, re.DOTALL)[0]
     except Exception as err:
         return None
-
     if ("<question>" in conclusion) or ("</question>" in conclusion):
         return None
 
@@ -1981,8 +1981,11 @@ class NumericalAnswer(object):
             # 转换为字符串，确保保留三位小数
             return f"{rounded:.3f}"
 
-    def extra_constraint(self, answer):
-        if answer in ('\\boxed{0}', '\\boxed{1}', '\\boxed{3}', '\\boxed{4}', '\\boxed{5}', '\\boxed{6}'):
+    def satisfy_extra_constraint(self, answer):
+        if answer in (
+            '\\boxed{-1}', '\\boxed{0}', '\\boxed{1}', '\\boxed{3}',
+            '\\boxed{4}', '\\boxed{5}', '\\boxed{6}', '\\boxed{1.000}',
+                '\\boxed{2.000}', '\\boxed{3.000}'):
             return False
         return True
 
@@ -2016,7 +2019,7 @@ class NumericalAnswer(object):
         result = self.verify_numeric_content(cleaned_content)  # 调用数值校验函数
 
         # 3. 特定校验（避免构造0、1、2等常见答案）
-        if not self.extra_constraint(cleaned_content):
+        if not self.satisfy_extra_constraint(answer_str):
             return False
         return result[0]
 
@@ -2114,8 +2117,9 @@ class Doc2QueryV2FormatReward(PenaltyOrReward):
 
     def get_penalty_or_reward(self, solution_str, ground_truth):
         solution_str = self.doc2query_parse_solution_fn(solution_str)
+
         if solution_str is None:
-            return self.penalty
+            return 0.0
 
         question, answer, answer_type = solution_str
 

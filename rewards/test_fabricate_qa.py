@@ -396,10 +396,13 @@ class TestDoc2QueryV2(unittest.TestCase):
         task = QwQLongCoTDoc2QueryV2ComputeScore(split="valid")
         for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
             # QSim\Format\AnsFeature
-            score = task.get_penalties()["AnsFeature"](solution_str, gt)
+
+            solution_str = '<think>***</think><question>\nQuestion: 在范畴Set中，设函子G为Option，对于任何集合A，Option(A)是{None} ∪ A。给定符号函子H由H(X) = X·G定义。设函子Z和自然变换e满足：对于任意集合A，Z(A) = A × {0,1}，且e_{Option(A)}将Option(A)中的每个元素映射为：None → (None, 0)，而a ∈ A → (Some a, 1)。考虑集合A = {1, 2}，计算配分律δ_{(Z,e)}在Option(Z(A)) → Z(Option(A))的映射中，元素Some((1,0))的像在Z(Option(A))中的第二个分量的值。注意：Option(Z(A))中的元素Some((1,0))表示Some包裹着Z(A)中的元素(1,0)。\nAnswer: \\boxed{-1}\nAnswer Type: NumericalAnswer\n</question>'
+            score = task.get_penalties()["Format"](solution_str, gt)
             print(solution_str)
             print(score)
             print("="*80)
+            break
 
     def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_doc2query_v2(32)
