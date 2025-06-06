@@ -497,7 +497,7 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]"):s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1982,9 +1982,9 @@ class NumericalAnswer(object):
 
     def exclude_common_answer_pattern(self, answer):
         if answer in (
-            '\\boxed{-1}', '\\boxed{0}', '\\boxed{1}', '\\boxed{3}',
-            '\\boxed{4}', '\\boxed{5}', '\\boxed{6}', '\\boxed{1.000}', '\\boxed{0.000}',
-                '\\boxed{2.000}', '\\boxed{3.000}'):
+            '\\boxed{-2}', '\\boxed{-1}', '\\boxed{0}', '\\boxed{1}', '\\boxed{2}', '\\boxed{3}',
+            '\\boxed{4}', '\\boxed{5}', '\\boxed{6}', '\\boxed{7}', '\\boxed{1.000}', '\\boxed{0.000}',
+                '\\boxed{2.000}', '\\boxed{3.000}', '\\boxed{-1.000}',):
             return False
         return True
 
@@ -2398,7 +2398,8 @@ Specifications for Numerical Answers (NumericalAnswer)
                 prompt = f'{instruct}\n\n' + question
                 wo_content_prompts[prompt].append(i)
 
-                prompts.extend([prompt]*repeat)
+                # 无参考考虑Bo16
+                prompts.extend([prompt]*repeat*2)
                 prompt = f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n' + \
                     f'{instruct}\n\n' + question
                 w_content_prompts[prompt].append(i)
@@ -2424,6 +2425,7 @@ Specifications for Numerical Answers (NumericalAnswer)
         full_rewards = []
         pass_rates = []
 
+        # FIXME
         for i in range(len(batch_solution_str)):
             if i in wo_contents:
                 base_score = 0.0
@@ -2453,7 +2455,7 @@ Specifications for Numerical Answers (NumericalAnswer)
                         continue
 
                     # 题目过于简单或困难
-                    if np.mean(wo_content_scores) > 0.75 or np.mean(wo_content_scores) < 0.05:
+                    if np.mean(wo_content_scores) >= 0.5 or np.mean(wo_content_scores) < (1.0/16) or np.mean(wo_content_scores) == 0.:
                         full_rewards.append(base_score)
                         continue
 
@@ -2462,23 +2464,13 @@ Specifications for Numerical Answers (NumericalAnswer)
                         full_rewards.append(base_score)
                         continue
 
-                    # 题目难度在合理区间
-
-                    # 难度系数 (最大0.8)
-                    difficulty_reward = max(1.0 -
-                                            max(np.mean(wo_content_scores), 0.0), 0.8)
-
-                    # 有/无参考正确率差异(并非越大越好，有参考达到majority vote为上限)
-                    rag_reward = max(0.0, min(np.mean(
-                        w_content_scores) - np.mean(wo_content_scores), 0.75-np.mean(wo_content_scores)))
-
                     # 有参考置信度
-                    confidence_reward = 1.0 if np.mean(
-                        w_content_scores) >= 0.75 else np.mean(
-                        w_content_scores)
+                    if np.mean(w_content_scores) < 0.5:
+                        full_rewards.append(base_score)
+                        continue
 
                     # 总分计算
-                    base_score += 2 * difficulty_reward + rag_reward + confidence_reward
+                    base_score = 1.0
                 except Exception as err:
                     pass
 
