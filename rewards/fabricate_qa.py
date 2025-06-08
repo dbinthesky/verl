@@ -497,7 +497,8 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]"):s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")
+                               :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1303,7 +1304,7 @@ class QuestionSimilarity(PenaltyOrReward):
         self.doc2query_parse_solution_fn = doc2query_parse_solution_fn
 
     def get_penalty_or_reward(self, solution_str, ground_truth):
-        if ground_truth.get("question", None) is None:
+        if ground_truth.get("question", None) is None and len(ground_truth.get("fabricate_questions", [])) == 0:
             return 0.0
         try:
             solution_str = self.doc2query_parse_solution_fn(solution_str)
@@ -1312,12 +1313,15 @@ class QuestionSimilarity(PenaltyOrReward):
                 return 0.0
             question, options, answer = solution_str
 
-            gt = ground_truth["question"]
+            if ground_truth.get("question", None):
+                gt = ground_truth["question"]
+            else:
+                gt = random.choice(ground_truth["fabricate_questions"])
 
             gt_tokens = " ".join(tokenize(gt.lower(), "en"))
             sl_tokens = " ".join(tokenize(question.lower(), "en"))
             bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
-            return bleu / 100
+            return bleu / 100 * 2
         except Exception as err:
             return 0.0
 
@@ -2460,7 +2464,7 @@ Specifications for Numerical Answers (NumericalAnswer)
                         continue
 
                     # 带参考 应该比 不带参考 显著好
-                    if not (np.mean(w_content_scores) - np.mean(wo_content_scores) > 1/self.difficulty_bon):
+                    if not (np.mean(w_content_scores) - np.mean(wo_content_scores) >= 1/self.difficulty_bon):
                         full_rewards.append(base_score)
                         continue
 
@@ -2526,7 +2530,7 @@ Specifications for Numerical Answers (NumericalAnswer)
         final_results = []
         for i in range(len(batch_solution_str)):
             scores = copy.deepcopy(penalty[i])
-            scores.append(difficulty_rewards[i])
+            scores.append(difficulty_rewards[i] * 0.5)
             cur_score = 0
             for _score in scores:
                 if _score < 0:

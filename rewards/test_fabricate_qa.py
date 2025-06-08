@@ -33,6 +33,7 @@ from fabricate_qa import (
     QwQLongCoTDoc2QueryComputeScore,
     QwQLongCoTDoc2QueryV2ComputeScore,
     qwq_longcot_doc2query_compute_score_valid,
+    doc2query_v2_parse_solution_fn,
     batchify
 )
 
@@ -68,7 +69,7 @@ def load_qwq_fabricate_qa_data(num=100):
 
 
 def load_doc2query_v2(num=40):
-    path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v2/iscalc_numeric_high_equation_mix_0604"
+    path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v2/iscalc_numeric_high_equation_mix_0608"
     batch_solution_str, batch_ground_truth = [], []
 
     df = pd.read_parquet(path)
@@ -80,11 +81,13 @@ def load_doc2query_v2(num=40):
         if i > num-1:
             break
         try:
+            assert gt["question"] is not None
             batch_solution_str.append(
                 f'<think>***</think><question>\nQuestion: {gt["question"]}\\n\nAnswer: {gt["answer"]}\n\nAnswer Type:{gt["answer_type"]}\n</question><｜end▁of▁sentence｜>')
         except Exception as err:
+            question = random.choice(gt["fabricate_questions"])
             batch_solution_str.append(
-                f'<think>***</think><question>\nQuestion: Using a 0.1000 mol/L NaOH solution to titrate a 0.1000 mol/L formic acid solution, what is the pH at the stoichiometric point? \n\nOptions:\nA) 5.67\nB) 8.23\nC) 9.88\nD) 12.46\nE) 10.11\nF) 11.07\nG) 7.22\nH) 6.35\nI) 3.47\bJ) 3.47\n\nAnswer: A\n</question><｜end▁of▁sentence｜>')
+                f'<think>***</think><question>\nQuestion: {question}\n\nAnswer: \\boxed{{18}}\n\nAnswer Type: NumericalAnswer\n</question><｜end▁of▁sentence｜>')
     return batch_solution_str, batch_ground_truth
 
 
@@ -409,7 +412,7 @@ class TestDoc2QueryV2(unittest.TestCase):
 
         task = QwQLongCoTDoc2QueryV2ComputeScore(split="valid")
         print(task.compute_score([None]*len(batch_solution_str),
-                                 batch_solution_str, batch_ground_truth))
+                                batch_solution_str, batch_ground_truth))
 
 
 class TestDoc2Query(unittest.TestCase):
