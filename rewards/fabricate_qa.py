@@ -1321,7 +1321,7 @@ class QuestionSimilarity(PenaltyOrReward):
             gt_tokens = " ".join(tokenize(gt.lower(), "en"))
             sl_tokens = " ".join(tokenize(question.lower(), "en"))
             bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
-            return bleu / 100 * 2
+            return bleu / 100
         except Exception as err:
             return 0.0
 
@@ -2530,7 +2530,7 @@ Specifications for Numerical Answers (NumericalAnswer)
         final_results = []
         for i in range(len(batch_solution_str)):
             scores = copy.deepcopy(penalty[i])
-            scores.append(difficulty_rewards[i] * 0.5)
+            scores.append(difficulty_rewards[i])
             cur_score = 0
             for _score in scores:
                 if _score < 0:
