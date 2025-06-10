@@ -497,7 +497,7 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]"):s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1603,7 +1603,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
 
                 prompts.extend([prompt]*repeat)
 
-        _results = await self.agent.run(prompts, max_concurrent_requests, desc=f"[Generate Responses {self.agent.model}]", postprocess_fns=[self.response_postprocess] * len(prompts))
+        _results = await self.agent.run(list(set(prompts)), max_concurrent_requests, desc=f"[Generate Responses {self.agent.model}]", postprocess_fns=[self.response_postprocess] * len(list(set(prompts))))
         results_mapper = defaultdict(list)
         for (k, v) in _results:
             results_mapper[k].append(v)
@@ -2133,7 +2133,7 @@ class Doc2QueryV2FormatReward(PenaltyOrReward):
             if parser.verify(answer):
                 if answer_type == "NumericalAnswer":
                     # 特定校验（避免构造0、1、2等常见答案）
-                    if not parser.exclude_common_answer_pattern(answer_str):
+                    if not parser.exclude_common_answer_pattern(answer):
                         return -0.5
                 return 0.0
             else:
@@ -2370,6 +2370,102 @@ Specifications for Numerical Answers (NumericalAnswer)
             else:
                 return 0.0
 
+    async def verify_results(self, verify_queue, batch_solution_str, max_concurrent_requests):
+        def validate_result(response):
+            s = response
+            try:
+                conclusion = s.strip()
+
+                conclusion = conclusion[conclusion.index(
+                    "```json")+len("```json"):].strip()
+                conclusion = conclusion[:conclusion.index("```")].strip()
+                try:
+                    conclusion = json.loads(conclusion)
+                    if conclusion["判断结果"] not in ("正确", "错误"):
+                        raise PostprocessError(f'corrupt')
+                    return conclusion["判断结果"] == "正确"
+                except Exception as err:
+                    try:
+                        conclusion = re.findall(
+                            r'\"判断结果\": \"(.*)\"', conclusion)[0]
+                        if not conclusion in ("正确", "错误"):
+                            raise PostprocessError(f'corrupt')
+                        return conclusion == "正确"
+                    except Exception as err:
+                        raise PostprocessError(f'{err}')
+            except Exception as err:
+                raise PostprocessError(f'{err}')
+
+        verify_prompt = """### **基于标准答案判断回答是否正确**  
+任务描述：请根据提供的**题目**、**用户回答（答案部分）**和**标准答案**，判断用户回答是否正确，并按照指定格式输出结果。需严格比对答案，若用户回答与标准答案**完全一致**，则判定为正确，否则为错误。
+
+**必须与标准答案完全一致**（含字符、单位、符号等），如果数值是科学记数法或者是小数，是否按规定保留到规定位数，否则判错。 |  
+
+#### 输出要求
+```json
+{
+"判断结果": "正确/错误",
+}
+```
+
+现在对下面的回答判断正确性
+"""
+
+        verify_template = """
+#### **输入：**
+##### 题目
+```
+{question}
+```
+
+##### 用户回答（答案部分）
+{conclusion}
+
+##### 标准答案
+{answer}
+
+#### **输出：**  
+"""
+        correctness = {
+            "w_content": defaultdict(list),
+            "w/o_content": defaultdict(list)
+        }
+
+        verify_mapper = defaultdict(list)
+
+        for example in verify_queue:
+            index = example[0]
+            sol_str = batch_solution_str[index]
+            question, answer, answer_type = self.doc2query_parse_solution_fn(
+                sol_str)
+            # 基于规则解析答案
+            correct = self.verify(example[2], answer, answer_type)
+
+            if correct > 0.0:
+                correctness[example[1]][example[0]].append(correct)
+            else:
+                # verify_mapper
+                instruct = f'仔细一步步思考，并回答下面的问题。你回应的最后一行必须采用 “... 最终答案是 $ANSWER 的格式（不带引号），其中 $ANSWER 的格式要求需要满足下面的说明。\n\n{self.get_answer_format(answer_type, "zh")}'
+                prompt = f'{instruct}\n\n' + question
+                eval_prompt = verify_prompt + "\n\n" + verify_template.format(
+                    question=prompt,
+                    answer=answer,
+                    conclusion=example[2]
+                )
+                verify_mapper[eval_prompt].append((example[0], example[1]))
+
+        _results = await self.agent.run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.agent.model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),))
+
+        results_mapper = defaultdict(list)
+        for (k, v) in _results:
+            for meta in verify_mapper[k]:
+                index, _type = meta
+                if v is not None:
+                    correctness[_type][index].append(1.0 if v else 0.0)
+
+        print(correctness)
+        return correctness
+
     async def get_difficulty_reward(
             self,
             batch_data_sources,
@@ -2401,34 +2497,37 @@ Specifications for Numerical Answers (NumericalAnswer)
                 wo_content_prompts[prompt].append(i)
 
                 # 无参考考虑Bo16
-                prompts.extend([prompt]*repeat*2)
+                # prompts.extend([prompt]*repeat*2)
+                # 无参考考虑Bo8
+                prompts.extend([prompt]*repeat)
+
                 prompt = f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n' + \
                     f'{instruct}\n\n' + question
                 w_content_prompts[prompt].append(i)
 
                 prompts.extend([prompt]*repeat)
-
         _results = await self.agent.run(prompts, max_concurrent_requests, desc=f"[Generate Responses {self.agent.model}]", postprocess_fns=[self.response_postprocess] * len(prompts))
 
         results_mapper = defaultdict(list)
         for (k, v) in _results:
             results_mapper[k].append(v)
 
-        for (k, v) in _results:
-            print(v)
-            print("="*80)
-        raise NotImplementedError
-
-        wo_contents, w_contents = defaultdict(list), defaultdict(list)
+        # 答案验证
+        verify_queue = []
         for k, v in results_mapper.items():
             if k in wo_content_prompts:
                 for index in wo_content_prompts[k]:
-                    wo_contents[index].extend(v)
+                    verify_queue.extend(
+                        [(index, "w/o_content", _v) for _v in v])
             elif k in w_content_prompts:
                 for index in w_content_prompts[k]:
-                    w_contents[index].extend(v)
-            else:
-                raise NotImplementedError
+                    verify_queue.extend([(index, "w_content", _v) for _v in v])
+
+        correctness = await self.verify_results(
+            verify_queue=verify_queue, batch_solution_str=batch_solution_str, max_concurrent_requests=MAX_CONCURRENT,
+        )
+
+        wo_contents, w_contents = correctness["w/o_content"], correctness["w_content"]
 
         full_rewards = []
         pass_rates = []
@@ -2438,19 +2537,8 @@ Specifications for Numerical Answers (NumericalAnswer)
             if i in wo_contents:
                 base_score = 0.0
 
-                wo_content, w_content = wo_contents[i], w_contents[i]
-
-                wo_content = [_ for _ in wo_content if _ is not None]
-                w_content = [_ for _ in w_content if _ is not None]
-
-                # 标准答案
-                question, answer, answer_type = self.doc2query_parse_solution_fn(
-                    batch_solution_str[i])
-
-                wo_content_scores = [self.verify(_, answer, answer_type)
-                                     for _ in wo_content]
-                w_content_scores = [self.verify(_, answer, answer_type)
-                                    for _ in w_content]
+                wo_content_scores = wo_contents[i]
+                w_content_scores = w_contents[i]
 
                 pass_rates.append({
                     "wo_content": f'{np.sum(wo_content_scores)}/{len(wo_content_scores)}',

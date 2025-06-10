@@ -87,8 +87,9 @@ def load_doc2query_v2(num=40):
                 f'<think>***</think><question>\nQuestion: {gt["question"]}\\n\nAnswer: {gt["answer"]}\n\nAnswer Type:{gt["answer_type"]}\n</question><｜end▁of▁sentence｜>')
         except Exception as err:
             question = random.choice(gt["fabricate_questions"])
+            ans = "\\boxed{18}"
             batch_solution_str.append(
-                f'<think>***</think><question>\nQuestion: {question}\n\nAnswer: \\boxed{{18}}\n\nAnswer Type: NumericalAnswer\n</question><｜end▁of▁sentence｜>')
+                f'<think>***</think><question>\nQuestion: {question}\n\nAnswer: {ans}\n\nAnswer Type: NumericalAnswer\n</question><｜end▁of▁sentence｜>')
     return batch_solution_str, batch_ground_truth
 
 
@@ -493,7 +494,7 @@ class TestDoc2Query(unittest.TestCase):
         aio.run(main())
 
     def test_compute_score(self):
-        batch_solution_str, batch_ground_truth = load_doc2query(32)
+        # batch_solution_str, batch_ground_truth = load_doc2query(32)
 
         task = QwQLongCoTDoc2QueryComputeScore(split="valid")
         print(qwq_longcot_doc2query_compute_score_valid([None]*len(batch_solution_str),
