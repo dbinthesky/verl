@@ -497,8 +497,7 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")
-                               :s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")                       :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -1864,13 +1863,11 @@ def doc2query_v2_parse_solution_fn(solution_str: str, remove_option_letter=True)
         return None
 
     solution_str = postprocess_solution(solution_str)
-
     if not solution_str.startswith("<think>"):
         return None
 
     # if not solution_str.endswith("</question>"):
     #     return None
-
     try:
         thought = re.findall(r'<think>.*</think>',
                              solution_str, re.DOTALL)[0]
@@ -1890,6 +1887,8 @@ def doc2query_v2_parse_solution_fn(solution_str: str, remove_option_letter=True)
     try:
         question = conclusion[conclusion.index(
             "Question: ")+len("Question: "):conclusion.index("Answer:")].strip()
+
+        print("@@@@@", conclusion)
 
         answer = conclusion[conclusion.index(
             "Answer:")+len("Answer:"):conclusion.index("Answer Type:")].strip()
@@ -2092,19 +2091,20 @@ class WithUnitSymbol(object):
             )?                  # 科学计数法结束
             \s+                 # 至少一个空格分隔数值与单位
             (                   # 单位部分
-                [A-Za-z]+       # 基础单位（如m, Pa, mol）
+                [A-Za-zμΩ°]+       # 基础单位（如m, Pa, mol）
+                [²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*  # 允许幂次符号和负号（如m², m³, m⁻¹）
                 (?:             # 可选的SI前缀（如k, m, μ）
-                    [yzafpnμmcdhkMGTPEZY]
+                    [yzafpnumcdhkMGTPEZY]
                 )?
                 (?:             # 分子中多个单位用·连接（如kJ·mol）
-                    \u00B7[A-Za-z]+
+                    \u00B7[A-Za-zμΩ]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*
                 )*
                 (?:             # 分母部分（可选）
                     /           # 斜杠分隔符
                     (?:         # 分母两种格式：括号内或直接跟单位
-                        \([A-Za-z]+(?:\u00B7[A-Za-z]+)*\)  # 括号内的单位（如(mol·K)）
+                        \([A-Za-zμΩ°]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*(?:\u00B7[A-Za-zμΩ°]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*)*\)  # 括号内的单位（如(mol·K)）
                         |       # 或
-                        [A-Za-z]+(?:\u00B7[A-Za-z]+)*      # 直接跟单位（如mol·K）
+                        [A-Za-zμΩ°]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*(?:\u00B7[A-Za-zμΩ°]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*)*      # 直接跟单位（如mol·K）
                     )
                 )?
             )
