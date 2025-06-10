@@ -1888,8 +1888,6 @@ def doc2query_v2_parse_solution_fn(solution_str: str, remove_option_letter=True)
         question = conclusion[conclusion.index(
             "Question: ")+len("Question: "):conclusion.index("Answer:")].strip()
 
-        print("@@@@@", conclusion)
-
         answer = conclusion[conclusion.index(
             "Answer:")+len("Answer:"):conclusion.index("Answer Type:")].strip()
 
