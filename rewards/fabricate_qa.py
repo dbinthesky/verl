@@ -2017,10 +2017,6 @@ class NumericalAnswer(object):
         # 去除可能的残留空格（确保数值部分无空格）
         cleaned_content = content.replace(' ', '')
         result = self.verify_numeric_content(cleaned_content)  # 调用数值校验函数
-
-        # 3. 特定校验（避免构造0、1、2等常见答案）
-        if not self.exclude_common_answer_pattern(answer_str):
-            return False
         return result[0]
 
     def verify_numeric_content(self, content):
@@ -2135,6 +2131,10 @@ class Doc2QueryV2FormatReward(PenaltyOrReward):
 
         try:
             if parser.verify(answer):
+                if answer_type == "NumericalAnswer":
+                    # 特定校验（避免构造0、1、2等常见答案）
+                    if not parser.exclude_common_answer_pattern(answer_str):
+                        return -0.5
                 return 0.0
             else:
                 return -1.0
@@ -2410,11 +2410,14 @@ Specifications for Numerical Answers (NumericalAnswer)
 
         _results = await self.agent.run(prompts, max_concurrent_requests, desc=f"[Generate Responses {self.agent.model}]", postprocess_fns=[self.response_postprocess] * len(prompts))
 
-        print(_results)
-        raise NotImplementedError
         results_mapper = defaultdict(list)
         for (k, v) in _results:
             results_mapper[k].append(v)
+
+        for (k, v) in _results:
+            print(v)
+            print("="*80)
+        raise NotImplementedError
 
         wo_contents, w_contents = defaultdict(list), defaultdict(list)
         for k, v in results_mapper.items():
