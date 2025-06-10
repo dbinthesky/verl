@@ -2278,39 +2278,39 @@ class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
 
     def get_answer_format(self, answer_type, lang_code):
         WithUnitSymbol_zh = """带单位数值 (WithUnitSymbol) 规范要求
-1. **数值表示**
-   - 问题指令必须明确要求保留的小数点位数 科学计数法位数。
-   - 大数用科学计数法，避免冗余空格，如 `$5.27×10^{5}\ \\text{Pa}$`。
+1. **数值表示**  
+   - 问题指令必须明确要求保留的小数点位数 科学计数法位数。  
+   - 大数用科学计数法，避免冗余空格，如 `$5.27×10^{5}\ \\text{Pa}$`。  
 
-2. **单位规范**
-   - 问题指令必须明确要求返回答案的单位。
-   - 单位符号用国际标准（SI），大小写严格区分：
-     - 大写：N（牛）、Pa（帕）、J（焦）、W（瓦）、Hz（赫）等。
-     - 小写：m（米）、kg（千克）、s（秒）、mol（摩）等。
-   - 单位与数值间留空格：`2.91 m` ✅，`2.91m` ❌。
-   - 复合单位用斜杠表示：`kJ/(mol·K)` ✅，禁止使用乘方形式（如 `kJ·mol⁻¹·K⁻¹` ❌）。
+2. **单位规范** 
+   - 问题指令必须明确要求返回答案的单位。   
+   - 单位符号用国际标准（SI），大小写严格区分：  
+     - 大写：N（牛）、Pa（帕）、J（焦）、W（瓦）、Hz（赫）等。  
+     - 小写：m（米）、kg（千克）、s（秒）、mol（摩）等。  
+   - 单位与数值间留空格：`2.91 m` ✅，`2.91m` ❌。  
+   - 复合单位用斜杠表示：`kJ/(mol·K)` ✅，禁止使用乘方形式（如 `kJ·mol⁻¹·K⁻¹` ❌）。  
 """
         WithUnitSymbol_en = """Specifications for Numerical Answers with Unit Symbols (WithUnitSymbol)
-1. **Numerical Representation**
-   - The problem instructions must clearly specify the number of decimal places to retain or the number of significant figures for scientific notation.
-   - Use scientific notation for large numbers to avoid redundant spaces, e.g., `$5.27×10^{5}\ \text{Pa}$`.
-
-2. **Unit Specifications**
-   - The problem instructions must clearly require the unit for the returned answer.
-   - Use International System (SI) unit symbols with strict case distinction:
-     - Uppercase: N (newton), Pa (pascal), J (joule), W (watt), Hz (hertz), etc.
-     - Lowercase: m (meter), kg (kilogram), s (second), mol (mole), etc.
-   - Leave a space between the numerical value and the unit: `2.91 m` ✅, `2.91m` ❌.
-   - Represent composite units with a slash: `kJ/(mol·K)` ✅, and avoid exponential forms (e.g., `kJ·mol⁻¹·K⁻¹` ❌).
+1. Numerical Representation:
+    - The question instructions must clearly require the number of decimal places or significant figures for scientific notation to be retained.
+    - Use scientific notation for large numbers, use format correctly such as `5.27 × 10^5 Pa`. Do not add parentheses to the exponent part: `1.256 × 10^-67 J` ✅, `1.256 × 10^{-67} J` ❌, `1.92 × 10⁷ m⁻¹` ❌。  
+    
+2. Unit Specifications:
+    - The question instructions must clearly require the unit for the returned answer.
+    - Use international standard (SI) unit symbols with strict case distinction:
+      - Uppercase: N (newton), Pa (pascal), J (joule), W (watt), Hz (hertz), etc.
+      - Lowercase: m (meter), kg (kilogram), s (second), mol (mole), etc.
+    - Leave a space between the unit and the numerical value: `2.91 m` ✅, `2.91m` ❌.
+    - Use a slash for composite units: `kJ/(mol·K)` ✅, and power forms are prohibited (such as `kJ·mol⁻¹·K⁻¹` ❌). 
 """
         NumericalAnswer_zh = """数值答案 (NumericalAnswer) 规范要求
-1. **类型允许**：
-  - **整数**：正整数，无前导零（如 \(5, 275, 144\)）。
-  - **浮点数**：由整数部分、小数点和小数部分组成，整数部分可为 \(0\) 或正整数（无前导零），**小数部分固定保留3位**（如 \(0.210, 40.200, 5.500\)）。
-  - **禁止分数形式**，必须转换为小数形式（如 \(5/12\) 需表示为 \(0.417\)）。
+1. **类型允许**：  
+  - **整数**：正整数，无前导零（如 \(5, 275, 144\)）。  
+  - **浮点数**：由整数部分、小数点和小数部分组成，整数部分可为 \(0\) 或正整数（无前导零），**小数部分固定保留3位**（如 \(0.210, 40.200, 5.500\)）。  
+  - **禁止分数形式**，必须转换为小数形式（如 \(5/12\) 需表示为 \(0.417\)）。  
 
-2. **格式限制**：
-  - 不允许包含空格、逗号、单位（如“元”）等无关字符。
+2. **格式限制**：  
+  - 不允许包含空格、逗号、单位（如“元”）等无关字符。  
   - 所有答案需用 \(\\boxed{}\) 包裹（如 \(\\boxed{5}\)、\(\\boxed{0.210}\)）。
 """
         NumericalAnswer_en = """
@@ -2409,6 +2409,9 @@ Specifications for Numerical Answers (NumericalAnswer)
                 prompts.extend([prompt]*repeat)
 
         _results = await self.agent.run(prompts, max_concurrent_requests, desc=f"[Generate Responses {self.agent.model}]", postprocess_fns=[self.response_postprocess] * len(prompts))
+
+        print(_results)
+        raise NotImplementedError
         results_mapper = defaultdict(list)
         for (k, v) in _results:
             results_mapper[k].append(v)
