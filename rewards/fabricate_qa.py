@@ -2272,8 +2272,8 @@ class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
     def get_penalties(self) -> Dict[str, Callable]:
         return {
             "Format": self.format.get_penalty_or_reward,
-            "QSim": self.question_similarity.get_penalty_or_reward,
-            "AnsFeature": self.answer_feature.get_penalty_or_reward,
+            # "QSim": self.question_similarity.get_penalty_or_reward,
+            # "AnsFeature": self.answer_feature.get_penalty_or_reward,
         }
 
     def get_answer_format(self, answer_type, lang_code):
@@ -2439,20 +2439,23 @@ Specifications for Numerical Answers (NumericalAnswer)
             question, answer, answer_type = self.doc2query_parse_solution_fn(
                 sol_str)
             # 基于规则解析答案
-            correct = self.verify(example[2], answer, answer_type)
-
-            if correct > 0.0:
-                correctness[example[1]][example[0]].append(correct)
+            if example[2] is None:
+                correctness[example[1]][example[0]].append(0.0)
             else:
-                # verify_mapper
-                instruct = f'仔细一步步思考，并回答下面的问题。你回应的最后一行必须采用 “... 最终答案是 $ANSWER 的格式（不带引号），其中 $ANSWER 的格式要求需要满足下面的说明。\n\n{self.get_answer_format(answer_type, "zh")}'
-                prompt = f'{instruct}\n\n' + question
-                eval_prompt = verify_prompt + "\n\n" + verify_template.format(
-                    question=prompt,
-                    answer=answer,
-                    conclusion=example[2]
-                )
-                verify_mapper[eval_prompt].append((example[0], example[1]))
+                correct = self.verify(example[2], answer, answer_type)
+
+                if correct > 0.0:
+                    correctness[example[1]][example[0]].append(correct)
+                else:
+                    # verify_mapper
+                    instruct = f'仔细一步步思考，并回答下面的问题。你回应的最后一行必须采用 “... 最终答案是 $ANSWER 的格式（不带引号），其中 $ANSWER 的格式要求需要满足下面的说明。\n\n{self.get_answer_format(answer_type, "zh")}'
+                    prompt = f'{instruct}\n\n' + question
+                    eval_prompt = verify_prompt + "\n\n" + verify_template.format(
+                        question=prompt,
+                        answer=answer,
+                        conclusion=example[2]
+                    )
+                    verify_mapper[eval_prompt].append((example[0], example[1]))
 
         _results = await self.agent.run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.agent.model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),))
 
@@ -2463,7 +2466,6 @@ Specifications for Numerical Answers (NumericalAnswer)
                 if v is not None:
                     correctness[_type][index].append(1.0 if v else 0.0)
 
-        print(correctness)
         return correctness
 
     async def get_difficulty_reward(
@@ -2496,7 +2498,7 @@ Specifications for Numerical Answers (NumericalAnswer)
                 prompt = f'{instruct}\n\n' + question
                 wo_content_prompts[prompt].append(i)
 
-                # 无参考考虑Bo16
+                # # 无参考考虑Bo16
                 # prompts.extend([prompt]*repeat*2)
                 # 无参考考虑Bo8
                 prompts.extend([prompt]*repeat)
@@ -2506,6 +2508,8 @@ Specifications for Numerical Answers (NumericalAnswer)
                 w_content_prompts[prompt].append(i)
 
                 prompts.extend([prompt]*repeat)
+
+        prompts = list(set(prompts))
         _results = await self.agent.run(prompts, max_concurrent_requests, desc=f"[Generate Responses {self.agent.model}]", postprocess_fns=[self.response_postprocess] * len(prompts))
 
         results_mapper = defaultdict(list)
@@ -2551,7 +2555,7 @@ Specifications for Numerical Answers (NumericalAnswer)
                         continue
 
                     # 题目过于简单或困难
-                    if np.mean(wo_content_scores) > 0.5 or np.mean(wo_content_scores) < (1.0/16) or np.mean(wo_content_scores) == 0.:
+                    if np.mean(wo_content_scores) > 0.7 or np.mean(wo_content_scores) < (1.0/16) or np.mean(wo_content_scores) == 0.:
                         full_rewards.append(base_score)
                         continue
 
@@ -2561,7 +2565,7 @@ Specifications for Numerical Answers (NumericalAnswer)
                         continue
 
                     # 有参考置信度
-                    if np.mean(w_content_scores) < 0.5:
+                    if np.mean(w_content_scores) < 0.3:
                         full_rewards.append(base_score)
                         continue
 
@@ -2607,7 +2611,8 @@ Specifications for Numerical Answers (NumericalAnswer)
                 penalty[i].append(-2.0)
             else:
                 penalty[i].append(0.0)
-            for key in ("Format", "AnsFeature", "QSim"):
+            # for key in ("Format", "AnsFeature", "QSim"):
+            for key in ("Format",):
                 penalty[i].append(self.get_penalties()[key]
                                   (solution_str, ground_truth))
 
