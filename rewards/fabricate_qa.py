@@ -2273,7 +2273,7 @@ class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
     def get_penalties(self) -> Dict[str, Callable]:
         return {
             "Format": self.format.get_penalty_or_reward,
-            # "QSim": self.question_similarity.get_penalty_or_reward,
+            "QSim": self.question_similarity.get_penalty_or_reward,
             # "AnsFeature": self.answer_feature.get_penalty_or_reward,
         }
 
@@ -2550,7 +2550,7 @@ Specifications for Numerical Answers (NumericalAnswer)
                         continue
 
                     # 题目过于简单或困难
-                    if np.mean(wo_content_scores) > 0.5 or np.mean(wo_content_scores) < (1.0/16) or np.mean(wo_content_scores) == 0.:
+                    if np.mean(wo_content_scores) > 0.7 or np.mean(wo_content_scores) < (1.0/16) or np.mean(wo_content_scores) == 0.:
                         full_rewards.append(base_score)
                         continue
 
@@ -2565,7 +2565,9 @@ Specifications for Numerical Answers (NumericalAnswer)
                         continue
 
                     # 总分计算
-                    base_score = 1.0
+                    difficulty = 1.0 - np.mean(wo_content_scores)
+                    confidence = (1.0 if np.mean(w_content_scores)>0.5 else np.mean(w_content_scores)) - np.mean(wo_content_scores)
+                    base_score = difficulty + confidence
                 except Exception as err:
                     pass
 
@@ -2607,7 +2609,7 @@ Specifications for Numerical Answers (NumericalAnswer)
             else:
                 penalty[i].append(0.0)
             # for key in ("Format", "AnsFeature", "QSim"):
-            for key in ("Format",):
+            for key in ("Format", "QSim"):
                 penalty[i].append(self.get_penalties()[key]
                                   (solution_str, ground_truth))
 
