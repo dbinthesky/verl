@@ -497,7 +497,8 @@ SIMILARITY=4
 
 async def question_constraint(questions, max_concurrent_requests=32):
     def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]"):s.index("[CONCLUSION END]")]
+        conclusion = s[s.index("[CONCLUSION START]")
+                               :s.index("[CONCLUSION END]")]
         conclusion = conclusion[conclusion.index("SATISFICATION="):]
         if "True" in conclusion:
             return True
@@ -2474,7 +2475,6 @@ Specifications for Numerical Answers (NumericalAnswer)
             batch_solution_str,
             batch_ground_truth, max_concurrent_requests=MAX_CONCURRENT, repeat=8):
 
-        prompts = []
         wo_content_prompts, w_content_prompts = defaultdict(
             list), defaultdict(list)
 
@@ -2498,18 +2498,13 @@ Specifications for Numerical Answers (NumericalAnswer)
                 prompt = f'{instruct}\n\n' + question
                 wo_content_prompts[prompt].append(i)
 
-                # # 无参考考虑Bo16
-                # prompts.extend([prompt]*repeat*2)
-                # 无参考考虑Bo8
-                prompts.extend([prompt]*repeat)
-
                 prompt = f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n' + \
                     f'{instruct}\n\n' + question
                 w_content_prompts[prompt].append(i)
 
-                prompts.extend([prompt]*repeat)
+        prompts = list(w_content_prompts.keys()) * repeat + \
+            list(wo_content_prompts.keys()) * repeat * 2
 
-        prompts = list(set(prompts))
         _results = await self.agent.run(prompts, max_concurrent_requests, desc=f"[Generate Responses {self.agent.model}]", postprocess_fns=[self.response_postprocess] * len(prompts))
 
         results_mapper = defaultdict(list)
@@ -2555,12 +2550,12 @@ Specifications for Numerical Answers (NumericalAnswer)
                         continue
 
                     # 题目过于简单或困难
-                    if np.mean(wo_content_scores) > 0.7 or np.mean(wo_content_scores) < (1.0/16) or np.mean(wo_content_scores) == 0.:
+                    if np.mean(wo_content_scores) > 0.5 or np.mean(wo_content_scores) < (1.0/16) or np.mean(wo_content_scores) == 0.:
                         full_rewards.append(base_score)
                         continue
 
                     # 带参考 应该比 不带参考 显著好
-                    if not (np.mean(w_content_scores) - np.mean(wo_content_scores) >= 1/self.difficulty_bon):
+                    if not (np.mean(w_content_scores) - np.mean(wo_content_scores) > 1/self.difficulty_bon):
                         full_rewards.append(base_score)
                         continue
 
