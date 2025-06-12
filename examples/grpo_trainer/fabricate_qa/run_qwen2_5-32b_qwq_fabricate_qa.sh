@@ -57,7 +57,7 @@ setup_path() {
     experiment_name="qwen2_5-32b_qwq_fabricate_qa_supergpqa-dlc-${YYMMDD}-${HHMMSS}"
     project_name="fabricate_qa_supergpqa"
 
-    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/qwen2_5-32b_qwq_fabricate_qa/${YYMMDD}/${HHMMSS}"
+    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_qa/${experiment_name}/"
     mkdir -p "${OUTPUT_DIR}"
 }
 setup_path
@@ -96,20 +96,20 @@ run_training() {
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=32 \
+        data.train_batch_size=64 \
         data.max_prompt_length=2048 \
-        data.max_response_length=8192 \
+        data.max_response_length=10240 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
         actor_rollout_ref.actor.optim.lr=1e-6 \
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=32 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=64 \
         actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus)) \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=4 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=10240 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=12288 \
         actor_rollout_ref.actor.use_kl_loss=False \
         actor_rollout_ref.actor.kl_loss_coef=0.0 \
         actor_rollout_ref.actor.entropy_coeff=0.005 \
@@ -122,7 +122,7 @@ run_training() {
         actor_rollout_ref.rollout.name="vllm" \
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
-        actor_rollout_ref.rollout.temperature=1 \
+        actor_rollout_ref.rollout.temperature=0.8 \
         actor_rollout_ref.rollout.n=16 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \

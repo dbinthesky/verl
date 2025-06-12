@@ -2317,22 +2317,14 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
                         continue
 
                     # 题目过于简单或困难
-                    if np.mean(weak_scores) > 0.75 or np.mean(weak_scores) < (1.0/weak_bon) or np.mean(weak_scores) == 0.:
-                        full_rewards.append(base_score)
-                        continue
-
-                    # 强模型 应该比 弱模型 显著好
-                    if not (np.mean(strong_scores) - np.mean(weak_scores) > 0):
+                    if np.mean(weak_scores) == 1. or np.mean(weak_scores) < (1.0/weak_bon) or np.mean(weak_scores) == 0.:
                         full_rewards.append(base_score)
                         continue
 
                     # 总分计算
-                    difficulty = 1.0 - np.mean(weak_scores)
-                    if np.mean(strong_scores) < 1.0:
-                        if np.mean(strong_scores) >= 3/4:
-                            difficulty += 0.25
-                        elif np.mean(strong_scores) >= 1/4 and np.mean(strong_scores) < 3/4:
-                            difficulty += 0.5
+                    difficulty = 0.5 * (1.0 - np.mean(weak_scores))
+                    if np.mean(strong_scores) > 0.:
+                        difficulty += 0.5 * (1.0 - np.mean(strong_scores))
 
                     base_score = difficulty
                 except Exception as err:
