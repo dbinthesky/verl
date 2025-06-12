@@ -1604,9 +1604,11 @@ class WithUnitSymbol(object):
                 (?:             # 分母部分（可选）
                     /           # 斜杠分隔符
                     (?:         # 分母两种格式：括号内或直接跟单位
-                        \([A-Za-zμΩ°]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*(?:\u00B7[A-Za-zμΩ°]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*)*\)  # 括号内的单位（如(mol·K)）
+                        # 括号内的单位（如(mol·K)）
+                        \([A-Za-zμΩ°]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*(?:\u00B7[A-Za-zμΩ°]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*)*\)
                         |       # 或
-                        [A-Za-zμΩ°]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*(?:\u00B7[A-Za-zμΩ°]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*)*      # 直接跟单位（如mol·K）
+                        # 直接跟单位（如mol·K）
+                        [A-Za-zμΩ°]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*(?:\u00B7[A-Za-zμΩ°]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*)*
                     )
                 )?
             )
@@ -1776,6 +1778,7 @@ class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
             doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
         self.answer_feature = AnswerFeatureMatch(
             doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
+        self.verify_agent = self.agent
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
@@ -1786,39 +1789,39 @@ class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
 
     def get_answer_format(self, answer_type, lang_code):
         WithUnitSymbol_zh = """带单位数值 (WithUnitSymbol) 规范要求
-1. **数值表示**  
-   - 问题指令必须明确要求保留的小数点位数 科学计数法位数。  
-   - 大数用科学计数法，避免冗余空格，如 `$5.27×10^{5}\ \\text{Pa}$`。  
+1. **数值表示**
+   - 问题指令必须明确要求保留的小数点位数 科学计数法位数。
+   - 大数用科学计数法，避免冗余空格，如 `$5.27×10^{5}\ \\text{Pa}$`。
 
-2. **单位规范** 
-   - 问题指令必须明确要求返回答案的单位。   
-   - 单位符号用国际标准（SI），大小写严格区分：  
-     - 大写：N（牛）、Pa（帕）、J（焦）、W（瓦）、Hz（赫）等。  
-     - 小写：m（米）、kg（千克）、s（秒）、mol（摩）等。  
-   - 单位与数值间留空格：`2.91 m` ✅，`2.91m` ❌。  
-   - 复合单位用斜杠表示：`kJ/(mol·K)` ✅，禁止使用乘方形式（如 `kJ·mol⁻¹·K⁻¹` ❌）。  
+2. **单位规范**
+   - 问题指令必须明确要求返回答案的单位。
+   - 单位符号用国际标准（SI），大小写严格区分：
+     - 大写：N（牛）、Pa（帕）、J（焦）、W（瓦）、Hz（赫）等。
+     - 小写：m（米）、kg（千克）、s（秒）、mol（摩）等。
+   - 单位与数值间留空格：`2.91 m` ✅，`2.91m` ❌。
+   - 复合单位用斜杠表示：`kJ/(mol·K)` ✅，禁止使用乘方形式（如 `kJ·mol⁻¹·K⁻¹` ❌）。
 """
         WithUnitSymbol_en = """Specifications for Numerical Answers with Unit Symbols (WithUnitSymbol)
 1. Numerical Representation:
     - The question instructions must clearly require the number of decimal places or significant figures for scientific notation to be retained.
-    - Use scientific notation for large numbers, use format correctly such as `5.27 × 10^5 Pa`. Do not add parentheses to the exponent part: `1.256 × 10^-67 J` ✅, `1.256 × 10^{-67} J` ❌, `1.92 × 10⁷ m⁻¹` ❌。  
-    
+    - Use scientific notation for large numbers, use format correctly such as `5.27 × 10^5 Pa`. Do not add parentheses to the exponent part: `1.256 × 10^-67 J` ✅, `1.256 × 10^{-67} J` ❌, `1.92 × 10⁷ m⁻¹` ❌。
+
 2. Unit Specifications:
     - The question instructions must clearly require the unit for the returned answer.
     - Use international standard (SI) unit symbols with strict case distinction:
       - Uppercase: N (newton), Pa (pascal), J (joule), W (watt), Hz (hertz), etc.
       - Lowercase: m (meter), kg (kilogram), s (second), mol (mole), etc.
     - Leave a space between the unit and the numerical value: `2.91 m` ✅, `2.91m` ❌.
-    - Use a slash for composite units: `kJ/(mol·K)` ✅, and power forms are prohibited (such as `kJ·mol⁻¹·K⁻¹` ❌). 
+    - Use a slash for composite units: `kJ/(mol·K)` ✅, and power forms are prohibited (such as `kJ·mol⁻¹·K⁻¹` ❌).
 """
         NumericalAnswer_zh = """数值答案 (NumericalAnswer) 规范要求
-1. **类型允许**：  
-  - **整数**：正整数，无前导零（如 \(5, 275, 144\)）。  
-  - **浮点数**：由整数部分、小数点和小数部分组成，整数部分可为 \(0\) 或正整数（无前导零），**小数部分固定保留3位**（如 \(0.210, 40.200, 5.500\)）。  
-  - **禁止分数形式**，必须转换为小数形式（如 \(5/12\) 需表示为 \(0.417\)）。  
+1. **类型允许**：
+  - **整数**：正整数，无前导零（如 \(5, 275, 144\)）。
+  - **浮点数**：由整数部分、小数点和小数部分组成，整数部分可为 \(0\) 或正整数（无前导零），**小数部分固定保留3位**（如 \(0.210, 40.200, 5.500\)）。
+  - **禁止分数形式**，必须转换为小数形式（如 \(5/12\) 需表示为 \(0.417\)）。
 
-2. **格式限制**：  
-  - 不允许包含空格、逗号、单位（如“元”）等无关字符。  
+2. **格式限制**：
+  - 不允许包含空格、逗号、单位（如“元”）等无关字符。
   - 所有答案需用 \(\\boxed{}\) 包裹（如 \(\\boxed{5}\)、\(\\boxed{0.210}\)）。
 """
         NumericalAnswer_en = """
@@ -1878,7 +1881,7 @@ Specifications for Numerical Answers (NumericalAnswer)
             else:
                 return 0.0
 
-    async def verify_results(self, verify_queue, batch_solution_str, max_concurrent_requests):
+    async def verify_results(self, verify_queue, batch_solution_str, max_concurrent_requests, split_names):
         def validate_result(response):
             s = response
             try:
@@ -1904,10 +1907,10 @@ Specifications for Numerical Answers (NumericalAnswer)
             except Exception as err:
                 raise PostprocessError(f'{err}')
 
-        verify_prompt = """### **基于标准答案判断回答是否正确**  
+        verify_prompt = """### **基于标准答案判断回答是否正确**
 任务描述：请根据提供的**题目**、**用户回答（答案部分）**和**标准答案**，判断用户回答是否正确，并按照指定格式输出结果。需严格比对答案，若用户回答与标准答案**完全一致**，则判定为正确，否则为错误。
 
-**必须与标准答案完全一致**（含字符、单位、符号等），如果数值是科学记数法或者是小数，是否按规定保留到规定位数，否则判错。 |  
+**必须与标准答案完全一致**（含字符、单位、符号等），如果数值是科学记数法或者是小数，是否按规定保留到规定位数，否则判错。 |
 
 #### 输出要求
 ```json
@@ -1932,12 +1935,9 @@ Specifications for Numerical Answers (NumericalAnswer)
 ##### 标准答案
 {answer}
 
-#### **输出：**  
+#### **输出：**
 """
-        correctness = {
-            "w_content": defaultdict(list),
-            "w/o_content": defaultdict(list)
-        }
+        correctness = {name: defaultdict(list) for name in split_names}
 
         verify_mapper = defaultdict(list)
 
@@ -1965,7 +1965,7 @@ Specifications for Numerical Answers (NumericalAnswer)
                     )
                     verify_mapper[eval_prompt].append((example[0], example[1]))
 
-        _results = await self.agent.run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.agent.model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),))
+        _results = await self.verify_agent.run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.verify_agent.model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),))
 
         results_mapper = defaultdict(list)
         for (k, v) in _results:
@@ -2031,6 +2031,7 @@ Specifications for Numerical Answers (NumericalAnswer)
 
         correctness = await self.verify_results(
             verify_queue=verify_queue, batch_solution_str=batch_solution_str, max_concurrent_requests=MAX_CONCURRENT,
+            split_names=["w/o_content", "w_content"]
         )
 
         wo_contents, w_contents = correctness["w/o_content"], correctness["w_content"]
@@ -2229,13 +2230,13 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
             self,
             batch_data_sources,
             batch_solution_str,
-            batch_ground_truth, max_concurrent_requests=MAX_CONCURRENT, repeat=8):
+            batch_ground_truth, max_concurrent_requests=MAX_CONCURRENT, weak_bon=16, strong_bon=4):
 
-        wo_content_prompts, w_content_prompts = defaultdict(
+        weak_model_prompts, strong_model_prompts = defaultdict(
             list), defaultdict(list)
 
         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-            result = self.doc2query_parse_solution_fn(solution_str)
+            result = self.parse_solution_fn(solution_str)
             if result is not None:
                 question, answer, answer_type = result
                 ans_format_strict = self.format.get_penalty_or_reward(
@@ -2252,68 +2253,67 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
                     instruct = f'Think step by step in detail and answer the following questions. The last line of your response must be in the format "... the final answer is $ANSWER" (without quotes), where the format requirements for $ANSWER need to meet the instructions below.\n\n{self.get_answer_format(answer_type, lang_code)}'
 
                 prompt = f'{instruct}\n\n' + question
-                wo_content_prompts[prompt].append(i)
+                weak_model_prompts[prompt].append(i)
+                strong_model_prompts[prompt].append(i)
 
-                prompt = f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n' + \
-                    f'{instruct}\n\n' + question
-                w_content_prompts[prompt].append(i)
-
-        prompts = list(w_content_prompts.keys()) * repeat + \
-            list(wo_content_prompts.keys()) * repeat * 2
-
-        print(prompts)
-        raise NotImplementedError
-        _results = await self.agent.run(prompts, max_concurrent_requests, desc=f"[Generate Responses {self.agent.model}]", postprocess_fns=[self.response_postprocess] * len(prompts))
-
-        results_mapper = defaultdict(list)
+        # 调用弱模型
+        _weak_prompts = list(weak_model_prompts.keys()) * weak_bon
+        _results = await self.weak_agent.run(_weak_prompts, max_concurrent_requests, desc=f"[Generate Weak Responses {self.weak_agent.model}]", postprocess_fns=[self.response_postprocess] * len(_weak_prompts))
+        weak_results_mapper = defaultdict(list)
         for (k, v) in _results:
-            results_mapper[k].append(v)
+            weak_results_mapper[k].append(v)
+
+        # 调用强模型
+        _strong_prompts = list(strong_model_prompts.keys()) * strong_bon
+        _results = await self.strong_agent.run(_strong_prompts, max_concurrent_requests, desc=f"[Generate Strong Responses {self.strong_agent.model}]", postprocess_fns=[self.response_postprocess] * len(_strong_prompts))
+        strong_results_mapper = defaultdict(list)
+        for (k, v) in _results:
+            strong_results_mapper[k].append(v)
 
         # 答案验证
         verify_queue = []
-        for k, v in results_mapper.items():
-            if k in wo_content_prompts:
-                for index in wo_content_prompts[k]:
-                    verify_queue.extend(
-                        [(index, "w/o_content", _v) for _v in v])
-            elif k in w_content_prompts:
-                for index in w_content_prompts[k]:
-                    verify_queue.extend([(index, "w_content", _v) for _v in v])
+        for k, v in weak_results_mapper.items():
+            for index in weak_model_prompts[k]:
+                verify_queue.extend([(index, "weak", _v) for _v in v])
+
+        for k, v in strong_results_mapper.items():
+            for index in strong_model_prompts[k]:
+                verify_queue.extend([(index, "strong", _v) for _v in v])
 
         correctness = await self.verify_results(
             verify_queue=verify_queue, batch_solution_str=batch_solution_str, max_concurrent_requests=MAX_CONCURRENT,
+            split_names=["weak", "strong"]
         )
 
-        wo_contents, w_contents = correctness["w/o_content"], correctness["w_content"]
+        weak, strong = correctness["weak"], correctness["strong"]
 
         full_rewards = []
         pass_rates = []
 
-        # FIXME
         for i in range(len(batch_solution_str)):
-            if i in wo_contents:
+            if i in weak:
                 base_score = 0.0
 
-                wo_content_scores = wo_contents[i]
-                w_content_scores = w_contents[i]
+                weak_scores = weak[i]
+                strong_scores = strong[i]
 
                 pass_rates.append({
-                    "wo_content": f'{np.sum(wo_content_scores)}/{len(wo_content_scores)}',
-                    "w_content": f'{np.sum(w_content_scores)}/{len(w_content_scores)}',
+                    "weak": f'{np.sum(weak_scores)}/{len(weak_scores)}',
+                    "strong": f'{np.sum(strong_scores)}/{len(strong_scores)}',
                 })
 
                 try:
-                    if len(wo_content_scores) == 0 or len(w_content_scores) == 0:
+                    if len(weak_scores) == 0 or len(strong_scores) == 0:
                         full_rewards.append(base_score)
                         continue
 
                     # 题目过于简单或困难
-                    if np.mean(wo_content_scores) > 0.75 or np.mean(wo_content_scores) < (1.0/16) or np.mean(wo_content_scores) == 0.:
+                    if np.mean(weak_scores) > 0.75 or np.mean(weak_scores) < (1.0/weak_bon) or np.mean(weak_scores) == 0.:
                         full_rewards.append(base_score)
                         continue
 
-                    # 带参考 应该比 不带参考 显著好
-                    if not (np.mean(w_content_scores) - np.mean(wo_content_scores) >= 1/self.difficulty_bon):
+                    # 强模型 应该比 弱模型 显著好
+                    if not (np.mean(strong_scores) - np.mean(weak_scores) >= 1/strong_bon):
                         full_rewards.append(base_score)
                         continue
 
@@ -2323,10 +2323,8 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
                         continue
 
                     # 总分计算
-                    # difficulty = 1.0 - np.mean(wo_content_scores)
-                    # confidence = (1.0 if np.mean(w_content_scores)>0.5 else np.mean(w_content_scores)) - np.mean(wo_content_scores)
-                    # base_score = 1.0 + difficulty + confidence
-                    base_score = 1.0
+                    difficulty = 1.0 - np.mean(weak_scores)
+                    base_score = difficulty
                 except Exception as err:
                     pass
 
@@ -2375,10 +2373,10 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
         return scores
 
     def log_solution(self, solution):
-        norm = fabricate_parse_solution_fn(solution)
+        norm = self.parse_solution_fn(solution)
         if norm is None:
             return repr(self.clip_string(solution))
-        return repr(self.clip_string(norm))
+        return repr(self.format_question(norm[0], norm[1]))
 
     def log_ground_truth(self, ground_truth):
         return repr(self.clip_string(ground_truth["authentic_question"]))
@@ -2388,30 +2386,28 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
                              batch_solution_str,
                              batch_ground_truth,
                              ):
-        penalty = defaultdict(dict)
-        for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-            for key, fn in self.get_penalties().items():
-                penalty[key][i] = fn(solution_str, ground_truth)
+        # 解析出错 -2.0
+        # 答案分析 -1.5 ～ -1.0
+        # 答案特征 0 ～ 0.02
 
-        # rm_similarity = await self.rm_similarity(batch_data_sources,
-        #                                          batch_solution_str,
-        #                                          batch_ground_truth,)
-        # rm_checklist = await self.rm_criteria_checklist(batch_data_sources,
-        #                                                 batch_solution_str,
-        #                                                 batch_ground_truth,)
-        llm_as_judge_criteria_checklist = await self.llm_as_judge_criteria_checklist(
+        penalty = defaultdict(list)
+        for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            parsed = self.doc2query_parse_solution_fn(solution_str)
+            if parsed is None:
+                penalty[i].append(-2.0)
+            else:
+                penalty[i].append(0.0)
+            for key in ("Format", "QSim"):
+                penalty[i].append(self.get_penalties()[key]
+                                  (solution_str, ground_truth))
+
+        difficulty_rewards, pass_rates = await self.get_difficulty_reward(
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth,
-            self.max_concurrent_requests
+            max_concurrent_requests=MAX_CONCURRENT,
         )
-        llm_as_judge_similarity = await self.llm_as_judge_similarity(
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-            self.max_concurrent_requests
-        )
-        llm_as_regularization = await self.question_constraint(
+        similarity_rewards = await self.llm_as_judge_similarity(
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth,
@@ -2419,50 +2415,44 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
         )
 
         final_results = []
-
         for i in range(len(batch_solution_str)):
-            # score = rm_similarity[i] + rm_checklist[i] + \
-            #     llm_as_judge_criteria_checklist[i] + llm_as_regularization[i]
-            score = llm_as_regularization[i]
+            scores = copy.deepcopy(penalty[i])
+            scores.append(difficulty_rewards[i])
+            cur_score = 0
+            for _score in scores:
+                if _score < 0:
+                    cur_score = _score
+                    break
+                else:
+                    cur_score += _score
 
-            if llm_as_judge_criteria_checklist[i] == 1:
-                score += llm_as_judge_similarity[i]
+            if cur_score > 0:
+                cur_score += similarity_rewards[i]
 
-            penalty_log_str = []
-            for name, _penalty in penalty.items():
-                penalty_log_str.append(
-                    f'{name}={_penalty[i]:.2f}')
-                score += _penalty[i]
+            penalty_log_str = f'Parse/Format/AnsFeature/QSim={penalty[i]}'
 
-            final_results.append(score)
+            final_results.append(cur_score)
 
-            if self.split == "valid" or (self.split == "train" and random.random() < 0.05):
+            if (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
                 log = True
                 log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
             else:
                 log = False
 
+            domain = batch_ground_truth[i]["domain"]
+
             if log:
                 print(
                     f"--------------------------------{log_flag}--------------------------------")
                 print(
-                    f"【Solution】 `{self.log_solution(batch_solution_str[i])}`")
-                print(
-                    f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
-                print(
-                    f'[Final Reward]={score:.3f}|llm_as_judge_criteria_checklist={llm_as_judge_criteria_checklist[i]:.3f}|llm_as_judge_similarity={llm_as_judge_similarity[i]:.3f}|llm_as_regularization={llm_as_regularization[i]:.3f}|{"|".join(penalty_log_str)}\n')
-                # print(
-                #     f'[Final Reward]={score:.3f}|rm_similarity={rm_similarity[i]:.3f}|rm_checklist={rm_checklist[i]:.3f}|llm_as_judge_criteria_checklist={llm_as_judge_criteria_checklist[i]:.3f}|llm_as_judge_similarity={llm_as_judge_similarity[i]:.3f}|llm_as_regularization={llm_as_regularization[i]:.3f}|{"|".join(penalty_log_str)}\n')
+                    f"【Solution】({domain})`{self.log_solution(batch_solution_str[i])}`")
+                try:
+                    print(
+                        f"【Ground Truth】({difficulty})`{self.log_ground_truth(batch_ground_truth[i])}`")
+                except Exception as err:
+                    print(
+                        f'[Final Reward]={cur_score:.3f}|[Pass@{self.difficulty_bon}]={pass_rates[i]}|Sim={similarity_rewards[i]:.3f}|Difficulty={difficulty_rewards[i]}|{penalty_log_str}\n')
         return final_results
-
-    def compute_score(self,
-                      batch_data_sources,
-                      batch_solution_str,
-                      batch_ground_truth,
-                      ):
-        async def main():
-            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
-        return aio.run(main())
 
     def clip_string(self, s: str):
         if len(s) > 1500:

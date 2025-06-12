@@ -59,6 +59,8 @@ def load_qwq_fabricate_qa_data(num=100):
 
         batch_solution_str.append(
             f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
+        if _ > num-1:
+            break
     return batch_solution_str, batch_ground_truth
 
 
@@ -182,7 +184,8 @@ class TestFabricateQA(unittest.TestCase):
 
     def test_get_difficulty_reward(self):
         async def main():
-            batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data()
+            batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
+                16)
             task = QwQLongCoTFabricateQAComputeScore(split="valid")
             results = await task.get_difficulty_reward(
                 [None] *
@@ -192,19 +195,9 @@ class TestFabricateQA(unittest.TestCase):
         aio.run(main())
 
     def test_compute_score(self):
-        # async def main():
-        #     batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
-        #         num=100)
-        #     task = QwQLongCoTFabricateQAComputeScore(split="valid")
-        #     results = await task._compute_score(
-        #         [None] *
-        #         len(batch_solution_str), batch_solution_str, batch_ground_truth
-        #     )
-        #     print(results)
-        # aio.run(main())
         bg = time.time()
         batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
-            num=100)
+            num=32)
         results = qwq_longcot_fabricate_qa_compute_score_valid(
             [None] *
             len(batch_solution_str), batch_solution_str, batch_ground_truth
