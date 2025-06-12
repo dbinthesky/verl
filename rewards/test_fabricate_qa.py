@@ -14,20 +14,15 @@ from fabricate_qa import (
     agent,
     criteria_parse_solution_fn,
     get_total_score,
-    fabricate_parse_solution_fn,
     question_constraint,
     decode_to_question,
     criteria_get_score,
     question_similarity,
     QwQLongCoTCreateCriteriaComputeScore,
     qwq_longcot_create_criteria_compute_score_valid,
-    FabricateQATooLongPenalty,
-    BleuSimilarity,
-    fabricate_parse_solution_fn,
     QwQLongCoTFabricateQAComputeScore,
     qwq_longcot_fabricate_qa_compute_score_valid,
     doc2query_parse_solution_fn,
-    Doc2QueryFormatReward,
     QuestionSimilarity,
     RuleBasedOptionMatch,
     QwQLongCoTDoc2QueryComputeScore,
@@ -163,45 +158,17 @@ async def create_mock_data():
 
 
 class TestFabricateQA(unittest.TestCase):
-    def test_fabricate_qa_too_long_penalty(self):
-        penalty_fn = FabricateQATooLongPenalty(
-            postprocess_solution_fn=fabricate_parse_solution_fn,
-        )
-        batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data()
-        for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
-            print(penalty_fn.get_penalty_or_reward(solution_str, ground_truth))
-
-    def test_bleu_similarity(self):
-        penalty_fn = BleuSimilarity(
-            postprocess_solution_fn=fabricate_parse_solution_fn,
-        )
-        batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data()
-        for solution_str, ground_truth in zip(batch_solution_str, batch_ground_truth):
-            print(penalty_fn.get_penalty_or_reward(solution_str, ground_truth))
-
-    def test_rm_similarity(self):
-        async def main():
-            batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
-                num=100)
-            task = QwQLongCoTFabricateQAComputeScore(split="valid")
-            results = await task.rm_similarity(
-                [None] *
-                len(batch_solution_str), batch_solution_str, batch_ground_truth
-            )
-            print(results)
-        aio.run(main())
-
-    def test_rm_criteria_checklist(self):
-        async def main():
-            batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
-                num=100)
-            task = QwQLongCoTFabricateQAComputeScore(split="valid")
-            results = await task.rm_criteria_checklist(
-                [None] *
-                len(batch_solution_str), batch_solution_str, batch_ground_truth
-            )
-            print(results)
-        aio.run(main())
+    def test_question_similarity(self):
+        batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
+            num=100)
+        task = QwQLongCoTFabricateQAComputeScore(split="valid")
+        for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
+            solution_str = f'<think>***</think><question>\nQuestion: {gt["authentic_question"]}\nAnswer: \\boxed{{-9}}\nAnswer Type: NumericalAnswer\n</question>'
+            score = task.get_penalties()["QSim"](solution_str, gt)
+            print(solution_str)
+            print(score)
+            print("="*80)
+            break
 
     def test_llm_as_judge_criteria_checklist(self):
         async def main():
