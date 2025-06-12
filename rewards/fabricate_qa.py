@@ -2303,7 +2303,7 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
                         continue
 
                     # 强模型 应该比 弱模型 显著好
-                    if not (np.mean(strong_scores) - np.mean(weak_scores) >= 1/strong_bon):
+                    if not (np.mean(strong_scores) - np.mean(weak_scores) > 0):
                         full_rewards.append(base_score)
                         continue
 
