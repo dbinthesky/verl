@@ -2411,7 +2411,7 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth,
-            self.max_concurrent_requests
+            max_concurrent_requests=MAX_CONCURRENT,
         )
 
         final_results = []
@@ -2439,13 +2439,11 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
             else:
                 log = False
 
-            domain = batch_ground_truth[i]["domain"]
-
             if log:
                 print(
                     f"--------------------------------{log_flag}--------------------------------")
                 print(
-                    f"【Solution】({domain})`{self.log_solution(batch_solution_str[i])}`")
+                    f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
                 try:
                     print(
                         f"【Ground Truth】({difficulty})`{self.log_ground_truth(batch_ground_truth[i])}`")
