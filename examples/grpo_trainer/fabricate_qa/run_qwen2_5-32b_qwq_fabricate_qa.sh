@@ -7,6 +7,7 @@ set -euo pipefail
 # ------------------------------
 setup_env() {
     export WANDB_API_KEY="2e3700316fecb744b594dff815d1b11fbe514d24"
+    export WANDB_BASE_URL=https://api.bandw.top
     export VERL_PPO_LOGGING_LEVEL='DEBUG'
     export VLLM_ATTENTION_BACKEND="XFORMERS"
     export VLLM_USE_MODELSCOPE="False"
@@ -49,12 +50,12 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/opencompass/models/hf_hub/models--deepseek-ai--DeepSeek-R1-Distill-Qwen-32B_new/snapshots/2d78713b01ecefe27a89fafec248a5dfd731396f"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/DeepSeek-R1-Distill-Qwen-32B-fabricate_qa_v9/checkpoint-289"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/super_gpqa_aio_noneasy_train_0517.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/super_gpqa_aio_noneasy_test_0517.parquet"
 
-    experiment_name="qwen2_5-7b_qwq_fabricate_qa_supergpqa-dlc-${YYMMDD}-${HHMMSS}"
-    project_name="verl_grpo_qwq_fabricate_qa_supergpqa"
+    experiment_name="qwen2_5-32b_qwq_fabricate_qa_supergpqa-dlc-${YYMMDD}-${HHMMSS}"
+    project_name="fabricate_qa_supergpqa"
 
     OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/qwen2_5-32b_qwq_fabricate_qa/${YYMMDD}/${HHMMSS}"
     mkdir -p "${OUTPUT_DIR}"
@@ -96,7 +97,7 @@ run_training() {
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
         data.train_batch_size=32 \
-        data.max_prompt_length=1024 \
+        data.max_prompt_length=2048 \
         data.max_response_length=8192 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
@@ -108,20 +109,20 @@ run_training() {
         actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus)) \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=4 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=9216 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=10240 \
         actor_rollout_ref.actor.use_kl_loss=False \
         actor_rollout_ref.actor.kl_loss_coef=0.0 \
-        actor_rollout_ref.actor.entropy_coeff=0.001 \
+        actor_rollout_ref.actor.entropy_coeff=0.005 \
         actor_rollout_ref.actor.kl_loss_type="low_var_kl" \
         actor_rollout_ref.model.enable_gradient_checkpointing=True \
         +actor_rollout_ref.model.trust_remote_code=True \
         actor_rollout_ref.actor.fsdp_config.param_offload=True \
         actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
-        actor_rollout_ref.rollout.tensor_model_parallel_size=2 \
+        actor_rollout_ref.rollout.tensor_model_parallel_size=4 \
         actor_rollout_ref.rollout.name="vllm" \
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
-        actor_rollout_ref.rollout.gpu_memory_utilization=0.85 \
-        actor_rollout_ref.rollout.temperature=1.1 \
+        actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
+        actor_rollout_ref.rollout.temperature=1 \
         actor_rollout_ref.rollout.n=16 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
@@ -134,7 +135,7 @@ run_training() {
         +trainer.val_before_train=True \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
-        trainer.save_freq=5 \
+        trainer.save_freq=10 \
         trainer.test_freq=5 \
         trainer.total_epochs=10000 \
         reward_model.reward_manager="custom" "$@"
