@@ -401,7 +401,7 @@ D. 315
     return [_[1] for _ in results]
 
 
-async def question_similarity(authentic, fabricate, max_concurrent_requests=32):
+async def question_similarity(agent, authentic, fabricate, max_concurrent_requests=32):
     TEMPLATE = """### 问题相似程度评价标准（1-5分）
 
 | **相似等级** | **判定标准**                                                                 |
@@ -486,46 +486,26 @@ SIMILARITY=4
             raise PostprocessError(f'{err}')
 
     prompts = []
-    for a, b in zip(authentic, fabricate):
+    prompts = defaultdict(list)
+    for index, (a, b) in enumerate(zip(authentic, fabricate)):
         prompt = TEMPLATE + \
             f'\n\n现在需要你比较下面两个问题的相似度。\n\n[原问题]\n{a}\n\n[对比问题]\n{b}\n\n[输出]\n'
-        prompts.append(prompt)
+        prompts[prompt].append(index)
 
-    results = await agent.run(prompts, max_concurrent_requests, desc="[QA Similarity]", postprocess_fns=[postprocess]*len(prompts))
-    return [_[1] for _ in results]
+    results = await agent.run(list(prompts.keys()), max_concurrent_requests, desc="[QA Similarity]", postprocess_fns=[postprocess]*len(list(prompts.keys())))
 
+    results_mapper = {}
+    for (k, v) in results:
+        for _ in prompts[k]:
+            results_mapper[_] = v
 
-async def question_constraint(questions, max_concurrent_requests=32):
-    def postprocess(s):
-        conclusion = s[s.index("[CONCLUSION START]")
-                               :s.index("[CONCLUSION END]")]
-        conclusion = conclusion[conclusion.index("SATISFICATION="):]
-        if "True" in conclusion:
-            return True
-        elif "False" in conclusion:
-            return False
-        return None
-    TEMPLATE = """判断下面的内容是否是一个提问，不包含其他无关的词语。不应出现任何与问题无关的内容，包括对问题的分析和回答，或对提出问题的构造思路等。
-
-
-你的回答需要先给出详细的思考过程再最终推导出结果。
-回答格式如下：
-```
-{给出思考过程}
-
-[CONCLUSION START]
-SATISFICATION=True/False
-[CONCLUSION END]
-```
-"""
-
-    prompts = []
-    for question in questions:
-        prompt = TEMPLATE + f'\n\n{question}'
-        prompts.append(prompt)
-
-    results = await agent.run(prompts, max_concurrent_requests, desc="[QA Constraint]", postprocess_fns=[postprocess]*len(prompts))
-    return [_[1] for _ in results]
+    outputs = []
+    for i, _ in enumerate(authentic):
+        if i in results_mapper and results_mapper[i] is not None:
+            outputs.append(results_mapper[i])
+        else:
+            outputs.append(0)
+    return outputs
 
 
 class QwQLongCoTCreateCriteriaComputeScore(object):
@@ -1396,8 +1376,6 @@ def doc2query_v2_parse_solution_fn(solution_str: str, remove_option_letter=True)
     if not solution_str.startswith("<think>"):
         return None
 
-    # if not solution_str.endswith("</question>"):
-    #     return None
     try:
         thought = re.findall(r'<think>.*</think>',
                              solution_str, re.DOTALL)[0]
@@ -2206,6 +2184,7 @@ qwq_longcot_doc2query_v2_compute_score_valid = _qwq_longcot_doc2query_v2_compute
 
 
 class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
+
     JUDGE_CRITERIA_RM_SIMILARITY = """Just create a question for me directly.
 
 # JUDGE CRITERIA
@@ -2225,6 +2204,20 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
         )
         self.question_similarity = QuestionSimilarity(
             doc2query_parse_solution_fn=self.doc2query_parse_solution_fn, key="authentic_question")
+        self.parse_solution_fn = self.doc2query_parse_solution_fn
+
+        self.weak_agent = self.agent
+        self.verify_agent = self.agent
+        self.strong_agent = Agent(**{
+            "model": "DeepSeek-V3-0324",
+            "base_url": "https://sd138cdmeq1emkiunptm0.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.9,
+                "timeout": 360,
+                "max_tokens": 2048,
+            }
+        })
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
@@ -2232,86 +2225,17 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
             "QSim": self.question_similarity.get_penalty_or_reward,
         }
 
-    async def process_queue(self, queue, semaphore):
-        """处理单个队列，确保队列内任务串行执行"""
-        async with semaphore:  # 限制并发队列数量
-            results = []
-            for task in queue:
-                result = await task
-                results.append(result)
-            return results
-
-    async def run_tasks_in_queues(self, tasks, n):
-        """将任务分成n个队列并行执行"""
-        # 创建n个队列
-        queues = [[] for _ in range(n)]
-
-        # 平均分配任务到各个队列
-        for i, task in enumerate(tasks):
-            queues[i % n].append(task)
-
-        # 创建信号量限制并发队列数量
-        semaphore = Semaphore(n)
-
-        # 并行处理所有队列
-        queue_results = await aio.gather(
-            *[self.process_queue(queue, semaphore) for queue in queues]
-        )
-        # queue_results = tqdm.asyncio.tqdm.as_completed(
-        #     *[self.process_queue(queue, semaphore) for queue in queues], dynamic_ncols=True, desc=f'[Generate Responses]')
-
-        # 展平结果列表（保持原始顺序）
-        flattened_results = []
-        for i in range(len(tasks)):
-            queue_idx = i % n
-            task_idx = i // n
-            flattened_results.append(queue_results[queue_idx][task_idx])
-
-        return flattened_results
-
-    async def question_constraint(
-        self,
-        batch_data_sources,
-        batch_solution_str,
-        batch_ground_truth,
-        max_concurrent_requests=32,
-    ):
-        indices = []
-        fabricates = []
-        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-            fabricate = fabricate_parse_solution_fn(sol)
-            if fabricate is not None:
-                fabricates.append(fabricate)
-                indices.append(i)
-            else:
-                continue
-
-        question_constraints = await question_constraint(
-            questions=fabricates,
-            max_concurrent_requests=max_concurrent_requests
-        )
-        scores = [self.parse_result_failure_score] * len(batch_solution_str)
-        for is_question, index in zip(question_constraints, indices):
-            if is_question is None:
-                scores[index] = -0.5
-            else:
-                if is_question:
-                    scores[index] = 0.0
-                else:
-                    scores[index] = -2.0
-        return scores
-
     async def llm_as_judge_similarity(
         self,
         batch_data_sources,
         batch_solution_str,
         batch_ground_truth,
-        max_concurrent_requests=32,
+        max_concurrent_requests=128,
     ):
         indices = []
         fabricates, authentics = [], []
         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-            fabricate = fabricate_parse_solution_fn(sol)
+            fabricate = self.parse_solution_fn(sol)
             if fabricate is not None:
                 fabricates.append(fabricate)
                 authentics.append(gt["authentic_question"])
@@ -2320,173 +2244,24 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
                 continue
 
         similarity = await question_similarity(
+            agent=self.verify_agent,
             authentic=authentics,
             fabricate=fabricates,
             max_concurrent_requests=max_concurrent_requests
         )
+
         scores = [0.0] * len(batch_solution_str)
         for sim, index in zip(similarity, indices):
             if sim is None:
                 pass
             else:
-                if sim < 4:
+                if sim < 3:
                     pass
-                elif sim == 4:
-                    scores[index] = 0.5
-                else:
+                elif sim >= 4:
                     scores[index] = 1.0
+                elif sim == 3:
+                    scores[index] = 0.5
         return scores
-
-    async def rm_similarity(
-            self,
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-            urls=RM_URLS):
-        """ 真题/合成题RM判断相似度 """
-        judges = []
-        indices = []
-
-        fabricate_questions = []
-        for index, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-            sol = fabricate_parse_solution_fn(sol)
-            if sol is None:
-                continue
-            fabricate_questions.append(sol)
-
-            lang_code = gt["lang_code"]
-            judges.append({
-                "ground_truth": self.JUDGE_CRITERIA_RM_SIMILARITY.format(
-                    question=gt["authentic_question"],
-                    question_type=gt["question_type"]
-                )
-            })
-            indices.append(index)
-
-        tasks = []
-        n = len(urls)
-
-        for i, batch in enumerate(batchify(zip(judges, fabricate_questions), n=64)):
-            _judges = [_[0] for _ in batch]
-            mini_batch_solution_str = [_[1] for _ in batch]
-            tasks.append(
-                compute_rm_score(
-                    batch_solution_str=mini_batch_solution_str,
-                    batch_ground_truth=_judges,
-                    postprocess_solution_fn=lambda x: x,
-                    parse_result_failure_score=self.parse_result_failure_score,
-                    desc="-rm_similarity",
-                    urls=[urls[i % n]]
-                )
-            )
-
-        results = await self.run_tasks_in_queues(tasks, n=n)
-        rewards = []
-        for _ in results:
-            rewards.extend(_)
-
-        full_rewards = []
-        for i in range(len(batch_solution_str)):
-            if i in indices:
-                full_rewards.append(rewards[indices.index(i)])
-            else:
-                full_rewards.append(self.parse_result_failure_score)
-        return full_rewards
-
-    async def rm_criteria_checklist(
-            self,
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-            urls=RM_URLS,
-    ):
-        """ Criteria Checklist逐项基于RM进行打分 """
-        addition_judges = []
-        new_batch_solution_strs = []
-        indices = []
-        sizes = []
-
-        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-            sol = fabricate_parse_solution_fn(sol)
-            if sol is None:
-                continue
-
-            checklist = re.findall(r'\[SCORE=\d+\].*\n', gt["criteria"])
-
-            for item in checklist:
-                addition_judges.append(
-                    {"ground_truth": f'Judge whether the given question satisfy the following criteria.\n{item}'})
-                new_batch_solution_strs.append(sol)
-
-            sizes.append(len(checklist))
-            indices.append(i)
-
-        tasks = []
-        n = len(urls)
-
-        for i, batch in enumerate(batchify(zip(addition_judges, new_batch_solution_strs), n=64)):
-            addition_judge = [_[0] for _ in batch]
-            new_batch_solution_str = [_[1] for _ in batch]
-            tasks.append(
-                compute_rm_score(
-                    batch_solution_str=new_batch_solution_str,
-                    batch_ground_truth=addition_judge,
-                    postprocess_solution_fn=lambda x: x,
-                    parse_result_failure_score=self.parse_result_failure_score,
-                    desc="-rm_criteria_checklist",
-                    urls=[urls[i % n]]
-                )
-            )
-        results = await self.run_tasks_in_queues(tasks, n=n)
-        rewards = []
-        for _ in results:
-            rewards.extend(_)
-
-        rewards_group = []
-        for size in sizes:
-            rewards_group.append(rewards[:size])
-            rewards = rewards[size:]
-
-        full_rewards = []
-        for i in range(len(batch_solution_str)):
-            if i in indices:
-                full_rewards.append(np.mean(rewards_group[indices.index(i)]))
-            else:
-                full_rewards.append(self.parse_result_failure_score)
-        return full_rewards
-
-    async def llm_as_judge_criteria_checklist(
-        self,
-        batch_data_sources,
-        batch_solution_str,
-        batch_ground_truth,
-        max_concurrent_requests=32,
-    ):
-        questions, criteria = [], []
-
-        indices = []
-        for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-            fabricate = fabricate_parse_solution_fn(solution_str)
-            if fabricate is not None:
-                questions.append(fabricate)
-                criteria.append(gt["criteria"])
-                indices.append(i)
-
-        results = await criteria_get_score(
-            questions, criteria, max_concurrent_requests=max_concurrent_requests)
-
-        final_rewards = []
-        for i in range(len(batch_ground_truth)):
-            # 解析错误
-            if i not in indices:
-                final_rewards.append(self.parse_result_failure_score)
-            else:
-                sim = results[indices.index(i)]
-                if sim is None:
-                    sim = 0.0
-                score = 1.0 if sim >= batch_ground_truth[i]["criteria_threshold"] else sim
-                final_rewards.append(score)
-        return final_rewards
 
     def log_solution(self, solution):
         norm = fabricate_parse_solution_fn(solution)

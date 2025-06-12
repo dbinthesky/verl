@@ -14,10 +14,8 @@ from fabricate_qa import (
     agent,
     criteria_parse_solution_fn,
     get_total_score,
-    question_constraint,
     decode_to_question,
     criteria_get_score,
-    question_similarity,
     QwQLongCoTCreateCriteriaComputeScore,
     qwq_longcot_create_criteria_compute_score_valid,
     QwQLongCoTFabricateQAComputeScore,
@@ -60,7 +58,7 @@ def load_qwq_fabricate_qa_data(num=100):
         gt = row["reward_model"]["authentic_question"]
 
         batch_solution_str.append(
-            f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>{gt}\n{generate_random_string(2000)}</question>')
+            f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
     return batch_solution_str, batch_ground_truth
 
 
@@ -170,41 +168,12 @@ class TestFabricateQA(unittest.TestCase):
             print("="*80)
             break
 
-    def test_llm_as_judge_criteria_checklist(self):
-        async def main():
-            batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
-                num=100)
-            task = QwQLongCoTFabricateQAComputeScore(split="valid")
-            results = await task.llm_as_judge_criteria_checklist(
-                [None] *
-                len(batch_solution_str), batch_solution_str, batch_ground_truth
-            )
-            print(results)
-        aio.run(main())
-
     def test_llm_as_judge_similarity(self):
         async def main():
             batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
                 num=100)
             task = QwQLongCoTFabricateQAComputeScore(split="valid")
             results = await task.llm_as_judge_similarity(
-                [None] *
-                len(batch_solution_str), batch_solution_str, batch_ground_truth
-            )
-            print(results)
-        aio.run(main())
-
-    def test_question_constraint(self):
-        async def main():
-            batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
-                num=100)
-
-            fabricates = []
-            for _ in batch_solution_str:
-                fabricates.append(fabricate_parse_solution_fn(_))
-
-            task = QwQLongCoTFabricateQAComputeScore(split="valid")
-            results = await task.question_constraint(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth
             )
