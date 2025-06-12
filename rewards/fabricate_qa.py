@@ -2261,12 +2261,10 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
         results = await aio.gather(*tasks)
         _weak_results, _strong_results = results
 
-        # _weak_results = await self.weak_agent.run(_weak_prompts, max_concurrent_requests, desc=f"[Generate Weak Responses {self.weak_agent.model}]", postprocess_fns=[self.response_postprocess] * len(_weak_prompts))
         weak_results_mapper = defaultdict(list)
         for (k, v) in _weak_results:
             weak_results_mapper[k].append(v)
 
-        # _strong_results = await self.strong_agent.run(_strong_prompts, max_concurrent_requests, desc=f"[Generate Strong Responses {self.strong_agent.model}]", postprocess_fns=[self.response_postprocess] * len(_strong_prompts))
         strong_results_mapper = defaultdict(list)
         for (k, v) in _strong_results:
             strong_results_mapper[k].append(v)
