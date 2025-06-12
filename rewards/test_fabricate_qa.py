@@ -180,6 +180,17 @@ class TestFabricateQA(unittest.TestCase):
             print(results)
         aio.run(main())
 
+    def test_get_difficulty_reward(self):
+        async def main():
+            batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data()
+            task = QwQLongCoTFabricateQAComputeScore(split="valid")
+            results = await task.get_difficulty_reward(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth
+            )
+            print(results)
+        aio.run(main())
+
     def test_compute_score(self):
         # async def main():
         #     batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(

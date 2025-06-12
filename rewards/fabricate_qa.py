@@ -2225,6 +2225,117 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
             "QSim": self.question_similarity.get_penalty_or_reward,
         }
 
+    async def get_difficulty_reward(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth, max_concurrent_requests=MAX_CONCURRENT, repeat=8):
+
+        wo_content_prompts, w_content_prompts = defaultdict(
+            list), defaultdict(list)
+
+        for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            result = self.doc2query_parse_solution_fn(solution_str)
+            if result is not None:
+                question, answer, answer_type = result
+                ans_format_strict = self.format.get_penalty_or_reward(
+                    solution_str, gt
+                )
+                # 答案格式不符合规范
+                if ans_format_strict < 0.0:
+                    continue
+
+                lang_code = gt["lang_code"]
+                if lang_code == "zh":
+                    instruct = f'仔细一步步思考，并回答下面的问题。你回应的最后一行必须采用 “... 最终答案是 $ANSWER 的格式（不带引号），其中 $ANSWER 的格式要求需要满足下面的说明。\n\n{self.get_answer_format(answer_type, lang_code)}'
+                else:
+                    instruct = f'Think step by step in detail and answer the following questions. The last line of your response must be in the format "... the final answer is $ANSWER" (without quotes), where the format requirements for $ANSWER need to meet the instructions below.\n\n{self.get_answer_format(answer_type, lang_code)}'
+
+                prompt = f'{instruct}\n\n' + question
+                wo_content_prompts[prompt].append(i)
+
+                prompt = f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n' + \
+                    f'{instruct}\n\n' + question
+                w_content_prompts[prompt].append(i)
+
+        prompts = list(w_content_prompts.keys()) * repeat + \
+            list(wo_content_prompts.keys()) * repeat * 2
+
+        print(prompts)
+        raise NotImplementedError
+        _results = await self.agent.run(prompts, max_concurrent_requests, desc=f"[Generate Responses {self.agent.model}]", postprocess_fns=[self.response_postprocess] * len(prompts))
+
+        results_mapper = defaultdict(list)
+        for (k, v) in _results:
+            results_mapper[k].append(v)
+
+        # 答案验证
+        verify_queue = []
+        for k, v in results_mapper.items():
+            if k in wo_content_prompts:
+                for index in wo_content_prompts[k]:
+                    verify_queue.extend(
+                        [(index, "w/o_content", _v) for _v in v])
+            elif k in w_content_prompts:
+                for index in w_content_prompts[k]:
+                    verify_queue.extend([(index, "w_content", _v) for _v in v])
+
+        correctness = await self.verify_results(
+            verify_queue=verify_queue, batch_solution_str=batch_solution_str, max_concurrent_requests=MAX_CONCURRENT,
+        )
+
+        wo_contents, w_contents = correctness["w/o_content"], correctness["w_content"]
+
+        full_rewards = []
+        pass_rates = []
+
+        # FIXME
+        for i in range(len(batch_solution_str)):
+            if i in wo_contents:
+                base_score = 0.0
+
+                wo_content_scores = wo_contents[i]
+                w_content_scores = w_contents[i]
+
+                pass_rates.append({
+                    "wo_content": f'{np.sum(wo_content_scores)}/{len(wo_content_scores)}',
+                    "w_content": f'{np.sum(w_content_scores)}/{len(w_content_scores)}',
+                })
+
+                try:
+                    if len(wo_content_scores) == 0 or len(w_content_scores) == 0:
+                        full_rewards.append(base_score)
+                        continue
+
+                    # 题目过于简单或困难
+                    if np.mean(wo_content_scores) > 0.75 or np.mean(wo_content_scores) < (1.0/16) or np.mean(wo_content_scores) == 0.:
+                        full_rewards.append(base_score)
+                        continue
+
+                    # 带参考 应该比 不带参考 显著好
+                    if not (np.mean(w_content_scores) - np.mean(wo_content_scores) >= 1/self.difficulty_bon):
+                        full_rewards.append(base_score)
+                        continue
+
+                    # 有参考置信度
+                    if np.mean(w_content_scores) < 0.3:
+                        full_rewards.append(base_score)
+                        continue
+
+                    # 总分计算
+                    # difficulty = 1.0 - np.mean(wo_content_scores)
+                    # confidence = (1.0 if np.mean(w_content_scores)>0.5 else np.mean(w_content_scores)) - np.mean(wo_content_scores)
+                    # base_score = 1.0 + difficulty + confidence
+                    base_score = 1.0
+                except Exception as err:
+                    pass
+
+                full_rewards.append(base_score)
+            else:
+                pass_rates.append({})
+                full_rewards.append(0.0)
+        return full_rewards, pass_rates
+
     async def llm_as_judge_similarity(
         self,
         batch_data_sources,
