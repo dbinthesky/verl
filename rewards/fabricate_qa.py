@@ -1452,7 +1452,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
 
         self.agent = Agent(**{
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.138.40:8000/v1",
+            "base_url": "http://10.130.131.138:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.9,
@@ -2273,7 +2273,7 @@ class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
     def get_penalties(self) -> Dict[str, Callable]:
         return {
             "Format": self.format.get_penalty_or_reward,
-            "QSim": self.question_similarity.get_penalty_or_reward,
+            # "QSim": self.question_similarity.get_penalty_or_reward,
             # "AnsFeature": self.answer_feature.get_penalty_or_reward,
         }
 
@@ -2550,12 +2550,12 @@ Specifications for Numerical Answers (NumericalAnswer)
                         continue
 
                     # 题目过于简单或困难
-                    if np.mean(wo_content_scores) > 0.7 or np.mean(wo_content_scores) < (1.0/16) or np.mean(wo_content_scores) == 0.:
+                    if np.mean(wo_content_scores) > 0.75 or np.mean(wo_content_scores) < (1.0/16) or np.mean(wo_content_scores) == 0.:
                         full_rewards.append(base_score)
                         continue
 
                     # 带参考 应该比 不带参考 显著好
-                    if not (np.mean(w_content_scores) - np.mean(wo_content_scores) > 1/self.difficulty_bon):
+                    if not (np.mean(w_content_scores) - np.mean(wo_content_scores) >= 1/self.difficulty_bon):
                         full_rewards.append(base_score)
                         continue
 
@@ -2565,9 +2565,10 @@ Specifications for Numerical Answers (NumericalAnswer)
                         continue
 
                     # 总分计算
-                    difficulty = 1.0 - np.mean(wo_content_scores)
-                    confidence = (1.0 if np.mean(w_content_scores)>0.5 else np.mean(w_content_scores)) - np.mean(wo_content_scores)
-                    base_score = difficulty + confidence
+                    # difficulty = 1.0 - np.mean(wo_content_scores)
+                    # confidence = (1.0 if np.mean(w_content_scores)>0.5 else np.mean(w_content_scores)) - np.mean(wo_content_scores)
+                    # base_score = 1.0 + difficulty + confidence
+                    base_score = 1.0
                 except Exception as err:
                     pass
 
@@ -2609,7 +2610,7 @@ Specifications for Numerical Answers (NumericalAnswer)
             else:
                 penalty[i].append(0.0)
             # for key in ("Format", "AnsFeature", "QSim"):
-            for key in ("Format", "QSim"):
+            for key in ("Format",):
                 penalty[i].append(self.get_penalties()[key]
                                   (solution_str, ground_truth))
 
