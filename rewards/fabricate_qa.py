@@ -2198,7 +2198,16 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
         self.parse_solution_fn = self.doc2query_parse_solution_fn
 
         self.weak_agent = self.agent
-        self.verify_agent = self.agent
+        self.medium_agent = Agent(**{
+            "model": "QwQ_32B",
+            "base_url": "http://10.130.131.138:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.9,
+                "timeout": 360,
+                "max_tokens": 8192,
+            },
+        })
         self.strong_agent = Agent(**{
             "model": "DeepSeek-V3-0324",
             "base_url": "https://sd138cdmeq1emkiunptm0.apigateway-cn-beijing.volceapi.com/v1",
@@ -2209,6 +2218,7 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
                 "max_tokens": 2048,
             }
         })
+        self.verify_agent = self.agent
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
