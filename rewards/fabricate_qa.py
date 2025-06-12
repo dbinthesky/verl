@@ -2329,7 +2329,11 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
                     # 总分计算
                     difficulty = 1.0 - np.mean(weak_scores)
                     if np.mean(strong_scores) < 1.0:
-                        difficulty += 0.25
+                        if np.mean(strong_scores) >= 3/4:
+                            difficulty += 0.25
+                        elif np.mean(strong_scores) >= 1/4 and np.mean(strong_scores) < 3/4:
+                            difficulty += 0.5
+
                     base_score = difficulty
                 except Exception as err:
                     pass
