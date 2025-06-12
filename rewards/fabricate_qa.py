@@ -2316,11 +2316,6 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
                         full_rewards.append(base_score)
                         continue
 
-                    # 有参考置信度
-                    if np.mean(w_content_scores) < 0.3:
-                        full_rewards.append(base_score)
-                        continue
-
                     # 总分计算
                     difficulty = 1.0 - np.mean(weak_scores)
                     base_score = difficulty
@@ -2417,17 +2412,20 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
             scores = copy.deepcopy(penalty[i])
             scores.append(difficulty_rewards[i])
             cur_score = 0
-            for _score in scores:
+
+            for j, _score in enumerate(scores):
                 if _score < 0:
                     cur_score = _score
                     break
                 else:
-                    cur_score += _score
+                    if j == 2:  # BLEU
+                        if difficulty_rewards[i] > 0:
+                            cur_score += _score
+                    else:
+                        cur_score += _score
 
-            if scores[-1] > 0:
+            if difficulty_rewards[i] > 0:
                 cur_score += similarity_rewards[i]
-            else:
-                cur_score -= scores[-2]  # Question Sim BLEU
 
             penalty_log_str = f'Parse/Format/AnsFeature/QSim={penalty[i]}'
 
