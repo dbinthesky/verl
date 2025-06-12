@@ -969,16 +969,6 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 "max_tokens": 2048,
             },
         })
-        # self.agent = Agent(**{
-        #     "model": "DeepSeek-V3-0324",
-        #     "base_url": "https://sd0rainnf2h21nr3724fg.apigateway-cn-beijing.volceapi.com/v1",
-        #     "api_keys": "EMPTY",
-        #     "request_kwargs": {
-        #         "temperature": 0.9,
-        #         "timeout": 360,
-        #         "max_tokens": 2048,
-        #     }
-        # })
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
@@ -2388,7 +2378,6 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
                              ):
         # 解析出错 -2.0
         # 答案分析 -1.5 ～ -1.0
-        # 答案特征 0 ～ 0.02
 
         penalty = defaultdict(list)
         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
@@ -2400,6 +2389,8 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
             for key in ("Format", "QSim"):
                 penalty[i].append(self.get_penalties()[key]
                                   (solution_str, ground_truth))
+
+        # results = await asyncio.gather(*tasks)
 
         difficulty_rewards, pass_rates = await self.get_difficulty_reward(
             batch_data_sources,
@@ -2426,8 +2417,10 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
                 else:
                     cur_score += _score
 
-            if cur_score > 0:
+            if scores[-1] > 0:
                 cur_score += similarity_rewards[i]
+            else:
+                cur_score -= scores[-2]  # Question Sim BLEU
 
             penalty_log_str = f'Parse/Format/AnsFeature/QSim={penalty[i]}'
 
@@ -2446,10 +2439,11 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
                     f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
                 try:
                     print(
-                        f"【Ground Truth】({difficulty})`{self.log_ground_truth(batch_ground_truth[i])}`")
+                        f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
                 except Exception as err:
-                    print(
-                        f'[Final Reward]={cur_score:.3f}|[Pass@{self.difficulty_bon}]={pass_rates[i]}|Sim={similarity_rewards[i]:.3f}|Difficulty={difficulty_rewards[i]}|{penalty_log_str}\n')
+                    print(f'[ERROR] {err}')
+                print(
+                    f'[Final Reward]={cur_score:.3f}|[Pass@{self.difficulty_bon}]={pass_rates[i]}|Sim={similarity_rewards[i]:.3f}|Difficulty={difficulty_rewards[i]}|{penalty_log_str}\n')
         return final_results
 
     def clip_string(self, s: str):
