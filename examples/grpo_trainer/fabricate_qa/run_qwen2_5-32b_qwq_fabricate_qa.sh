@@ -50,7 +50,9 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/DeepSeek-R1-Distill-Qwen-32B-fabricate_qa_v9/checkpoint-289"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/DeepSeek-R1-Distill-Qwen-32B-fabricate_qa_v9/checkpoint-289"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/qwen2_5-32b_qwq_fabricate_qa_supergpqa-dlc-2025-06-12-14-55-09_grpo_step_10"
+
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/super_gpqa_aio_noneasy_train_0517.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/super_gpqa_aio_noneasy_test_0517.parquet"
 
@@ -112,7 +114,7 @@ run_training() {
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=12288 \
         actor_rollout_ref.actor.use_kl_loss=False \
         actor_rollout_ref.actor.kl_loss_coef=0.0 \
-        actor_rollout_ref.actor.entropy_coeff=0.005 \
+        actor_rollout_ref.actor.entropy_coeff=0.000 \
         actor_rollout_ref.actor.kl_loss_type="low_var_kl" \
         actor_rollout_ref.model.enable_gradient_checkpointing=True \
         +actor_rollout_ref.model.trust_remote_code=True \
