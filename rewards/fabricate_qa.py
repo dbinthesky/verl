@@ -2174,11 +2174,11 @@ Specifications for Numerical Answers (NumericalAnswer)
                     f"【Solution】({domain})`{self.log_solution(batch_solution_str[i])}`")
                 try:
                     print(
-                        f"【Ground Truth】({difficulty})`{self.log_ground_truth(batch_ground_truth[i])}`")
+                        f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
                 except Exception as err:
                     pass
                 print(
-                    f'[Final Reward]={cur_score:.3f}={pass_rates[i]}|Difficulty={difficulty_rewards[i]:.3f}|{penalty_log_str}\n')
+                    f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={difficulty_rewards[i]:.3f}|{penalty_log_str}\n')
         return final_results
 
 
