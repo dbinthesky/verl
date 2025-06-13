@@ -813,7 +813,7 @@ class QuestionSimilarity(PenaltyOrReward):
         self.key = key
 
     def get_penalty_or_reward(self, solution_str, ground_truth):
-        if ground_truth.get(self.key, None) is None and len(ground_truth.get("fabricate_questions", [])) == 0:
+        if ground_truth.get(self.key, None) is None:
             return 0.0
         try:
             solution_str = self.doc2query_parse_solution_fn(solution_str)
@@ -825,7 +825,7 @@ class QuestionSimilarity(PenaltyOrReward):
             if ground_truth.get(self.key, None):
                 gt = ground_truth[self.key]
             else:
-                gt = random.choice(ground_truth["fabricate_questions"])
+                return 0.0
 
             gt_tokens = " ".join(tokenize(gt.lower(), "en"))
             sl_tokens = " ".join(tokenize(question.lower(), "en"))
@@ -953,7 +953,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
         self.format = Doc2QueryFormatReward(
             doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
         self.question_similarity = QuestionSimilarity(
-            doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
+            doc2query_parse_solution_fn=self.doc2query_parse_solution_fn, key="question")
         self.rule_base = RuleBasedOptionMatch(
             doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
         self.add_difficulty_rewards = add_difficulty_rewards
@@ -1785,7 +1785,7 @@ class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
     def get_penalties(self) -> Dict[str, Callable]:
         return {
             "Format": self.format.get_penalty_or_reward,
-            # "QSim": self.question_similarity.get_penalty_or_reward,
+            "QSim": self.question_similarity.get_penalty_or_reward,
             # "AnsFeature": self.answer_feature.get_penalty_or_reward,
         }
 
@@ -2118,9 +2118,6 @@ Specifications for Numerical Answers (NumericalAnswer)
                              batch_solution_str,
                              batch_ground_truth,
                              ):
-        # 解析出错 -2.0
-        # 答案分析 -1.5 ～ -1.0
-        # 答案特征 0 ～ 0.02
 
         penalty = defaultdict(list)
         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
@@ -2129,8 +2126,8 @@ Specifications for Numerical Answers (NumericalAnswer)
                 penalty[i].append(-2.0)
             else:
                 penalty[i].append(0.0)
-            # for key in ("Format", "AnsFeature", "QSim"):
-            for key in ("Format",):
+
+            for key in ("Format", "QSim"):
                 penalty[i].append(self.get_penalties()[key]
                                   (solution_str, ground_truth))
 
@@ -2146,12 +2143,17 @@ Specifications for Numerical Answers (NumericalAnswer)
             scores = copy.deepcopy(penalty[i])
             scores.append(difficulty_rewards[i])
             cur_score = 0
-            for _score in scores:
+
+            for j, _score in enumerate(scores):
                 if _score < 0:
                     cur_score = _score
                     break
                 else:
-                    cur_score += _score
+                    if j == 2:  # BLEU
+                        if difficulty_rewards[i] > 0:
+                            cur_score += _score
+                    else:
+                        cur_score += _score
 
             penalty_log_str = f'Parse/Format/AnsFeature/QSim={penalty[i]}'
 
@@ -2174,8 +2176,9 @@ Specifications for Numerical Answers (NumericalAnswer)
                     print(
                         f"【Ground Truth】({difficulty})`{self.log_ground_truth(batch_ground_truth[i])}`")
                 except Exception as err:
-                    print(
-                        f'[Final Reward]={cur_score:.3f}|[Pass@{self.difficulty_bon}]={pass_rates[i]}|{penalty_log_str}\n')
+                    pass
+                print(
+                    f'[Final Reward]={cur_score:.3f}={pass_rates[i]}|Difficulty={difficulty_rewards[i]:.3f}|{penalty_log_str}\n')
         return final_results
 
 
