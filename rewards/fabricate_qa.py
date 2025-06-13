@@ -969,6 +969,7 @@ class QwQLongCoTDoc2QueryComputeScore(object):
                 "max_tokens": 2048,
             },
         })
+        self.verify_agent = self.agent
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
@@ -1768,7 +1769,18 @@ class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
             doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
         self.answer_feature = AnswerFeatureMatch(
             doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
-        self.verify_agent = self.agent
+
+        self.wo_content_agent = self.agent
+        self.w_content_agent = Agent(**{
+            "model": "DeepSeek-V3-0324",
+            "base_url": "https://sd138cdmeq1emkiunptm0.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.9,
+                "timeout": 360,
+                "max_tokens": 2048,
+            }
+        })
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
@@ -1970,7 +1982,7 @@ Specifications for Numerical Answers (NumericalAnswer)
             self,
             batch_data_sources,
             batch_solution_str,
-            batch_ground_truth, max_concurrent_requests=MAX_CONCURRENT, repeat=8):
+            batch_ground_truth, max_concurrent_requests=MAX_CONCURRENT, wo_content_bon=16, w_content_bon=6):
 
         wo_content_prompts, w_content_prompts = defaultdict(
             list), defaultdict(list)
@@ -1999,13 +2011,21 @@ Specifications for Numerical Answers (NumericalAnswer)
                     f'{instruct}\n\n' + question
                 w_content_prompts[prompt].append(i)
 
-        prompts = list(w_content_prompts.keys()) * repeat + \
-            list(wo_content_prompts.keys()) * repeat * 2
+        _w_content_prompts = list(w_content_prompts.keys()) * w_content_bon
+        _wo_content_prompts = list(wo_content_prompts.keys()) * wo_content_bon
 
-        _results = await self.agent.run(prompts, max_concurrent_requests, desc=f"[Generate Responses {self.agent.model}]", postprocess_fns=[self.response_postprocess] * len(prompts))
+        tasks = [
+            self.wo_content_agent.run(_wo_content_prompts, max_concurrent_requests, desc=f"[Generate w/o Content Responses {self.wo_content_agent.model}]", postprocess_fns=[
+                self.response_postprocess] * len(_wo_content_prompts)),
+            self.w_content_agent.run(_w_content_prompts, max_concurrent_requests, desc=f"[Generate w Content Responses {self.w_content_agent.model}]", postprocess_fns=[
+                self.response_postprocess] * len(_w_content_prompts))
+        ]
+        wo_results, w_results = await aio.gather(*tasks)
 
         results_mapper = defaultdict(list)
-        for (k, v) in _results:
+        for (k, v) in wo_results:
+            results_mapper[k].append(v)
+        for (k, v) in w_results:
             results_mapper[k].append(v)
 
         # 答案验证
@@ -2048,25 +2068,27 @@ Specifications for Numerical Answers (NumericalAnswer)
                         continue
 
                     # 题目过于简单或困难
-                    if np.mean(wo_content_scores) > 0.75 or np.mean(wo_content_scores) < (1.0/16) or np.mean(wo_content_scores) == 0.:
+                    if np.mean(wo_content_scores) == 1.0 or np.mean(wo_content_scores) < (1.0/16) or np.mean(wo_content_scores) == 0.:
                         full_rewards.append(base_score)
                         continue
 
                     # 带参考 应该比 不带参考 显著好
-                    if not (np.mean(w_content_scores) - np.mean(wo_content_scores) >= 1/self.difficulty_bon):
+                    if not (np.mean(w_content_scores) >= min(1/w_content_bon + np.mean(wo_content_scores), 1.0)):
                         full_rewards.append(base_score)
                         continue
 
-                    # 有参考置信度
-                    if np.mean(w_content_scores) < 0.3:
-                        full_rewards.append(base_score)
-                        continue
+                    # # 有参考置信度
+                    # if np.mean(w_content_scores) < 0.3:
+                    #     full_rewards.append(base_score)
+                    #     continue
 
                     # 总分计算
-                    # difficulty = 1.0 - np.mean(wo_content_scores)
-                    # confidence = (1.0 if np.mean(w_content_scores)>0.5 else np.mean(w_content_scores)) - np.mean(wo_content_scores)
-                    # base_score = 1.0 + difficulty + confidence
-                    base_score = 1.0
+                    difficulty = 0.75 * \
+                        (1.0 - np.mean(wo_content_scores)) + \
+                        0.25 * (1 - np.mean(w_content_scores))
+                    confidence = (1.0 if np.mean(w_content_scores)
+                                  > 0.5 else np.mean(w_content_scores))
+                    base_score = difficulty + confidence * 0.5
                 except Exception as err:
                     pass
 
@@ -2117,7 +2139,6 @@ Specifications for Numerical Answers (NumericalAnswer)
             batch_solution_str,
             batch_ground_truth,
             max_concurrent_requests=MAX_CONCURRENT,
-            repeat=self.difficulty_bon
         )
 
         final_results = []
