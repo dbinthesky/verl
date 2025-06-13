@@ -1778,7 +1778,7 @@ class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
             "request_kwargs": {
                 "temperature": 0.9,
                 "timeout": 360,
-                "max_tokens": 2048,
+                "max_tokens": 4096,
             }
         })
 
@@ -2239,7 +2239,7 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
             "request_kwargs": {
                 "temperature": 0.9,
                 "timeout": 360,
-                "max_tokens": 2048,
+                "max_tokens": 4096,
             }
         })
         self.verify_agent = self.agent
