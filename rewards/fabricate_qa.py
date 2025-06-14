@@ -3,6 +3,7 @@ import sys
 import json
 import uuid
 import copy
+import math
 import jieba
 import random
 import aiohttp
@@ -1635,12 +1636,12 @@ class GenerateQAV2FormatReward(PenaltyOrReward):
                 if answer_type == "NumericalAnswer":
                     # 特定校验（避免构造0、1、2等常见答案）
                     if not parser.exclude_common_answer_pattern(answer):
-                        return -0.5
+                        return -0.1
                 return 0.0
             else:
-                return -1.0
+                return -0.2
         except Exception as err:
-            return -1.0
+            return -0.2
 
 
 class AnswerFeatureMatch(PenaltyOrReward):
@@ -1910,9 +1911,9 @@ Specifications for Numerical Answers (NumericalAnswer)
                 raise PostprocessError(f'{err}')
 
         verify_prompt = """### **基于标准答案判断回答是否正确**
-任务描述：请根据提供的**题目**、**用户回答（答案部分）**和**标准答案**，判断用户回答是否正确，并按照指定格式输出结果。需严格比对答案，若用户回答与标准答案**完全一致**，则判定为正确，否则为错误。
+任务描述：请根据提供的**题目**、**用户回答（答案部分）**和**标准答案**，判断用户回答是否正确，并按照指定格式输出结果。需严格比对答案，若用户回答与标准答案**内容一致**，则判定为正确，否则为错误。
 
-**必须与标准答案完全一致**（含字符、单位、符号等），如果数值是科学记数法或者是小数，是否按规定保留到规定位数，否则判错。 |
+**必须与标准答案完全一致**（含数值、单位、符号等），如果数值是科学记数法或者是小数，只允许非常小的计算误差（有效计算部分最后一位），否则判错。 |
 
 #### 输出要求
 ```json
@@ -1982,7 +1983,7 @@ Specifications for Numerical Answers (NumericalAnswer)
             self,
             batch_data_sources,
             batch_solution_str,
-            batch_ground_truth, max_concurrent_requests=MAX_CONCURRENT, wo_content_bon=16, w_content_bon=6):
+            batch_ground_truth, max_concurrent_requests=MAX_CONCURRENT, wo_content_bon=24, w_content_bon=6):
 
         wo_content_prompts, w_content_prompts = defaultdict(
             list), defaultdict(list)
@@ -2049,7 +2050,6 @@ Specifications for Numerical Answers (NumericalAnswer)
         full_rewards = []
         pass_rates = []
 
-        # FIXME
         for i in range(len(batch_solution_str)):
             if i in wo_contents:
                 base_score = 0.0
@@ -2083,12 +2083,14 @@ Specifications for Numerical Answers (NumericalAnswer)
                     #     continue
 
                     # 总分计算
-                    difficulty = 0.75 * \
-                        (1.0 - np.mean(wo_content_scores)) + \
-                        0.25 * (1 - np.mean(w_content_scores))
+                    difficulty1 = (1.0-math.log2(1+np.sum(wo_content_scores))/math.log2(
+                        1+wo_content_bon))
+                    difficulty2 = (1.0-math.log2(1+np.sum(w_content_scores)) /
+                                   math.log2(1+w_content_bon))
+
                     confidence = (1.0 if np.mean(w_content_scores)
                                   > 0.5 else np.mean(w_content_scores))
-                    base_score = difficulty + confidence * 0.5
+                    base_score = [difficulty1, difficulty2, confidence]
                 except Exception as err:
                     pass
 
@@ -2141,7 +2143,12 @@ Specifications for Numerical Answers (NumericalAnswer)
         final_results = []
         for i in range(len(batch_solution_str)):
             scores = copy.deepcopy(penalty[i])
-            scores.append(difficulty_rewards[i])
+            _difficulty = difficulty_rewards[i]
+            _difficulty = (0.5 * _difficulty[0] + 0.5 * _difficulty[1] +
+                           0.2 * _difficulty[2]) if isinstance(_difficulty, list) else _difficulty
+            penalty_log_str = f'Parse/Format/AnsFeature/QSim={penalty[i]}'
+
+            scores.append(_difficulty)
             cur_score = 0
 
             for j, _score in enumerate(scores):
@@ -2150,13 +2157,10 @@ Specifications for Numerical Answers (NumericalAnswer)
                     break
                 else:
                     if j == 2:  # BLEU
-                        if difficulty_rewards[i] > 0:
+                        if _difficulty > 0:
                             cur_score += _score
                     else:
                         cur_score += _score
-
-            penalty_log_str = f'Parse/Format/AnsFeature/QSim={penalty[i]}'
-
             final_results.append(cur_score)
 
             if (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
@@ -2178,7 +2182,7 @@ Specifications for Numerical Answers (NumericalAnswer)
                 except Exception as err:
                     pass
                 print(
-                    f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={difficulty_rewards[i]:.3f}|{penalty_log_str}\n')
+                    f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|{penalty_log_str}\n')
         return final_results
 
 
@@ -2412,9 +2416,6 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
                              batch_solution_str,
                              batch_ground_truth,
                              ):
-        # 解析出错 -2.0
-        # 答案分析 -1.5 ～ -1.0
-
         penalty = defaultdict(list)
         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
             parsed = self.doc2query_parse_solution_fn(solution_str)
@@ -2426,12 +2427,17 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
                 penalty[i].append(self.get_penalties()[key]
                                   (solution_str, ground_truth))
 
-        difficulty_rewards, pass_rates = await self.get_difficulty_reward(
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-            max_concurrent_requests=MAX_CONCURRENT,
-        )
+        # difficulty_rewards, pass_rates = await self.get_difficulty_reward(
+        #     batch_data_sources,
+        #     batch_solution_str,
+        #     batch_ground_truth,
+        #     max_concurrent_requests=MAX_CONCURRENT,
+        # )
+
+        # FIXME
+        difficulty_rewards, pass_rates = [
+            0.0]*len(batch_solution_str), [{}] * len(batch_solution_str)
+
         similarity_rewards = await self.llm_as_judge_similarity(
             batch_data_sources,
             batch_solution_str,
