@@ -2133,19 +2133,24 @@ Specifications for Numerical Answers (NumericalAnswer)
                 penalty[i].append(self.get_penalties()[key]
                                   (solution_str, ground_truth))
 
-        difficulty_rewards, pass_rates = await self.get_difficulty_reward(
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-            max_concurrent_requests=MAX_CONCURRENT,
-        )
+        # difficulty_rewards, pass_rates = await self.get_difficulty_reward(
+        #     batch_data_sources,
+        #     batch_solution_str,
+        #     batch_ground_truth,
+        #     max_concurrent_requests=MAX_CONCURRENT,
+        # )
+
+        # FIXME
+        difficulty_rewards, pass_rates = [
+            0.0]*len(batch_solution_str), [{}] * len(batch_solution_str)
 
         final_results = []
         for i in range(len(batch_solution_str)):
             scores = copy.deepcopy(penalty[i])
             _difficulty = difficulty_rewards[i]
-            _difficulty = (0.5 * _difficulty[0] + 0.5 * _difficulty[1] +
-                           0.2 * _difficulty[2]) if isinstance(_difficulty, list) else _difficulty
+            # FIXME
+            # _difficulty = (0.5 * _difficulty[0] + 0.5 * _difficulty[1] +
+            #                0.2 * _difficulty[2]) if isinstance(_difficulty, list) else _difficulty
             penalty_log_str = f'Parse/Format/AnsFeature/QSim={penalty[i]}'
 
             scores.append(_difficulty)
