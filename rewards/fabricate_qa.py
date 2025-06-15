@@ -2478,7 +2478,7 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
                         cur_score += _score
 
             if difficulty_rewards[i] > 0:
-                cur_score += similarity_rewards[i]
+                cur_score += 0.25 * similarity_rewards[i]
 
             penalty_log_str = f'Parse/Format/AnsFeature/QSim={penalty[i]}'
 
