@@ -2263,7 +2263,7 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
             self,
             batch_data_sources,
             batch_solution_str,
-            batch_ground_truth, max_concurrent_requests=MAX_CONCURRENT, weak_bon=16, strong_bon=4):
+            batch_ground_truth, max_concurrent_requests=MAX_CONCURRENT, weak_bon=16, strong_bon=6):
 
         weak_model_prompts, strong_model_prompts = defaultdict(
             list), defaultdict(list)
@@ -2355,9 +2355,19 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
                         continue
 
                     # 总分计算
-                    difficulty = 0.5 * (1.0 - np.mean(weak_scores))
+                    # difficulty = 0.5 * (1.0 - np.mean(weak_scores))
+                    # if np.mean(strong_scores) > 0.:
+                    #     difficulty += 0.5 * (1.0 - np.mean(strong_scores))
+
+                    difficulty = 0.0
+                    difficulty1 = (1.0-math.log2(1+np.sum(weak_scores))/math.log2(
+                        1+weak_bon))
+
+                    difficulty += difficulty1
                     if np.mean(strong_scores) > 0.:
-                        difficulty += 0.5 * (1.0 - np.mean(strong_scores))
+                        difficulty2 = (1.0-math.log2(1+np.sum(strong_scores)) /
+                                       math.log2(1+strong_bon))
+                        difficulty += difficulty2
 
                     base_score = difficulty
                 except Exception as err:
@@ -2432,16 +2442,16 @@ class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
                 penalty[i].append(self.get_penalties()[key]
                                   (solution_str, ground_truth))
 
-        # difficulty_rewards, pass_rates = await self.get_difficulty_reward(
-        #     batch_data_sources,
-        #     batch_solution_str,
-        #     batch_ground_truth,
-        #     max_concurrent_requests=MAX_CONCURRENT,
-        # )
+        difficulty_rewards, pass_rates = await self.get_difficulty_reward(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            max_concurrent_requests=MAX_CONCURRENT,
+        )
 
-        # FIXME
-        difficulty_rewards, pass_rates = [
-            0.0]*len(batch_solution_str), [{}] * len(batch_solution_str)
+        # # FIXME
+        # difficulty_rewards, pass_rates = [
+        #     0.0]*len(batch_solution_str), [{}] * len(batch_solution_str)
 
         similarity_rewards = await self.llm_as_judge_similarity(
             batch_data_sources,
