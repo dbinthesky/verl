@@ -1792,7 +1792,7 @@ class LanguageConsistency(PenaltyOrReward):
             if contain_chinese(raw_solution_str):
                 return base_score
         elif lang_code == "zh":
-            if not self.detect_zh(raw_solution_str, 0.8):
+            if not self.detect_zh(raw_solution_str, 0.75):
                 return base_score
         else:
             pass
