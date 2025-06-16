@@ -1596,7 +1596,7 @@ class NumericalAnswer(object):
                 return len(integer_part) + len(decimal_part)
         else:
             # 整数形式
-            return len(num_str.lstrip('0')) if num_str != '0' else 1
+            return max(len(num_str.lstrip('0')) if num_str != '0' else 1, 3)
 
 
 class WithUnitSymbol(object):
@@ -1702,12 +1702,12 @@ class WithUnitSymbol(object):
         return bool(self.percent_pattern.match(answer.strip()))
 
 
-class GenerateQAV2FormatReward(PenaltyOrReward):
-    def __init__(self, doc2query_parse_solution_fn=custom_qa_parse_solution_fn):
-        self.doc2query_parse_solution_fn = doc2query_parse_solution_fn
+class CalculationAnswerFormatVerify(PenaltyOrReward):
+    def __init__(self, parse_solution_fn=custom_qa_parse_solution_fn):
+        self.parse_solution_fn = parse_solution_fn
 
     def get_penalty_or_reward(self, solution_str, ground_truth):
-        solution_str = self.doc2query_parse_solution_fn(solution_str)
+        solution_str = self.parse_solution_fn(solution_str)
 
         if solution_str is None:
             return 0.0
@@ -1793,7 +1793,7 @@ def extract_boxed_answer(solution: str) -> str:
 #         super().__init__(
 #             split=split, add_difficulty_rewards=add_difficulty_rewards, difficulty_bon=difficulty_bon, parse_solution_fn=parse_solution_fn
 #         )
-#         self.format = GenerateQAV2FormatReward(
+#         self.format = CalculationAnswerFormatVerify(
 #             doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
 #         self.answer_feature = AnswerFeatureMatch(
 #             doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)

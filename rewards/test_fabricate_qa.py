@@ -22,7 +22,7 @@ from fabricate_qa import (
     # qwq_longcot_fabricate_qa_compute_score_valid,
     # doc2query_parse_solution_fn,
     QuestionSimilarity,
-    # RuleBasedOptionMatch,
+    CalculationAnswerFormatVerify,
     # QwQLongCoTDoc2QueryComputeScore,
     # QwQLongCoTDoc2QueryV2ComputeScore,
     # qwq_longcot_doc2query_compute_score_valid,
@@ -181,6 +181,9 @@ class TestFabricate(unittest.TestCase):
         self.assertEqual(verifier.verify("\\boxed{-32.4}"), True)
         self.assertEqual(verifier.verify("\\boxed{8.95}"), True)
         self.assertEqual(verifier.verify("\\boxed{26.32}"), True)
+        self.assertEqual(verifier.verify("\\boxed{78}"), True)
+        self.assertEqual(verifier.verify("\\boxed{-78}"), True)
+        self.assertEqual(verifier.verify("\\boxed{5}"), True)
 
     def test_custom_qa_parse_solution_fn(self):
         self.assertFalse(custom_qa_parse_solution_fn(
@@ -200,6 +203,16 @@ class TestFabricate(unittest.TestCase):
         for response, gt in zip(batch_solution_str, batch_ground_truth):
             score = scorer.get_penalty_or_reward(response, gt)
             self.assertTrue(score > 0.5)
+
+    def test_calc_answer_verify(self):
+        batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
+            format="wrong_question", num=100)
+
+        scorer = CalculationAnswerFormatVerify(custom_qa_parse_solution_fn)
+        for response, gt in zip(batch_solution_str, batch_ground_truth):
+            score = scorer.get_penalty_or_reward(response, gt)
+            self.assertTrue(score >= 0)
+
 
 #         x, y = [], []
 #         task = QwQLongCoTDoc2QueryV2ComputeScore(split="valid")
