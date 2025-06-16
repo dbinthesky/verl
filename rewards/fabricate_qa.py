@@ -1736,6 +1736,70 @@ class CalculationAnswerFormatVerify(PenaltyOrReward):
             return -0.2
 
 
+class LanguageConsistency(PenaltyOrReward):
+    def __init__(self, parse_solution_fn=custom_qa_parse_solution_fn):
+        self.parse_solution_fn = parse_solution_fn
+
+    def detect_zh(self, text, threshold=0.05):
+        if text is None:
+            return False
+        # Remove URLs, numbers, and punctuation to focus on language characters
+        cleaned_text = re.sub(r'[^\w\s]|[\d]', '', text)
+        if not cleaned_text:
+            return False
+
+        # Count Chinese characters
+        chinese_chars = re.findall(r'[\u4e00-\u9fa5]', cleaned_text)
+        chinese_count = len(chinese_chars)
+
+        # Count English characters
+        english_chars = re.findall(r'[a-zA-Z]', cleaned_text)
+        english_count = len(english_chars)
+
+        # Total language characters
+        total_chars = chinese_count + english_count
+        if total_chars == 0:
+            return False
+
+        # Calculate ratios
+        chinese_ratio = chinese_count / total_chars
+        english_ratio = english_count / total_chars
+
+        # Check if both languages exceed the threshold
+        return chinese_ratio >= threshold
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        raw_solution_str = solution_str
+        solution_str = self.parse_solution_fn(solution_str)
+
+        if solution_str is None:
+            return 0.0
+
+        question, answer, answer_type = solution_str
+
+        lang_code = ground_truth["lang_code"]
+
+        base_score = -0.1
+
+        if lang_code == "en" and contain_chinese(question):
+            return base_score
+        elif lang_code == "zh" and (not contain_chinese(question)):
+            return base_score
+
+        base_score += 0.05
+
+        if lang_code == "en":
+            if contain_chinese(raw_solution_str):
+                return base_score
+        elif lang_code == "zh":
+            if not self.detect_zh(raw_solution_str, 0.8):
+                return base_score
+        else:
+            pass
+
+        return 0.0
+
+
 def last_boxed_only_string(string):
     idx = string.rfind("\\boxed")
     if idx < 0:

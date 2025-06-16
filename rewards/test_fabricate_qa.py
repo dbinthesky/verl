@@ -23,6 +23,7 @@ from fabricate_qa import (
     # doc2query_parse_solution_fn,
     QuestionSimilarity,
     CalculationAnswerFormatVerify,
+    LanguageConsistency,
     # QwQLongCoTDoc2QueryComputeScore,
     # QwQLongCoTDoc2QueryV2ComputeScore,
     # qwq_longcot_doc2query_compute_score_valid,
@@ -43,6 +44,7 @@ def load_fabricate_aio_data(num=100, format="wrong_question"):
     batch_solution_str, batch_ground_truth = [], []
 
     df = pd.read_parquet(filename)
+    count = 0
     for _, row in df.iterrows():
         row = row.to_dict()
         if format == "wrong_question":
@@ -51,9 +53,21 @@ def load_fabricate_aio_data(num=100, format="wrong_question"):
                 batch_solution_str.append(
                     f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
                 batch_ground_truth.append(row["reward_model"])
+                count += 1
             else:
                 continue
-        if _ > num-1:
+        if format == "zh_question":
+            if row["reward_model"]["lang_code"] != "zh":
+                continue
+            gt = row["reward_model"]["question"]
+            if gt is not None:
+                batch_solution_str.append(
+                    f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
+                batch_ground_truth.append(row["reward_model"])
+                count += 1
+            else:
+                continue
+        if count > num-1:
             break
     return batch_solution_str, batch_ground_truth
 
@@ -186,6 +200,7 @@ class TestFabricate(unittest.TestCase):
         self.assertEqual(verifier.verify("\\boxed{-78}"), True)
         self.assertEqual(verifier.verify("\\boxed{5}"), True)
         self.assertEqual(verifier.verify("\\boxed{-5}"), True)
+        self.assertEqual(verifier.verify("\\boxed{0.500}"), True)
         self.assertEqual(verifier.verify("\\boxed{0.210}"), True)
 
     def test_custom_qa_parse_solution_fn(self):
@@ -216,6 +231,14 @@ class TestFabricate(unittest.TestCase):
             score = scorer.get_penalty_or_reward(response, gt)
             self.assertTrue(score >= 0)
 
+    def test_language_consistency(self):
+        batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
+            format="zh_question", num=100)
+
+        scorer = LanguageConsistency(custom_qa_parse_solution_fn)
+        for response, gt in zip(batch_solution_str, batch_ground_truth):
+            score = scorer.get_penalty_or_reward(response, gt)
+            self.assertTrue(score < 0)
 
 #         x, y = [], []
 #         task = QwQLongCoTDoc2QueryV2ComputeScore(split="valid")
