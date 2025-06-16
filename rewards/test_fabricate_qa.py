@@ -28,7 +28,8 @@ from fabricate_qa import (
     qwq_longcot_doc2query_compute_score_valid,
     doc2query_v2_parse_solution_fn,
     batchify,
-    WithUnitSymbol
+    WithUnitSymbol,
+    NumericalAnswer
 )
 
 
@@ -337,27 +338,54 @@ class TestDoc2QueryV2(unittest.TestCase):
 
     def test_with_unit_symbol(self):
         verifier = WithUnitSymbol()
-        print("1", verifier.verify("1.275 mol"))
+        self.assertEqual(verifier.verify("1.275 mol"), True)
+        self.assertEqual(verifier.verify("1.256 × 10^-67 J"), True)
+        self.assertEqual(verifier.verify("9.42 pc"), True)
+        self.assertEqual(verifier.verify("50.1 g"), True)
+        self.assertEqual(verifier.verify("5.27×10^5 Pa"), True)
+        self.assertEqual(verifier.verify("1.812 meV"), True)
+        self.assertEqual(verifier.verify("5.27×10^5 Pa"), True)
+        self.assertEqual(verifier.verify("6.100×10^11 Hz"), True)
+        self.assertEqual(verifier.verify("0.010 °"), True)
+        self.assertEqual(verifier.verify("10.938 kg/m²"), True)
+        self.assertEqual(verifier.verify("12288 KB"), True)
+        self.assertEqual(verifier.verify("1.256 × 10^-67 J"), True)
+        self.assertEqual(verifier.verify("1.720 ppm"), True)
+        self.assertEqual(verifier.verify("12.000 μm"), True)
+        self.assertEqual(verifier.verify("10.870 kJ/g"), True)
+        self.assertEqual(verifier.verify("127.500 MeV"), True)
+        self.assertEqual(verifier.verify("-0.854 kJ"), True)
+        self.assertEqual(verifier.verify("2560 m²"), True)
+        self.assertEqual(verifier.verify("\\boxed{3.970e13}"), True)
+        self.assertEqual(verifier.verify("\\boxed{82.6%}"), True)
+        self.assertEqual(verifier.verify("\\boxed{-45.3%}"), True)
+        self.assertEqual(verifier.verify("2.006 Å"), True)
+
+        verifier = NumericalAnswer()
+        self.assertEqual(verifier.verify("\\boxed{0.00000225}"), True)
+        self.assertEqual(verifier.verify("\\boxed{0.000186}"), True)
+        self.assertEqual(verifier.verify("\\boxed{426}"), True)
+        self.assertEqual(verifier.verify("\\boxed{-854}"), True)
+        self.assertEqual(verifier.verify("\\boxed{0.00474}"), True)
+        self.assertEqual(verifier.verify("\\boxed{0.000180}"), True)
+        self.assertEqual(verifier.verify("\\boxed{0.0213}"), True)
+        self.assertEqual(verifier.verify("\\boxed{46.8}"), True)
+        self.assertEqual(verifier.verify("\\boxed{1.8}"), False)
+        self.assertEqual(verifier.verify("\\boxed{56.35}"), True)
+        self.assertEqual(verifier.verify("\\boxed{1.77e15}"), True)
+        self.assertEqual(verifier.verify("\\boxed{-0.8}"), False)
+        self.assertEqual(verifier.verify("\\boxed{1.667e-06}"), True)
+        self.assertEqual(verifier.verify("\\boxed{202.5}"), True)
+        self.assertEqual(verifier.verify("\\boxed{2.470e16}"), True)
+        self.assertEqual(verifier.verify("\\boxed{7.800e10}"), True)
+        self.assertEqual(verifier.verify("\\boxed{-32.4}"), True)
+        self.assertEqual(verifier.verify("\\boxed{8.95}"), True)
+        self.assertEqual(verifier.verify("\\boxed{26.32}"), True)
+
         print("2", verifier.verify("1.256 × 10^{-67} J"))
-        print("3", verifier.verify("1.256 × 10^-67 J"))
-        print("4", verifier.verify("9.42 pc"))
-        print("5", verifier.verify("50.1 g"))
         print("6", verifier.verify("5.27×10^{5}"))
-        print("7", verifier.verify("5.27×10^5 Pa"))
-        print("8", verifier.verify("1.812 meV"))
         print("9", verifier.verify("2.73 × 10⁻²³²³ J/(K·m²)"))
-        print(verifier.verify("1.720 ppm"))
-        print(verifier.verify("12.000 μm"))
-        print(verifier.verify("10.870 kJ/g"))
-        print(verifier.verify("127.500 MeV"))
-        print(verifier.verify("-0.854 kJ"))
-        print(verifier.verify("2560 m²"))
         print(verifier.verify("342 lb_f"))
-        print(verifier.verify("6.100×10^11 Hz"))
-        print(verifier.verify("0.010 °"))
-        print(verifier.verify("10.938 kg/m²"))
-        print(verifier.verify("12288 KB"))
-        print(verifier.verify("1.256 × 10^-67 J"))
 
     def test_doc2query_v2_parse_solution_fn(self):
         print(doc2query_v2_parse_solution_fn(

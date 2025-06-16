@@ -1440,14 +1440,14 @@ class NumericalAnswer(object):
             return False
 
     def rectify(self, answer):
-        """处理数字，判断整数/小数并格式化（四舍五入保留三位小数）"""
+        """处理数字，判断整数/小数并格式化（四舍五入保留三位有效数字）"""
         num = answer
         # 处理分数形式
         if isinstance(num, str) and '/' in num:
             try:
                 numerator, denominator = map(int, num.split('/'))
                 value = numerator / denominator
-                return f'\\boxed' + "{" + format_decimal(value) + "}"
+                return f'\\boxed' + "{" + self.format_sig_figs(value) + "}"
             except:
                 return f'\\boxed' + "{" + num + "}"  # 转换失败返回原始值
 
@@ -1461,37 +1461,64 @@ class NumericalAnswer(object):
         # 处理普通字符串表示的数字
         try:
             value = float(num)
-            return f'\\boxed' + "{" + self.format_decimal(value) + "}"
+            return f'\\boxed' + "{" + self.format_sig_figs(value) + "}"
         except:
             return f'\\boxed' + "{" + num + "}"  # 非数字类型直接返回
 
-    def format_decimal(self, value):
-        """核心格式化函数：使用Decimal进行精确四舍五入"""
+    def format_sig_figs(self, value):
+        """核心格式化函数：使用Decimal进行精确四舍五入，保留三位有效数字"""
+        if value == 0:  # 特殊情况：零
+            return "0"
+
         # 使用Decimal进行精确计算
         decimal_value = Decimal(str(value))
 
-        # 四舍五入保留三位小数
-        rounded = decimal_value.quantize(
-            Decimal('0.001'), rounding=ROUND_HALF_UP)
+        # 确定有效数字位数
+        sig_figs = 3
 
-        # 判断是否为整数
-        if rounded == rounded.to_integral_value():
-            return int(rounded)
+        # 计算需要的精度
+        abs_value = abs(decimal_value)
+        if abs_value >= 1:
+            # 整数或大于1的数
+            int_part = len(str(int(abs_value)))
+            if int_part >= sig_figs:
+                # 整数部分已经超过或等于有效位数，直接取整
+                exp = Decimal('1')
+                rounded = decimal_value.quantize(exp, rounding=ROUND_HALF_UP)
+                return f"{rounded:.0f}"
+            else:
+                # 需要小数部分
+                places = sig_figs - int_part
+                exp = Decimal('10') ** (-places)
+                rounded = decimal_value.quantize(exp, rounding=ROUND_HALF_UP)
+                # 确保显示足够的小数位数
+                return f"{rounded:.{places}f}"
         else:
-            # 转换为字符串，确保保留三位小数
-            return f"{rounded:.3f}"
+            # 小于1的数，确定第一个非零数字的位置
+            s = str(abs_value)
+            if '.' in s:
+                decimal_part = s.split('.')[1]
+                leading_zeros = len(decimal_part) - \
+                    len(decimal_part.lstrip('0'))
+                exp = Decimal('10') ** (- (leading_zeros + sig_figs))
+                rounded = decimal_value.quantize(exp, rounding=ROUND_HALF_UP)
+                # 确保显示足够的小数位数
+                return f"{rounded:.{leading_zeros + sig_figs}f}"
+            else:
+                # 这种情况理论上不会发生，因为值小于1且是Decimal
+                return str(decimal_value)
 
     def exclude_common_answer_pattern(self, answer):
         if answer in (
             '\\boxed{-2}', '\\boxed{-1}', '\\boxed{0}', '\\boxed{1}', '\\boxed{2}', '\\boxed{3}',
-            '\\boxed{4}', '\\boxed{5}', '\\boxed{6}', '\\boxed{7}', '\\boxed{1.000}', '\\boxed{0.000}',
-                '\\boxed{2.000}', '\\boxed{3.000}', '\\boxed{-1.000}',):
+            '\\boxed{4}', '\\boxed{5}', '\\boxed{6}', '\\boxed{7}', '\\boxed{1.00}', '\\boxed{0.00}',
+                '\\boxed{2.00}', '\\boxed{3.00}', '\\boxed{-1.00}',):
             return False
         return True
 
     def verify(self, answer):
         """
-        检测答案是否符合 \boxed{} 格式及数值规范（整数/浮点数）
+        检测答案是否符合 \boxed{} 格式及数值规范（有效位数≥3）
 
         参数：
         answer_str (str)：待检测的答案字符串（如 "\boxed{5}", "boxed{0.210}", "\boxed{5/12}" 等）
@@ -1504,72 +1531,97 @@ class NumericalAnswer(object):
         boxed_pattern = r'^\\boxed\{(.*?)\}$'
         match = re.match(boxed_pattern, answer_str)
         if not match:
-            # return False, "格式错误：答案需用 \\boxed{} 包裹，且大括号内无空格"
             return False
 
         # 提取数值内容
         content = match.group(1).strip()
         if not content:
-            # return False, "格式错误：\\boxed{} 内内容为空"
             return False
 
         # 2. 校验数值规范（复用之前的数值校验逻辑）
         # 去除可能的残留空格（确保数值部分无空格）
         cleaned_content = content.replace(' ', '')
-        result = self.verify_numeric_content(cleaned_content)  # 调用数值校验函数
-        return result[0]
+        # 调用有效位数校验函数
+        return self.verify_significant_figures(cleaned_content)[0]
 
-    def verify_numeric_content(self, content):
+    def verify_significant_figures(self, content):
         """
-        单独校验数值内容是否符合规范（整数/浮点数，禁止分数）
+        校验数值内容的有效位数是否≥3
         """
-        # 去除无关字符（仅保留数字和小数点）
-        cleaned = re.sub(r'[^\d.]', '', content)
-
-        # 检查是否为分数（先于数值校验，避免误判）
+        # 处理分数形式
         if '/' in content:
-            return False, "禁止使用分数形式，请转换为小数"
+            try:
+                numerator, denominator = content.split('/')
+                # 分别检查分子和分母的有效位数
+                num_sig_figs = self.count_significant_figures(numerator)
+                denom_sig_figs = self.count_significant_figures(denominator)
+                if num_sig_figs >= 3 and denom_sig_figs >= 3:
+                    return True, "格式正确"
+                else:
+                    return False, f"分数的分子或分母有效位数不足3位（分子:{num_sig_figs}，分母:{denom_sig_figs}）"
+            except:
+                return False, "分数格式错误"
 
-        # 校验整数或浮点数
-        if re.match(r'^\d+$', cleaned):
-            # 整数校验：无前导零
-            if len(cleaned) > 1 and cleaned.startswith('0'):
-                return False, "整数包含前导零"
-            return True, "格式正确"
-        elif re.match(r'^\d*\.\d+$', cleaned):
-            # 拆分整数部分和小数部分
-            parts = cleaned.split('.')
-            if len(parts) != 2:
-                return False, "浮点数格式错误（需包含一个小数点）"
+        # 处理小数和整数
+        try:
+            value = float(content)
+            sig_figs = self.count_significant_figures(content)
+            if sig_figs >= 3:
+                return True, "格式正确"
+            else:
+                return False, f"有效位数不足（当前{sig_figs}位，要求≥3位）"
+        except:
+            return False, "无效数值格式"
 
-            int_part, float_part = parts
-            # 整数部分校验：0 或正整数（无前导零）
-            if int_part != '0' and (len(int_part) > 1 and int_part.startswith('0')):
-                return False, "整数部分包含前导零"
-            # 小数部分校验：固定3位
-            if len(float_part) != 3:
-                return False, f"小数部分应为3位（当前{len(float_part)}位）"
-            return True, "格式正确"
+    def count_significant_figures(self, num_str):
+        """计算数值字符串的有效位数"""
+        # 去除符号
+        if num_str.startswith(('+', '-')):
+            num_str = num_str[1:]
+
+        # 处理特殊情况
+        if num_str == '0' or num_str == '0.0' or num_str == '0.00':
+            return 1
+
+        # 处理小数点
+        if '.' in num_str:
+            # 小数形式
+            integer_part, decimal_part = num_str.split('.')
+
+            if integer_part == '0':
+                # 小数小于1，有效位数从第一个非零数字开始
+                stripped_decimal = decimal_part.lstrip('0')
+                return len(stripped_decimal) if stripped_decimal else 0
+            else:
+                # 小数大于1，整数部分的所有数字都是有效数字
+                return len(integer_part) + len(decimal_part)
         else:
-            return False, "无效数值格式（需为整数或3位小数）"
+            # 整数形式
+            return len(num_str.lstrip('0')) if num_str != '0' else 1
 
 
 class WithUnitSymbol(object):
     def __init__(self):
-        pass
+        # 原数值部分的正则表达式（支持科学计数法和\boxed格式）
+        self.number_pattern = re.compile(r'''
+            ^
+            (?:\\boxed\{)?  # 可选的\boxed{前缀
+            ([+-]?)         # 可选的正负号
+            (               # 数值部分
+                \d+\.?\d*   # 整数或小数（如123, 123.4）
+                |           # 或
+                \.\d+       # 纯小数（如.456）
+            )
+            (?:             # 科学计数法部分（可选）
+                [eE]        # e或E符号
+                [+-]?\d+    # 指数部分
+            )?
+            (?:\})?         # 可选的}后缀
+            $
+        ''', re.VERBOSE)
 
-    def initial_recognize(self, answer) -> bool:
-        return self.is_valid_with_unit(answer)
-
-    def verify(self, answer):
-        return self.is_valid_with_unit(answer)
-
-    def is_valid_with_unit(self, answer: str) -> bool:
-        """
-        验证答案是否符合数值与单位格式规范
-        增强对科学计数法多种表示形式的支持
-        """
-        pattern = re.compile(r'''
+        # 最终修复的单位部分的正则表达式
+        self.unit_pattern = re.compile(r'''
             ^                   # 字符串起始
             ([+-]?)             # 可选的正负号
             (                   # 数值部分
@@ -1585,29 +1637,70 @@ class WithUnitSymbol(object):
             )?                  # 科学计数法结束
             \s+                 # 至少一个空格分隔数值与单位
             (                   # 单位部分
-                [A-Za-zμΩ°]+       # 基础单位（如m, Pa, mol）
+                [A-Za-zμΩ°Å]+       # 基础单位（如m, Pa, mol, Å）
                 [²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*  # 允许幂次符号和负号（如m², m³, m⁻¹）
                 (?:             # 可选的SI前缀（如k, m, μ）
                     [yzafpnumcdhkMGTPEZY]
                 )?
-                (?:             # 分子中多个单位用·连接（如kJ·mol）
-                    \u00B7[A-Za-zμΩ]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*
+                (?:             # 多个单位连接（修正：第一个单位后才需要连接符）
+                    [\u00B7\.\s-]  # 连接符（中间点、点号、空格、连字符）
+                    [A-Za-zμΩ°Å]+  # 后续单位组件
+                    [²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*  # 允许幂次符号
+                    (?:         # 可选的SI前缀
+                        [yzafpnumcdhkMGTPEZY]
+                    )?
                 )*
                 (?:             # 分母部分（可选）
                     /           # 斜杠分隔符
                     (?:         # 分母两种格式：括号内或直接跟单位
                         # 括号内的单位（如(mol·K)）
-                        \([A-Za-zμΩ°]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*(?:\u00B7[A-Za-zμΩ°]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*)*\)
+                        \([A-Za-zμΩ°Å]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*(?:[\u00B7\.\s-][A-Za-zμΩ°Å]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*)*\)
                         |       # 或
                         # 直接跟单位（如mol·K）
-                        [A-Za-zμΩ°]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*(?:\u00B7[A-Za-zμΩ°]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*)*
+                        [A-Za-zμΩ°Å]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*(?:[\u00B7\.\s-][A-Za-zμΩ°Å]+[²³⁰¹²³⁴⁵⁶⁷⁸⁹\-⁻]*)*
                     )
                 )?
             )
             $                   # 字符串结束
         ''', re.VERBOSE | re.UNICODE)  # 启用详细模式和Unicode匹配
 
-        return bool(pattern.match(answer.strip()))
+        # 新增：百分比格式的正则表达式
+        self.percent_pattern = re.compile(r'''
+            ^
+            (?:\\boxed\{)?  # 可选的\boxed{前缀
+            ([+-]?)         # 可选的正负号
+            (               # 数值部分
+                \d+\.?\d*   # 整数或小数（如123, 123.4）
+                |           # 或
+                \.\d+       # 纯小数（如.456）
+            )
+            \s*%            # 百分比符号（允许前面有空格）
+            (?:\})?         # 可选的}后缀
+            $
+        ''', re.VERBOSE)
+
+    def initial_recognize(self, answer) -> bool:
+        return self.is_valid_with_unit(answer)
+
+    def verify(self, answer) -> bool:
+        """验证答案是否符合数值与单位格式规范，或是否为\boxed包裹的科学计数法数值"""
+        # 先尝试匹配带单位的格式
+        if self.is_valid_with_unit(answer):
+            return True
+        # 再尝试匹配百分比格式
+        if self.is_valid_percentage(answer):
+            return True
+        # 最后尝试匹配纯数值格式（包括科学计数法和\boxed包裹的情况）
+        stripped = answer.strip()
+        return bool(self.number_pattern.match(stripped))
+
+    def is_valid_with_unit(self, answer: str) -> bool:
+        """验证答案是否符合数值与单位格式规范"""
+        return bool(self.unit_pattern.match(answer.strip()))
+
+    def is_valid_percentage(self, answer: str) -> bool:
+        """验证答案是否符合百分比格式（如\\boxed{82.6\\%}或82.6 %）"""
+        return bool(self.percent_pattern.match(answer.strip()))
 
 
 class GenerateQAV2FormatReward(PenaltyOrReward):
@@ -1991,7 +2084,7 @@ Specifications for Numerical Answers (NumericalAnswer)
         fabricates, authentics = [], []
         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
             fabricate = self.parse_solution_fn(sol)
-            if fabricate is not None and gt.get(question, None):
+            if fabricate is not None and gt.get("question", None):
                 fabricates.append(fabricate)
                 authentics.append(gt["question"])
                 indices.append(i)
@@ -2214,7 +2307,7 @@ Specifications for Numerical Answers (NumericalAnswer)
             final_results.append(cur_score)
 
             if _difficulty > 0:
-                cur_score += 0.5 * similarity_rewards[i]
+                cur_score += 0.25 * similarity_rewards[i]
 
             if (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
                 log = True
