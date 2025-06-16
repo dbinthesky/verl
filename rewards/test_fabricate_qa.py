@@ -12,330 +12,329 @@ from tqdm import tqdm
 from collections import defaultdict
 from fabricate_qa import (
     agent,
-    criteria_parse_solution_fn,
-    get_total_score,
-    decode_to_question,
-    criteria_get_score,
-    QwQLongCoTCreateCriteriaComputeScore,
-    qwq_longcot_create_criteria_compute_score_valid,
-    QwQLongCoTFabricateQAComputeScore,
-    qwq_longcot_fabricate_qa_compute_score_valid,
-    doc2query_parse_solution_fn,
-    QuestionSimilarity,
-    RuleBasedOptionMatch,
-    QwQLongCoTDoc2QueryComputeScore,
-    QwQLongCoTDoc2QueryV2ComputeScore,
-    qwq_longcot_doc2query_compute_score_valid,
-    doc2query_v2_parse_solution_fn,
-    batchify,
+    # criteria_parse_solution_fn,
+    # get_total_score,
+    # decode_to_question,
+    # criteria_get_score,
+    # QwQLongCoTCreateCriteriaComputeScore,
+    # qwq_longcot_create_criteria_compute_score_valid,
+    # QwQLongCoTFabricateQAComputeScore,
+    # qwq_longcot_fabricate_qa_compute_score_valid,
+    # doc2query_parse_solution_fn,
+    # QuestionSimilarity,
+    # RuleBasedOptionMatch,
+    # QwQLongCoTDoc2QueryComputeScore,
+    # QwQLongCoTDoc2QueryV2ComputeScore,
+    # qwq_longcot_doc2query_compute_score_valid,
+    # doc2query_v2_parse_solution_fn,
+    # batchify,
     WithUnitSymbol,
     NumericalAnswer
 )
 
 
-def generate_random_string(n):
-    all_characters = string.ascii_letters + string.digits + " "
-    return ''.join(random.choice(all_characters) for _ in range(n))
+# def generate_random_string(n):
+#     all_characters = string.ascii_letters + string.digits + " "
+#     return ''.join(random.choice(all_characters) for _ in range(n))
 
 
-def load_criteria():
-    filename = "/cpfs01/shared/llm_ddd/tongjian/verl/rewards/fabricate_qa_criteria.json"
-    batch_solution_str, batch_ground_truth = [], []
+# def load_criteria():
+#     filename = "/cpfs01/shared/llm_ddd/tongjian/verl/rewards/fabricate_qa_criteria.json"
+#     batch_solution_str, batch_ground_truth = [], []
 
-    with open(filename, "rt") as f:
-        data = json.load(f)
-    batch_solution_str, batch_ground_truth = data["batch_solution_str"], data["batch_ground_truth"]
-    return batch_solution_str, batch_ground_truth
-
-
-def load_qwq_fabricate_qa_data(num=100):
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/super_gpqa_aio_noneasy_test_0517.parquet"
-    batch_solution_str, batch_ground_truth = [], []
-
-    df = pd.read_parquet(filename)
-    for _, row in df.iterrows():
-        row = row.to_dict()
-        batch_ground_truth.append(row["reward_model"])
-        gt = row["reward_model"]["authentic_question"]
-
-        batch_solution_str.append(
-            f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
-        if _ > num-1:
-            break
-    return batch_solution_str, batch_ground_truth
+#     with open(filename, "rt") as f:
+#         data = json.load(f)
+#     batch_solution_str, batch_ground_truth = data["batch_solution_str"], data["batch_ground_truth"]
+#     return batch_solution_str, batch_ground_truth
 
 
-def load_doc2query_v2(num=40):
-    path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v2/iscalc_numeric_high_equation_mix_0608"
-    batch_solution_str, batch_ground_truth = [], []
+# def load_qwq_fabricate_qa_data(num=100):
+#     filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/super_gpqa_aio_noneasy_test_0517.parquet"
+#     batch_solution_str, batch_ground_truth = [], []
 
-    df = pd.read_parquet(path)
-    for i, row in df.iterrows():
-        row = row.to_dict()
-        batch_ground_truth.append(row["reward_model"])
-        gt = row["reward_model"]
+#     df = pd.read_parquet(filename)
+#     for _, row in df.iterrows():
+#         row = row.to_dict()
+#         batch_ground_truth.append(row["reward_model"])
+#         gt = row["reward_model"]["authentic_question"]
 
-        if i > num-1:
-            break
-        try:
-            assert gt["question"] is not None
-            batch_solution_str.append(
-                f'<think>***</think><question>\nQuestion: {gt["question"]}\\n\nAnswer: {gt["answer"]}\n\nAnswer Type:{gt["answer_type"]}\n</question><｜end▁of▁sentence｜>')
-        except Exception as err:
-            question = random.choice(gt["fabricate_questions"])
-            ans = "\\boxed{18}"
-            batch_solution_str.append(
-                f'<think>***</think><question>\nQuestion: {question}\n\nAnswer: {ans}\n\nAnswer Type: NumericalAnswer\n</question><｜end▁of▁sentence｜>')
-    return batch_solution_str, batch_ground_truth
+#         batch_solution_str.append(
+#             f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
+#         if _ > num-1:
+#             break
+#     return batch_solution_str, batch_ground_truth
 
 
-def load_doc2query(num=40):
-    path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_iscalc_high_equation_mix_0602"
-    # path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_test"
-    batch_solution_str, batch_ground_truth = [], []
+# def load_doc2query_v2(num=40):
+#     path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v2/iscalc_numeric_high_equation_mix_0608"
+#     batch_solution_str, batch_ground_truth = [], []
 
-    df = pd.read_parquet(path)
-    for i, row in df.iterrows():
-        row = row.to_dict()
-        batch_ground_truth.append(row["reward_model"])
-        gt = row["reward_model"]
+#     df = pd.read_parquet(path)
+#     for i, row in df.iterrows():
+#         row = row.to_dict()
+#         batch_ground_truth.append(row["reward_model"])
+#         gt = row["reward_model"]
 
-        if i > num-1:
-            break
-        try:
-            options = []
-            for x, y in zip(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P"], gt["options"]):
-                options.append(f'{x}) {y}')
-            options = "\n".join(options)
-            ans_letter = gt["options"].tolist().index(gt["answer"])
-            ans_letter = ["A", "B", "C", "D", "E", "F", "G", "H",
-                          "I", "J", "K", "L", "M", "N", "O", "P"][ans_letter]
-            # batch_solution_str.append(
-            #     '<think>\nOkay, so I need to create a question. Let me start by thinking about what kind of question I can come up with. The user\'s prompt says the question should be about something I\'m an expert in, which is creating a question. Hmm, that\'s a bit meta. Maybe I should think of a common problem-solving scenario or a favorite topic. \n\nWait, maybe a common math problem? Like, how to find the roots of a quadratic equation? But maybe something more engaging. Alternatively, perhaps a riddle? Like, "Why was the math book sad?" But that\'s a bit too open-ended.\n\nAlternatively, maybe something that requires some logical thinking. Let me think. Maybe a puzzle involving sequences. Like, "What is the next... [省略] ...ly, "What is the value of 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2?" which is 20. \n\nHmm. \n\nHmm, I think I\'ll go with the question "What is the value of 2^3 + 3^2?" as it\'s straightforward and requires basic exponent arithmetic. \n\nAlternatively, the question could be: "What is the value of the sum of the first 10 positive integers?" but that requires remembering the formula. \n\nHmm. Maybe the question is better as "What is the value of 2^3 * 2^2?" which is 8 * 4 = 32. \n\nHmm. \n\nHmm, after considering various options, I think the question "What is the value of 2^3 + 3^2?" is good because it\'s concise, requires applying exponents, and is a common question in math education. \n\nTherefore, I\'ll present that as my question.\n</think>\n\n<question>\nWhat is the value of \\(2^3 + 3^2\\)?\n</question><|im_end|>'
-            # )
-            batch_solution_str.append(
-                f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\n{options}\n\nAnswer: {ans_letter}\n</question><｜end▁of▁sentence｜>')
-            # batch_solution_str.append(
-            #     f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\n\nAnswer: {ans_letter}\n</question>')
-        except Exception as err:
-            # raise NotImplementedError
-            # batch_solution_str.append(
-            #     '<think>\nOkay, so I need to create a question. Let me start by thinking about what kind of question I can come up with. The user\'s prompt says the question should be about something I\'m an expert in, which is creating a question. Hmm, that\'s a bit meta. Maybe I should think of a common problem-solving scenario or a favorite topic. \n\nWait, maybe a common math problem? Like, how to find the roots of a quadratic equation? But maybe something more engaging. Alternatively, perhaps a riddle? Like, "Why was the math book sad?" But that\'s a bit too open-ended.\n\nAlternatively, maybe something that requires some logical thinking. Let me think. Maybe a puzzle involving sequences. Like, "What is the next... [省略] ...ly, "What is the value of 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2?" which is 20. \n\nHmm. \n\nHmm, I think I\'ll go with the question "What is the value of 2^3 + 3^2?" as it\'s straightforward and requires basic exponent arithmetic. \n\nAlternatively, the question could be: "What is the value of the sum of the first 10 positive integers?" but that requires remembering the formula. \n\nHmm. Maybe the question is better as "What is the value of 2^3 * 2^2?" which is 8 * 4 = 32. \n\nHmm. \n\nHmm, after considering various options, I think the question "What is the value of 2^3 + 3^2?" is good because it\'s concise, requires applying exponents, and is a common question in math education. \n\nTherefore, I\'ll present that as my question.\n</think>\n\n<question>\nWhat is the value of \\(2^3 + 3^2\\)?\n</question><|im_end|>'
-            # )
-            # batch_solution_str.append(
-            #     f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\nA) {gt["answer"]}\nAnswer: A\n</question><｜end▁of▁sentence｜>')
-            batch_solution_str.append(
-                f'<think>***</think><question>\nQuestion: Using a 0.1000 mol/L NaOH solution to titrate a 0.1000 mol/L formic acid solution, what is the pH at the stoichiometric point? \n\nOptions:\nA) 5.67\nB) 8.23\nC) 9.88\nD) 12.46\nE) 10.11\nF) 11.07\nG) 7.22\nH) 6.35\nI) 3.47\bJ) 3.47\n\nAnswer: A\n</question><｜end▁of▁sentence｜>')
-    return batch_solution_str, batch_ground_truth
+#         if i > num-1:
+#             break
+#         try:
+#             assert gt["question"] is not None
+#             batch_solution_str.append(
+#                 f'<think>***</think><question>\nQuestion: {gt["question"]}\\n\nAnswer: {gt["answer"]}\n\nAnswer Type:{gt["answer_type"]}\n</question><｜end▁of▁sentence｜>')
+#         except Exception as err:
+#             question = random.choice(gt["fabricate_questions"])
+#             ans = "\\boxed{18}"
+#             batch_solution_str.append(
+#                 f'<think>***</think><question>\nQuestion: {question}\n\nAnswer: {ans}\n\nAnswer Type: NumericalAnswer\n</question><｜end▁of▁sentence｜>')
+#     return batch_solution_str, batch_ground_truth
 
 
-async def create_mock_data():
-    df = pd.read_parquet(
-        "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa_criteria/super_gpqa_aio_noneasy_train_0513_criteria_test_0514.parquet")
+# def load_doc2query(num=40):
+#     path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_iscalc_high_equation_mix_0602"
+#     # path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_test"
+#     batch_solution_str, batch_ground_truth = [], []
 
-    prompt_mapper = {}
-    for _, row in df.iterrows():
-        row = row.to_dict()
-        prompt = f'{row["prompt"][0]["content"]}\n\n\n{row["prompt"][1]["content"]}'
-        prompt_mapper[prompt] = row
+#     df = pd.read_parquet(path)
+#     for i, row in df.iterrows():
+#         row = row.to_dict()
+#         batch_ground_truth.append(row["reward_model"])
+#         gt = row["reward_model"]
 
-    prompts = prompt_mapper.keys()
-
-    batch_solution_str, batch_ground_truth = [], []
-
-    results = await agent.run(prompts, 32, desc="[MOCK DATASET]", postprocess_fns=[lambda x: x]*len(prompts))
-    for prompt, response in results:
-        example = prompt_mapper[prompt]
-        rm = example["reward_model"]
-        rm = {
-            "positive": rm["positive"],
-            "negatives": rm["negatives"].tolist(),
-        }
-        batch_ground_truth.append(rm)
-        batch_solution_str.append(response)
-    with open("fabricate_qa_criteria.json", "wt") as f:
-        json.dump({"batch_ground_truth": batch_ground_truth,
-                  "batch_solution_str": batch_solution_str}, f, ensure_ascii=False)
-
-
-class TestFabricateQA(unittest.TestCase):
-    def test_question_similarity(self):
-        batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
-            num=100)
-        task = QwQLongCoTFabricateQAComputeScore(split="valid")
-        for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
-            solution_str = f'<think>***</think><question>\nQuestion: {gt["authentic_question"]}\nAnswer: \\boxed{{-9}}\nAnswer Type: NumericalAnswer\n</question>'
-            score = task.get_penalties()["QSim"](solution_str, gt)
-            print(solution_str)
-            print(score)
-            print("="*80)
-            break
-
-    def test_llm_as_judge_similarity(self):
-        async def main():
-            batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
-                num=100)
-            task = QwQLongCoTFabricateQAComputeScore(split="valid")
-            results = await task.llm_as_judge_similarity(
-                [None] *
-                len(batch_solution_str), batch_solution_str, batch_ground_truth
-            )
-            print(results)
-        aio.run(main())
-
-    def test_get_difficulty_reward(self):
-        async def main():
-            batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
-                8)
-            task = QwQLongCoTFabricateQAComputeScore(split="valid")
-            results = await task.get_difficulty_reward(
-                [None] *
-                len(batch_solution_str), batch_solution_str, batch_ground_truth
-            )
-            print(results)
-        aio.run(main())
-
-    def test_compute_score(self):
-        bg = time.time()
-        batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
-            num=32)
-        results = qwq_longcot_fabricate_qa_compute_score_valid(
-            [None] *
-            len(batch_solution_str), batch_solution_str, batch_ground_truth
-        )
-        print(results)
-        print(f'Finish {time.time()-bg}')
+#         if i > num-1:
+#             break
+#         try:
+#             options = []
+#             for x, y in zip(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P"], gt["options"]):
+#                 options.append(f'{x}) {y}')
+#             options = "\n".join(options)
+#             ans_letter = gt["options"].tolist().index(gt["answer"])
+#             ans_letter = ["A", "B", "C", "D", "E", "F", "G", "H",
+#                           "I", "J", "K", "L", "M", "N", "O", "P"][ans_letter]
+#             # batch_solution_str.append(
+#             #     '<think>\nOkay, so I need to create a question. Let me start by thinking about what kind of question I can come up with. The user\'s prompt says the question should be about something I\'m an expert in, which is creating a question. Hmm, that\'s a bit meta. Maybe I should think of a common problem-solving scenario or a favorite topic. \n\nWait, maybe a common math problem? Like, how to find the roots of a quadratic equation? But maybe something more engaging. Alternatively, perhaps a riddle? Like, "Why was the math book sad?" But that\'s a bit too open-ended.\n\nAlternatively, maybe something that requires some logical thinking. Let me think. Maybe a puzzle involving sequences. Like, "What is the next... [省略] ...ly, "What is the value of 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2?" which is 20. \n\nHmm. \n\nHmm, I think I\'ll go with the question "What is the value of 2^3 + 3^2?" as it\'s straightforward and requires basic exponent arithmetic. \n\nAlternatively, the question could be: "What is the value of the sum of the first 10 positive integers?" but that requires remembering the formula. \n\nHmm. Maybe the question is better as "What is the value of 2^3 * 2^2?" which is 8 * 4 = 32. \n\nHmm. \n\nHmm, after considering various options, I think the question "What is the value of 2^3 + 3^2?" is good because it\'s concise, requires applying exponents, and is a common question in math education. \n\nTherefore, I\'ll present that as my question.\n</think>\n\n<question>\nWhat is the value of \\(2^3 + 3^2\\)?\n</question><|im_end|>'
+#             # )
+#             batch_solution_str.append(
+#                 f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\n{options}\n\nAnswer: {ans_letter}\n</question><｜end▁of▁sentence｜>')
+#             # batch_solution_str.append(
+#             #     f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\n\nAnswer: {ans_letter}\n</question>')
+#         except Exception as err:
+#             # raise NotImplementedError
+#             # batch_solution_str.append(
+#             #     '<think>\nOkay, so I need to create a question. Let me start by thinking about what kind of question I can come up with. The user\'s prompt says the question should be about something I\'m an expert in, which is creating a question. Hmm, that\'s a bit meta. Maybe I should think of a common problem-solving scenario or a favorite topic. \n\nWait, maybe a common math problem? Like, how to find the roots of a quadratic equation? But maybe something more engaging. Alternatively, perhaps a riddle? Like, "Why was the math book sad?" But that\'s a bit too open-ended.\n\nAlternatively, maybe something that requires some logical thinking. Let me think. Maybe a puzzle involving sequences. Like, "What is the next... [省略] ...ly, "What is the value of 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2?" which is 20. \n\nHmm. \n\nHmm, I think I\'ll go with the question "What is the value of 2^3 + 3^2?" as it\'s straightforward and requires basic exponent arithmetic. \n\nAlternatively, the question could be: "What is the value of the sum of the first 10 positive integers?" but that requires remembering the formula. \n\nHmm. Maybe the question is better as "What is the value of 2^3 * 2^2?" which is 8 * 4 = 32. \n\nHmm. \n\nHmm, after considering various options, I think the question "What is the value of 2^3 + 3^2?" is good because it\'s concise, requires applying exponents, and is a common question in math education. \n\nTherefore, I\'ll present that as my question.\n</think>\n\n<question>\nWhat is the value of \\(2^3 + 3^2\\)?\n</question><|im_end|>'
+#             # )
+#             # batch_solution_str.append(
+#             #     f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\nA) {gt["answer"]}\nAnswer: A\n</question><｜end▁of▁sentence｜>')
+#             batch_solution_str.append(
+#                 f'<think>***</think><question>\nQuestion: Using a 0.1000 mol/L NaOH solution to titrate a 0.1000 mol/L formic acid solution, what is the pH at the stoichiometric point? \n\nOptions:\nA) 5.67\nB) 8.23\nC) 9.88\nD) 12.46\nE) 10.11\nF) 11.07\nG) 7.22\nH) 6.35\nI) 3.47\bJ) 3.47\n\nAnswer: A\n</question><｜end▁of▁sentence｜>')
+#     return batch_solution_str, batch_ground_truth
 
 
-class TestCriteria(unittest.TestCase):
-    def test_criteria_get_score(self):
-        batch_solution_str, batch_ground_truth = load_criteria()
+# async def create_mock_data():
+#     df = pd.read_parquet(
+#         "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa_criteria/super_gpqa_aio_noneasy_train_0513_criteria_test_0514.parquet")
 
-        x, y = [], []
-        for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
-            criteria = criteria_parse_solution_fn(solution_str)
-            if criteria is not None:
-                x.append(random.choice(gt["negatives"]))
-                y.append(criteria)
+#     prompt_mapper = {}
+#     for _, row in df.iterrows():
+#         row = row.to_dict()
+#         prompt = f'{row["prompt"][0]["content"]}\n\n\n{row["prompt"][1]["content"]}'
+#         prompt_mapper[prompt] = row
 
-        async def main():
-            print(await criteria_get_score(x, y))
-        aio.run(main())
+#     prompts = prompt_mapper.keys()
 
-    def test_decode_to_question(self):
-        batch_solution_str, batch_ground_truth = load_criteria()
+#     batch_solution_str, batch_ground_truth = [], []
 
-        x, y = [], []
-        for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
-            criteria = criteria_parse_solution_fn(solution_str)
-            if criteria is not None:
-                x.append(random.choice(gt["negatives"]))
-                y.append(criteria)
-
-        y = y[:10]
-
-        async def main():
-            print(await decode_to_question(y))
-        aio.run(main())
-
-    def test_question_similarity(self):
-        batch_solution_str, batch_ground_truth = load_criteria()
-
-        x, y = [], []
-        for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
-            criteria = criteria_parse_solution_fn(solution_str)
-            if criteria is not None:
-                x.append(gt["positive"])
-                y.append(random.choice(gt["negatives"]))
-
-        async def main():
-            print(await question_similarity(x, y))
-        aio.run(main())
-
-    def test_calc_compression_ratio_reward(self):
-        task = QwQLongCoTCreateCriteriaComputeScore()
-        batch_solution_str, batch_ground_truth = load_criteria()
-
-        async def main():
-            print(await task.calc_compression_ratio_reward(
-                [None]*len(batch_solution_str),
-                batch_solution_str,
-                batch_ground_truth))
-        aio.run(main())
-
-    def test_calc_classify_acc_reward(self):
-        task = QwQLongCoTCreateCriteriaComputeScore(split="valid")
-        batch_solution_str, batch_ground_truth = load_criteria()
-        batch_solution_str = batch_solution_str[:10]
-        batch_ground_truth = batch_ground_truth[:10]
-
-        # async def main():
-        #     print(await qwq_longcot_create_criteria_compute_score_valid(
-        #         [None]*len(batch_solution_str),
-        #         batch_solution_str,
-        #         batch_ground_truth))
-        # aio.run(main())
-        qwq_longcot_create_criteria_compute_score_valid(
-            [None]*len(batch_solution_str),
-            batch_solution_str,
-            batch_ground_truth)
+#     results = await agent.run(prompts, 32, desc="[MOCK DATASET]", postprocess_fns=[lambda x: x]*len(prompts))
+#     for prompt, response in results:
+#         example = prompt_mapper[prompt]
+#         rm = example["reward_model"]
+#         rm = {
+#             "positive": rm["positive"],
+#             "negatives": rm["negatives"].tolist(),
+#         }
+#         batch_ground_truth.append(rm)
+#         batch_solution_str.append(response)
+#     with open("fabricate_qa_criteria.json", "wt") as f:
+#         json.dump({"batch_ground_truth": batch_ground_truth,
+#                   "batch_solution_str": batch_solution_str}, f, ensure_ascii=False)
 
 
-def load_criteria_infer():
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/super_gpqa_aio_noneasy_train_0513_criteria_output.jsonl"
+# class TestFabricateQA(unittest.TestCase):
+#     def test_question_similarity(self):
+#         batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
+#             num=100)
+#         task = QwQLongCoTFabricateQAComputeScore(split="valid")
+#         for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
+#             solution_str = f'<think>***</think><question>\nQuestion: {gt["authentic_question"]}\nAnswer: \\boxed{{-9}}\nAnswer Type: NumericalAnswer\n</question>'
+#             score = task.get_penalties()["QSim"](solution_str, gt)
+#             print(solution_str)
+#             print(score)
+#             print("="*80)
+#             break
 
-    def preprocess(batch):
-        batch_solution_str, batch_ground_truth = [], []
-        for elem in batch:
-            batch_solution_str.append(
-                elem["self_improvement"]["responses"][0]["response"]["text"])
-            batch_ground_truth.append(
-                {
-                    "positive": elem["self_improvement"]["question"],
-                    "negatives": elem["self_improvement"]["fabricate_questions"]
-                }
-            )
-        return batch_solution_str, batch_ground_truth, batch
+#     def test_llm_as_judge_similarity(self):
+#         async def main():
+#             batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
+#                 num=100)
+#             task = QwQLongCoTFabricateQAComputeScore(split="valid")
+#             results = await task.llm_as_judge_similarity(
+#                 [None] *
+#                 len(batch_solution_str), batch_solution_str, batch_ground_truth
+#             )
+#             print(results)
+#         aio.run(main())
 
-    batch = []
-    with open(filename, "rt") as f:
-        for line in f:
-            example = json.loads(line)
-            batch.append(example)
+#     def test_get_difficulty_reward(self):
+#         async def main():
+#             batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
+#                 8)
+#             task = QwQLongCoTFabricateQAComputeScore(split="valid")
+#             results = await task.get_difficulty_reward(
+#                 [None] *
+#                 len(batch_solution_str), batch_solution_str, batch_ground_truth
+#             )
+#             print(results)
+#         aio.run(main())
 
-            if len(batch) == 1024:
-                yield preprocess(batch)
-                batch = []
-    if len(batch):
-        yield preprocess(batch)
-
-
-async def offline_compute_score():
-    with open("/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/_super_gpqa_aio_noneasy_train_0513_criteria_output2.jsonl", "wt") as g:
-        max_concurrent_requests = 256
-        task = QwQLongCoTCreateCriteriaComputeScore(split="train")
-        for batch_solution_str, batch_ground_truth, batch_examples in load_criteria_infer():
-            data_sources = [None] * len(batch_solution_str)
-            score1, score2 = await task.calc_classify_acc_reward(
-                data_sources,
-                batch_solution_str, batch_ground_truth,
-                max_concurrent_requests=max_concurrent_requests,
-                return_single_score=False
-            )
-            calc_compression_ratio_reward = await task.calc_compression_ratio_reward(
-                data_sources,
-                batch_solution_str, batch_ground_truth,
-                max_concurrent_requests=max_concurrent_requests
-            )
-            for example, _score1, _score2, _score3 in zip(batch_examples, score1, score2, calc_compression_ratio_reward):
-                example["calc_compression_ratio_reward"] = _score3
-                example["classify_acc_reward"] = _score1
-                example["gt_match_score"] = _score2
-                g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
+#     def test_compute_score(self):
+#         bg = time.time()
+#         batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
+#             num=32)
+#         results = qwq_longcot_fabricate_qa_compute_score_valid(
+#             [None] *
+#             len(batch_solution_str), batch_solution_str, batch_ground_truth
+#         )
+#         print(results)
+#         print(f'Finish {time.time()-bg}')
 
 
-class TestDoc2QueryV2(unittest.TestCase):
+# class TestCriteria(unittest.TestCase):
+#     def test_criteria_get_score(self):
+#         batch_solution_str, batch_ground_truth = load_criteria()
 
+#         x, y = [], []
+#         for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
+#             criteria = criteria_parse_solution_fn(solution_str)
+#             if criteria is not None:
+#                 x.append(random.choice(gt["negatives"]))
+#                 y.append(criteria)
+
+#         async def main():
+#             print(await criteria_get_score(x, y))
+#         aio.run(main())
+
+#     def test_decode_to_question(self):
+#         batch_solution_str, batch_ground_truth = load_criteria()
+
+#         x, y = [], []
+#         for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
+#             criteria = criteria_parse_solution_fn(solution_str)
+#             if criteria is not None:
+#                 x.append(random.choice(gt["negatives"]))
+#                 y.append(criteria)
+
+#         y = y[:10]
+
+#         async def main():
+#             print(await decode_to_question(y))
+#         aio.run(main())
+
+#     def test_question_similarity(self):
+#         batch_solution_str, batch_ground_truth = load_criteria()
+
+#         x, y = [], []
+#         for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
+#             criteria = criteria_parse_solution_fn(solution_str)
+#             if criteria is not None:
+#                 x.append(gt["positive"])
+#                 y.append(random.choice(gt["negatives"]))
+
+#         async def main():
+#             print(await question_similarity(x, y))
+#         aio.run(main())
+
+#     def test_calc_compression_ratio_reward(self):
+#         task = QwQLongCoTCreateCriteriaComputeScore()
+#         batch_solution_str, batch_ground_truth = load_criteria()
+
+#         async def main():
+#             print(await task.calc_compression_ratio_reward(
+#                 [None]*len(batch_solution_str),
+#                 batch_solution_str,
+#                 batch_ground_truth))
+#         aio.run(main())
+
+#     def test_calc_classify_acc_reward(self):
+#         task = QwQLongCoTCreateCriteriaComputeScore(split="valid")
+#         batch_solution_str, batch_ground_truth = load_criteria()
+#         batch_solution_str = batch_solution_str[:10]
+#         batch_ground_truth = batch_ground_truth[:10]
+
+#         # async def main():
+#         #     print(await qwq_longcot_create_criteria_compute_score_valid(
+#         #         [None]*len(batch_solution_str),
+#         #         batch_solution_str,
+#         #         batch_ground_truth))
+#         # aio.run(main())
+#         qwq_longcot_create_criteria_compute_score_valid(
+#             [None]*len(batch_solution_str),
+#             batch_solution_str,
+#             batch_ground_truth)
+
+
+# def load_criteria_infer():
+#     filename = "/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/super_gpqa_aio_noneasy_train_0513_criteria_output.jsonl"
+
+#     def preprocess(batch):
+#         batch_solution_str, batch_ground_truth = [], []
+#         for elem in batch:
+#             batch_solution_str.append(
+#                 elem["self_improvement"]["responses"][0]["response"]["text"])
+#             batch_ground_truth.append(
+#                 {
+#                     "positive": elem["self_improvement"]["question"],
+#                     "negatives": elem["self_improvement"]["fabricate_questions"]
+#                 }
+#             )
+#         return batch_solution_str, batch_ground_truth, batch
+
+#     batch = []
+#     with open(filename, "rt") as f:
+#         for line in f:
+#             example = json.loads(line)
+#             batch.append(example)
+
+#             if len(batch) == 1024:
+#                 yield preprocess(batch)
+#                 batch = []
+#     if len(batch):
+#         yield preprocess(batch)
+
+
+# async def offline_compute_score():
+#     with open("/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/_super_gpqa_aio_noneasy_train_0513_criteria_output2.jsonl", "wt") as g:
+#         max_concurrent_requests = 256
+#         task = QwQLongCoTCreateCriteriaComputeScore(split="train")
+#         for batch_solution_str, batch_ground_truth, batch_examples in load_criteria_infer():
+#             data_sources = [None] * len(batch_solution_str)
+#             score1, score2 = await task.calc_classify_acc_reward(
+#                 data_sources,
+#                 batch_solution_str, batch_ground_truth,
+#                 max_concurrent_requests=max_concurrent_requests,
+#                 return_single_score=False
+#             )
+#             calc_compression_ratio_reward = await task.calc_compression_ratio_reward(
+#                 data_sources,
+#                 batch_solution_str, batch_ground_truth,
+#                 max_concurrent_requests=max_concurrent_requests
+#             )
+#             for example, _score1, _score2, _score3 in zip(batch_examples, score1, score2, calc_compression_ratio_reward):
+#                 example["calc_compression_ratio_reward"] = _score3
+#                 example["classify_acc_reward"] = _score1
+#                 example["gt_match_score"] = _score2
+#                 g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
+
+
+class TestFabricate(unittest.TestCase):
     def test_with_unit_symbol(self):
         verifier = WithUnitSymbol()
         self.assertEqual(verifier.verify("1.275 mol"), True)
@@ -360,6 +359,10 @@ class TestDoc2QueryV2(unittest.TestCase):
         self.assertEqual(verifier.verify("\\boxed{82.6%}"), True)
         self.assertEqual(verifier.verify("\\boxed{-45.3%}"), True)
         self.assertEqual(verifier.verify("2.006 Å"), True)
+        self.assertEqual(verifier.verify("1.256 × 10^{-67} J"), False)
+        self.assertEqual(verifier.verify("5.27×10^{5}"), False)
+        self.assertEqual(verifier.verify("2.73 × 10⁻²³²³ J/(K·m²)"), False)
+        self.assertEqual(verifier.verify("342 lb_f"), False)
 
         verifier = NumericalAnswer()
         self.assertEqual(verifier.verify("\\boxed{0.00000225}"), True)
@@ -382,296 +385,292 @@ class TestDoc2QueryV2(unittest.TestCase):
         self.assertEqual(verifier.verify("\\boxed{8.95}"), True)
         self.assertEqual(verifier.verify("\\boxed{26.32}"), True)
 
-        print("2", verifier.verify("1.256 × 10^{-67} J"))
-        print("6", verifier.verify("5.27×10^{5}"))
-        print("9", verifier.verify("2.73 × 10⁻²³²³ J/(K·m²)"))
-        print(verifier.verify("342 lb_f"))
 
-    def test_doc2query_v2_parse_solution_fn(self):
-        print(doc2query_v2_parse_solution_fn(
-            '<think>\nssssss\n</think>\n\n<question>\n某公司生产密码设备，其产品批次密码t为两位正整数。密码设置规则要求：将t乘以生产效率系数K后，结果最后两位必须是36。效率系数K通过如下方式计算：去年设备计划运行250天，实际因维护停机30天，另5%时间用于年度升级。K值等于[(计划运行天数 - 停机天数 - 升级天数) × 0.05] + 1。同时，公司年度维护成本为80,000元，但这不影响K的计算。求满足条件的密码t值。  \nAnswer: \\boxed{76}  \nAnswer Type: NumericalAnswer  \n</question><|im_end|><｜end▁of▁sentence｜>'
-        ))
-        print(doc2query_v2_parse_solution_fn(
-            "<think>\nssssss\n</think>\n\n<question>\nQuestion: A green energy factory optimizes its production parameters via a reaction governed by the equation:  \n\\[ a^2 + 3b^2 + \\frac{c^2 + 3d^2}{2} = a + b + c + d - 1 \\]  \nwhere \\( a \\), \\( b \\), \\( c \\), and \\( d \\) are operational parameters (unitless in the equation). The process involves two steps with yields of 82% and 76%, respectively. Given that the initial reagent InCl₃ has a purity of 85%, and the target is to produce 0.0350 moles of the final product, calculate the operational efficiency index \\( E = 1000a + 100b + 10c + d \\). Ignore distractor information: annual maintenance costs of ¥90,000 and equipment depreciation period of 7 years.  \nAnswer: \\boxed{527}  \nAnswer Type: NumericalAnswer  \n</question><|im_end|>"
-        ))
-        print(doc2query_v2_parse_solution_fn(
-            "<think>\nOkay, let me try to create a question based on the given requirements. The respondent is an undergraduate with knowledge in calculus, vector operations, central forces, work done by a force, position and velocity vectors. The skills include integrating velocity to find position, calculating dot products, applying the work-energy theorem, and understanding central force properties. The difficulty is advanced, so I need to incorporate multiple steps and potential distractors.\n\nFirst, I need to think of a scenario that combines these elements. Maybe a physics problem involving a particle moving under a central force, where they have to calculate work done or perhaps find a position vect... [省略] ... places  correct.\n\nTherefore, the final question is as constructed above, with the answer being 479.366 kJ. Let me adjust the question\'s answer in the output.\n</think>\n\n<question>\nQuestion: A researcher compresses an ideal gas in a laboratory. Initially, the gas has a pressure of 3 bar, a volume of 2.5 m³, and a temperature of 25°C. After isobaric compression, the volume is reduced to 1.2 m³, and the temperature is measured as 158°F. The molar specific heat at constant pressure (Cp) for the gas is 35.2 J/mol·K. During the process, 500 J of non-volume work is done on the gas. Calculate the change in enthalpy (ΔH) of the gas in kJ, rounded to three decimal places. (Note: The ideal gas constant R = 8.314 J/mol·K.)\nAnswer: 479.366 kJ\nAnswer Type: WithUnitSymbol\n</question><|im_end|>")
-        )
+#     def test_doc2query_v2_parse_solution_fn(self):
+#         print(doc2query_v2_parse_solution_fn(
+#             '<think>\nssssss\n</think>\n\n<question>\n某公司生产密码设备，其产品批次密码t为两位正整数。密码设置规则要求：将t乘以生产效率系数K后，结果最后两位必须是36。效率系数K通过如下方式计算：去年设备计划运行250天，实际因维护停机30天，另5%时间用于年度升级。K值等于[(计划运行天数 - 停机天数 - 升级天数) × 0.05] + 1。同时，公司年度维护成本为80,000元，但这不影响K的计算。求满足条件的密码t值。  \nAnswer: \\boxed{76}  \nAnswer Type: NumericalAnswer  \n</question><|im_end|><｜end▁of▁sentence｜>'
+#         ))
+#         print(doc2query_v2_parse_solution_fn(
+#             "<think>\nssssss\n</think>\n\n<question>\nQuestion: A green energy factory optimizes its production parameters via a reaction governed by the equation:  \n\\[ a^2 + 3b^2 + \\frac{c^2 + 3d^2}{2} = a + b + c + d - 1 \\]  \nwhere \\( a \\), \\( b \\), \\( c \\), and \\( d \\) are operational parameters (unitless in the equation). The process involves two steps with yields of 82% and 76%, respectively. Given that the initial reagent InCl₃ has a purity of 85%, and the target is to produce 0.0350 moles of the final product, calculate the operational efficiency index \\( E = 1000a + 100b + 10c + d \\). Ignore distractor information: annual maintenance costs of ¥90,000 and equipment depreciation period of 7 years.  \nAnswer: \\boxed{527}  \nAnswer Type: NumericalAnswer  \n</question><|im_end|>"
+#         ))
+#         print(doc2query_v2_parse_solution_fn(
+#             "<think>\nOkay, let me try to create a question based on the given requirements. The respondent is an undergraduate with knowledge in calculus, vector operations, central forces, work done by a force, position and velocity vectors. The skills include integrating velocity to find position, calculating dot products, applying the work-energy theorem, and understanding central force properties. The difficulty is advanced, so I need to incorporate multiple steps and potential distractors.\n\nFirst, I need to think of a scenario that combines these elements. Maybe a physics problem involving a particle moving under a central force, where they have to calculate work done or perhaps find a position vect... [省略] ... places  correct.\n\nTherefore, the final question is as constructed above, with the answer being 479.366 kJ. Let me adjust the question\'s answer in the output.\n</think>\n\n<question>\nQuestion: A researcher compresses an ideal gas in a laboratory. Initially, the gas has a pressure of 3 bar, a volume of 2.5 m³, and a temperature of 25°C. After isobaric compression, the volume is reduced to 1.2 m³, and the temperature is measured as 158°F. The molar specific heat at constant pressure (Cp) for the gas is 35.2 J/mol·K. During the process, 500 J of non-volume work is done on the gas. Calculate the change in enthalpy (ΔH) of the gas in kJ, rounded to three decimal places. (Note: The ideal gas constant R = 8.314 J/mol·K.)\nAnswer: 479.366 kJ\nAnswer Type: WithUnitSymbol\n</question><|im_end|>")
+#         )
 
-    def test_question_similarity(self):
-        batch_solution_str, batch_ground_truth = load_doc2query_v2()
+#     def test_question_similarity(self):
+#         batch_solution_str, batch_ground_truth = load_doc2query_v2()
 
-        x, y = [], []
-        task = QwQLongCoTDoc2QueryV2ComputeScore(split="valid")
-        for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
-            # QSim\Format\AnsFeature
+#         x, y = [], []
+#         task = QwQLongCoTDoc2QueryV2ComputeScore(split="valid")
+#         for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
+#             # QSim\Format\AnsFeature
 
-            solution_str = '<think>***</think><question>\nQuestion: 在范畴Set中，设函子G为Option，对于任何集合A，Option(A)是{None} ∪ A。给定符号函子H由H(X) = X·G定义。设函子Z和自然变换e满足：对于任意集合A，Z(A) = A × {0,1}，且e_{Option(A)}将Option(A)中的每个元素映射为：None → (None, 0)，而a ∈ A → (Some a, 1)。考虑集合A = {1, 2}，计算配分律δ_{(Z,e)}在Option(Z(A)) → Z(Option(A))的映射中，元素Some((1,0))的像在Z(Option(A))中的第二个分量的值。注意：Option(Z(A))中的元素Some((1,0))表示Some包裹着Z(A)中的元素(1,0)。\nAnswer: \\boxed{-1}\nAnswer Type: NumericalAnswer\n</question>'
-            score = task.get_penalties()["Format"](solution_str, gt)
-            print(solution_str)
-            print(score)
-            print("="*80)
-            break
+#             solution_str = '<think>***</think><question>\nQuestion: 在范畴Set中，设函子G为Option，对于任何集合A，Option(A)是{None} ∪ A。给定符号函子H由H(X) = X·G定义。设函子Z和自然变换e满足：对于任意集合A，Z(A) = A × {0,1}，且e_{Option(A)}将Option(A)中的每个元素映射为：None → (None, 0)，而a ∈ A → (Some a, 1)。考虑集合A = {1, 2}，计算配分律δ_{(Z,e)}在Option(Z(A)) → Z(Option(A))的映射中，元素Some((1,0))的像在Z(Option(A))中的第二个分量的值。注意：Option(Z(A))中的元素Some((1,0))表示Some包裹着Z(A)中的元素(1,0)。\nAnswer: \\boxed{-1}\nAnswer Type: NumericalAnswer\n</question>'
+#             score = task.get_penalties()["Format"](solution_str, gt)
+#             print(solution_str)
+#             print(score)
+#             print("="*80)
+#             break
 
-    def test_compute_score(self):
-        batch_solution_str, batch_ground_truth = load_doc2query_v2(32)
+#     def test_compute_score(self):
+#         batch_solution_str, batch_ground_truth = load_doc2query_v2(32)
 
-        task = QwQLongCoTDoc2QueryV2ComputeScore(split="valid")
-        print(task.compute_score([None]*len(batch_solution_str),
-                                 batch_solution_str, batch_ground_truth))
+#         task = QwQLongCoTDoc2QueryV2ComputeScore(split="valid")
+#         print(task.compute_score([None]*len(batch_solution_str),
+#                                  batch_solution_str, batch_ground_truth))
 
 
-class TestDoc2Query(unittest.TestCase):
-    def test_get_difficulty_reward(self):
-        async def main():
-            batch_solution_str, batch_ground_truth = load_doc2query()
-            task = QwQLongCoTDoc2QueryComputeScore(split="valid")
-            results = await task.get_difficulty_reward(
-                [None] *
-                len(batch_solution_str), batch_solution_str, batch_ground_truth
-            )
-            print(results)
-        aio.run(main())
+# class TestDoc2Query(unittest.TestCase):
+#     def test_get_difficulty_reward(self):
+#         async def main():
+#             batch_solution_str, batch_ground_truth = load_doc2query()
+#             task = QwQLongCoTDoc2QueryComputeScore(split="valid")
+#             results = await task.get_difficulty_reward(
+#                 [None] *
+#                 len(batch_solution_str), batch_solution_str, batch_ground_truth
+#             )
+#             print(results)
+#         aio.run(main())
 
-    def test_chat_completion_with_retry(self):
-        async def main():
-            batch_solution_str, batch_ground_truth = load_doc2query(32*8)
-            task = QwQLongCoTDoc2QueryComputeScore(split="valid")
-            prompts = []
+#     def test_chat_completion_with_retry(self):
+#         async def main():
+#             batch_solution_str, batch_ground_truth = load_doc2query(32*8)
+#             task = QwQLongCoTDoc2QueryComputeScore(split="valid")
+#             prompts = []
 
-            instruct = 'Answer the following multiple choice question. There is only one correct answer. The last line of your response should be in the format "Answer: $LETTER" (without quotes), where LETTER is one of the option letters. You must first think step by step with very detail thinking process.'
+#             instruct = 'Answer the following multiple choice question. There is only one correct answer. The last line of your response should be in the format "Answer: $LETTER" (without quotes), where LETTER is one of the option letters. You must first think step by step with very detail thinking process.'
 
-            for _ in batch_solution_str:
-                result = doc2query_parse_solution_fn(_)
-                if result is None:
-                    continue
-                question, options, answer = result
-                prompts.append(task.format_question(
-                    question, options, None) + f"\n\n{instruct}")
+#             for _ in batch_solution_str:
+#                 result = doc2query_parse_solution_fn(_)
+#                 if result is None:
+#                     continue
+#                 question, options, answer = result
+#                 prompts.append(task.format_question(
+#                     question, options, None) + f"\n\n{instruct}")
 
-            # results = await task.chat_completion_with_retry(
-            #     "http://10.130.0.245:5002", prompts
-            # )
-            prompts = prompts * 16
-            s1 = time.time()
-            results = await task.generate_responses(
-                prompts
-            )
-            # for p, r in zip(prompts, results):
-            #     print(p)
-            #     print(r)
-            #     print("="*80)
-            # print(f'Finish: {time.time()-s1}s')
-        aio.run(main())
+#             # results = await task.chat_completion_with_retry(
+#             #     "http://10.130.0.245:5002", prompts
+#             # )
+#             prompts = prompts * 16
+#             s1 = time.time()
+#             results = await task.generate_responses(
+#                 prompts
+#             )
+#             # for p, r in zip(prompts, results):
+#             #     print(p)
+#             #     print(r)
+#             #     print("="*80)
+#             # print(f'Finish: {time.time()-s1}s')
+#         aio.run(main())
 
-    def test_compute_score(self):
-        # batch_solution_str, batch_ground_truth = load_doc2query(32)
+#     def test_compute_score(self):
+#         # batch_solution_str, batch_ground_truth = load_doc2query(32)
 
-        task = QwQLongCoTDoc2QueryComputeScore(split="valid")
-        print(qwq_longcot_doc2query_compute_score_valid([None]*len(batch_solution_str),
-                                                        batch_solution_str, batch_ground_truth))
-
-
-def doc2query_format_filter(path):
-    outputs = []
-    with open(path, "rt") as f:
-        for line in f:
-            example = json.loads(line)
-            prompt = example["self_improvement"]["chat_completion"]
-            option_num = int(re.findall(
-                r'- Number of options: (\d+)', prompt)[0].strip())
-            difficulty = re.findall(
-                r'- Difficulty level: (\w+)', prompt)[0].strip()
-
-            response = example["self_improvement"]["responses"][0]["response"]["text"]
-            result = doc2query_parse_solution_fn(response)
-            if result is None:
-                continue
-            question, options, answer = result
-            if len(options) != option_num:
-                continue
-            try:
-                ans_index = ['A', 'B', 'C', 'D', 'E', 'F', 'G',
-                             'H', 'I', 'J', 'K', 'L', 'M'].index(answer)
-            except Exception as err:
-                continue
-            if not (ans_index <= (len(options)-1)):
-                continue
-            prompt = prompt[prompt.index("<|im_start|>user") +
-                            len("<|im_start|>user"):prompt.index("<|im_end|>\n<|im_start|>assistant")].strip()
-
-            output = {
-                "system": "You are a helpful assistant and an expert in creating a question. Now your task is to create a question. You first thinks about the reasoning process in the mind and then provides the user with the answer. Show your reasoning process in <think> </think> tags, and your final question creation in <question> </question> tags. Remember the part in <question> </question> tags MUST only be the question you created ** WITHOUT ** any explanation or solution.",
-                "instruction": prompt,
-                "input": "",
-                "output": response
-            }
-            outputs.append(output)
-
-    with open("/cpfs01/shared/llm_ddd/tongjian/synthetic/sft/fabricate_qa_v2.json", "rt") as f:
-        mix = json.load(f)
-        print(len(mix))
-
-    mix.extend(outputs)
-    random.shuffle(mix)
-
-    with open("/cpfs01/shared/llm_ddd/tongjian/synthetic/sft/fabricate_qa_v3.json", "wt") as f:
-        json.dump(mix, f, ensure_ascii=False)
-    print(len(mix))
+#         task = QwQLongCoTDoc2QueryComputeScore(split="valid")
+#         print(qwq_longcot_doc2query_compute_score_valid([None]*len(batch_solution_str),
+#                                                         batch_solution_str, batch_ground_truth))
 
 
-def doc2query_bon_merge(path, output):
-    outputs = []
-    scorer = RuleBasedOptionMatch()
-    group = defaultdict(list)
+# def doc2query_format_filter(path):
+#     outputs = []
+#     with open(path, "rt") as f:
+#         for line in f:
+#             example = json.loads(line)
+#             prompt = example["self_improvement"]["chat_completion"]
+#             option_num = int(re.findall(
+#                 r'- Number of options: (\d+)', prompt)[0].strip())
+#             difficulty = re.findall(
+#                 r'- Difficulty level: (\w+)', prompt)[0].strip()
 
-    pbar = tqdm(total=736928)
+#             response = example["self_improvement"]["responses"][0]["response"]["text"]
+#             result = doc2query_parse_solution_fn(response)
+#             if result is None:
+#                 continue
+#             question, options, answer = result
+#             if len(options) != option_num:
+#                 continue
+#             try:
+#                 ans_index = ['A', 'B', 'C', 'D', 'E', 'F', 'G',
+#                              'H', 'I', 'J', 'K', 'L', 'M'].index(answer)
+#             except Exception as err:
+#                 continue
+#             if not (ans_index <= (len(options)-1)):
+#                 continue
+#             prompt = prompt[prompt.index("<|im_start|>user") +
+#                             len("<|im_start|>user"):prompt.index("<|im_end|>\n<|im_start|>assistant")].strip()
 
-    with open(path, "rt") as f:
-        for line in f:
-            example = json.loads(line)
-            pbar.update(1)
-            prompt = example["self_improvement"]["chat_completion"]
-            response = example["self_improvement"]["responses"][0]["response"]["text"]
-            result = doc2query_parse_solution_fn(response)
-            if result is None:
-                continue
-            question, options, answer = result
-            try:
-                ans_index = ['A', 'B', 'C', 'D', 'E', 'F', 'G',
-                             'H', 'I', 'J', 'K', 'L', 'M'].index(answer)
-            except Exception as err:
-                continue
-            if not (ans_index <= (len(options)-1)):
-                continue
+#             output = {
+#                 "system": "You are a helpful assistant and an expert in creating a question. Now your task is to create a question. You first thinks about the reasoning process in the mind and then provides the user with the answer. Show your reasoning process in <think> </think> tags, and your final question creation in <question> </question> tags. Remember the part in <question> </question> tags MUST only be the question you created ** WITHOUT ** any explanation or solution.",
+#                 "instruction": prompt,
+#                 "input": "",
+#                 "output": response
+#             }
+#             outputs.append(output)
 
-            score = scorer.get_penalty_or_reward(response, {
-                "question": example["self_improvement"]["question"],
-                "answer": example["self_improvement"]["answer"],
-                "options": example["self_improvement"]["options"],
-                "difficulty": example["self_improvement"]["difficulty"],
-            })
-            group[example["uuid"]].append({
-                "response": response,
-                "score": score
-            })
+#     with open("/cpfs01/shared/llm_ddd/tongjian/synthetic/sft/fabricate_qa_v2.json", "rt") as f:
+#         mix = json.load(f)
+#         print(len(mix))
 
-    done = {}
-    with open(output, 'wt') as g:
-        with open(path, "rt") as f:
-            for line in f:
-                example = json.loads(line)
-                if example["uuid"] not in done:
-                    done[example["uuid"]] = True
-                    del example["self_improvement"]["responses"]
-                    example["self_improvement"]["responses"] = group[example["uuid"]]
-                    g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
+#     mix.extend(outputs)
+#     random.shuffle(mix)
 
-
-def doc2query_difficulty_filter(path, output):
-    pbar = tqdm(total=736928)
-
-    with open(output, "wt") as g:
-        with open(path, "rt") as f:
-            for line in f:
-                example = json.loads(line)
-                pbar.update(1)
-                responses = example["self_improvement"]["responses"]
-
-                threshold = 0.5
-                filtered = [_ for _ in responses if _["score"] > threshold]
-                if len(filtered) < 7 and len(filtered):
-                    del example["self_improvement"]["responses"]
-                    del example["self_improvement"]["chat_completion"]
-                    g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
+#     with open("/cpfs01/shared/llm_ddd/tongjian/synthetic/sft/fabricate_qa_v3.json", "wt") as f:
+#         json.dump(mix, f, ensure_ascii=False)
+#     print(len(mix))
 
 
-def doc2query_fabricate_qa_difficulty_reward(path, output):
+# def doc2query_bon_merge(path, output):
+#     outputs = []
+#     scorer = RuleBasedOptionMatch()
+#     group = defaultdict(list)
 
-    for filename in tqdm(os.listdir(path)):
-        basename = os.path.basename(filename)
-        outputs = []
-        filename = os.path.join(path, filename)
-        with open(filename, "rt") as f:
-            for line in f:
-                example = json.loads(line)
-                outputs.append(
-                    (
-                        example, example["self_improvement"]["responses"][0]["response"]["text"],
-                        {
-                            "document": example["content"],
-                        }
-                    )
-                )
-        output_path = f'{output}_{basename}'
-        if os.path.exists(output_path):
-            continue
+#     pbar = tqdm(total=736928)
 
-        async def main():
-            task = QwQLongCoTDoc2QueryComputeScore(
-                split="valid", difficulty_bon=4)
-            with open(output_path, "wt") as f:
-                for batch in batchify(outputs, n=1024):
-                    examples = [_[0] for _ in batch]
-                    batch_solution_str, batch_ground_truth = [
-                        _[1] for _ in batch], [_[2] for _ in batch]
-                    results, pass_rates = await task.get_difficulty_reward(
-                        [None] *
-                        len(batch_solution_str), batch_solution_str, batch_ground_truth, repeat=4
-                    )
-                    for example, result, pass_rate in zip(examples, results, pass_rates):
-                        example["self_improvement"]["difficulty_reward"] = result
-                        example["self_improvement"]["pass_rate"] = pass_rate
-                        f.write(f'{json.dumps(example, ensure_ascii=False)}\n')
-        aio.run(main())
+#     with open(path, "rt") as f:
+#         for line in f:
+#             example = json.loads(line)
+#             pbar.update(1)
+#             prompt = example["self_improvement"]["chat_completion"]
+#             response = example["self_improvement"]["responses"][0]["response"]["text"]
+#             result = doc2query_parse_solution_fn(response)
+#             if result is None:
+#                 continue
+#             question, options, answer = result
+#             try:
+#                 ans_index = ['A', 'B', 'C', 'D', 'E', 'F', 'G',
+#                              'H', 'I', 'J', 'K', 'L', 'M'].index(answer)
+#             except Exception as err:
+#                 continue
+#             if not (ans_index <= (len(options)-1)):
+#                 continue
+
+#             score = scorer.get_penalty_or_reward(response, {
+#                 "question": example["self_improvement"]["question"],
+#                 "answer": example["self_improvement"]["answer"],
+#                 "options": example["self_improvement"]["options"],
+#                 "difficulty": example["self_improvement"]["difficulty"],
+#             })
+#             group[example["uuid"]].append({
+#                 "response": response,
+#                 "score": score
+#             })
+
+#     done = {}
+#     with open(output, 'wt') as g:
+#         with open(path, "rt") as f:
+#             for line in f:
+#                 example = json.loads(line)
+#                 if example["uuid"] not in done:
+#                     done[example["uuid"]] = True
+#                     del example["self_improvement"]["responses"]
+#                     example["self_improvement"]["responses"] = group[example["uuid"]]
+#                     g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
 
 
-def doc2query_postprocess(path, output):
-    task = QwQLongCoTDoc2QueryComputeScore(split="valid")
+# def doc2query_difficulty_filter(path, output):
+#     pbar = tqdm(total=736928)
 
-    with open(output, "wt") as g:
-        for filename in tqdm(os.listdir(path)):
-            filename = os.path.join(path, filename)
-            with open(filename, "rt") as f:
-                for line in f:
-                    example = json.loads(line)
-                    response = example["self_improvement"]["responses"][0]["response"]["text"]
-                    result = doc2query_parse_solution_fn(
-                        response, remove_option_letter=False)
-                    if result is None:
-                        continue
-                    question, options, answer = result
-                    try:
-                        ans_index = task.MULTICHOICE_LETTER.index(answer)
-                    except Exception as err:
-                        continue
-                    if len(options) < 40:
-                        continue
-                    if ans_index > len(options) - 1 or not options[ans_index].startswith(f'{answer})'):
-                        continue
-                    result = doc2query_parse_solution_fn(
-                        response, remove_option_letter=True)
-                    question, options, answer = result
-                    example["self_improvement"]["synthetic_qa_prompt"] = example["self_improvement"]["chat_completion"]
-                    del example["self_improvement"]["chat_completion"]
-                    example["self_improvement"]["synthetic_qa_response"] = response
-                    example["self_improvement"]["question"] = question
-                    answer_content = options[ans_index]
+#     with open(output, "wt") as g:
+#         with open(path, "rt") as f:
+#             for line in f:
+#                 example = json.loads(line)
+#                 pbar.update(1)
+#                 responses = example["self_improvement"]["responses"]
 
-                    random.shuffle(options)
+#                 threshold = 0.5
+#                 filtered = [_ for _ in responses if _["score"] > threshold]
+#                 if len(filtered) < 7 and len(filtered):
+#                     del example["self_improvement"]["responses"]
+#                     del example["self_improvement"]["chat_completion"]
+#                     g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
 
-                    try:
-                        example["self_improvement"]["options"] = options
-                        example["self_improvement"]["answer"] = answer_content
-                        example["self_improvement"]["answer_letter"] = task.MULTICHOICE_LETTER[options.index(
-                            answer_content)]
-                        example["self_improvement"]["prompt"] = 'Answer the following multiple choice question. There is only one correct answer. The last line of your response should be in the format "Answer: $LETTER" (without quotes), where LETTER is one of the option letters.\n\n' + task.format_question(
-                            question=question, options=options, answer=None
-                        )
 
-                        g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
-                    except Exception as err:
-                        continue
+# def doc2query_fabricate_qa_difficulty_reward(path, output):
+
+#     for filename in tqdm(os.listdir(path)):
+#         basename = os.path.basename(filename)
+#         outputs = []
+#         filename = os.path.join(path, filename)
+#         with open(filename, "rt") as f:
+#             for line in f:
+#                 example = json.loads(line)
+#                 outputs.append(
+#                     (
+#                         example, example["self_improvement"]["responses"][0]["response"]["text"],
+#                         {
+#                             "document": example["content"],
+#                         }
+#                     )
+#                 )
+#         output_path = f'{output}_{basename}'
+#         if os.path.exists(output_path):
+#             continue
+
+#         async def main():
+#             task = QwQLongCoTDoc2QueryComputeScore(
+#                 split="valid", difficulty_bon=4)
+#             with open(output_path, "wt") as f:
+#                 for batch in batchify(outputs, n=1024):
+#                     examples = [_[0] for _ in batch]
+#                     batch_solution_str, batch_ground_truth = [
+#                         _[1] for _ in batch], [_[2] for _ in batch]
+#                     results, pass_rates = await task.get_difficulty_reward(
+#                         [None] *
+#                         len(batch_solution_str), batch_solution_str, batch_ground_truth, repeat=4
+#                     )
+#                     for example, result, pass_rate in zip(examples, results, pass_rates):
+#                         example["self_improvement"]["difficulty_reward"] = result
+#                         example["self_improvement"]["pass_rate"] = pass_rate
+#                         f.write(f'{json.dumps(example, ensure_ascii=False)}\n')
+#         aio.run(main())
+
+
+# def doc2query_postprocess(path, output):
+#     task = QwQLongCoTDoc2QueryComputeScore(split="valid")
+
+#     with open(output, "wt") as g:
+#         for filename in tqdm(os.listdir(path)):
+#             filename = os.path.join(path, filename)
+#             with open(filename, "rt") as f:
+#                 for line in f:
+#                     example = json.loads(line)
+#                     response = example["self_improvement"]["responses"][0]["response"]["text"]
+#                     result = doc2query_parse_solution_fn(
+#                         response, remove_option_letter=False)
+#                     if result is None:
+#                         continue
+#                     question, options, answer = result
+#                     try:
+#                         ans_index = task.MULTICHOICE_LETTER.index(answer)
+#                     except Exception as err:
+#                         continue
+#                     if len(options) < 40:
+#                         continue
+#                     if ans_index > len(options) - 1 or not options[ans_index].startswith(f'{answer})'):
+#                         continue
+#                     result = doc2query_parse_solution_fn(
+#                         response, remove_option_letter=True)
+#                     question, options, answer = result
+#                     example["self_improvement"]["synthetic_qa_prompt"] = example["self_improvement"]["chat_completion"]
+#                     del example["self_improvement"]["chat_completion"]
+#                     example["self_improvement"]["synthetic_qa_response"] = response
+#                     example["self_improvement"]["question"] = question
+#                     answer_content = options[ans_index]
+
+#                     random.shuffle(options)
+
+#                     try:
+#                         example["self_improvement"]["options"] = options
+#                         example["self_improvement"]["answer"] = answer_content
+#                         example["self_improvement"]["answer_letter"] = task.MULTICHOICE_LETTER[options.index(
+#                             answer_content)]
+#                         example["self_improvement"]["prompt"] = 'Answer the following multiple choice question. There is only one correct answer. The last line of your response should be in the format "Answer: $LETTER" (without quotes), where LETTER is one of the option letters.\n\n' + task.format_question(
+#                             question=question, options=options, answer=None
+#                         )
+
+#                         g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
+#                     except Exception as err:
+#                         continue
 
 
 if __name__ == '__main__':
