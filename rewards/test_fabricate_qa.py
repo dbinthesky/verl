@@ -160,6 +160,7 @@ class TestFabricate(unittest.TestCase):
         self.assertEqual(verifier.verify("5.27×10^{5}"), False)
         self.assertEqual(verifier.verify("2.73 × 10⁻²³²³ J/(K·m²)"), False)
         self.assertEqual(verifier.verify("342 lb_f"), False)
+        self.assertEqual(verifier.verify("2.91 kJ/(mol·K)"), True)
 
         verifier = NumericalAnswer()
         self.assertEqual(verifier.verify("\\boxed{0.00000225}"), True)
@@ -184,6 +185,8 @@ class TestFabricate(unittest.TestCase):
         self.assertEqual(verifier.verify("\\boxed{78}"), True)
         self.assertEqual(verifier.verify("\\boxed{-78}"), True)
         self.assertEqual(verifier.verify("\\boxed{5}"), True)
+        self.assertEqual(verifier.verify("\\boxed{-5}"), True)
+        self.assertEqual(verifier.verify("\\boxed{0.210}"), True)
 
     def test_custom_qa_parse_solution_fn(self):
         self.assertFalse(custom_qa_parse_solution_fn(
