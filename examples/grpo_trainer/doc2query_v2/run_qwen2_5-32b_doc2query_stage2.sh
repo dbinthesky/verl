@@ -44,7 +44,6 @@ activate_conda() {
 }
 activate_conda
 
-
 # ------------------------------
 # Path Configuration
 # ------------------------------
@@ -54,7 +53,8 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/qwen2_5-32b_qwq_fabricate_qa_supergpqa-dlc-2025-06-14-14-38-44_grpo_step_20"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/qwen2_5-32b_qwq_fabricate_qa_supergpqa-dlc-2025-06-14-14-38-44_grpo_step_20"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/qwen2_5-32b_qwq_fabricate_qa_supergpqa-dlc-2025-06-15-00-19-28_grpo_step_40"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v2/iscalc_numeric_high_equation_mix_0608"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v2/super_gpqa_test_100"
 
@@ -66,7 +66,6 @@ setup_path() {
 }
 setup_path
 
-
 # ------------------------------
 # Install Package
 # ------------------------------
@@ -74,7 +73,6 @@ setup_path
 #     pip3 install -U torchdata
 # }
 # setup_package
-
 
 # ------------------------------
 # Main Training Command
@@ -115,7 +113,7 @@ run_training() {
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=16384 \
         actor_rollout_ref.actor.use_kl_loss=True \
-        actor_rollout_ref.actor.kl_loss_coef=0.0005 \
+        actor_rollout_ref.actor.kl_loss_coef=0.002 \
         actor_rollout_ref.actor.entropy_coeff=0.0 \
         actor_rollout_ref.actor.kl_loss_type="low_var_kl" \
         actor_rollout_ref.model.enable_gradient_checkpointing=True \
@@ -148,11 +146,10 @@ run_training() {
     # 显式传递训练状态
     if [ $training_status -ne 0 ]; then
         echo "Training failed with exit code $training_status"
-        exit $training_status  # 退出码传递给全局
+        exit $training_status # 退出码传递给全局
     fi
 }
 # run_training "$@"
-
 
 # ------------------------------
 # Ray Cluster Setup

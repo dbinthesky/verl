@@ -8,9 +8,9 @@ PYARGS="${@:3}"
 NUM_PROCESSES="${NUM_PROCESSES:-4}"
 DLC_CONFIG_PATH="${DLC_CONFIG_PATH:-"/cpfs01/shared/llm_ddd/tongjian/dlc.config"}"
 # [ddd]
-# WORKSPACE_ID="${WORKSPACE_ID:-"ws1ujefpjyfgqjwp"}"
+WORKSPACE_ID="${WORKSPACE_ID:-"ws1ujefpjyfgqjwp"}"
 # [he]
-WORKSPACE_ID="${WORKSPACE_ID:-"wso1cah3ytpgmaah"}"
+# WORKSPACE_ID="${WORKSPACE_ID:-"wso1cah3ytpgmaah"}"
 # [hc]
 # WORKSPACE_ID="${WORKSPACE_ID:-"ws1h2vgufjufr4jj"}"
 # [h2]  
