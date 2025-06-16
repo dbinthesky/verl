@@ -1951,29 +1951,28 @@ class Doc2QueryV2ComputeScore(object):
             "QSim": self.question_similarity.get_penalty_or_reward,
         }
 
+    def response_postprocess(self, s):
+        try:
+            s = s.strip()
+            conclusion = s
+            if "最终答案是" in conclusion:
+                conclusion = conclusion[conclusion.index(
+                    "最终答案是")+len("最终答案是"):].strip()
+                return conclusion
+            else:
+                conclusion = conclusion[conclusion.index(
+                    "final answer is")+len("final answer is"):].strip()
+                return conclusion
+        except Exception as err:
+            try:
+                s = s.strip()
+                conclusion = s.split("\n")[-1].strip()
 
-#     def response_postprocess(self, s):
-#         try:
-#             s = s.strip()
-#             conclusion = s
-#             if "最终答案是" in conclusion:
-#                 conclusion = conclusion[conclusion.index(
-#                     "最终答案是")+len("最终答案是"):].strip()
-#                 return conclusion
-#             else:
-#                 conclusion = conclusion[conclusion.index(
-#                     "the final answer is")+len("the final answer is"):].strip()
-#                 return conclusion
-#         except Exception as err:
-#             try:
-#                 s = s.strip()
-#                 conclusion = s.split("\n")[-1].strip()
-
-#                 if len(conclusion) < 5:
-#                     conclusion = "\n".join(s.split("\n")[-3:]).strip()
-#                 return conclusion
-#             except Exception as err:
-#                 raise PostprocessError(f'parse conclusion failure')
+                if len(conclusion) < 5:
+                    conclusion = "\n".join(s.split("\n")[-3:]).strip()
+                return conclusion
+            except Exception as err:
+                raise PostprocessError(f'parse conclusion failure')
 
 #     def verify(self, conclusion, answer, answer_type):
 #         if answer_type == "WithUnitSymbol":
@@ -2123,7 +2122,6 @@ class Doc2QueryV2ComputeScore(object):
 #                     scores[index] = 0.5
 #         return scores
 
-
     def get_answer_format(self, answer_type, lang_code):
         return {
             "WithUnitSymbol": WithUnitSymbol_zh,
@@ -2174,33 +2172,18 @@ class Doc2QueryV2ComputeScore(object):
                 lang_code = gt["lang_code"]
                 for name, v in run_args.items():
                     fn = v["fn"]
-                    print(fn)
-                # print(self.respond_w_context(question, answer_type, gt))
-                # print(lang_code)
-#                 if lang_code == "zh":
-#                     instruct = f'仔细一步步思考，并回答下面的问题。你回应的最后一行必须采用 “... 最终答案是 $ANSWER 的格式（不带引号），其中 $ANSWER 的格式要求需要满足下面的说明。\n\n{self.get_answer_format(answer_type, lang_code)}'
-#                 else:
-#                     instruct = f'Think step by step in detail and answer the following questions. The last line of your response must be in the format "... the final answer is $ANSWER" (without quotes), where the format requirements for $ANSWER need to meet the instructions below.\n\n{self.get_answer_format(answer_type, lang_code)}'
-
-#                 prompt = f'{instruct}\n\n' + question
-#                 wo_content_prompts[prompt].append(i)
-
-#                 prompt = f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n' + \
-#                     f'{instruct}\n\n' + question
-#                 w_content_prompts[prompt].append(i)
-
-
-#         _w_content_prompts = list(w_content_prompts.keys()) * w_content_bon
-#         _wo_content_prompts = list(wo_content_prompts.keys()) * wo_content_bon
-
-#         tasks = [
-#             self.wo_content_agent.run(_wo_content_prompts, max_concurrent_requests, desc=f"[Generate w/o Content Responses {self.wo_content_agent.model}]", postprocess_fns=[
-#                 self.response_postprocess] * len(_wo_content_prompts)),
-#             self.w_content_agent.run(_w_content_prompts, max_concurrent_requests, desc=f"[Generate w Content Responses {self.w_content_agent.model}]", postprocess_fns=[
-#                 self.response_postprocess] * len(_w_content_prompts))
-#         ]
-#         wo_results, w_results = await aio.gather(*tasks)
-
+                    _prompt = fn(question, answer_type, gt)
+                    prompt2index[name][_prompt].append(i)
+        tasks = []
+        task_names = []
+        for name, v in prompt2index.items():
+            prompts = list(v.keys()) * run_args[name]["repeat"]
+            tasks.append(run_args[name]["model"].run(
+                prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]',
+                postprocess_fns=[self.response_postprocess] * len(prompts)
+            ))
+            task_names.append(name)
+        respond_questions = await aio.gather(*tasks)
 #         results_mapper = defaultdict(list)
 #         for (k, v) in wo_results:
 #             results_mapper[k].append(v)

@@ -276,12 +276,14 @@ class TestFabricate(unittest.TestCase):
                     "w/o_content": {
                         "model": task.weak_agent,
                         "repeat": 24,
-                        "fn": task.respond_wo_context
+                        "fn": task.respond_wo_context,
+                        "desc": 'w/o ctx'
                     },
                     "w_content": {
                         "model": task.strong_agent,
                         "repeat": 6,
-                        "fn": task.respond_w_context
+                        "fn": task.respond_w_context,
+                        "desc": 'w ctx'
                     }
                 }
             )
