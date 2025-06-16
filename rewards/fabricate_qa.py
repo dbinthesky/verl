@@ -1770,6 +1770,7 @@ class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
             doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
         self.answer_feature = AnswerFeatureMatch(
             doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
+        self.parse_solution_fn = self.doc2query_parse_solution_fn
 
         self.wo_content_agent = self.agent
         self.w_content_agent = Agent(**{
@@ -1979,6 +1980,44 @@ Specifications for Numerical Answers (NumericalAnswer)
 
         return correctness
 
+    async def llm_as_judge_similarity(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        max_concurrent_requests=128,
+    ):
+        indices = []
+        fabricates, authentics = [], []
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            fabricate = self.parse_solution_fn(sol)
+            if fabricate is not None and gt.get(question, None):
+                fabricates.append(fabricate)
+                authentics.append(gt["question"])
+                indices.append(i)
+            else:
+                continue
+
+        similarity = await question_similarity(
+            agent=self.verify_agent,
+            authentic=authentics,
+            fabricate=fabricates,
+            max_concurrent_requests=max_concurrent_requests
+        )
+
+        scores = [0.0] * len(batch_solution_str)
+        for sim, index in zip(similarity, indices):
+            if sim is None:
+                pass
+            else:
+                if sim < 3:
+                    pass
+                elif sim >= 4:
+                    scores[index] = 1.0
+                elif sim == 3:
+                    scores[index] = 0.5
+        return scores
+
     async def get_difficulty_reward(
             self,
             batch_data_sources,
@@ -2133,24 +2172,30 @@ Specifications for Numerical Answers (NumericalAnswer)
                 penalty[i].append(self.get_penalties()[key]
                                   (solution_str, ground_truth))
 
-        # difficulty_rewards, pass_rates = await self.get_difficulty_reward(
-        #     batch_data_sources,
-        #     batch_solution_str,
-        #     batch_ground_truth,
-        #     max_concurrent_requests=MAX_CONCURRENT,
-        # )
+        similarity_rewards = await self.llm_as_judge_similarity(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            max_concurrent_requests=MAX_CONCURRENT,
+        )
 
-        # FIXME
-        difficulty_rewards, pass_rates = [
-            0.0]*len(batch_solution_str), [{}] * len(batch_solution_str)
+        difficulty_rewards, pass_rates = await self.get_difficulty_reward(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            max_concurrent_requests=MAX_CONCURRENT,
+        )
+
+        # # FIXME
+        # difficulty_rewards, pass_rates = [
+        #     0.0]*len(batch_solution_str), [{}] * len(batch_solution_str)
 
         final_results = []
         for i in range(len(batch_solution_str)):
             scores = copy.deepcopy(penalty[i])
             _difficulty = difficulty_rewards[i]
-            # FIXME
-            # _difficulty = (0.5 * _difficulty[0] + 0.5 * _difficulty[1] +
-            #                0.2 * _difficulty[2]) if isinstance(_difficulty, list) else _difficulty
+            _difficulty = (1.0 * _difficulty[0] + 1.0 * _difficulty[1] +
+                           0.5 * _difficulty[2]) if isinstance(_difficulty, list) else _difficulty
             penalty_log_str = f'Parse/Format/AnsFeature/QSim={penalty[i]}'
 
             scores.append(_difficulty)
@@ -2167,6 +2212,9 @@ Specifications for Numerical Answers (NumericalAnswer)
                     else:
                         cur_score += _score
             final_results.append(cur_score)
+
+            if _difficulty > 0:
+                cur_score += 0.5 * similarity_rewards[i]
 
             if (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
                 log = True
@@ -2187,7 +2235,7 @@ Specifications for Numerical Answers (NumericalAnswer)
                 except Exception as err:
                     pass
                 print(
-                    f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|{penalty_log_str}\n')
+                    f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|Sim={similarity_rewards[i]:.3f}|{penalty_log_str}\n')
         return final_results
 
 
