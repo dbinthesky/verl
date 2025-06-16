@@ -1702,6 +1702,65 @@ class WithUnitSymbol(object):
         return bool(self.percent_pattern.match(answer.strip()))
 
 
+WithUnitSymbol_zh = """
+#### WithUnitSymbol 规范要求  
+    1. **数值表示**  
+    - 问题指令必须明确要求保留的小数点位数 科学计数法位数。  
+    - 大数用科学计数法，如 `5.27 × 10^5 Pa`。指数部分不要加括号，`1.256 × 10^-67 J` ✅，`1.256 × 10^{-67} J` ❌，`1.92 × 10⁷ m⁻¹`❌。  
+
+    2. **单位规范** 
+    - 问题指令必须明确要求返回答案的单位。   
+    - 单位符号用国际标准（SI），大小写严格区分：  
+        - 大写：N（牛）、Pa（帕）、J（焦）、W（瓦）、Hz（赫）等。  
+        - 小写：m（米）、kg（千克）、s（秒）、mol（摩）等。  
+    - 单位与数值间留空格：`2.91 m` ✅，`2.91m` ❌。  
+    - 复合单位用斜杠表示：`kJ/(mol·K)` ✅，禁止使用乘方形式（如 `kJ·mol⁻¹·K⁻¹` ❌）。  
+    
+    3. 注意WithUnitSymbol和NumericalAnswer不同，不需要用 \(\\boxed{}\) 
+"""
+
+WithUnitSymbol_en = """
+#### **WithUnitSymbol**: Specifications for Numerical Answers with Units
+    1. Numerical Representation:
+        - The question instructions must clearly require the number of decimal places or significant figures for scientific notation to be retained.
+        - Use scientific notation for large numbers, use format correctly such as `5.27 × 10^5 Pa`. Do not add parentheses to the exponent part: `1.256 × 10^-67 J` ✅, `1.256 × 10^{-67} J` ❌, `1.92 × 10⁷ m⁻¹` ❌。  
+        
+    2. Unit Specifications:
+        - The question instructions must clearly require the unit for the returned answer.
+        - Use international standard (SI) unit symbols with strict case distinction:
+        - Uppercase: N (newton), Pa (pascal), J (joule), W (watt), Hz (hertz), etc.
+        - Lowercase: m (meter), kg (kilogram), s (second), mol (mole), etc.
+        - Leave a space between the unit and the numerical value: `2.91 m` ✅, `2.91m` ❌.
+        - Use a slash for composite units: `kJ/(mol·K)` ✅, and power forms are prohibited (such as `kJ·mol⁻¹·K⁻¹` ❌).  
+
+    3. **Note** that unlike numerical answers, there is no need to enclose it with \(\\boxed{}\) !!! For example, Answer: `1.040 mol` ✅, `Answer: \\boxed{1.040\\ mol}` ❌.
+"""
+
+NumericalAnswer_zh = """
+#### NumericalAnswer 规范要求  
+    1. **类型允许**：  
+    - **整数**：正整数，无前导零（如 \(5, 275, 144\)）。  
+    - **浮点数**：由整数部分、小数点和小数部分组成，整数部分可为 \(0\) 或正整数（无前导零），**保留至少3位有效数字**（如 \(0.210, 40.2, 5.50\)）。  
+    - **禁止分数或百分号形式**，必须转换为小数形式（如 \(5/12\) 需表示为 \(0.417\)）。  
+
+    2. **格式限制**：
+    - 不允许包含空格、逗号、单位（如“元”）等无关字符。  
+    - 所有答案需用 \(\\boxed{}\) 包裹（如 \(\\boxed{5}\)、\(\\boxed{0.210}\)）。
+"""
+
+NumericalAnswer_en = """
+#### **NumericalAnswer**: Specifications for Numerical Answers
+    1. Allowed Types:
+        - **Integers**: Positive integers without leading zeros (such as \(5, 275, 144\)).
+        - **Floats**: Composed of an integer part, a decimal point, and a fractional part. The integer part can be \(0\) or a positive integer (without leading zeros), and the **fractional part is to retain at least 3 significant figures** (such as \(0.210, 40.2, 5.50\)).
+        - **Fractional or percentage forms are prohibited** and must be converted to decimal forms (such as \(5/12\) should be expressed as \(0.417\)).
+
+    2. Format Restrictions:
+        - No irrelevant characters such as spaces, commas, or units (like "yuan") are allowed.
+        - All answers must be enclosed in \(\\boxed{}\) (such as \(\\boxed{5}\), \(\\boxed{0.210}\)).
+"""
+
+
 class CalculationAnswerFormatVerify(PenaltyOrReward):
     def __init__(self, parse_solution_fn=custom_qa_parse_solution_fn):
         self.parse_solution_fn = parse_solution_fn
@@ -1851,92 +1910,47 @@ def extract_boxed_answer(solution: str) -> str:
     return solution
 
 
-# class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
-#     def __init__(self,
-#                  split="train", add_difficulty_rewards=False, difficulty_bon=8, parse_solution_fn=custom_qa_parse_solution_fn):
-#         super().__init__(
-#             split=split, add_difficulty_rewards=add_difficulty_rewards, difficulty_bon=difficulty_bon, parse_solution_fn=parse_solution_fn
-#         )
-#         self.format = CalculationAnswerFormatVerify(
-#             doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
-#         self.answer_feature = AnswerFeatureMatch(
-#             doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
-#         self.parse_solution_fn = self.doc2query_parse_solution_fn
+class Doc2QueryV2ComputeScore(object):
+    def __init__(self, parse_solution_fn, split="train"):
+        self.split = split
+        self.parse_solution_fn = parse_solution_fn
 
-#         self.wo_content_agent = self.agent
-#         self.w_content_agent = Agent(**{
-#             "model": "DeepSeek-V3-0324",
-#             "base_url": "https://sd138cdmeq1emkiunptm0.apigateway-cn-beijing.volceapi.com/v1",
-#             "api_keys": "EMPTY",
-#             "request_kwargs": {
-#                 "temperature": 0.9,
-#                 "timeout": 360,
-#                 "max_tokens": 4096,
-#             }
-#         })
+        self.format = CalculationAnswerFormatVerify(
+            parse_solution_fn=self.parse_solution_fn)
+        self.language = LanguageConsistency(
+            parse_solution_fn=self.parse_solution_fn)
+        self.question_similarity = QuestionSimilarity(
+            parse_solution_fn=self.parse_solution_fn)
 
-#     def get_penalties(self) -> Dict[str, Callable]:
-#         return {
-#             "Format": self.format.get_penalty_or_reward,
-#             "QSim": self.question_similarity.get_penalty_or_reward,
-#             # "AnsFeature": self.answer_feature.get_penalty_or_reward,
-#         }
+        self.weak_agent = Agent(**{
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.131.138:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.9,
+                "timeout": 360,
+                "max_tokens": 2048,
+            },
+        })
+        self.strong_agent = Agent(**{
+            "model": "DeepSeek-V3-0324",
+            "base_url": "https://sd138cdmeq1emkiunptm0.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.9,
+                "timeout": 360,
+                "max_tokens": 4096,
+            }
+        })
+        self.verify_agent = self.weak_agent
 
-#     def get_answer_format(self, answer_type, lang_code):
-#         WithUnitSymbol_zh = """带单位数值 (WithUnitSymbol) 规范要求
-# 1. **数值表示**
-#    - 问题指令必须明确要求保留的小数点位数 科学计数法位数。
-#    - 大数用科学计数法，避免冗余空格，如 `$5.27×10^{5}\ \\text{Pa}$`。
+    def get_penalties(self) -> Dict[str, Callable]:
+        return {
+            "Format": self.format.get_penalty_or_reward,
+            "Lang": self.language.get_penalty_or_reward,
+            "QSim": self.question_similarity.get_penalty_or_reward,
+        }
 
-# 2. **单位规范**
-#    - 问题指令必须明确要求返回答案的单位。
-#    - 单位符号用国际标准（SI），大小写严格区分：
-#      - 大写：N（牛）、Pa（帕）、J（焦）、W（瓦）、Hz（赫）等。
-#      - 小写：m（米）、kg（千克）、s（秒）、mol（摩）等。
-#    - 单位与数值间留空格：`2.91 m` ✅，`2.91m` ❌。
-#    - 复合单位用斜杠表示：`kJ/(mol·K)` ✅，禁止使用乘方形式（如 `kJ·mol⁻¹·K⁻¹` ❌）。
-# """
-#         WithUnitSymbol_en = """Specifications for Numerical Answers with Unit Symbols (WithUnitSymbol)
-# 1. Numerical Representation:
-#     - The question instructions must clearly require the number of decimal places or significant figures for scientific notation to be retained.
-#     - Use scientific notation for large numbers, use format correctly such as `5.27 × 10^5 Pa`. Do not add parentheses to the exponent part: `1.256 × 10^-67 J` ✅, `1.256 × 10^{-67} J` ❌, `1.92 × 10⁷ m⁻¹` ❌。
-
-# 2. Unit Specifications:
-#     - The question instructions must clearly require the unit for the returned answer.
-#     - Use international standard (SI) unit symbols with strict case distinction:
-#       - Uppercase: N (newton), Pa (pascal), J (joule), W (watt), Hz (hertz), etc.
-#       - Lowercase: m (meter), kg (kilogram), s (second), mol (mole), etc.
-#     - Leave a space between the unit and the numerical value: `2.91 m` ✅, `2.91m` ❌.
-#     - Use a slash for composite units: `kJ/(mol·K)` ✅, and power forms are prohibited (such as `kJ·mol⁻¹·K⁻¹` ❌).
-# """
-#         NumericalAnswer_zh = """数值答案 (NumericalAnswer) 规范要求
-# 1. **类型允许**：
-#   - **整数**：正整数，无前导零（如 \(5, 275, 144\)）。
-#   - **浮点数**：由整数部分、小数点和小数部分组成，整数部分可为 \(0\) 或正整数（无前导零），**小数部分固定保留3位**（如 \(0.210, 40.200, 5.500\)）。
-#   - **禁止分数形式**，必须转换为小数形式（如 \(5/12\) 需表示为 \(0.417\)）。
-
-# 2. **格式限制**：
-#   - 不允许包含空格、逗号、单位（如“元”）等无关字符。
-#   - 所有答案需用 \(\\boxed{}\) 包裹（如 \(\\boxed{5}\)、\(\\boxed{0.210}\)）。
-# """
-#         NumericalAnswer_en = """
-# Specifications for Numerical Answers (NumericalAnswer)
-# 1. **Permitted Types**:
-#    - **Integers**: Positive integers without leading zeros (e.g., \(5, 275, 144\)).
-#    - **Floating-point numbers**: Composed of an integer part, a decimal point, and a fractional part. The integer part can be \(0\) or a positive integer (no leading zeros), and the **fractional part must be fixed to 3 decimal places** (e.g., \(0.210, 40.200, 5.500\)).
-#    - **Fractional forms are prohibited** and must be converted to decimal form (e.g., \(5/12\) should be expressed as \(0.417\)).
-
-# 2. **Format Restrictions**:
-#    - No irrelevant characters such as spaces, commas, or units (e.g., "yuan") are allowed.
-#    - All answers must be enclosed in \(\\boxed{}\) (e.g., \(\\boxed{5}\), \(\\boxed{0.210}\)).
-# """
-#         return {
-#             "WithUnitSymbol": WithUnitSymbol_zh,
-#             "NumericalAnswer": NumericalAnswer_zh
-#         }[answer_type] if lang_code == "zh" else {
-#             "WithUnitSymbol": WithUnitSymbol_en,
-#             "NumericalAnswer": NumericalAnswer_en
-#         }[answer_type]
 
 #     def response_postprocess(self, s):
 #         try:
@@ -2109,27 +2123,60 @@ def extract_boxed_answer(solution: str) -> str:
 #                     scores[index] = 0.5
 #         return scores
 
-#     async def get_difficulty_reward(
-#             self,
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth, max_concurrent_requests=MAX_CONCURRENT, wo_content_bon=24, w_content_bon=6):
 
-#         wo_content_prompts, w_content_prompts = defaultdict(
-#             list), defaultdict(list)
+    def get_answer_format(self, answer_type, lang_code):
+        return {
+            "WithUnitSymbol": WithUnitSymbol_zh,
+            "NumericalAnswer": NumericalAnswer_zh
+        }[answer_type] if lang_code == "zh" else {
+            "WithUnitSymbol": WithUnitSymbol_en,
+            "NumericalAnswer": NumericalAnswer_en
+        }[answer_type]
 
-#         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-#             result = self.doc2query_parse_solution_fn(solution_str)
-#             if result is not None:
-#                 question, answer, answer_type = result
-#                 ans_format_strict = self.format.get_penalty_or_reward(
-#                     solution_str, gt
-#                 )
-#                 # 答案格式不符合规范
-#                 if ans_format_strict < 0.0:
-#                     continue
+    def get_instruct(self, gt, answer_type):
+        lang_code = gt["lang_code"]
+        if lang_code == "zh":
+            instruct = f'仔细一步步思考，并回答下面的问题。你回应的最后一行必须采用 “最终答案是 $ANSWER 的格式（不带引号），其中 $ANSWER 的格式要求需要满足下面的说明。\n\n{self.get_answer_format(answer_type, lang_code)}'
+        else:
+            instruct = f'Think step by step in detail and answer the following questions. The last line of your response must be in the format "The final answer is $ANSWER" (without quotes), where the format requirements for $ANSWER need to meet the instructions below.\n\n{self.get_answer_format(answer_type, lang_code)}'
+        return instruct
 
-#                 lang_code = gt["lang_code"]
+    def respond_wo_context(self, question, answer_type, gt):
+        _if = self.get_instruct(gt, answer_type)
+        return f'{_if}\n\n{question}'
+
+    def respond_w_context(self, question, answer_type, gt):
+        _if = self.get_instruct(gt, answer_type)
+        return f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n{_if}\n\n{question}'
+
+    async def get_difficulty_reward(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            run_args=None,
+            max_concurrent_requests=MAX_CONCURRENT):
+        assert run_args is not None
+
+        prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
+
+        for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            result = self.parse_solution_fn(solution_str)
+            if result is not None:
+                question, answer, answer_type = result
+                ans_format_strict = self.format.get_penalty_or_reward(
+                    solution_str, gt
+                )
+                # 答案格式不符合规范
+                if ans_format_strict < 0.0:
+                    continue
+
+                lang_code = gt["lang_code"]
+                for name, v in run_args.items():
+                    fn = v["fn"]
+                    print(fn)
+                # print(self.respond_w_context(question, answer_type, gt))
+                # print(lang_code)
 #                 if lang_code == "zh":
 #                     instruct = f'仔细一步步思考，并回答下面的问题。你回应的最后一行必须采用 “... 最终答案是 $ANSWER 的格式（不带引号），其中 $ANSWER 的格式要求需要满足下面的说明。\n\n{self.get_answer_format(answer_type, lang_code)}'
 #                 else:
@@ -2141,6 +2188,7 @@ def extract_boxed_answer(solution: str) -> str:
 #                 prompt = f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n' + \
 #                     f'{instruct}\n\n' + question
 #                 w_content_prompts[prompt].append(i)
+
 
 #         _w_content_prompts = list(w_content_prompts.keys()) * w_content_bon
 #         _wo_content_prompts = list(wo_content_prompts.keys()) * wo_content_bon

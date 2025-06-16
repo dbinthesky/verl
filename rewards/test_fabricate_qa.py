@@ -24,7 +24,7 @@ from fabricate_qa import (
     QuestionSimilarity,
     CalculationAnswerFormatVerify,
     LanguageConsistency,
-    # QwQLongCoTDoc2QueryComputeScore,
+    Doc2QueryV2ComputeScore,
     # QwQLongCoTDoc2QueryV2ComputeScore,
     # qwq_longcot_doc2query_compute_score_valid,
     custom_qa_parse_solution_fn,
@@ -262,8 +262,33 @@ class TestFabricate(unittest.TestCase):
             score = scorer.get_penalty_or_reward(response, gt)
             self.assertTrue(score < 0)
 
-#         x, y = [], []
-#         task = QwQLongCoTDoc2QueryV2ComputeScore(split="valid")
+    def test_doc2query_v2(self):
+        batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
+            format="doc2query_v2", num=32)
+        task = Doc2QueryV2ComputeScore(
+            custom_qa_parse_solution_fn, split="valid")
+
+        async def main():
+            results = await task.get_difficulty_reward(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth,
+                run_args={
+                    "w/o_content": {
+                        "model": task.weak_agent,
+                        "repeat": 24,
+                        "fn": task.respond_wo_context
+                    },
+                    "w_content": {
+                        "model": task.strong_agent,
+                        "repeat": 6,
+                        "fn": task.respond_w_context
+                    }
+                }
+            )
+            print(results)
+        aio.run(main())
+
+
 #         for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
 #             # QSim\Format\AnsFeature
 
