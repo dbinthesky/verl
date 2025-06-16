@@ -809,15 +809,15 @@ class Doc2QueryFormatReward(PenaltyOrReward):
 
 
 class QuestionSimilarity(PenaltyOrReward):
-    def __init__(self, doc2query_parse_solution_fn=doc2query_parse_solution_fn, key="authentic_question"):
-        self.doc2query_parse_solution_fn = doc2query_parse_solution_fn
-        self.key = key
+    def __init__(self, parse_solution_fn, authentic_key="question"):
+        self.parse_solution_fn = parse_solution_fn
+        self.key = authentic_key
 
     def get_penalty_or_reward(self, solution_str, ground_truth):
         if ground_truth.get(self.key, None) is None:
             return 0.0
         try:
-            solution_str = self.doc2query_parse_solution_fn(solution_str)
+            solution_str = self.parse_solution_fn(solution_str)
 
             if solution_str is None:
                 return 0.0
@@ -942,412 +942,412 @@ class RuleBasedOptionMatch(PenaltyOrReward):
             return 0.0
 
 
-class QwQLongCoTDoc2QueryComputeScore(object):
-    MULTICHOICE_LETTER = ('A', 'B', 'C', 'D', 'E', 'F', 'G',
-                          'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T')
-
-    def __init__(self,
-                 split="train", add_difficulty_rewards=False, difficulty_bon=8, parse_solution_fn=doc2query_parse_solution_fn):
-        self.split = split
-        self.doc2query_parse_solution_fn = parse_solution_fn
-
-        self.format = Doc2QueryFormatReward(
-            doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
-        self.question_similarity = QuestionSimilarity(
-            doc2query_parse_solution_fn=self.doc2query_parse_solution_fn, key="question")
-        self.rule_base = RuleBasedOptionMatch(
-            doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
-        self.add_difficulty_rewards = add_difficulty_rewards
-        self.difficulty_bon = difficulty_bon
-
-        self.agent = Agent(**{
-            "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.131.138:8000/v1",
-            "api_keys": "EMPTY",
-            "request_kwargs": {
-                "temperature": 0.9,
-                "timeout": 360,
-                "max_tokens": 2048,
-            },
-        })
-        self.verify_agent = self.agent
-
-    def get_penalties(self) -> Dict[str, Callable]:
-        return {
-            "Format": self.format.get_penalty_or_reward,
-            "QSim": self.question_similarity.get_penalty_or_reward,
-            "RuleBased": self.rule_base.get_penalty_or_reward,
-        }
-
-    async def chat_completion_with_retry(self, url, data, max_retries=3, retry_delay=5, suffix="/generate"):
-        retries = 0
-        while retries < max_retries:
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(f'{url}{suffix}', json=data, timeout=aiohttp.ClientTimeout(total=2400)) as response:
-                        response.raise_for_status()
-                        return await response.json()
-            except (aiohttp.ClientError, aiohttp.ClientResponseError) as e:
-                print(
-                    f"{url}请求(数据总量={len(data)})失败，错误信息: {e}，重试第 {retries + 1} 次...")
-                retries += 1
-                if retries < max_retries:
-                    await aio.sleep(retry_delay)
-        print(f"{url}达到最大重试次数，请求失败。")
-        return None
-
-    async def run_tasks_in_queues(self, tasks):
-        """将任务分成n个队列并行执行"""
-        n = len(self.get_respondent_urls())
-
-        # 创建n个队列
-        queues = [[] for _ in range(n)]
-
-        # 平均分配任务到各个队列
-        for i, task in enumerate(tasks):
-            queue_id = i % n
-            queues[queue_id].append(task)
-
-        parallel_tasks = []
-        for i, queue in enumerate(queues):
-            parallel_tasks.append(self.chat_completion_with_retry(
-                url=self.get_respondent_urls()[i],
-                data=queue
-            ))
-        flattened_results = []
-        for f in tqdm.asyncio.tqdm.as_completed(parallel_tasks, dynamic_ncols=True, desc=f'[Generate {len(tasks)} Responses]'):
-            results = await f
-            for result in results:
-                flattened_results.append(result)
-
-        return flattened_results
-
-    def get_respondent_urls(self):
-        suffixes = [
-        ]
-        return [f'http://{_}' for _ in suffixes]
-
-    def response_postprocess(self, s):
-        ans = None
-        try:
-            s = s.strip()
-            conclusion = s.split("\n")[-1]
-            conclusion = conclusion[conclusion.index(
-                "Answer:")+len("Answer:"):].strip()
-            if conclusion not in self.MULTICHOICE_LETTER:
-                ans = None
-            else:
-                ans = conclusion
-        except Exception as err:
-            ans = None
-
-        if ans is None:
-            matched = re.findall(r'Answer:\s*([A-W])', s)
-            if len(matched) > 0:
-                return matched[0]
-            return None
-        return ans
-
-    async def generate_responses(self, prompts):
-        prompts_w_ids = [{"prompt": _, "uuid": uuid.uuid4().hex}
-                         for _ in prompts]
-        ids = [_["uuid"] for _ in prompts_w_ids]
-
-        random.shuffle(prompts_w_ids)
-        # prompts_w_ids = sorted(prompts_w_ids, key=lambda x: x["prompt"])
-        results = await self.run_tasks_in_queues(prompts_w_ids)
-
-        post_results = {}
-        for result in results:
-            if result and "uuid" in result and "response" in result:
-                post_results[result["uuid"]] = (
-                    result["prompt"],
-                    self.response_postprocess(result["response"])
-                )
-
-        outputs = []
-        for prompt, _uuid in zip(prompts, ids):
-            if _uuid in post_results:
-                outputs.append(post_results[_uuid])
-            else:
-                outputs.append((prompt, None))
-        return outputs
-
-    async def get_difficulty_reward(
-            self,
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth, max_concurrent_requests=MAX_CONCURRENT, repeat=8):
-
-        prompts = []
-        wo_content_prompts, w_content_prompts = defaultdict(
-            list), defaultdict(list)
-
-        for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-            result = self.doc2query_parse_solution_fn(solution_str)
-            if result is not None:
-                question, options, answer = result
-
-                lang_code = gt["lang_code"]
-                if lang_code == "zh":
-                    instruct = '回答以下单项选择题。只有一个正确答案。你回应的最后一行必须采用 “Answer: $LETTER” 的格式（不带引号），其中 LETTER 为选项字母之一。你必须首先通过非常详细的思考过程逐步分析。'
-                else:
-                    instruct = 'Answer the following multiple choice question. There is only one correct answer. The last line of your response should be in the format "Answer: $LETTER" (without quotes), where LETTER is one of the option letters. You must first think step by step with very detail thinking process.'
-
-                prompt = f'{instruct}\n\n' + self.prepare_question_for_test(
-                    question, options, lang_code=lang_code)
-                wo_content_prompts[prompt].append(i)
-
-                prompts.extend([prompt]*repeat)
-                prompt = f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n' + f'{instruct}\n\n' + self.prepare_question_for_test(
-                    question, options, lang_code=lang_code)
-                w_content_prompts[prompt].append(i)
-
-                prompts.extend([prompt]*repeat)
-
-        _results = await self.agent.run(list(set(prompts)), max_concurrent_requests, desc=f"[Generate Responses {self.agent.model}]", postprocess_fns=[self.response_postprocess] * len(list(set(prompts))))
-        results_mapper = defaultdict(list)
-        for (k, v) in _results:
-            results_mapper[k].append(v)
-
-        wo_contents, w_contents = defaultdict(list), defaultdict(list)
-        for k, v in results_mapper.items():
-            if k in wo_content_prompts:
-                for index in wo_content_prompts[k]:
-                    wo_contents[index].extend(v)
-            elif k in w_content_prompts:
-                for index in w_content_prompts[k]:
-                    w_contents[index].extend(v)
-            else:
-                raise NotImplementedError
-
-        full_rewards = []
-        pass_rates = []
-
-        for i in range(len(batch_solution_str)):
-            if i in wo_contents:
-                base_score = 0.0
-
-                wo_content, w_content = wo_contents[i], w_contents[i]
-
-                wo_content = [_ for _ in wo_content if _ is not None]
-                w_content = [_ for _ in w_content if _ is not None]
-
-                # 正确回答
-                result = self.doc2query_parse_solution_fn(
-                    batch_solution_str[i])
-                if result is not None:
-                    _, _options, answer = result
-                else:
-                    answer, _options = "", []
-                ans = answer
-
-                wo_content_correct = [_ for _ in wo_content if _ == ans]
-                w_content_correct = [_ for _ in w_content if _ == ans]
-
-                pass_rates.append({
-                    "wo_content": f'{len(wo_content_correct)}/{len(wo_content)} {wo_content}, ans={ans}',
-                    "w_content": f'{len(w_content_correct)}/{len(w_content)} {w_content}, ans={ans}',
-                })
-
-                try:
-                    if wo_content.count(self.MULTICHOICE_LETTER[len(
-                            _options)]) >= self.difficulty_bon/4:
-                        base_score -= 3.0
-                    if wo_content.count(self.MULTICHOICE_LETTER[len(
-                            _options)+1]) >= self.difficulty_bon/4:
-                        base_score -= 3.0
-
-                    # 无参考 majority vote
-                    wo_content_majority_votes = defaultdict(int)
-                    for v in wo_content:
-                        wo_content_majority_votes[v] += 1
-                    wo_content_majority_votes = sorted(
-                        wo_content_majority_votes.items(), key=lambda x: x[1], reverse=True)
-                    if len(wo_content_majority_votes) > 0:
-                        wo_majority_vote_ans = wo_content_majority_votes[0][0]
-                        if ans == self.MULTICHOICE_LETTER[len(_options)] or ans == self.MULTICHOICE_LETTER[len(_options)+1]:
-                            base_score -= 3.0
-                except Exception as err:
-                    pass
-
-                # 不带参考 模型也有机会rollout对 否则问题可能过于长尾
-                if wo_content.count(ans) < self.difficulty_bon/4:  # 至少对两次
-                    full_rewards.append(base_score)
-                    continue
-
-                # 带参考 应该比 不带参考 显著好
-                if w_content.count(ans) - wo_content.count(ans) < self.difficulty_bon/4:
-                    full_rewards.append(base_score)
-                    continue
-
-                # 完全做不对
-                if len(wo_content_correct) == 0 or len(w_content_correct) == 0:
-                    pass
-                # 全对
-                elif len(wo_content_correct) == len(wo_content):
-                    pass
-                else:
-                    # 无参考正确率在一定区间
-                    if len(wo_content_correct) >= 1 and len(wo_content_correct)/len(wo_content) <= 0.75:
-                        wo_acc = len(wo_content_correct)/len(wo_content)
-                        # 难度越大越好(min_threshold=0.2)
-                        base_score += 1-max(wo_acc, 0.2)
-
-                        # 有/无参考正确率差异越大越好
-                        diff = (len(w_content_correct) / len(w_content)
-                                ) - ((len(wo_content_correct))/(len(wo_content)))
-                        diff = max(diff, 0.0)
-                        base_score += diff
-
-                        # 有参考 majority vote是正确答案加分
-                        w_content_majority_votes = defaultdict(int)
-                        for v in w_content:
-                            w_content_majority_votes[v] += 1
-
-                        w_content_majority_votes = sorted(
-                            w_content_majority_votes.items(), key=lambda x: x[1], reverse=True)
-                        try:
-                            if w_content_majority_votes[0][0] == ans:
-                                base_score += 0.5
-                        except Exception as err:
-                            pass
-
-                full_rewards.append(base_score)
-            else:
-                pass_rates.append({})
-                full_rewards.append(0.0)
-        return full_rewards, pass_rates
-
-    async def _compute_score(self,
-                             batch_data_sources,
-                             batch_solution_str,
-                             batch_ground_truth,
-                             ):
-        penalty = defaultdict(dict)
-        for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-            for key, fn in self.get_penalties().items():
-                penalty[key][i] = fn(solution_str, ground_truth)
-
-        final_results = []
-
-        if self.add_difficulty_rewards:
-            difficulty_rewards, pass_rates = await self.get_difficulty_reward(
-                batch_data_sources,
-                batch_solution_str,
-                batch_ground_truth,
-                max_concurrent_requests=MAX_CONCURRENT,
-                repeat=self.difficulty_bon
-            )
-
-        for i in range(len(batch_solution_str)):
-            if self.add_difficulty_rewards:
-                score = difficulty_rewards[i]
-            else:
-                score = 0.0
-
-            penalty_log_str = []
-            for name, _penalty in penalty.items():
-                penalty_log_str.append(
-                    f'{name}={_penalty[i]:.2f}')
-                score += _penalty[i]
-
-            final_results.append(score)
-
-            if (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
-                log = True
-                log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
-            else:
-                log = False
-
-            difficulty = batch_ground_truth[i]["difficulty"]
-            domain = batch_ground_truth[i]["domain"]
-
-            if log:
-                print(
-                    f"--------------------------------{log_flag}--------------------------------")
-                print(
-                    f"【Solution】({domain})`{self.log_solution(batch_solution_str[i])}`")
-                try:
-                    print(
-                        f"【Ground Truth】({difficulty})`{self.log_ground_truth(batch_ground_truth[i])}`")
-                except Exception as err:
-                    pass
-                if self.add_difficulty_rewards:
-                    print(
-                        f'[Pass@{self.difficulty_bon}]={pass_rates[i]}|[Final Reward]={score:.3f}|Difficulty={difficulty_rewards[i]:.3f}|{"|".join(penalty_log_str)}\n')
-                else:
-                    print(
-                        f'[Pass@{self.difficulty_bon}]={pass_rates[i]}|[Final Reward]={score:.3f}|{"|".join(penalty_log_str)}\n')
-        return final_results
-
-    def compute_score(self,
-                      batch_data_sources,
-                      batch_solution_str,
-                      batch_ground_truth,
-                      ):
-        async def main():
-            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
-        return aio.run(main())
-
-    def log_solution(self, solution):
-        norm = self.doc2query_parse_solution_fn(solution)
-        if norm is None:
-            return repr(self.clip_string(solution))
-        return repr(self.format_question(norm[0], norm[1], norm[2]))
-
-    def format_question(self, question, options, answer):
-        options_str = "\n".join([f'{x}) {y}' for x, y in zip(
-            self.MULTICHOICE_LETTER, options)])
-        if answer is not None:
-            return f'Question: {question}\n\nOptions:\n{options_str}\n\nAnswer: {answer}'
-        else:
-            return f'Question: {question}\n\nOptions:\n{options_str}'
-
-    def prepare_question_for_test(self, question, options, lang_code):
-        if lang_code == "zh":
-            na = '以上都不对'
-        else:
-            na = 'None of the above'
-
-        new_options = copy.deepcopy(options)
-        if na not in new_options:
-            new_options.append(na)
-
-        if lang_code == "zh":
-            error = '题目存在错误（包括题目信息不完整 / 前提矛盾或问题设定有缺陷 / 表述不当等等各种错误 / 同时存在多个正确答案、无法单选）'
-        else:
-            error = 'The question contains errors (cases including incomplete conditions, contradictory statements, Cannot be determined/Unable to determine, insufficient data/contradictory premises or problem is flawed/ill-posed, multiple correct answers simultaneously or etc.)'
-
-        new_options.append(error)
-
-        options_str = "\n".join([f'{x}) {y}' for x, y in zip(
-            self.MULTICHOICE_LETTER, new_options)])
-
-        if lang_code == "zh":
-            return f'问题：{question}\n\n选项：\n{options_str}'
-        else:
-            return f'Question: {question}\n\nOptions:\n{options_str}'
-
-    def log_ground_truth(self, ground_truth):
-        return repr(self.format_question(
-            ground_truth["question"],
-            ground_truth["options"],
-            ground_truth["answer"])
-        )
-
-    def clip_string(self, s: str):
-        if len(s) > 1500:
-            return f'{s[:700]}... [省略] ...{s[-800:]}'
-        return s
-
-
-_qwq_longcot_doc2query_compute_score_train = QwQLongCoTDoc2QueryComputeScore(
-    split="train", add_difficulty_rewards=True)
-_qwq_longcot_doc2query_compute_score_valid = QwQLongCoTDoc2QueryComputeScore(
-    split="valid", add_difficulty_rewards=True)
-qwq_longcot_doc2query_compute_score_train = _qwq_longcot_doc2query_compute_score_train.compute_score
-qwq_longcot_doc2query_compute_score_valid = _qwq_longcot_doc2query_compute_score_valid.compute_score
+# class QwQLongCoTDoc2QueryComputeScore(object):
+#     MULTICHOICE_LETTER = ('A', 'B', 'C', 'D', 'E', 'F', 'G',
+#                           'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T')
+
+#     def __init__(self,
+#                  split="train", add_difficulty_rewards=False, difficulty_bon=8, parse_solution_fn=doc2query_parse_solution_fn):
+#         self.split = split
+#         self.doc2query_parse_solution_fn = parse_solution_fn
+
+#         self.format = Doc2QueryFormatReward(
+#             parse_solution_fn=self.doc2query_parse_solution_fn)
+#         self.question_similarity = QuestionSimilarity(
+#             parse_solution_fn=self.doc2query_parse_solution_fn, key="question")
+#         self.rule_base = RuleBasedOptionMatch(
+#             doc2query_parse_solution_fn=self.doc2query_parse_solution_fn)
+#         self.add_difficulty_rewards = add_difficulty_rewards
+#         self.difficulty_bon = difficulty_bon
+
+#         self.agent = Agent(**{
+#             "model": "qwen25_32B_instruct",
+#             "base_url": "http://10.130.131.138:8000/v1",
+#             "api_keys": "EMPTY",
+#             "request_kwargs": {
+#                 "temperature": 0.9,
+#                 "timeout": 360,
+#                 "max_tokens": 2048,
+#             },
+#         })
+#         self.verify_agent = self.agent
+
+#     def get_penalties(self) -> Dict[str, Callable]:
+#         return {
+#             "Format": self.format.get_penalty_or_reward,
+#             "QSim": self.question_similarity.get_penalty_or_reward,
+#             "RuleBased": self.rule_base.get_penalty_or_reward,
+#         }
+
+#     async def chat_completion_with_retry(self, url, data, max_retries=3, retry_delay=5, suffix="/generate"):
+#         retries = 0
+#         while retries < max_retries:
+#             try:
+#                 async with aiohttp.ClientSession() as session:
+#                     async with session.post(f'{url}{suffix}', json=data, timeout=aiohttp.ClientTimeout(total=2400)) as response:
+#                         response.raise_for_status()
+#                         return await response.json()
+#             except (aiohttp.ClientError, aiohttp.ClientResponseError) as e:
+#                 print(
+#                     f"{url}请求(数据总量={len(data)})失败，错误信息: {e}，重试第 {retries + 1} 次...")
+#                 retries += 1
+#                 if retries < max_retries:
+#                     await aio.sleep(retry_delay)
+#         print(f"{url}达到最大重试次数，请求失败。")
+#         return None
+
+#     async def run_tasks_in_queues(self, tasks):
+#         """将任务分成n个队列并行执行"""
+#         n = len(self.get_respondent_urls())
+
+#         # 创建n个队列
+#         queues = [[] for _ in range(n)]
+
+#         # 平均分配任务到各个队列
+#         for i, task in enumerate(tasks):
+#             queue_id = i % n
+#             queues[queue_id].append(task)
+
+#         parallel_tasks = []
+#         for i, queue in enumerate(queues):
+#             parallel_tasks.append(self.chat_completion_with_retry(
+#                 url=self.get_respondent_urls()[i],
+#                 data=queue
+#             ))
+#         flattened_results = []
+#         for f in tqdm.asyncio.tqdm.as_completed(parallel_tasks, dynamic_ncols=True, desc=f'[Generate {len(tasks)} Responses]'):
+#             results = await f
+#             for result in results:
+#                 flattened_results.append(result)
+
+#         return flattened_results
+
+#     def get_respondent_urls(self):
+#         suffixes = [
+#         ]
+#         return [f'http://{_}' for _ in suffixes]
+
+#     def response_postprocess(self, s):
+#         ans = None
+#         try:
+#             s = s.strip()
+#             conclusion = s.split("\n")[-1]
+#             conclusion = conclusion[conclusion.index(
+#                 "Answer:")+len("Answer:"):].strip()
+#             if conclusion not in self.MULTICHOICE_LETTER:
+#                 ans = None
+#             else:
+#                 ans = conclusion
+#         except Exception as err:
+#             ans = None
+
+#         if ans is None:
+#             matched = re.findall(r'Answer:\s*([A-W])', s)
+#             if len(matched) > 0:
+#                 return matched[0]
+#             return None
+#         return ans
+
+#     async def generate_responses(self, prompts):
+#         prompts_w_ids = [{"prompt": _, "uuid": uuid.uuid4().hex}
+#                          for _ in prompts]
+#         ids = [_["uuid"] for _ in prompts_w_ids]
+
+#         random.shuffle(prompts_w_ids)
+#         # prompts_w_ids = sorted(prompts_w_ids, key=lambda x: x["prompt"])
+#         results = await self.run_tasks_in_queues(prompts_w_ids)
+
+#         post_results = {}
+#         for result in results:
+#             if result and "uuid" in result and "response" in result:
+#                 post_results[result["uuid"]] = (
+#                     result["prompt"],
+#                     self.response_postprocess(result["response"])
+#                 )
+
+#         outputs = []
+#         for prompt, _uuid in zip(prompts, ids):
+#             if _uuid in post_results:
+#                 outputs.append(post_results[_uuid])
+#             else:
+#                 outputs.append((prompt, None))
+#         return outputs
+
+#     async def get_difficulty_reward(
+#             self,
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth, max_concurrent_requests=MAX_CONCURRENT, repeat=8):
+
+#         prompts = []
+#         wo_content_prompts, w_content_prompts = defaultdict(
+#             list), defaultdict(list)
+
+#         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+#             result = self.doc2query_parse_solution_fn(solution_str)
+#             if result is not None:
+#                 question, options, answer = result
+
+#                 lang_code = gt["lang_code"]
+#                 if lang_code == "zh":
+#                     instruct = '回答以下单项选择题。只有一个正确答案。你回应的最后一行必须采用 “Answer: $LETTER” 的格式（不带引号），其中 LETTER 为选项字母之一。你必须首先通过非常详细的思考过程逐步分析。'
+#                 else:
+#                     instruct = 'Answer the following multiple choice question. There is only one correct answer. The last line of your response should be in the format "Answer: $LETTER" (without quotes), where LETTER is one of the option letters. You must first think step by step with very detail thinking process.'
+
+#                 prompt = f'{instruct}\n\n' + self.prepare_question_for_test(
+#                     question, options, lang_code=lang_code)
+#                 wo_content_prompts[prompt].append(i)
+
+#                 prompts.extend([prompt]*repeat)
+#                 prompt = f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n' + f'{instruct}\n\n' + self.prepare_question_for_test(
+#                     question, options, lang_code=lang_code)
+#                 w_content_prompts[prompt].append(i)
+
+#                 prompts.extend([prompt]*repeat)
+
+#         _results = await self.agent.run(list(set(prompts)), max_concurrent_requests, desc=f"[Generate Responses {self.agent.model}]", postprocess_fns=[self.response_postprocess] * len(list(set(prompts))))
+#         results_mapper = defaultdict(list)
+#         for (k, v) in _results:
+#             results_mapper[k].append(v)
+
+#         wo_contents, w_contents = defaultdict(list), defaultdict(list)
+#         for k, v in results_mapper.items():
+#             if k in wo_content_prompts:
+#                 for index in wo_content_prompts[k]:
+#                     wo_contents[index].extend(v)
+#             elif k in w_content_prompts:
+#                 for index in w_content_prompts[k]:
+#                     w_contents[index].extend(v)
+#             else:
+#                 raise NotImplementedError
+
+#         full_rewards = []
+#         pass_rates = []
+
+#         for i in range(len(batch_solution_str)):
+#             if i in wo_contents:
+#                 base_score = 0.0
+
+#                 wo_content, w_content = wo_contents[i], w_contents[i]
+
+#                 wo_content = [_ for _ in wo_content if _ is not None]
+#                 w_content = [_ for _ in w_content if _ is not None]
+
+#                 # 正确回答
+#                 result = self.doc2query_parse_solution_fn(
+#                     batch_solution_str[i])
+#                 if result is not None:
+#                     _, _options, answer = result
+#                 else:
+#                     answer, _options = "", []
+#                 ans = answer
+
+#                 wo_content_correct = [_ for _ in wo_content if _ == ans]
+#                 w_content_correct = [_ for _ in w_content if _ == ans]
+
+#                 pass_rates.append({
+#                     "wo_content": f'{len(wo_content_correct)}/{len(wo_content)} {wo_content}, ans={ans}',
+#                     "w_content": f'{len(w_content_correct)}/{len(w_content)} {w_content}, ans={ans}',
+#                 })
+
+#                 try:
+#                     if wo_content.count(self.MULTICHOICE_LETTER[len(
+#                             _options)]) >= self.difficulty_bon/4:
+#                         base_score -= 3.0
+#                     if wo_content.count(self.MULTICHOICE_LETTER[len(
+#                             _options)+1]) >= self.difficulty_bon/4:
+#                         base_score -= 3.0
+
+#                     # 无参考 majority vote
+#                     wo_content_majority_votes = defaultdict(int)
+#                     for v in wo_content:
+#                         wo_content_majority_votes[v] += 1
+#                     wo_content_majority_votes = sorted(
+#                         wo_content_majority_votes.items(), key=lambda x: x[1], reverse=True)
+#                     if len(wo_content_majority_votes) > 0:
+#                         wo_majority_vote_ans = wo_content_majority_votes[0][0]
+#                         if ans == self.MULTICHOICE_LETTER[len(_options)] or ans == self.MULTICHOICE_LETTER[len(_options)+1]:
+#                             base_score -= 3.0
+#                 except Exception as err:
+#                     pass
+
+#                 # 不带参考 模型也有机会rollout对 否则问题可能过于长尾
+#                 if wo_content.count(ans) < self.difficulty_bon/4:  # 至少对两次
+#                     full_rewards.append(base_score)
+#                     continue
+
+#                 # 带参考 应该比 不带参考 显著好
+#                 if w_content.count(ans) - wo_content.count(ans) < self.difficulty_bon/4:
+#                     full_rewards.append(base_score)
+#                     continue
+
+#                 # 完全做不对
+#                 if len(wo_content_correct) == 0 or len(w_content_correct) == 0:
+#                     pass
+#                 # 全对
+#                 elif len(wo_content_correct) == len(wo_content):
+#                     pass
+#                 else:
+#                     # 无参考正确率在一定区间
+#                     if len(wo_content_correct) >= 1 and len(wo_content_correct)/len(wo_content) <= 0.75:
+#                         wo_acc = len(wo_content_correct)/len(wo_content)
+#                         # 难度越大越好(min_threshold=0.2)
+#                         base_score += 1-max(wo_acc, 0.2)
+
+#                         # 有/无参考正确率差异越大越好
+#                         diff = (len(w_content_correct) / len(w_content)
+#                                 ) - ((len(wo_content_correct))/(len(wo_content)))
+#                         diff = max(diff, 0.0)
+#                         base_score += diff
+
+#                         # 有参考 majority vote是正确答案加分
+#                         w_content_majority_votes = defaultdict(int)
+#                         for v in w_content:
+#                             w_content_majority_votes[v] += 1
+
+#                         w_content_majority_votes = sorted(
+#                             w_content_majority_votes.items(), key=lambda x: x[1], reverse=True)
+#                         try:
+#                             if w_content_majority_votes[0][0] == ans:
+#                                 base_score += 0.5
+#                         except Exception as err:
+#                             pass
+
+#                 full_rewards.append(base_score)
+#             else:
+#                 pass_rates.append({})
+#                 full_rewards.append(0.0)
+#         return full_rewards, pass_rates
+
+#     async def _compute_score(self,
+#                              batch_data_sources,
+#                              batch_solution_str,
+#                              batch_ground_truth,
+#                              ):
+#         penalty = defaultdict(dict)
+#         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+#             for key, fn in self.get_penalties().items():
+#                 penalty[key][i] = fn(solution_str, ground_truth)
+
+#         final_results = []
+
+#         if self.add_difficulty_rewards:
+#             difficulty_rewards, pass_rates = await self.get_difficulty_reward(
+#                 batch_data_sources,
+#                 batch_solution_str,
+#                 batch_ground_truth,
+#                 max_concurrent_requests=MAX_CONCURRENT,
+#                 repeat=self.difficulty_bon
+#             )
+
+#         for i in range(len(batch_solution_str)):
+#             if self.add_difficulty_rewards:
+#                 score = difficulty_rewards[i]
+#             else:
+#                 score = 0.0
+
+#             penalty_log_str = []
+#             for name, _penalty in penalty.items():
+#                 penalty_log_str.append(
+#                     f'{name}={_penalty[i]:.2f}')
+#                 score += _penalty[i]
+
+#             final_results.append(score)
+
+#             if (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+#                 log = True
+#                 log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
+#             else:
+#                 log = False
+
+#             difficulty = batch_ground_truth[i]["difficulty"]
+#             domain = batch_ground_truth[i]["domain"]
+
+#             if log:
+#                 print(
+#                     f"--------------------------------{log_flag}--------------------------------")
+#                 print(
+#                     f"【Solution】({domain})`{self.log_solution(batch_solution_str[i])}`")
+#                 try:
+#                     print(
+#                         f"【Ground Truth】({difficulty})`{self.log_ground_truth(batch_ground_truth[i])}`")
+#                 except Exception as err:
+#                     pass
+#                 if self.add_difficulty_rewards:
+#                     print(
+#                         f'[Pass@{self.difficulty_bon}]={pass_rates[i]}|[Final Reward]={score:.3f}|Difficulty={difficulty_rewards[i]:.3f}|{"|".join(penalty_log_str)}\n')
+#                 else:
+#                     print(
+#                         f'[Pass@{self.difficulty_bon}]={pass_rates[i]}|[Final Reward]={score:.3f}|{"|".join(penalty_log_str)}\n')
+#         return final_results
+
+#     def compute_score(self,
+#                       batch_data_sources,
+#                       batch_solution_str,
+#                       batch_ground_truth,
+#                       ):
+#         async def main():
+#             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+#         return aio.run(main())
+
+#     def log_solution(self, solution):
+#         norm = self.doc2query_parse_solution_fn(solution)
+#         if norm is None:
+#             return repr(self.clip_string(solution))
+#         return repr(self.format_question(norm[0], norm[1], norm[2]))
+
+#     def format_question(self, question, options, answer):
+#         options_str = "\n".join([f'{x}) {y}' for x, y in zip(
+#             self.MULTICHOICE_LETTER, options)])
+#         if answer is not None:
+#             return f'Question: {question}\n\nOptions:\n{options_str}\n\nAnswer: {answer}'
+#         else:
+#             return f'Question: {question}\n\nOptions:\n{options_str}'
+
+#     def prepare_question_for_test(self, question, options, lang_code):
+#         if lang_code == "zh":
+#             na = '以上都不对'
+#         else:
+#             na = 'None of the above'
+
+#         new_options = copy.deepcopy(options)
+#         if na not in new_options:
+#             new_options.append(na)
+
+#         if lang_code == "zh":
+#             error = '题目存在错误（包括题目信息不完整 / 前提矛盾或问题设定有缺陷 / 表述不当等等各种错误 / 同时存在多个正确答案、无法单选）'
+#         else:
+#             error = 'The question contains errors (cases including incomplete conditions, contradictory statements, Cannot be determined/Unable to determine, insufficient data/contradictory premises or problem is flawed/ill-posed, multiple correct answers simultaneously or etc.)'
+
+#         new_options.append(error)
+
+#         options_str = "\n".join([f'{x}) {y}' for x, y in zip(
+#             self.MULTICHOICE_LETTER, new_options)])
+
+#         if lang_code == "zh":
+#             return f'问题：{question}\n\n选项：\n{options_str}'
+#         else:
+#             return f'Question: {question}\n\nOptions:\n{options_str}'
+
+#     def log_ground_truth(self, ground_truth):
+#         return repr(self.format_question(
+#             ground_truth["question"],
+#             ground_truth["options"],
+#             ground_truth["answer"])
+#         )
+
+#     def clip_string(self, s: str):
+#         if len(s) > 1500:
+#             return f'{s[:700]}... [省略] ...{s[-800:]}'
+#         return s
+
+
+# _qwq_longcot_doc2query_compute_score_train = QwQLongCoTDoc2QueryComputeScore(
+#     split="train", add_difficulty_rewards=True)
+# _qwq_longcot_doc2query_compute_score_valid = QwQLongCoTDoc2QueryComputeScore(
+#     split="valid", add_difficulty_rewards=True)
+# qwq_longcot_doc2query_compute_score_train = _qwq_longcot_doc2query_compute_score_train.compute_score
+# qwq_longcot_doc2query_compute_score_valid = _qwq_longcot_doc2query_compute_score_valid.compute_score
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1734,71 +1734,6 @@ class GenerateQAV2FormatReward(PenaltyOrReward):
                 return -0.2
         except Exception as err:
             return -0.2
-
-
-class AnswerFeatureMatch(PenaltyOrReward):
-    def __init__(self, doc2query_parse_solution_fn=doc2query_parse_solution_fn):
-        self.doc2query_parse_solution_fn = doc2query_parse_solution_fn
-
-        self.keywords = [
-            # 数学与物理符号
-            '\\box', '$', '\\frac', '^', '_', '\\sqrt', '\\vec', '\\approx', '\\pm', '\\times', '\\cdot', '/', '=',
-            '(', ')', '[', ']', '→', '\\hat', '%', '\\Delta', '\\odot', '\\rm', '\\ddot', '\\mu', '\\epsilon',
-            '\\mathsf', '\\mathbf', '\\ln', '\\cos', '\\exp', '\\sum', '\\int', '\\partial', '\\infty',
-            '\\pi', '\\zeta', '\\omega', '\\lambda', '\\sigma', '\\rho', '\\theta', '×10^', '×10^-', 'E+', 'E-',
-
-            # 单位与物理量符号
-            'm', 'cm', 'mm', 'in', 'km', 'ft', 's', 'μs', 'ms', 'min', 'h', 'a', 'sec', 'N', 'N/m²', 'Pa', 'kg',
-            'kg/m³', 'm/s', 'm/s²', 'rad/s', 'J', 'kJ', 'GJ', 'W', 'W/m²', 'V', 'nV', 'kV', 'A', 'Ω', 'Hz', 'dB',
-            'C', 'F', 'mol', 'L', 'mL', 'g', 'g/kg', '(liquid)', '(gas)', 'U', 'rpm', 'ppm', 'ppb',
-
-
-            # 编号与结构符号
-            '[ ]', '{ }', '( )', '〈〉', 'Ⅰ', 'Ⅱ', 'III', 'IV', '(1)', '(2)', '①', '②', 'n=', 'N=', 'No.', '→',
-            '+', '=', 'H₂O', 'Mg²⁺',
-
-            # 通用修饰词与状态词
-            'approximately', 'around', 'about', 'respectively', 'perfectly', 'small', 'big', 'non-', 'anti-',
-            '-hinged', '-order', 'dr.', 'national', 'university', 'initial', 'final', 'mean', 'total', 'effective',
-            'original', 'renewed',
-
-            # 其他符号与特殊标记
-            '$', '¥', '€', '%', '‰', '\\', '|', '*', '^T', 'file a request for', 'accounting for', 'originating from'
-        ]
-
-    def get_common_keywords(self, answer):
-        common_keywords = [_ for _ in self.keywords if _ in answer]
-        return common_keywords
-
-    def get_penalty_or_reward(self, solution_str, ground_truth):
-        if ground_truth.get("answer", None) is None:
-            return 0.0
-        try:
-            raw_solution_str = solution_str
-            solution_str = self.doc2query_parse_solution_fn(solution_str)
-
-            if solution_str is None:
-                return 0.0
-
-            gt_ans = ground_truth["answer"]
-
-            question, answer, answer_type = solution_str
-            targets = set(self.get_common_keywords(gt_ans))
-            score = 0.0
-            # 共同词缀奖励
-            if len(targets) > 0:
-                gt_match, sol_match = 0, 0
-                for _ in targets:
-                    if _ in gt_ans:
-                        gt_match += 1
-                    if _ in answer:
-                        sol_match += 1
-                score += max((sol_match/gt_match * 0.02), 0.02)
-            else:
-                pass
-            return score
-        except Exception as err:
-            return 0.0
 
 
 def last_boxed_only_string(string):

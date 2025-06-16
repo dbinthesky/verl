@@ -21,7 +21,7 @@ from fabricate_qa import (
     # QwQLongCoTFabricateQAComputeScore,
     # qwq_longcot_fabricate_qa_compute_score_valid,
     # doc2query_parse_solution_fn,
-    # QuestionSimilarity,
+    QuestionSimilarity,
     # RuleBasedOptionMatch,
     # QwQLongCoTDoc2QueryComputeScore,
     # QwQLongCoTDoc2QueryV2ComputeScore,
@@ -33,36 +33,29 @@ from fabricate_qa import (
 )
 
 
-# def generate_random_string(n):
-#     all_characters = string.ascii_letters + string.digits + " "
-#     return ''.join(random.choice(all_characters) for _ in range(n))
+def generate_random_string(n):
+    all_characters = string.ascii_letters + string.digits + " "
+    return ''.join(random.choice(all_characters) for _ in range(n))
 
 
-# def load_criteria():
-#     filename = "/cpfs01/shared/llm_ddd/tongjian/verl/rewards/fabricate_qa_criteria.json"
-#     batch_solution_str, batch_ground_truth = [], []
+def load_fabricate_aio_data(num=100, format="wrong_question"):
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0616.parquet"
+    batch_solution_str, batch_ground_truth = [], []
 
-#     with open(filename, "rt") as f:
-#         data = json.load(f)
-#     batch_solution_str, batch_ground_truth = data["batch_solution_str"], data["batch_ground_truth"]
-#     return batch_solution_str, batch_ground_truth
-
-
-# def load_qwq_fabricate_qa_data(num=100):
-#     filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa/super_gpqa_aio_noneasy_test_0517.parquet"
-#     batch_solution_str, batch_ground_truth = [], []
-
-#     df = pd.read_parquet(filename)
-#     for _, row in df.iterrows():
-#         row = row.to_dict()
-#         batch_ground_truth.append(row["reward_model"])
-#         gt = row["reward_model"]["authentic_question"]
-
-#         batch_solution_str.append(
-#             f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
-#         if _ > num-1:
-#             break
-#     return batch_solution_str, batch_ground_truth
+    df = pd.read_parquet(filename)
+    for _, row in df.iterrows():
+        row = row.to_dict()
+        if format == "wrong_question":
+            gt = row["reward_model"]["question"]
+            if gt is not None:
+                batch_solution_str.append(
+                    f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
+                batch_ground_truth.append(row["reward_model"])
+            else:
+                continue
+        if _ > num-1:
+            break
+    return batch_solution_str, batch_ground_truth
 
 
 # def load_doc2query_v2(num=40):
@@ -87,75 +80,6 @@ from fabricate_qa import (
 #             batch_solution_str.append(
 #                 f'<think>***</think><question>\nQuestion: {question}\n\nAnswer: {ans}\n\nAnswer Type: NumericalAnswer\n</question><｜end▁of▁sentence｜>')
 #     return batch_solution_str, batch_ground_truth
-
-
-# def load_doc2query(num=40):
-#     path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_iscalc_high_equation_mix_0602"
-#     # path = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query/super_gpqa_test"
-#     batch_solution_str, batch_ground_truth = [], []
-
-#     df = pd.read_parquet(path)
-#     for i, row in df.iterrows():
-#         row = row.to_dict()
-#         batch_ground_truth.append(row["reward_model"])
-#         gt = row["reward_model"]
-
-#         if i > num-1:
-#             break
-#         try:
-#             options = []
-#             for x, y in zip(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P"], gt["options"]):
-#                 options.append(f'{x}) {y}')
-#             options = "\n".join(options)
-#             ans_letter = gt["options"].tolist().index(gt["answer"])
-#             ans_letter = ["A", "B", "C", "D", "E", "F", "G", "H",
-#                           "I", "J", "K", "L", "M", "N", "O", "P"][ans_letter]
-#             # batch_solution_str.append(
-#             #     '<think>\nOkay, so I need to create a question. Let me start by thinking about what kind of question I can come up with. The user\'s prompt says the question should be about something I\'m an expert in, which is creating a question. Hmm, that\'s a bit meta. Maybe I should think of a common problem-solving scenario or a favorite topic. \n\nWait, maybe a common math problem? Like, how to find the roots of a quadratic equation? But maybe something more engaging. Alternatively, perhaps a riddle? Like, "Why was the math book sad?" But that\'s a bit too open-ended.\n\nAlternatively, maybe something that requires some logical thinking. Let me think. Maybe a puzzle involving sequences. Like, "What is the next... [省略] ...ly, "What is the value of 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2?" which is 20. \n\nHmm. \n\nHmm, I think I\'ll go with the question "What is the value of 2^3 + 3^2?" as it\'s straightforward and requires basic exponent arithmetic. \n\nAlternatively, the question could be: "What is the value of the sum of the first 10 positive integers?" but that requires remembering the formula. \n\nHmm. Maybe the question is better as "What is the value of 2^3 * 2^2?" which is 8 * 4 = 32. \n\nHmm. \n\nHmm, after considering various options, I think the question "What is the value of 2^3 + 3^2?" is good because it\'s concise, requires applying exponents, and is a common question in math education. \n\nTherefore, I\'ll present that as my question.\n</think>\n\n<question>\nWhat is the value of \\(2^3 + 3^2\\)?\n</question><|im_end|>'
-#             # )
-#             batch_solution_str.append(
-#                 f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\n{options}\n\nAnswer: {ans_letter}\n</question><｜end▁of▁sentence｜>')
-#             # batch_solution_str.append(
-#             #     f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\n\nAnswer: {ans_letter}\n</question>')
-#         except Exception as err:
-#             # raise NotImplementedError
-#             # batch_solution_str.append(
-#             #     '<think>\nOkay, so I need to create a question. Let me start by thinking about what kind of question I can come up with. The user\'s prompt says the question should be about something I\'m an expert in, which is creating a question. Hmm, that\'s a bit meta. Maybe I should think of a common problem-solving scenario or a favorite topic. \n\nWait, maybe a common math problem? Like, how to find the roots of a quadratic equation? But maybe something more engaging. Alternatively, perhaps a riddle? Like, "Why was the math book sad?" But that\'s a bit too open-ended.\n\nAlternatively, maybe something that requires some logical thinking. Let me think. Maybe a puzzle involving sequences. Like, "What is the next... [省略] ...ly, "What is the value of 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2?" which is 20. \n\nHmm. \n\nHmm, I think I\'ll go with the question "What is the value of 2^3 + 3^2?" as it\'s straightforward and requires basic exponent arithmetic. \n\nAlternatively, the question could be: "What is the value of the sum of the first 10 positive integers?" but that requires remembering the formula. \n\nHmm. Maybe the question is better as "What is the value of 2^3 * 2^2?" which is 8 * 4 = 32. \n\nHmm. \n\nHmm, after considering various options, I think the question "What is the value of 2^3 + 3^2?" is good because it\'s concise, requires applying exponents, and is a common question in math education. \n\nTherefore, I\'ll present that as my question.\n</think>\n\n<question>\nWhat is the value of \\(2^3 + 3^2\\)?\n</question><|im_end|>'
-#             # )
-#             # batch_solution_str.append(
-#             #     f'<think>***</think><question>\nQuestion: {gt["question"]}\n\nOptions:\nA) {gt["answer"]}\nAnswer: A\n</question><｜end▁of▁sentence｜>')
-#             batch_solution_str.append(
-#                 f'<think>***</think><question>\nQuestion: Using a 0.1000 mol/L NaOH solution to titrate a 0.1000 mol/L formic acid solution, what is the pH at the stoichiometric point? \n\nOptions:\nA) 5.67\nB) 8.23\nC) 9.88\nD) 12.46\nE) 10.11\nF) 11.07\nG) 7.22\nH) 6.35\nI) 3.47\bJ) 3.47\n\nAnswer: A\n</question><｜end▁of▁sentence｜>')
-#     return batch_solution_str, batch_ground_truth
-
-
-# async def create_mock_data():
-#     df = pd.read_parquet(
-#         "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_qa_criteria/super_gpqa_aio_noneasy_train_0513_criteria_test_0514.parquet")
-
-#     prompt_mapper = {}
-#     for _, row in df.iterrows():
-#         row = row.to_dict()
-#         prompt = f'{row["prompt"][0]["content"]}\n\n\n{row["prompt"][1]["content"]}'
-#         prompt_mapper[prompt] = row
-
-#     prompts = prompt_mapper.keys()
-
-#     batch_solution_str, batch_ground_truth = [], []
-
-#     results = await agent.run(prompts, 32, desc="[MOCK DATASET]", postprocess_fns=[lambda x: x]*len(prompts))
-#     for prompt, response in results:
-#         example = prompt_mapper[prompt]
-#         rm = example["reward_model"]
-#         rm = {
-#             "positive": rm["positive"],
-#             "negatives": rm["negatives"].tolist(),
-#         }
-#         batch_ground_truth.append(rm)
-#         batch_solution_str.append(response)
-#     with open("fabricate_qa_criteria.json", "wt") as f:
-#         json.dump({"batch_ground_truth": batch_ground_truth,
-#                   "batch_solution_str": batch_solution_str}, f, ensure_ascii=False)
 
 
 # class TestFabricateQA(unittest.TestCase):
@@ -205,133 +129,6 @@ from fabricate_qa import (
 #         )
 #         print(results)
 #         print(f'Finish {time.time()-bg}')
-
-
-# class TestCriteria(unittest.TestCase):
-#     def test_criteria_get_score(self):
-#         batch_solution_str, batch_ground_truth = load_criteria()
-
-#         x, y = [], []
-#         for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
-#             criteria = criteria_parse_solution_fn(solution_str)
-#             if criteria is not None:
-#                 x.append(random.choice(gt["negatives"]))
-#                 y.append(criteria)
-
-#         async def main():
-#             print(await criteria_get_score(x, y))
-#         aio.run(main())
-
-#     def test_decode_to_question(self):
-#         batch_solution_str, batch_ground_truth = load_criteria()
-
-#         x, y = [], []
-#         for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
-#             criteria = criteria_parse_solution_fn(solution_str)
-#             if criteria is not None:
-#                 x.append(random.choice(gt["negatives"]))
-#                 y.append(criteria)
-
-#         y = y[:10]
-
-#         async def main():
-#             print(await decode_to_question(y))
-#         aio.run(main())
-
-#     def test_question_similarity(self):
-#         batch_solution_str, batch_ground_truth = load_criteria()
-
-#         x, y = [], []
-#         for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
-#             criteria = criteria_parse_solution_fn(solution_str)
-#             if criteria is not None:
-#                 x.append(gt["positive"])
-#                 y.append(random.choice(gt["negatives"]))
-
-#         async def main():
-#             print(await question_similarity(x, y))
-#         aio.run(main())
-
-#     def test_calc_compression_ratio_reward(self):
-#         task = QwQLongCoTCreateCriteriaComputeScore()
-#         batch_solution_str, batch_ground_truth = load_criteria()
-
-#         async def main():
-#             print(await task.calc_compression_ratio_reward(
-#                 [None]*len(batch_solution_str),
-#                 batch_solution_str,
-#                 batch_ground_truth))
-#         aio.run(main())
-
-#     def test_calc_classify_acc_reward(self):
-#         task = QwQLongCoTCreateCriteriaComputeScore(split="valid")
-#         batch_solution_str, batch_ground_truth = load_criteria()
-#         batch_solution_str = batch_solution_str[:10]
-#         batch_ground_truth = batch_ground_truth[:10]
-
-#         # async def main():
-#         #     print(await qwq_longcot_create_criteria_compute_score_valid(
-#         #         [None]*len(batch_solution_str),
-#         #         batch_solution_str,
-#         #         batch_ground_truth))
-#         # aio.run(main())
-#         qwq_longcot_create_criteria_compute_score_valid(
-#             [None]*len(batch_solution_str),
-#             batch_solution_str,
-#             batch_ground_truth)
-
-
-# def load_criteria_infer():
-#     filename = "/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/super_gpqa_aio_noneasy_train_0513_criteria_output.jsonl"
-
-#     def preprocess(batch):
-#         batch_solution_str, batch_ground_truth = [], []
-#         for elem in batch:
-#             batch_solution_str.append(
-#                 elem["self_improvement"]["responses"][0]["response"]["text"])
-#             batch_ground_truth.append(
-#                 {
-#                     "positive": elem["self_improvement"]["question"],
-#                     "negatives": elem["self_improvement"]["fabricate_questions"]
-#                 }
-#             )
-#         return batch_solution_str, batch_ground_truth, batch
-
-#     batch = []
-#     with open(filename, "rt") as f:
-#         for line in f:
-#             example = json.loads(line)
-#             batch.append(example)
-
-#             if len(batch) == 1024:
-#                 yield preprocess(batch)
-#                 batch = []
-#     if len(batch):
-#         yield preprocess(batch)
-
-
-# async def offline_compute_score():
-#     with open("/cpfs01/shared/llm_ddd/tongjian/rl/hard_case_mixed/gpqa/_super_gpqa_aio_noneasy_train_0513_criteria_output2.jsonl", "wt") as g:
-#         max_concurrent_requests = 256
-#         task = QwQLongCoTCreateCriteriaComputeScore(split="train")
-#         for batch_solution_str, batch_ground_truth, batch_examples in load_criteria_infer():
-#             data_sources = [None] * len(batch_solution_str)
-#             score1, score2 = await task.calc_classify_acc_reward(
-#                 data_sources,
-#                 batch_solution_str, batch_ground_truth,
-#                 max_concurrent_requests=max_concurrent_requests,
-#                 return_single_score=False
-#             )
-#             calc_compression_ratio_reward = await task.calc_compression_ratio_reward(
-#                 data_sources,
-#                 batch_solution_str, batch_ground_truth,
-#                 max_concurrent_requests=max_concurrent_requests
-#             )
-#             for example, _score1, _score2, _score3 in zip(batch_examples, score1, score2, calc_compression_ratio_reward):
-#                 example["calc_compression_ratio_reward"] = _score3
-#                 example["classify_acc_reward"] = _score1
-#                 example["gt_match_score"] = _score2
-#                 g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
 
 
 class TestFabricate(unittest.TestCase):
@@ -395,8 +192,14 @@ class TestFabricate(unittest.TestCase):
         self.assertTrue(custom_qa_parse_solution_fn(
             "<think>\nOkay, let me try to create a question based on the given requirements. The respondent is an undergraduate with knowledge in calculus, vector operations, central forces, work done by a force, position and velocity vectors. The skills include integrating velocity to find position, calculating dot products, applying the work-energy theorem, and understanding central force properties. The difficulty is advanced, so I need to incorporate multiple steps and potential distractors.\n\nFirst, I need to think of a scenario that combines these elements. Maybe a physics problem involving a particle moving under a central force, where they have to calculate work done or perhaps find a position vect... [省略] ... places  correct.\n\nTherefore, the final question is as constructed above, with the answer being 479.366 kJ. Let me adjust the question\'s answer in the output.\n</think>\n\n<question>\nQuestion: A researcher compresses an ideal gas in a laboratory. Initially, the gas has a pressure of 3 bar, a volume of 2.5 m³, and a temperature of 25°C. After isobaric compression, the volume is reduced to 1.2 m³, and the temperature is measured as 158°F. The molar specific heat at constant pressure (Cp) for the gas is 35.2 J/mol·K. During the process, 500 J of non-volume work is done on the gas. Calculate the change in enthalpy (ΔH) of the gas in kJ, rounded to three decimal places. (Note: The ideal gas constant R = 8.314 J/mol·K.)\nAnswer: 479.366 kJ\nAnswer Type: WithUnitSymbol\n</question><|im_end|>"))
 
-#     def test_question_similarity(self):
-#         batch_solution_str, batch_ground_truth = load_doc2query_v2()
+    def test_question_similarity(self):
+        batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
+            format="wrong_question", num=100)
+
+        scorer = QuestionSimilarity(custom_qa_parse_solution_fn)
+        for response, gt in zip(batch_solution_str, batch_ground_truth):
+            score = scorer.get_penalty_or_reward(response, gt)
+            self.assertTrue(score > 0.5)
 
 #         x, y = [], []
 #         task = QwQLongCoTDoc2QueryV2ComputeScore(split="valid")
