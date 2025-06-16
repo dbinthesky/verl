@@ -1357,7 +1357,7 @@ qwq_longcot_doc2query_compute_score_valid = _qwq_longcot_doc2query_compute_score
 # Doc2Query V2
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def doc2query_v2_parse_solution_fn(solution_str: str, remove_option_letter=True):
+def custom_qa_parse_solution_fn(solution_str: str, remove_option_letter=True):
     if solution_str.count("</question>") > 1:
         return None
 
@@ -1703,7 +1703,7 @@ class WithUnitSymbol(object):
 
 
 class GenerateQAV2FormatReward(PenaltyOrReward):
-    def __init__(self, doc2query_parse_solution_fn=doc2query_v2_parse_solution_fn):
+    def __init__(self, doc2query_parse_solution_fn=custom_qa_parse_solution_fn):
         self.doc2query_parse_solution_fn = doc2query_parse_solution_fn
 
     def get_penalty_or_reward(self, solution_str, ground_truth):
@@ -1854,7 +1854,7 @@ def extract_boxed_answer(solution: str) -> str:
 
 # class QwQLongCoTDoc2QueryV2ComputeScore(QwQLongCoTDoc2QueryComputeScore):
 #     def __init__(self,
-#                  split="train", add_difficulty_rewards=False, difficulty_bon=8, parse_solution_fn=doc2query_v2_parse_solution_fn):
+#                  split="train", add_difficulty_rewards=False, difficulty_bon=8, parse_solution_fn=custom_qa_parse_solution_fn):
 #         super().__init__(
 #             split=split, add_difficulty_rewards=add_difficulty_rewards, difficulty_bon=difficulty_bon, parse_solution_fn=parse_solution_fn
 #         )
@@ -2362,7 +2362,7 @@ def extract_boxed_answer(solution: str) -> str:
 # """
 
 #     def __init__(self,
-#                  split="train", add_difficulty_rewards=False, difficulty_bon=8, parse_solution_fn=doc2query_v2_parse_solution_fn):
+#                  split="train", add_difficulty_rewards=False, difficulty_bon=8, parse_solution_fn=custom_qa_parse_solution_fn):
 #         super().__init__(
 #             split=split, add_difficulty_rewards=add_difficulty_rewards, difficulty_bon=difficulty_bon, parse_solution_fn=parse_solution_fn
 #         )
