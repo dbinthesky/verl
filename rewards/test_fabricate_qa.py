@@ -275,16 +275,27 @@ class TestFabricate(unittest.TestCase):
                 run_args={
                     "w/o_content": {
                         "model": task.weak_agent,
-                        "repeat": 24,
+                        "repeat": 8,
                         "fn": task.respond_wo_context,
                         "desc": 'w/o ctx'
                     },
                     "w_content": {
                         "model": task.strong_agent,
-                        "repeat": 6,
+                        "repeat": 2,
                         "fn": task.respond_w_context,
                         "desc": 'w ctx'
                     }
+                }, debug=False,
+                metric_args={
+                    "advantage": 'w_content',
+                    "weakness": 'w/o_content',
+                    "advantage_oversimplified_threshold": 1.0,
+                    "weakness_oversimplified_threshold": 7/8,
+                    # "advantage_overcomplex_threshold": 1/2,
+                    "advantage_overcomplex_threshold": 0.0,
+                    "weakness_overcomplex_threshold": 1/8,
+                    "advantage_threshold": 1e-5,
+                    # "confidence_bonus": 
                 }
             )
             print(results)

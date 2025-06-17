@@ -1951,16 +1951,18 @@ class Doc2QueryV2ComputeScore(object):
             "QSim": self.question_similarity.get_penalty_or_reward,
         }
 
-    def response_postprocess(self, s):
+    def response_postprocess(self, s, debug=False):
+        if debug:
+            return s
         try:
             s = s.strip()
             conclusion = s
             if "最终答案是" in conclusion:
-                conclusion = conclusion[conclusion.index(
+                conclusion = conclusion[conclusion.rindex(
                     "最终答案是")+len("最终答案是"):].strip()
                 return conclusion
             else:
-                conclusion = conclusion[conclusion.index(
+                conclusion = conclusion[conclusion.rindex(
                     "final answer is")+len("final answer is"):].strip()
                 return conclusion
         except Exception as err:
@@ -1974,115 +1976,297 @@ class Doc2QueryV2ComputeScore(object):
             except Exception as err:
                 raise PostprocessError(f'parse conclusion failure')
 
-#     def verify(self, conclusion, answer, answer_type):
-#         if answer_type == "WithUnitSymbol":
-#             score = 1.0 if answer in conclusion else 0.0
-#             if score > 0:
-#                 return score
-#             return 1.0 if all(part in conclusion for part in answer.split(" ")) else 0.0
-#         elif answer_type == "NumericalAnswer":
-#             gt = extract_answer(answer)
-#             if gt is None:
-#                 return 0.0
-#             if extract_answer(conclusion) == gt:
-#                 return 1.0
-#             else:
-#                 return 0.0
+    def verify_single_response(self, conclusion, answer, answer_type):
+        if answer_type == "WithUnitSymbol":
+            score = 1.0 if answer in conclusion else 0.0
+            if score > 0:
+                return score
+            return 1.0 if all(part in conclusion for part in answer.split(" ")) else 0.0
+        elif answer_type == "NumericalAnswer":
+            gt = extract_answer(answer)
+            if gt is None:
+                return 0.0
+            if extract_answer(conclusion) == gt:
+                return 1.0
+            else:
+                return 0.0
 
-#     async def verify_results(self, verify_queue, batch_solution_str, max_concurrent_requests, split_names):
-#         def validate_result(response):
-#             s = response
-#             try:
-#                 conclusion = s.strip()
+    async def verify_results(self, verify_queue, batch_solution_str, max_concurrent_requests, split_names):
+        def validate_result(response):
+            s = response
+            try:
+                conclusion = s.strip()
 
-#                 conclusion = conclusion[conclusion.index(
-#                     "```json")+len("```json"):].strip()
-#                 conclusion = conclusion[:conclusion.index("```")].strip()
-#                 try:
-#                     conclusion = json.loads(conclusion)
-#                     if conclusion["判断结果"] not in ("正确", "错误"):
-#                         raise PostprocessError(f'corrupt')
-#                     return conclusion["判断结果"] == "正确"
-#                 except Exception as err:
-#                     try:
-#                         conclusion = re.findall(
-#                             r'\"判断结果\": \"(.*)\"', conclusion)[0]
-#                         if not conclusion in ("正确", "错误"):
-#                             raise PostprocessError(f'corrupt')
-#                         return conclusion == "正确"
-#                     except Exception as err:
-#                         raise PostprocessError(f'{err}')
-#             except Exception as err:
-#                 raise PostprocessError(f'{err}')
+                conclusion = conclusion[conclusion.index(
+                    "```json")+len("```json"):].strip()
+                conclusion = conclusion[:conclusion.index("```")].strip()
+                try:
+                    conclusion = json.loads(conclusion)
+                    if conclusion["判断结果"] not in ("正确", "错误"):
+                        raise PostprocessError(f'corrupt')
+                    return conclusion["判断结果"] == "正确"
+                except Exception as err:
+                    try:
+                        conclusion = re.findall(
+                            r'\"判断结果\": \"(.*)\"', conclusion)[0]
+                        if not conclusion in ("正确", "错误"):
+                            raise PostprocessError(f'corrupt')
+                        return conclusion == "正确"
+                    except Exception as err:
+                        raise PostprocessError(f'{err}')
+            except Exception as err:
+                raise PostprocessError(f'{err}')
 
-#         verify_prompt = """### **基于标准答案判断回答是否正确**
-# 任务描述：请根据提供的**题目**、**用户回答（答案部分）**和**标准答案**，判断用户回答是否正确，并按照指定格式输出结果。需严格比对答案，若用户回答与标准答案**内容一致**，则判定为正确，否则为错误。
+        verify_prompt = """### **基于标准答案判断回答是否正确**
+任务描述：请根据提供的**题目**、**用户回答（答案部分）**和**标准答案**，判断用户回答是否正确，并按照指定格式输出结果。需严格比对答案，若用户回答与标准答案**内容一致**，则判定为正确，否则为错误。
 
-# **必须与标准答案完全一致**（含数值、单位、符号等），如果数值是科学记数法或者是小数，只允许非常小的计算误差（有效计算部分最后一位），否则判错。 |
+**必须与标准答案完全一致**（含数值、单位、符号等），如果数值是科学记数法或者是小数，只允许非常小的计算误差（有效计算部分最后一位），否则判错。 |
 
-# #### 输出要求
-# ```json
-# {
-# "判断结果": "正确/错误",
-# }
-# ```
+#### 输出要求
+```json
+{
+"判断结果": "正确/错误",
+}
+```
 
-# 现在对下面的回答判断正确性
-# """
+现在对下面的回答判断正确性
+"""
 
-#         verify_template = """
-# #### **输入：**
-# ##### 题目
-# ```
-# {question}
-# ```
+        verify_template = """
+#### **输入：**
+##### 题目
+```
+{question}
+```
 
-# ##### 用户回答（答案部分）
-# {conclusion}
+##### 用户回答（答案部分）
+{conclusion}
 
-# ##### 标准答案
-# {answer}
+##### 标准答案
+{answer}
 
-# #### **输出：**
-# """
-#         correctness = {name: defaultdict(list) for name in split_names}
+#### **输出：**
+"""
+        correctness = {name: defaultdict(list) for name in split_names}
 
-#         verify_mapper = defaultdict(list)
+        verify_mapper = defaultdict(list)
 
-#         for example in verify_queue:
-#             index = example[0]
-#             sol_str = batch_solution_str[index]
-#             question, answer, answer_type = self.doc2query_parse_solution_fn(
-#                 sol_str)
-#             # 基于规则解析答案
-#             if example[2] is None:
-#                 correctness[example[1]][example[0]].append(0.0)
-#             else:
-#                 correct = self.verify(example[2], answer, answer_type)
+        for example in verify_queue:
+            index, ans, name, prompt, conclusion = example
+            question, answer, answer_type = ans
 
-#                 if correct > 0.0:
-#                     correctness[example[1]][example[0]].append(correct)
-#                 else:
-#                     # verify_mapper
-#                     instruct = f'仔细一步步思考，并回答下面的问题。你回应的最后一行必须采用 “... 最终答案是 $ANSWER 的格式（不带引号），其中 $ANSWER 的格式要求需要满足下面的说明。\n\n{self.get_answer_format(answer_type, "zh")}'
-#                     prompt = f'{instruct}\n\n' + question
-#                     eval_prompt = verify_prompt + "\n\n" + verify_template.format(
-#                         question=prompt,
-#                         answer=answer,
-#                         conclusion=example[2]
-#                     )
-#                     verify_mapper[eval_prompt].append((example[0], example[1]))
+            # 基于规则解析答案
+            if conclusion is None:
+                correctness[name][index].append(0.0)
+            else:
+                correct = self.verify_single_response(
+                    conclusion, answer, answer_type)
 
-#         _results = await self.verify_agent.run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.verify_agent.model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),))
+                if correct > 0.0:
+                    correctness[name][index].append(correct)
+                else:
+                    instruct = f'仔细一步步思考，并回答下面的问题。你回应的最后一行必须采用 “... 最终答案是 $ANSWER 的格式（不带引号），其中 $ANSWER 的格式要求需要满足下面的说明。\n\n{self.get_answer_format(answer_type, "zh")}'
+                    prompt = f'{instruct}\n\n{question}'
+                    eval_prompt = verify_prompt + "\n\n" + verify_template.format(
+                        question=prompt,
+                        answer=answer,
+                        conclusion=conclusion
+                    )
+                    verify_mapper[eval_prompt].append((index, name))
 
-#         results_mapper = defaultdict(list)
-#         for (k, v) in _results:
-#             for meta in verify_mapper[k]:
-#                 index, _type = meta
-#                 if v is not None:
-#                     correctness[_type][index].append(1.0 if v else 0.0)
+        _results = await self.verify_agent.run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.verify_agent.model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),))
 
-#         return correctness
+        results_mapper = defaultdict(list)
+        for (k, v) in _results:
+            for meta in verify_mapper[k]:
+                index, name = meta
+                if v is not None:
+                    correctness[name][index].append(1.0 if v else 0.0)
+
+        return correctness
+
+    def get_answer_format(self, answer_type, lang_code):
+        return {
+            "WithUnitSymbol": WithUnitSymbol_zh,
+            "NumericalAnswer": NumericalAnswer_zh
+        }[answer_type] if lang_code == "zh" else {
+            "WithUnitSymbol": WithUnitSymbol_en,
+            "NumericalAnswer": NumericalAnswer_en
+        }[answer_type]
+
+    def get_instruct(self, gt, answer_type):
+        lang_code = gt["lang_code"]
+        if lang_code == "zh":
+            instruct = f'仔细一步步思考，并回答下面的问题。你回应的最后一行必须采用 “最终答案是 $ANSWER 的格式（不带引号），其中 $ANSWER 的格式要求需要满足下面的说明。\n\n{self.get_answer_format(answer_type, lang_code)}'
+        else:
+            instruct = f'Think step by step in detail and answer the following questions. The last line of your response must be in the format "The final answer is $ANSWER" (without quotes), where the format requirements for $ANSWER need to meet the instructions below.\n\n{self.get_answer_format(answer_type, lang_code)}'
+        return instruct
+
+    def respond_wo_context(self, question, answer_type, gt):
+        _if = self.get_instruct(gt, answer_type)
+        return f'{_if}\n\n{question}'
+
+    def respond_w_context(self, question, answer_type, gt):
+        _if = self.get_instruct(gt, answer_type)
+        return f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n{_if}\n\n{question}'
+
+    async def get_difficulty_reward(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            run_args=None,
+            metric_args=None,
+            max_concurrent_requests=MAX_CONCURRENT,
+            debug=False):
+
+        assert metric_args is not None, f'`metric_args` missed'
+        assert run_args is not None, f'`run_args` missed'
+
+        correctness = await self.simulate_respondent(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            run_args=run_args,
+            max_concurrent_requests=max_concurrent_requests,
+            debug=debug
+        )
+
+        full_rewards = []
+        pass_rates = []
+
+        for i in range(len(batch_solution_str)):
+            if i in list(correctness.values())[0]:
+                base_score = 0.0
+                pass_rates.append({
+                    k: f'{np.sum(v[i])}/{len(v[i])}' for k, v in correctness.items()
+                })
+
+                try:
+                    adv_name, weak_name = metric_args["advantage"], metric_args["weakness"]
+                    adv, weak = correctness[adv_name][i], correctness[weak_name][i]
+
+                    print("fucking!!!", adv, weak)
+                    print(pass_rates[-1])
+                    if len(weak) == 0 or len(adv) == 0:
+                        full_rewards.append(base_score)
+                        continue
+
+                    # 题目过难
+                    if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
+                        print(1)
+                        full_rewards.append(base_score)
+                        continue
+
+                    # 题目过易
+                    if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
+                        print(2)
+                        full_rewards.append(base_score)
+                        continue
+
+                    # # adv 应该比 weakness 显著好
+                    # if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
+                    #     print(3)
+                    #     full_rewards.append(base_score)
+                    #     continue
+
+                    # # 置信度奖励
+                    # if np.mean(w_content_scores) < 0.3:
+
+                    # 难度奖励
+                    def calc_difficulty(scores, total_attempts):
+                        return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
+
+                    print(calc_difficulty(
+                        weak, run_args[weak_name]["repeat"]))
+                    print(calc_difficulty(adv, run_args[adv_name]["repeat"]))
+
+                    # difficulty = 0.0
+                    # difficulty1 = (1.0-math.log2(1+np.sum(weak_scores))/math.log2(
+                    #     1+weak_bon))
+
+                    # difficulty += difficulty1
+                    # if np.mean(strong_scores) > 0.:
+                    #     difficulty2 = (1.0-math.log2(1+np.sum(strong_scores)) /
+                    #                    math.log2(1+strong_bon))
+                    #     difficulty += difficulty2
+
+                    #                     #     full_rewards.append(base_score)
+                    #                     #     continue
+
+                    #                     # 总分计算
+                    #                     difficulty1 = (1.0-math.log2(1+np.sum(wo_content_scores))/math.log2(
+                    #                         1+wo_content_bon))
+                    #                     difficulty2 = (1.0-math.log2(1+np.sum(w_content_scores)) /
+                    #                                    math.log2(1+w_content_bon))
+
+                    #                     confidence = (1.0 if np.mean(w_content_scores)
+                    #                                   > 0.5 else np.mean(w_content_scores))
+                    #                     base_score = [difficulty1, difficulty2, confidence]
+                except Exception as err:
+                    print(f'[ERROR] {err}')
+                    pass
+
+        #                 full_rewards.append(base_score)
+        #             else:
+        #                 pass_rates.append({})
+        #                 full_rewards.append(0.0)
+        #         return full_rewards, pass_rates
+
+    async def simulate_respondent(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            run_args=None,
+            max_concurrent_requests=MAX_CONCURRENT,
+            debug=False):
+        assert run_args is not None
+
+        prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
+        answer_map = {}
+
+        for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            result = self.parse_solution_fn(solution_str)
+            if result is not None:
+                question, answer, answer_type = result
+                answer_map[i] = (question, answer, answer_type)
+                ans_format_strict = self.format.get_penalty_or_reward(
+                    solution_str, gt
+                )
+                # 答案格式不符合规范
+                if ans_format_strict < 0.0:
+                    continue
+
+                lang_code = gt["lang_code"]
+                for name, v in run_args.items():
+                    fn = v["fn"]
+                    _prompt = fn(question, answer_type, gt)
+                    prompt2index[name][_prompt].append(i)
+        tasks = []
+        task_names = []
+        for name, v in prompt2index.items():
+            prompts = list(v.keys()) * run_args[name]["repeat"]
+            tasks.append(run_args[name]["model"].run(
+                prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]',
+                postprocess_fns=[
+                    partial(self.response_postprocess, debug=debug)] * len(prompts)
+            ))
+            task_names.append(name)
+        respond_questions = await aio.gather(*tasks)
+
+        # 验证答案正确性
+        verify_queue = []
+        for name, results in zip(task_names, respond_questions):
+            for (p, r) in results:
+                for index in prompt2index[name][p]:
+                    verify_queue.append((index, answer_map[index], name, p, r))
+
+        correctness = await self.verify_results(
+            verify_queue=verify_queue, batch_solution_str=batch_solution_str, max_concurrent_requests=MAX_CONCURRENT,
+            split_names=task_names
+        )
+        return correctness
 
 #     async def llm_as_judge_similarity(
 #         self,
@@ -2121,145 +2305,6 @@ class Doc2QueryV2ComputeScore(object):
 #                 elif sim == 3:
 #                     scores[index] = 0.5
 #         return scores
-
-    def get_answer_format(self, answer_type, lang_code):
-        return {
-            "WithUnitSymbol": WithUnitSymbol_zh,
-            "NumericalAnswer": NumericalAnswer_zh
-        }[answer_type] if lang_code == "zh" else {
-            "WithUnitSymbol": WithUnitSymbol_en,
-            "NumericalAnswer": NumericalAnswer_en
-        }[answer_type]
-
-    def get_instruct(self, gt, answer_type):
-        lang_code = gt["lang_code"]
-        if lang_code == "zh":
-            instruct = f'仔细一步步思考，并回答下面的问题。你回应的最后一行必须采用 “最终答案是 $ANSWER 的格式（不带引号），其中 $ANSWER 的格式要求需要满足下面的说明。\n\n{self.get_answer_format(answer_type, lang_code)}'
-        else:
-            instruct = f'Think step by step in detail and answer the following questions. The last line of your response must be in the format "The final answer is $ANSWER" (without quotes), where the format requirements for $ANSWER need to meet the instructions below.\n\n{self.get_answer_format(answer_type, lang_code)}'
-        return instruct
-
-    def respond_wo_context(self, question, answer_type, gt):
-        _if = self.get_instruct(gt, answer_type)
-        return f'{_if}\n\n{question}'
-
-    def respond_w_context(self, question, answer_type, gt):
-        _if = self.get_instruct(gt, answer_type)
-        return f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n{_if}\n\n{question}'
-
-    async def get_difficulty_reward(
-            self,
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-            run_args=None,
-            max_concurrent_requests=MAX_CONCURRENT):
-        assert run_args is not None
-
-        prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
-
-        for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-            result = self.parse_solution_fn(solution_str)
-            if result is not None:
-                question, answer, answer_type = result
-                ans_format_strict = self.format.get_penalty_or_reward(
-                    solution_str, gt
-                )
-                # 答案格式不符合规范
-                if ans_format_strict < 0.0:
-                    continue
-
-                lang_code = gt["lang_code"]
-                for name, v in run_args.items():
-                    fn = v["fn"]
-                    _prompt = fn(question, answer_type, gt)
-                    prompt2index[name][_prompt].append(i)
-        tasks = []
-        task_names = []
-        for name, v in prompt2index.items():
-            prompts = list(v.keys()) * run_args[name]["repeat"]
-            tasks.append(run_args[name]["model"].run(
-                prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]',
-                postprocess_fns=[self.response_postprocess] * len(prompts)
-            ))
-            task_names.append(name)
-        respond_questions = await aio.gather(*tasks)
-#         results_mapper = defaultdict(list)
-#         for (k, v) in wo_results:
-#             results_mapper[k].append(v)
-#         for (k, v) in w_results:
-#             results_mapper[k].append(v)
-
-#         # 答案验证
-#         verify_queue = []
-#         for k, v in results_mapper.items():
-#             if k in wo_content_prompts:
-#                 for index in wo_content_prompts[k]:
-#                     verify_queue.extend(
-#                         [(index, "w/o_content", _v) for _v in v])
-#             elif k in w_content_prompts:
-#                 for index in w_content_prompts[k]:
-#                     verify_queue.extend([(index, "w_content", _v) for _v in v])
-
-#         correctness = await self.verify_results(
-#             verify_queue=verify_queue, batch_solution_str=batch_solution_str, max_concurrent_requests=MAX_CONCURRENT,
-#             split_names=["w/o_content", "w_content"]
-#         )
-
-#         wo_contents, w_contents = correctness["w/o_content"], correctness["w_content"]
-
-#         full_rewards = []
-#         pass_rates = []
-
-#         for i in range(len(batch_solution_str)):
-#             if i in wo_contents:
-#                 base_score = 0.0
-
-#                 wo_content_scores = wo_contents[i]
-#                 w_content_scores = w_contents[i]
-
-#                 pass_rates.append({
-#                     "wo_content": f'{np.sum(wo_content_scores)}/{len(wo_content_scores)}',
-#                     "w_content": f'{np.sum(w_content_scores)}/{len(w_content_scores)}',
-#                 })
-
-#                 try:
-#                     if len(wo_content_scores) == 0 or len(w_content_scores) == 0:
-#                         full_rewards.append(base_score)
-#                         continue
-
-#                     # 题目过于简单或困难
-#                     if np.mean(wo_content_scores) == 1.0 or np.mean(wo_content_scores) < (1.0/16) or np.mean(wo_content_scores) == 0.:
-#                         full_rewards.append(base_score)
-#                         continue
-
-#                     # 带参考 应该比 不带参考 显著好
-#                     if not (np.mean(w_content_scores) >= min(1/w_content_bon + np.mean(wo_content_scores), 1.0)):
-#                         full_rewards.append(base_score)
-#                         continue
-
-#                     # # 有参考置信度
-#                     # if np.mean(w_content_scores) < 0.3:
-#                     #     full_rewards.append(base_score)
-#                     #     continue
-
-#                     # 总分计算
-#                     difficulty1 = (1.0-math.log2(1+np.sum(wo_content_scores))/math.log2(
-#                         1+wo_content_bon))
-#                     difficulty2 = (1.0-math.log2(1+np.sum(w_content_scores)) /
-#                                    math.log2(1+w_content_bon))
-
-#                     confidence = (1.0 if np.mean(w_content_scores)
-#                                   > 0.5 else np.mean(w_content_scores))
-#                     base_score = [difficulty1, difficulty2, confidence]
-#                 except Exception as err:
-#                     pass
-
-#                 full_rewards.append(base_score)
-#             else:
-#                 pass_rates.append({})
-#                 full_rewards.append(0.0)
-#         return full_rewards, pass_rates
 
 #     def log_solution(self, solution):
 #         norm = self.doc2query_parse_solution_fn(solution)
