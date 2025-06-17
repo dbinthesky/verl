@@ -1965,6 +1965,7 @@ class Doc2QueryV2ComputeScore(object):
         self.parse_solution_fn = parse_solution_fn
         assert args is not None
         self.args = args
+        self.task_name = "DOC2QUERY"
 
         self.format = CalculationAnswerFormatVerify(
             parse_solution_fn=self.parse_solution_fn)
@@ -2455,7 +2456,7 @@ class Doc2QueryV2ComputeScore(object):
 
             if (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
                 log = True
-                log_flag = "[DOC2QUERY VALID]" if self.split == "valid" else "[DOC2QUERY TRAIN]"
+                log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
             else:
                 log = False
 
@@ -2477,6 +2478,11 @@ class Doc2QueryV2ComputeScore(object):
                 elif stage == "2":
                     print(
                         f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|Sim={similarity_rewards[i]:.3f}|{penalty_log_str}\n')
+
+                thought = calc_qa_parse_thought_fn(batch_solution_str[i])
+                if thought is not None and random.random() < 0.1:
+                    print('[Thought]\n{thought}')
+                    print()
 
         return final_results
 
@@ -2543,6 +2549,7 @@ class FabricateQAComputeScore(Doc2QueryV2ComputeScore):
         super().__init__(
             split=split, parse_solution_fn=parse_solution_fn, args=args
         )
+        self.task_name = "FABRICATE_QA"
 
     @classmethod
     def respond(cls, question, answer_type, gt):
