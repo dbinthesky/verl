@@ -1366,8 +1366,9 @@ def calc_qa_parse_solution_fn(solution_str: str, remove_option_letter=True):
         return None
 
     solution_str = postprocess_solution(solution_str)
+    # FIXME
     if not solution_str.startswith("<think>"):
-        return None
+        solution_str = f'<think>\n{solution_str}'
 
     try:
         thought = re.findall(r'<think>.*</think>',
@@ -1407,8 +1408,10 @@ def calc_qa_parse_thought_fn(solution_str: str, remove_option_letter=True):
         return None
 
     solution_str = postprocess_solution(solution_str)
+
+    # FIXME
     if not solution_str.startswith("<think>"):
-        return None
+        solution_str = f'<think>\n{solution_str}'
 
     try:
         thought = re.findall(r'<think>.*</think>',
@@ -2178,6 +2181,11 @@ class Doc2QueryV2ComputeScore(object):
         _if = cls.get_instruct(gt, answer_type)
         return f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n{_if}\n\n{question}'
 
+    def clip_string(self, s: str):
+        if len(s) > 1500:
+            return f'{s[:700]}... [省略] ...{s[-800:]}'
+        return s
+
     async def get_difficulty_reward(
             self,
             batch_data_sources,
@@ -2474,7 +2482,7 @@ class Doc2QueryV2ComputeScore(object):
                     pass
                 if stage == "1":
                     print(
-                        f'[Final Reward]={cur_score:.3f}{penalty_log_str}\n')
+                        f'[Final Reward]={cur_score:.3f}|{penalty_log_str}\n')
                 elif stage == "2":
                     print(
                         f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|Sim={similarity_rewards[i]:.3f}|{penalty_log_str}\n')
@@ -2491,13 +2499,13 @@ DOC2QUERY_DEFAULT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": Doc2QueryV2ComputeScore.get_weak_agent(),
-            "repeat": 24,
+            "repeat": 32,
             "fn": Doc2QueryV2ComputeScore.respond_wo_context,
             "desc": 'w/o ctx'
         },
         "w_content": {
             "model": Doc2QueryV2ComputeScore.get_strong_agent(),
-            "repeat": 6,
+            "repeat": 8,
             "fn": Doc2QueryV2ComputeScore.respond_w_context,
             "desc": 'w ctx'
         }
@@ -2506,13 +2514,13 @@ DOC2QUERY_DEFAULT_PARAMS = {
         "advantage": 'w_content',
         "weakness": 'w/o_content',
         "advantage_oversimplified_threshold": 1.0,
-        "weakness_oversimplified_threshold": 21/24,
-        "advantage_overcomplex_threshold": 1/6,
-        "weakness_overcomplex_threshold": 1/24,
-        "advantage_threshold": 1/6,
+        "weakness_oversimplified_threshold": 28/32,
+        "advantage_overcomplex_threshold": 1/8,
+        "weakness_overcomplex_threshold": 1/32,
+        "advantage_threshold": 1/8,
         "advantage_weight": 0.5,
         "weakness_weight": 0.5,
-        "confidence_bonus_threshold": 2/6,
+        "confidence_bonus_threshold": 2/8,
         "confidence_bonus_weight": 0.25
     },
     "similarity_run_args":  {
