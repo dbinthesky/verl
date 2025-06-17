@@ -2146,43 +2146,33 @@ class Doc2QueryV2ComputeScore(object):
                     adv_name, weak_name = metric_args["advantage"], metric_args["weakness"]
                     adv, weak = correctness[adv_name][i], correctness[weak_name][i]
 
-                    print("fucking!!!", adv, weak)
-                    print(pass_rates[-1])
                     if len(weak) == 0 or len(adv) == 0:
                         full_rewards.append(base_score)
                         continue
 
                     # 题目过难
                     if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
-                        print(1)
                         full_rewards.append(base_score)
                         continue
 
                     # 题目过易
                     if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
-                        print(2)
                         full_rewards.append(base_score)
                         continue
 
-                    # # adv 应该比 weakness 显著好
-                    # if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
-                    #     print(3)
-                    #     full_rewards.append(base_score)
-                    #     continue
+                    # adv 应该比 weakness 显著好
+                    if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
+                        full_rewards.append(base_score)
+                        continue
 
                     # 难度奖励
                     def calc_difficulty(scores, total_attempts):
                         return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
 
-                    difficulty_reward = + \
-                        metric_args["advantage_weight"] * \
-                        calc_difficulty(adv, run_args[adv_name]["repeat"])
-
                     # 置信度奖励
                     confidence_bonus = 0.0
                     if np.mean(adv) >= metric_args["confidence_bonus_threshold"]:
                         confidence_bonus = metric_args["confidence_bonus_weight"]
-
                     base_score = [
                         metric_args["weakness_weight"] *
                         calc_difficulty(weak, run_args[weak_name]["repeat"]),
