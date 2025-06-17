@@ -1815,8 +1815,18 @@ class CalculationAnswerFormatVerify(PenaltyOrReward):
 
 
 class ThoughtBonus(PenaltyOrReward):
-    def __init__(self, parse_solution_fn=calc_qa_parse_thought_fn):
+    def __init__(self, parse_solution_fn=calc_qa_parse_thought_fn, base_score=0.1):
         self.parse_solution_fn = parse_solution_fn
+        self.base_score = 0.1
+        self.keywords = {
+            "zh": ("自检", "答案校验", "完备性检查", "冗余审查", "干扰", "真实性校验", "隐性化",
+                   "难度优化", "最终修改", "初拟", "雏形构建"),
+            "en": (
+                "self-validation", "final modification", "completeness check",
+                "redundancy review", "implicit condition", "redundant interference", "initial draft",
+                "difficulty optimization", "prototype construction", "answer verification"
+            )
+        }
 
     def get_penalty_or_reward(self, solution_str, ground_truth):
         raw_solution_str = solution_str
@@ -1825,30 +1835,12 @@ class ThoughtBonus(PenaltyOrReward):
         if solution_str is None:
             return 0.0
 
-        thought = solution_str
-        print(thought)
+        thought = solution_str.lower()
 
-    #     lang_code = ground_truth["lang_code"]
-
-    #     base_score = -0.1
-
-    #     if lang_code == "en" and contain_chinese(question):
-    #         return base_score
-    #     elif lang_code == "zh" and (not contain_chinese(question)):
-    #         return base_score
-
-    #     base_score += 0.05
-
-    #     if lang_code == "en":
-    #         if contain_chinese(raw_solution_str):
-    #             return base_score
-    #     elif lang_code == "zh":
-    #         if not self.detect_zh(raw_solution_str, 0.75):
-    #             return base_score
-    #     else:
-    #         pass
-
-    #     return 0.0
+        lang_code = ground_truth["lang_code"]
+        keywords = self.keywords[lang_code]
+        cover_score = [1.0 if kw in thought else 0.0 for kw in keywords]
+        return np.mean(cover_score) * self.base_score
 
 
 class LanguageConsistency(PenaltyOrReward):
@@ -1975,6 +1967,9 @@ class Doc2QueryV2ComputeScore(object):
             parse_solution_fn=self.parse_solution_fn)
         self.language = LanguageConsistency(
             parse_solution_fn=self.parse_solution_fn)
+        self.thought_bonus = ThoughtBonus(
+            parse_solution_fn=calc_qa_parse_thought_fn
+        )
         self.question_similarity = QuestionSimilarity(
             parse_solution_fn=self.parse_solution_fn)
 
@@ -2004,6 +1999,7 @@ class Doc2QueryV2ComputeScore(object):
         return {
             "Format": self.format.get_penalty_or_reward,
             "Lang": self.language.get_penalty_or_reward,
+            "Thought": self.thought_bonus.get_penalty_or_reward,
             "QSim": self.question_similarity.get_penalty_or_reward,
         }
 

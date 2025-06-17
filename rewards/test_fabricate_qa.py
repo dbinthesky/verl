@@ -270,9 +270,7 @@ class TestFabricate(unittest.TestCase):
 
         scorer = ThoughtBonus(calc_qa_parse_thought_fn)
         for response, gt in zip(batch_solution_str, batch_ground_truth):
-            print(scorer.get_penalty_or_reward(response, gt))
-            # score = scorer.get_penalty_or_reward(response, gt)
-            # self.assertTrue(score < 0)
+            self.assertTrue(scorer.get_penalty_or_reward(response, gt) == 0)
 
     def test_doc2query_v2_get_difficulty_reward(self):
         batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
@@ -315,7 +313,7 @@ class TestFabricate(unittest.TestCase):
                 }
             )
             assert len(results[0]) == len(results[1])
-            # print(results)
+            print(results)
         aio.run(main())
 
     def test_doc2query_v2_get_similarity_reward(self):
