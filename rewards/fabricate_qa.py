@@ -653,9 +653,10 @@ class QwQLongCoTCreateCriteriaComputeScore(object):
                       batch_data_sources,
                       batch_solution_str,
                       batch_ground_truth,
+                      stage,
                       ):
         async def main():
-            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, stage=stage)
         return aio.run(main())
 
     async def _compute_score(self,
@@ -2136,7 +2137,7 @@ class Doc2QueryV2ComputeScore(object):
                     )
                     verify_mapper[eval_prompt].append((index, name))
 
-        _results = await self.verify_agent.run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.verify_agent.model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),))
+        _results = await self.get_verify_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.get_verify_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),))
 
         results_mapper = defaultdict(list)
         for (k, v) in _results:
@@ -2332,7 +2333,7 @@ class Doc2QueryV2ComputeScore(object):
                 continue
 
         similarity = await question_similarity(
-            agent=self.verify_agent,
+            agent=self.get_verify_agent(),
             authentic=authentics,
             fabricate=fabricates,
             max_concurrent_requests=max_concurrent_requests
@@ -2354,120 +2355,131 @@ class Doc2QueryV2ComputeScore(object):
                       batch_data_sources,
                       batch_solution_str,
                       batch_ground_truth,
+                      stage,
                       ):
         async def main():
-            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, stage=stage)
         return aio.run(main())
 
-#     def log_solution(self, solution):
-#         norm = self.doc2query_parse_solution_fn(solution)
-#         if norm is None:
-#             return repr(self.clip_string(solution))
-#         return repr(self.format_question(norm[0], norm[1]))
+    def log_solution(self, solution):
+        norm = self.parse_solution_fn(solution)
+        if norm is None:
+            return repr(self.clip_string(solution))
+        return repr(self.format_question(norm[0], norm[1], norm[2]))
 
-#     def format_question(self, question, answer):
-#         return f'Question: {question}\nAnswer: {answer}'
+    def format_question(self, question, answer, ans_type):
+        return f'Question: {question}\nAnswer: {answer}\nAnswer Type: {ans_type}'
 
-#     def log_ground_truth(self, ground_truth):
-#         return repr(self.format_question(
-#             ground_truth["question"],
-#             ground_truth["answer"])
-#         )
+    def log_ground_truth(self, ground_truth):
+        return repr(self.format_question(
+            ground_truth["question"],
+            "", "")
+        )
+
+    def penalty_on(self):
+        return ("Format", "Lang", "Thought", "QSim")
 
     async def _compute_score(self,
                              batch_data_sources,
                              batch_solution_str,
                              batch_ground_truth,
+                             stage,
+                             max_concurrent_requests=MAX_CONCURRENT,
                              ):
+        assert stage in ("1", "2")
 
         penalty = defaultdict(list)
         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-            parsed = self.doc2query_parse_solution_fn(solution_str)
+            parsed = self.parse_solution_fn(solution_str)
             if parsed is None:
                 penalty[i].append(-2.0)
             else:
                 penalty[i].append(0.0)
 
-            for key in ("Format", "QSim"):
+            for key in self.penalty_on():
                 penalty[i].append(self.get_penalties()[key]
                                   (solution_str, ground_truth))
 
-        print(penalty)
+        # 二阶段训练(全量奖励)
+        # 一阶段训练(格式奖励)
 
+        if stage == "2":
+            # 难度奖励
+            difficulty_rewards, pass_rates = await self.get_difficulty_reward(
+                batch_data_sources,
+                batch_solution_str,
+                batch_ground_truth,
+                run_args=self.args["difficulty_run_args"],
+                metric_args=self.args["difficulty_metric_args"],
+                max_concurrent_requests=max_concurrent_requests,
+            )
+            # 相似度奖励
+            similarity_rewards = await self.get_similarity_reward(
+                batch_data_sources,
+                batch_solution_str,
+                batch_ground_truth,
+                max_concurrent_requests=max_concurrent_requests,
+                run_args=self.args["similarity_run_args"],
+            )
 
-#         similarity_rewards = await self.llm_as_judge_similarity(
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth,
-#             max_concurrent_requests=MAX_CONCURRENT,
-#         )
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            scores = copy.deepcopy(penalty[i])
+            penalties = ["Parse"]+list(self.penalty_on())
+            penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
+                                       s in zip(penalties, scores)])
 
-#         difficulty_rewards, pass_rates = await self.get_difficulty_reward(
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth,
-#             max_concurrent_requests=MAX_CONCURRENT,
-#         )
+            if stage == "2":
+                _difficulty = difficulty_rewards[i]
+                _difficulty_score = np.sum(_difficulty) if isinstance(
+                    _difficulty, list) else _difficulty
+                scores.append(_difficulty_score)
 
-#         # # FIXME
-#         # difficulty_rewards, pass_rates = [
-#         #     0.0]*len(batch_solution_str), [{}] * len(batch_solution_str)
+            cur_score = 0
 
-#         final_results = []
-#         for i in range(len(batch_solution_str)):
-#             scores = copy.deepcopy(penalty[i])
-#             _difficulty = difficulty_rewards[i]
-#             _difficulty = (1.0 * _difficulty[0] + 1.0 * _difficulty[1] +
-#                            0.5 * _difficulty[2]) if isinstance(_difficulty, list) else _difficulty
-#             penalty_log_str = f'Parse/Format/AnsFeature/QSim={penalty[i]}'
+            for j, _score in enumerate(scores):
+                if _score < 0:
+                    cur_score = _score
+                    break
+                else:
+                    if j == penalties.index("QSim"):  # BLEU
+                        if stage == "2" and _difficulty > 0:
+                            cur_score += _score
+                    else:
+                        cur_score += _score
 
-#             scores.append(_difficulty)
-#             cur_score = 0
+            if stage == "2" and _difficulty > 0:
+                cur_score += similarity_rewards[i]
 
-#             for j, _score in enumerate(scores):
-#                 if _score < 0:
-#                     cur_score = _score
-#                     break
-#                 else:
-#                     if j == 2:  # BLEU
-#                         if _difficulty > 0:
-#                             cur_score += _score
-#                     else:
-#                         cur_score += _score
-#             final_results.append(cur_score)
+            final_results.append(cur_score)
 
-#             if _difficulty > 0:
-#                 cur_score += 0.25 * similarity_rewards[i]
+            if (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+                log = True
+                log_flag = "[DOC2QUERY VALID]" if self.split == "valid" else "[DOC2QUERY TRAIN]"
+            else:
+                log = False
 
-#             if (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
-#                 log = True
-#                 log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
-#             else:
-#                 log = False
+            source = batch_ground_truth[i]["source"]
 
-#             domain = batch_ground_truth[i]["domain"]
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f"【Solution】({source})`{self.log_solution(batch_solution_str[i])}`")
+                try:
+                    print(
+                        f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                except Exception as err:
+                    pass
+                if stage == "1":
+                    print(
+                        f'[Final Reward]={cur_score:.3f}{penalty_log_str}\n')
+                elif stage == "2":
+                    print(
+                        f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|Sim={similarity_rewards[i]:.3f}|{penalty_log_str}\n')
 
-#             if log:
-#                 print(
-#                     f"--------------------------------{log_flag}--------------------------------")
-#                 print(
-#                     f"【Solution】({domain})`{self.log_solution(batch_solution_str[i])}`")
-#                 try:
-#                     print(
-#                         f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
-#                 except Exception as err:
-#                     pass
-#                 print(
-#                     f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|Sim={similarity_rewards[i]:.3f}|{penalty_log_str}\n')
-#         return final_results
+        return final_results
 
-
-# _qwq_longcot_doc2query_v2_compute_score_train = QwQLongCoTDoc2QueryV2ComputeScore(
-#     split="train", add_difficulty_rewards=True)
-# _qwq_longcot_doc2query_v2_compute_score_valid = QwQLongCoTDoc2QueryV2ComputeScore(
-#     split="valid", add_difficulty_rewards=True)
-# qwq_longcot_doc2query_v2_compute_score_train = _qwq_longcot_doc2query_v2_compute_score_train.compute_score
-# qwq_longcot_doc2query_v2_compute_score_valid = _qwq_longcot_doc2query_v2_compute_score_valid.compute_score
 
 DOC2QUERY_DEFAULT_PARAMS = {
     "difficulty_run_args": {
@@ -2505,6 +2517,15 @@ DOC2QUERY_DEFAULT_PARAMS = {
         "weight": 0.25,
     }
 }
+
+_default_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScore(
+    calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_DEFAULT_PARAMS)
+_default_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScore(
+    calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_DEFAULT_PARAMS)
+doc2query_v2_default_stage1_compute_score_train = partial(
+    _default_doc2query_v2_compute_score_train.compute_score, stage="1")
+doc2query_v2_default_stage1_compute_score_valid = partial(
+    _default_doc2query_v2_compute_score_valid.compute_score, stage="1")
 
 
 # # ------------------------------------------------------------------------------------------------------------------------------------------------------

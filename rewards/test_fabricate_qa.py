@@ -12,23 +12,13 @@ from tqdm import tqdm
 from collections import defaultdict
 from fabricate_qa import (
     agent,
-    # criteria_parse_solution_fn,
-    # get_total_score,
-    # decode_to_question,
-    # criteria_get_score,
-    # QwQLongCoTCreateCriteriaComputeScore,
-    # qwq_longcot_create_criteria_compute_score_valid,
-    # QwQLongCoTFabricateQAComputeScore,
-    # qwq_longcot_fabricate_qa_compute_score_valid,
-    # doc2query_parse_solution_fn,
     QuestionSimilarity,
     ThoughtBonus,
     CalculationAnswerFormatVerify,
     LanguageConsistency,
     Doc2QueryV2ComputeScore,
     DOC2QUERY_DEFAULT_PARAMS,
-    # QwQLongCoTDoc2QueryV2ComputeScore,
-    # qwq_longcot_doc2query_compute_score_valid,
+    doc2query_v2_default_stage1_compute_score_valid,
     calc_qa_parse_solution_fn,
     calc_qa_parse_thought_fn,
     batchify,
@@ -110,60 +100,12 @@ def load_fabricate_aio_data(num=100, format="wrong_question"):
                     "document": "<skip_content>",
                     "question": q,
                     "lang_code": "en",
+                    "source": ""
                 })
             count += 1
         if count > num-1:
             break
     return batch_solution_str, batch_ground_truth
-
-
-# class TestFabricateQA(unittest.TestCase):
-#     def test_question_similarity(self):
-#         batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
-#             num=100)
-#         task = QwQLongCoTFabricateQAComputeScore(split="valid")
-#         for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
-#             solution_str = f'<think>***</think><question>\nQuestion: {gt["authentic_question"]}\nAnswer: \\boxed{{-9}}\nAnswer Type: NumericalAnswer\n</question>'
-#             score = task.get_penalties()["QSim"](solution_str, gt)
-#             print(solution_str)
-#             print(score)
-#             print("="*80)
-#             break
-
-#     def test_llm_as_judge_similarity(self):
-#         async def main():
-#             batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
-#                 num=100)
-#             task = QwQLongCoTFabricateQAComputeScore(split="valid")
-#             results = await task.llm_as_judge_similarity(
-#                 [None] *
-#                 len(batch_solution_str), batch_solution_str, batch_ground_truth
-#             )
-#             print(results)
-#         aio.run(main())
-
-#     def test_get_difficulty_reward(self):
-#         async def main():
-#             batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
-#                 8)
-#             task = QwQLongCoTFabricateQAComputeScore(split="valid")
-#             results = await task.get_difficulty_reward(
-#                 [None] *
-#                 len(batch_solution_str), batch_solution_str, batch_ground_truth
-#             )
-#             print(results)
-#         aio.run(main())
-
-#     def test_compute_score(self):
-#         bg = time.time()
-#         batch_solution_str, batch_ground_truth = load_qwq_fabricate_qa_data(
-#             num=32)
-#         results = qwq_longcot_fabricate_qa_compute_score_valid(
-#             [None] *
-#             len(batch_solution_str), batch_solution_str, batch_ground_truth
-#         )
-#         print(results)
-#         print(f'Finish {time.time()-bg}')
 
 
 class TestFabricate(unittest.TestCase):
@@ -345,25 +287,10 @@ class TestFabricate(unittest.TestCase):
         task = Doc2QueryV2ComputeScore(calc_qa_parse_solution_fn,
                                        split="valid", args=DOC2QUERY_DEFAULT_PARAMS)
         # print(task.compute_score([None]*len(batch_solution_str),
-        #                          batch_solution_str, batch_ground_truth))
-
-
-#         for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
-#             # QSim\Format\AnsFeature
-
-#             solution_str = '<think>***</think><question>\nQuestion: 在范畴Set中，设函子G为Option，对于任何集合A，Option(A)是{None} ∪ A。给定符号函子H由H(X) = X·G定义。设函子Z和自然变换e满足：对于任意集合A，Z(A) = A × {0,1}，且e_{Option(A)}将Option(A)中的每个元素映射为：None → (None, 0)，而a ∈ A → (Some a, 1)。考虑集合A = {1, 2}，计算配分律δ_{(Z,e)}在Option(Z(A)) → Z(Option(A))的映射中，元素Some((1,0))的像在Z(Option(A))中的第二个分量的值。注意：Option(Z(A))中的元素Some((1,0))表示Some包裹着Z(A)中的元素(1,0)。\nAnswer: \\boxed{-1}\nAnswer Type: NumericalAnswer\n</question>'
-#             score = task.get_penalties()["Format"](solution_str, gt)
-#             print(solution_str)
-#             print(score)
-#             print("="*80)
-#             break
-
-#     def test_compute_score(self):
-#         batch_solution_str, batch_ground_truth = load_doc2query_v2(32)
-
-#         task = QwQLongCoTDoc2QueryV2ComputeScore(split="valid")
-#         print(task.compute_score([None]*len(batch_solution_str),
-#                                  batch_solution_str, batch_ground_truth))
+        #                          batch_solution_str, batch_ground_truth, stage="1"))
+        print(doc2query_v2_default_stage1_compute_score_valid(
+            [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        ))
 
 
 # class TestDoc2Query(unittest.TestCase):
@@ -617,7 +544,6 @@ class TestFabricate(unittest.TestCase):
 #                         g.write(f'{json.dumps(example, ensure_ascii=False)}\n')
 #                     except Exception as err:
 #                         continue
-
 
 if __name__ == '__main__':
     # async def main():
