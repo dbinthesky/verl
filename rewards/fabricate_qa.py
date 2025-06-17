@@ -1959,9 +1959,11 @@ def extract_boxed_answer(solution: str) -> str:
 
 
 class Doc2QueryV2ComputeScore(object):
-    def __init__(self, parse_solution_fn, split="train"):
+    def __init__(self, parse_solution_fn, split="train", args=None):
         self.split = split
         self.parse_solution_fn = parse_solution_fn
+        assert args is not None
+        self.args = args
 
         self.format = CalculationAnswerFormatVerify(
             parse_solution_fn=self.parse_solution_fn)
@@ -1973,7 +1975,9 @@ class Doc2QueryV2ComputeScore(object):
         self.question_similarity = QuestionSimilarity(
             parse_solution_fn=self.parse_solution_fn)
 
-        self.weak_agent = Agent(**{
+    @classmethod
+    def get_weak_agent(cls):
+        return Agent(**{
             "model": "qwen25_32B_instruct",
             "base_url": "http://10.130.131.138:8000/v1",
             "api_keys": "EMPTY",
@@ -1983,7 +1987,10 @@ class Doc2QueryV2ComputeScore(object):
                 "max_tokens": 2048,
             },
         })
-        self.strong_agent = Agent(**{
+
+    @classmethod
+    def get_strong_agent(cls):
+        return Agent(**{
             "model": "DeepSeek-V3-0324",
             "base_url": "https://sd138cdmeq1emkiunptm0.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "EMPTY",
@@ -1993,7 +2000,10 @@ class Doc2QueryV2ComputeScore(object):
                 "max_tokens": 4096,
             }
         })
-        self.verify_agent = self.weak_agent
+
+    @classmethod
+    def get_verify_agent(cls):
+        return cls.get_weak_agent()
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
@@ -2137,7 +2147,8 @@ class Doc2QueryV2ComputeScore(object):
 
         return correctness
 
-    def get_answer_format(self, answer_type, lang_code):
+    @classmethod
+    def get_answer_format(cls, answer_type, lang_code):
         return {
             "WithUnitSymbol": WithUnitSymbol_zh,
             "NumericalAnswer": NumericalAnswer_zh
@@ -2146,20 +2157,23 @@ class Doc2QueryV2ComputeScore(object):
             "NumericalAnswer": NumericalAnswer_en
         }[answer_type]
 
-    def get_instruct(self, gt, answer_type):
+    @classmethod
+    def get_instruct(cls, gt, answer_type):
         lang_code = gt["lang_code"]
         if lang_code == "zh":
-            instruct = f'仔细一步步思考，并回答下面的问题。你回应的最后一行必须采用 “最终答案是 $ANSWER 的格式（不带引号），其中 $ANSWER 的格式要求需要满足下面的说明。\n\n{self.get_answer_format(answer_type, lang_code)}'
+            instruct = f'仔细一步步思考，并回答下面的问题。你回应的最后一行必须采用 “最终答案是 $ANSWER 的格式（不带引号），其中 $ANSWER 的格式要求需要满足下面的说明。\n\n{cls.get_answer_format(answer_type, lang_code)}'
         else:
-            instruct = f'Think step by step in detail and answer the following questions. The last line of your response must be in the format "The final answer is $ANSWER" (without quotes), where the format requirements for $ANSWER need to meet the instructions below.\n\n{self.get_answer_format(answer_type, lang_code)}'
+            instruct = f'Think step by step in detail and answer the following questions. The last line of your response must be in the format "The final answer is $ANSWER" (without quotes), where the format requirements for $ANSWER need to meet the instructions below.\n\n{cls.get_answer_format(answer_type, lang_code)}'
         return instruct
 
-    def respond_wo_context(self, question, answer_type, gt):
-        _if = self.get_instruct(gt, answer_type)
+    @classmethod
+    def respond_wo_context(cls, question, answer_type, gt):
+        _if = cls.get_instruct(gt, answer_type)
         return f'{_if}\n\n{question}'
 
-    def respond_w_context(self, question, answer_type, gt):
-        _if = self.get_instruct(gt, answer_type)
+    @classmethod
+    def respond_w_context(cls, question, answer_type, gt):
+        _if = cls.get_instruct(gt, answer_type)
         return f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n{_if}\n\n{question}'
 
     async def get_difficulty_reward(
@@ -2336,6 +2350,15 @@ class Doc2QueryV2ComputeScore(object):
                 scores[index] = _score * run_args["weight"]
         return scores
 
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+        async def main():
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+        return aio.run(main())
+
 #     def log_solution(self, solution):
 #         norm = self.doc2query_parse_solution_fn(solution)
 #         if norm is None:
@@ -2351,23 +2374,26 @@ class Doc2QueryV2ComputeScore(object):
 #             ground_truth["answer"])
 #         )
 
-#     async def _compute_score(self,
-#                              batch_data_sources,
-#                              batch_solution_str,
-#                              batch_ground_truth,
-#                              ):
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
 
-#         penalty = defaultdict(list)
-#         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-#             parsed = self.doc2query_parse_solution_fn(solution_str)
-#             if parsed is None:
-#                 penalty[i].append(-2.0)
-#             else:
-#                 penalty[i].append(0.0)
+        penalty = defaultdict(list)
+        for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            parsed = self.doc2query_parse_solution_fn(solution_str)
+            if parsed is None:
+                penalty[i].append(-2.0)
+            else:
+                penalty[i].append(0.0)
 
-#             for key in ("Format", "QSim"):
-#                 penalty[i].append(self.get_penalties()[key]
-#                                   (solution_str, ground_truth))
+            for key in ("Format", "QSim"):
+                penalty[i].append(self.get_penalties()[key]
+                                  (solution_str, ground_truth))
+
+        print(penalty)
+
 
 #         similarity_rewards = await self.llm_as_judge_similarity(
 #             batch_data_sources,
@@ -2442,6 +2468,45 @@ class Doc2QueryV2ComputeScore(object):
 #     split="valid", add_difficulty_rewards=True)
 # qwq_longcot_doc2query_v2_compute_score_train = _qwq_longcot_doc2query_v2_compute_score_train.compute_score
 # qwq_longcot_doc2query_v2_compute_score_valid = _qwq_longcot_doc2query_v2_compute_score_valid.compute_score
+
+DOC2QUERY_DEFAULT_PARAMS = {
+    "difficulty_run_args": {
+        "w/o_content": {
+            "model": Doc2QueryV2ComputeScore.get_weak_agent(),
+            "repeat": 24,
+            "fn": Doc2QueryV2ComputeScore.respond_wo_context,
+            "desc": 'w/o ctx'
+        },
+        "w_content": {
+            "model": Doc2QueryV2ComputeScore.get_strong_agent(),
+            "repeat": 6,
+            "fn": Doc2QueryV2ComputeScore.respond_w_context,
+            "desc": 'w ctx'
+        }
+    },
+    "difficulty_metric_args": {
+        "advantage": 'w_content',
+        "weakness": 'w/o_content',
+        "advantage_oversimplified_threshold": 1.0,
+        "weakness_oversimplified_threshold": 21/24,
+        "advantage_overcomplex_threshold": 1/6,
+        "weakness_overcomplex_threshold": 1/24,
+        "advantage_threshold": 1/6,
+        "advantage_weight": 0.5,
+        "weakness_weight": 0.5,
+        "confidence_bonus_threshold": 2/6,
+        "confidence_bonus_weight": 0.25
+    },
+    "similarity_run_args":  {
+        "threshold": {
+            3: 0.5,
+            4: 1.0
+        },
+        "weight": 0.25,
+    }
+}
+
+
 # # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # # Doc2Query V2
 # # ------------------------------------------------------------------------------------------------------------------------------------------------------

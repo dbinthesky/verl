@@ -26,6 +26,7 @@ from fabricate_qa import (
     CalculationAnswerFormatVerify,
     LanguageConsistency,
     Doc2QueryV2ComputeScore,
+    DOC2QUERY_DEFAULT_PARAMS,
     # QwQLongCoTDoc2QueryV2ComputeScore,
     # qwq_longcot_doc2query_compute_score_valid,
     calc_qa_parse_solution_fn,
@@ -276,7 +277,7 @@ class TestFabricate(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
             format="doc2query_v2", num=32)
         task = Doc2QueryV2ComputeScore(
-            calc_qa_parse_solution_fn, split="valid")
+            calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_DEFAULT_PARAMS)
 
         async def main():
             results = await task.get_difficulty_reward(
@@ -284,13 +285,13 @@ class TestFabricate(unittest.TestCase):
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
                 run_args={
                     "w/o_content": {
-                        "model": task.weak_agent,
+                        "model": task.get_weak_agent(),
                         "repeat": 8,
                         "fn": task.respond_wo_context,
                         "desc": 'w/o ctx'
                     },
                     "w_content": {
-                        "model": task.strong_agent,
+                        "model": task.get_strong_agent(),
                         "repeat": 2,
                         "fn": task.respond_w_context,
                         "desc": 'w ctx'
@@ -320,7 +321,7 @@ class TestFabricate(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
             format="doc2query_v2", num=32)
         task = Doc2QueryV2ComputeScore(
-            calc_qa_parse_solution_fn, split="valid")
+            calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_DEFAULT_PARAMS)
 
         async def main():
             results = await task.get_similarity_reward(
@@ -336,6 +337,15 @@ class TestFabricate(unittest.TestCase):
             )
             self.assertTrue(all(_ == 1.0 * 0.25 for _ in results))
         aio.run(main())
+
+    def test_doc2query_v2_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
+            format="doc2query_v2", num=32)
+
+        task = Doc2QueryV2ComputeScore(calc_qa_parse_solution_fn,
+                                       split="valid", args=DOC2QUERY_DEFAULT_PARAMS)
+        # print(task.compute_score([None]*len(batch_solution_str),
+        #                          batch_solution_str, batch_ground_truth))
 
 
 #         for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
