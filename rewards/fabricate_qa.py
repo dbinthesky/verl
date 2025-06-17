@@ -1357,7 +1357,7 @@ class RuleBasedOptionMatch(PenaltyOrReward):
 # Doc2Query V2
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def custom_qa_parse_solution_fn(solution_str: str, remove_option_letter=True):
+def calc_qa_parse_solution_fn(solution_str: str, remove_option_letter=True):
     if solution_str.count("</question>") > 1:
         return None
 
@@ -1396,6 +1396,25 @@ def custom_qa_parse_solution_fn(solution_str: str, remove_option_letter=True):
         return question, answer, answer_type
     except Exception as err:
         return None
+
+
+def calc_qa_parse_thought_fn(solution_str: str, remove_option_letter=True):
+    if solution_str.count("</question>") > 1:
+        return None
+
+    if solution_str.count("</think>") > 1:
+        return None
+
+    solution_str = postprocess_solution(solution_str)
+    if not solution_str.startswith("<think>"):
+        return None
+
+    try:
+        thought = re.findall(r'<think>.*</think>',
+                             solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+    return thought
 
 
 class AnswerFormat(object):
@@ -1762,7 +1781,7 @@ NumericalAnswer_en = """
 
 
 class CalculationAnswerFormatVerify(PenaltyOrReward):
-    def __init__(self, parse_solution_fn=custom_qa_parse_solution_fn):
+    def __init__(self, parse_solution_fn=calc_qa_parse_solution_fn):
         self.parse_solution_fn = parse_solution_fn
 
     def get_penalty_or_reward(self, solution_str, ground_truth):
@@ -1795,8 +1814,45 @@ class CalculationAnswerFormatVerify(PenaltyOrReward):
             return -0.2
 
 
+class ThoughtBonus(PenaltyOrReward):
+    def __init__(self, parse_solution_fn=calc_qa_parse_thought_fn):
+        self.parse_solution_fn = parse_solution_fn
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        raw_solution_str = solution_str
+        solution_str = self.parse_solution_fn(solution_str)
+
+        if solution_str is None:
+            return 0.0
+
+        thought = solution_str
+        print(thought)
+
+    #     lang_code = ground_truth["lang_code"]
+
+    #     base_score = -0.1
+
+    #     if lang_code == "en" and contain_chinese(question):
+    #         return base_score
+    #     elif lang_code == "zh" and (not contain_chinese(question)):
+    #         return base_score
+
+    #     base_score += 0.05
+
+    #     if lang_code == "en":
+    #         if contain_chinese(raw_solution_str):
+    #             return base_score
+    #     elif lang_code == "zh":
+    #         if not self.detect_zh(raw_solution_str, 0.75):
+    #             return base_score
+    #     else:
+    #         pass
+
+    #     return 0.0
+
+
 class LanguageConsistency(PenaltyOrReward):
-    def __init__(self, parse_solution_fn=custom_qa_parse_solution_fn):
+    def __init__(self, parse_solution_fn=calc_qa_parse_solution_fn):
         self.parse_solution_fn = parse_solution_fn
 
     def detect_zh(self, text, threshold=0.05):
@@ -2421,7 +2477,7 @@ class Doc2QueryV2ComputeScore(object):
 # """
 
 #     def __init__(self,
-#                  split="train", add_difficulty_rewards=False, difficulty_bon=8, parse_solution_fn=custom_qa_parse_solution_fn):
+#                  split="train", add_difficulty_rewards=False, difficulty_bon=8, parse_solution_fn=calc_qa_parse_solution_fn):
 #         super().__init__(
 #             split=split, add_difficulty_rewards=add_difficulty_rewards, difficulty_bon=difficulty_bon, parse_solution_fn=parse_solution_fn
 #         )
