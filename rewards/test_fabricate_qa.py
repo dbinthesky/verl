@@ -262,7 +262,7 @@ class TestFabricate(unittest.TestCase):
             score = scorer.get_penalty_or_reward(response, gt)
             self.assertTrue(score < 0)
 
-    def test_doc2query_v2(self):
+    def test_doc2query_v2_get_difficulty_reward(self):
         batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
             format="doc2query_v2", num=32)
         task = Doc2QueryV2ComputeScore(
@@ -303,7 +303,27 @@ class TestFabricate(unittest.TestCase):
                 }
             )
             assert len(results[0]) == len(results[1])
-            print(results)
+            # print(results)
+        aio.run(main())
+
+    def test_doc2query_v2_get_similarity_reward(self):
+        batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
+            format="doc2query_v2", num=32)
+        task = Doc2QueryV2ComputeScore(
+            custom_qa_parse_solution_fn, split="valid")
+
+        async def main():
+            results = await task.get_similarity_reward(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth,
+                run_args={
+                    "threshold": {
+                        3: 0.5,
+                        4: 1.0
+                    }
+                },
+            )
+            self.assertTrue(all(_ == 1.0 for _ in results))
         aio.run(main())
 
 

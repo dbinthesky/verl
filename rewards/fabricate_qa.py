@@ -493,7 +493,7 @@ SIMILARITY=4
             f'\n\n现在需要你比较下面两个问题的相似度。\n\n[原问题]\n{a}\n\n[对比问题]\n{b}\n\n[输出]\n'
         prompts[prompt].append(index)
 
-    results = await agent.run(list(prompts.keys()), max_concurrent_requests, desc="[QA Similarity]", postprocess_fns=[postprocess]*len(list(prompts.keys())))
+    results = await agent.run(list(prompts.keys()), max_concurrent_requests, desc=f"[QA Similarity {agent.model}]", postprocess_fns=[postprocess]*len(list(prompts.keys())))
 
     results_mapper = {}
     for (k, v) in results:
@@ -2250,43 +2250,45 @@ class Doc2QueryV2ComputeScore(object):
         )
         return correctness
 
-#     async def llm_as_judge_similarity(
-#         self,
-#         batch_data_sources,
-#         batch_solution_str,
-#         batch_ground_truth,
-#         max_concurrent_requests=128,
-#     ):
-#         indices = []
-#         fabricates, authentics = [], []
-#         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-#             fabricate = self.parse_solution_fn(sol)
-#             if fabricate is not None and gt.get("question", None):
-#                 fabricates.append(fabricate)
-#                 authentics.append(gt["question"])
-#                 indices.append(i)
-#             else:
-#                 continue
+    async def get_similarity_reward(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        max_concurrent_requests=128,
+        run_args=None
+    ):
+        assert run_args is not None
 
-#         similarity = await question_similarity(
-#             agent=self.verify_agent,
-#             authentic=authentics,
-#             fabricate=fabricates,
-#             max_concurrent_requests=max_concurrent_requests
-#         )
+        indices = []
+        fabricates, authentics = [], []
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            fabricate = self.parse_solution_fn(sol)
+            if fabricate is not None and gt.get("question", None):
+                fabricates.append(fabricate)
+                authentics.append(gt["question"])
+                indices.append(i)
+            else:
+                continue
 
-#         scores = [0.0] * len(batch_solution_str)
-#         for sim, index in zip(similarity, indices):
-#             if sim is None:
-#                 pass
-#             else:
-#                 if sim < 3:
-#                     pass
-#                 elif sim >= 4:
-#                     scores[index] = 1.0
-#                 elif sim == 3:
-#                     scores[index] = 0.5
-#         return scores
+        similarity = await question_similarity(
+            agent=self.verify_agent,
+            authentic=authentics,
+            fabricate=fabricates,
+            max_concurrent_requests=max_concurrent_requests
+        )
+
+        scores = [0.0] * len(batch_solution_str)
+        for sim, index in zip(similarity, indices):
+            if sim is None:
+                pass
+            else:
+                _score = 0.0
+                for threshold, set_val in run_args["threshold"].items():
+                    if sim >= threshold:
+                        _score = max(_score, set_val)
+                scores[index] = _score
+        return scores
 
 #     def log_solution(self, solution):
 #         norm = self.doc2query_parse_solution_fn(solution)
