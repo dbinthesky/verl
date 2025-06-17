@@ -20,6 +20,7 @@ from fabricate_qa import (
     DOC2QUERY_DEFAULT_PARAMS,
     doc2query_v2_default_stage1_compute_score_valid,
     fabricate_qa_default_stage1_compute_score_valid,
+    fabricate_aio_default_stage1_compute_score_valid,
     calc_qa_parse_solution_fn,
     calc_qa_parse_thought_fn,
     batchify,
@@ -69,6 +70,8 @@ def load_fabricate_aio_data(num=100, format="wrong_question"):
                 f'<think>\nSelf-Validation\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
             batch_ground_truth.append(row["reward_model"])
             count += 1
+            if count > num-1:
+                break
             continue
         for q, a, _type in [
             ("Consider a triangle with angles \\(\\alpha\\), \\(\\beta\\), and \\(\\gamma\\) such that \\(\\alpha + \\beta + \\gamma = \\pi\\). Given that \\(\\tan \\alpha \\tan \\beta = \\csc \\frac{\\pi}{3}\\), find the value of \\(\\frac{\\cos \\alpha \\cos \\beta}{\\cos \\gamma}\\).", "\\boxed{2\\sqrt{3} + 3}", "NumericalAnswer"),
@@ -308,6 +311,20 @@ class TestFabricate(unittest.TestCase):
         print(fabricate_qa_default_stage1_compute_score_valid(
             [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth,
         ))
+
+    def test_fabricate_aio_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
+            format="fabricate_qa", num=32)
+        sources = []
+        for _ in range(len(batch_solution_str)):
+            if random.random() > 0.5:
+                sources.append("doc2query_v2")
+            else:
+                sources.append("fabricate_qa")
+        rewards = fabricate_aio_default_stage1_compute_score_valid(
+            sources, batch_solution_str, batch_ground_truth,
+        )
+        self.assertTrue(len(rewards) == len(batch_solution_str))
 
 
 if __name__ == '__main__':

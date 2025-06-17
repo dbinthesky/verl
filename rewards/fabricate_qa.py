@@ -2481,7 +2481,7 @@ class Doc2QueryV2ComputeScore(object):
 
                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
                 if thought is not None and random.random() < 0.1:
-                    print('[Thought]\n{thought}')
+                    print(f'[Thought]\n{thought}')
                     print()
 
         return final_results
@@ -2605,3 +2605,58 @@ fabricate_qa_default_stage1_compute_score_valid = partial(
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 问题合成
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+class FabricateAIOComputeScore(object):
+    def __init__(self, processors=None):
+        self.processors = processors
+
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      stage,
+                      ):
+        source_mapper = {}
+        splitter = defaultdict(list)
+
+        for i, (source, sol, gt) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            source_mapper[i] = source
+            splitter[source].append((source, sol, gt))
+            source_mapper[i] = (source, len(splitter[source])-1)
+
+        results = {}
+        for source, flatten_elems in splitter.items():
+            _batch_data_sources, _batch_solution_str, _batch_ground_truth = [], [], []
+            for source, sol, gt in flatten_elems:
+                _batch_data_sources.append(source)
+                _batch_solution_str.append(sol)
+                _batch_ground_truth.append(gt)
+
+                _results = self.processors[source].compute_score(
+                    batch_data_sources=_batch_data_sources,
+                    batch_solution_str=_batch_solution_str,
+                    batch_ground_truth=_batch_ground_truth,
+                    stage=stage,
+                )
+                results[source] = _results
+
+        final_results = []
+        for i, _ in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            source, group_index = source_mapper[i]
+            final_results.append(results[source][group_index])
+        return final_results
+
+
+_default_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+    "doc2query_v2": _default_doc2query_v2_compute_score_train,
+    "fabricate_qa": _default_fabricate_qa_compute_score_train,
+})
+_default_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+    "doc2query_v2": _default_doc2query_v2_compute_score_valid,
+    "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+})
+fabricate_aio_default_stage1_compute_score_train = partial(
+    _default_fabricate_aio_compute_score_train.compute_score, stage="1")
+fabricate_aio_default_stage1_compute_score_valid = partial(
+    _default_fabricate_aio_compute_score_valid.compute_score, stage="1")
