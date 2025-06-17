@@ -2538,315 +2538,63 @@ doc2query_v2_default_stage1_compute_score_valid = partial(
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-# class QwQLongCoTFabricateQAComputeScore(QwQLongCoTDoc2QueryV2ComputeScore):
+class FabricateQAComputeScore(Doc2QueryV2ComputeScore):
+    def __init__(self, parse_solution_fn, split="train", args=None):
+        super().__init__(
+            split=split, parse_solution_fn=parse_solution_fn, args=args
+        )
 
-#     JUDGE_CRITERIA_RM_SIMILARITY = """Just create a question for me directly.
-
-# # JUDGE CRITERIA
-# 1. Your response (the created question) must be the following:
-# ```
-# {question}
-# ```
-# 2. Respond only with the created question directly (which means your response should only be a question, without other irrelevant words), any content that is irrelevant to the question, including the analysis and answer of the question, or any acceptance of the idea of formulating the question should not appear.
-# 3. Question type should comply with the following requirement:
-# {question_type}
-# """
-
-#     def __init__(self,
-#                  split="train", add_difficulty_rewards=False, difficulty_bon=8, parse_solution_fn=calc_qa_parse_solution_fn):
-#         super().__init__(
-#             split=split, add_difficulty_rewards=add_difficulty_rewards, difficulty_bon=difficulty_bon, parse_solution_fn=parse_solution_fn
-#         )
-#         self.question_similarity = QuestionSimilarity(
-#             doc2query_parse_solution_fn=self.doc2query_parse_solution_fn, key="authentic_question")
-#         self.parse_solution_fn = self.doc2query_parse_solution_fn
-
-#         self.weak_agent = self.agent
-#         self.medium_agent = Agent(**{
-#             "model": "QwQ_32B",
-#             "base_url": "http://10.130.131.138:8000/v1",
-#             "api_keys": "EMPTY",
-#             "request_kwargs": {
-#                 "temperature": 0.9,
-#                 "timeout": 360,
-#                 "max_tokens": 8192,
-#             },
-#         })
-#         self.strong_agent = Agent(**{
-#             "model": "DeepSeek-V3-0324",
-#             "base_url": "https://sd138cdmeq1emkiunptm0.apigateway-cn-beijing.volceapi.com/v1",
-#             "api_keys": "EMPTY",
-#             "request_kwargs": {
-#                 "temperature": 0.9,
-#                 "timeout": 360,
-#                 "max_tokens": 4096,
-#             }
-#         })
-#         self.verify_agent = self.agent
-
-#     def get_penalties(self) -> Dict[str, Callable]:
-#         return {
-#             "Format": self.format.get_penalty_or_reward,
-#             "QSim": self.question_similarity.get_penalty_or_reward,
-#         }
-
-#     async def get_difficulty_reward(
-#             self,
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth, max_concurrent_requests=MAX_CONCURRENT, weak_bon=16, strong_bon=6):
-
-#         weak_model_prompts, strong_model_prompts = defaultdict(
-#             list), defaultdict(list)
-
-#         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-#             result = self.parse_solution_fn(solution_str)
-#             if result is not None:
-#                 question, answer, answer_type = result
-#                 ans_format_strict = self.format.get_penalty_or_reward(
-#                     solution_str, gt
-#                 )
-#                 # 答案格式不符合规范
-#                 if ans_format_strict < 0.0:
-#                     continue
-
-#                 lang_code = gt["lang_code"]
-#                 if lang_code == "zh":
-#                     instruct = f'仔细一步步思考，并回答下面的问题。你回应的最后一行必须采用 “... 最终答案是 $ANSWER 的格式（不带引号），其中 $ANSWER 的格式要求需要满足下面的说明。\n\n{self.get_answer_format(answer_type, lang_code)}'
-#                 else:
-#                     instruct = f'Think step by step in detail and answer the following questions. The last line of your response must be in the format "... the final answer is $ANSWER" (without quotes), where the format requirements for $ANSWER need to meet the instructions below.\n\n{self.get_answer_format(answer_type, lang_code)}'
-
-#                 prompt = f'{instruct}\n\n' + question
-#                 weak_model_prompts[prompt].append(i)
-#                 strong_model_prompts[prompt].append(i)
-
-#         # 调用弱模型
-#         _weak_prompts = list(weak_model_prompts.keys()) * weak_bon
-
-#         # 调用强模型
-#         _strong_prompts = list(strong_model_prompts.keys()) * strong_bon
-
-#         tasks = [
-#             self.weak_agent.run(_weak_prompts, max_concurrent_requests, desc=f"[Generate Weak Responses {self.weak_agent.model}]", postprocess_fns=[
-#                                 self.response_postprocess] * len(_weak_prompts)),
-#             self.strong_agent.run(_strong_prompts, max_concurrent_requests, desc=f"[Generate Strong Responses {self.strong_agent.model}]", postprocess_fns=[
-#                                   self.response_postprocess] * len(_strong_prompts))
-#         ]
-#         results = await aio.gather(*tasks)
-#         _weak_results, _strong_results = results
-
-#         weak_results_mapper = defaultdict(list)
-#         for (k, v) in _weak_results:
-#             weak_results_mapper[k].append(v)
-
-#         strong_results_mapper = defaultdict(list)
-#         for (k, v) in _strong_results:
-#             strong_results_mapper[k].append(v)
-
-#         # 答案验证
-#         verify_queue = []
-#         for k, v in weak_results_mapper.items():
-#             for index in weak_model_prompts[k]:
-#                 verify_queue.extend([(index, "weak", _v) for _v in v])
-
-#         for k, v in strong_results_mapper.items():
-#             for index in strong_model_prompts[k]:
-#                 verify_queue.extend([(index, "strong", _v) for _v in v])
-
-#         correctness = await self.verify_results(
-#             verify_queue=verify_queue, batch_solution_str=batch_solution_str, max_concurrent_requests=MAX_CONCURRENT,
-#             split_names=["weak", "strong"]
-#         )
-
-#         weak, strong = correctness["weak"], correctness["strong"]
-
-#         full_rewards = []
-#         pass_rates = []
-
-#         for i in range(len(batch_solution_str)):
-#             if i in weak:
-#                 base_score = 0.0
-
-#                 weak_scores = weak[i]
-#                 strong_scores = strong[i]
-
-#                 pass_rates.append({
-#                     "weak": f'{np.sum(weak_scores)}/{len(weak_scores)}',
-#                     "strong": f'{np.sum(strong_scores)}/{len(strong_scores)}',
-#                 })
-
-#                 try:
-#                     if len(weak_scores) == 0 or len(strong_scores) == 0:
-#                         full_rewards.append(base_score)
-#                         continue
-
-#                     # 题目过于简单或困难
-#                     if np.mean(weak_scores) == 1. or np.mean(weak_scores) < (1.0/weak_bon) or np.mean(weak_scores) == 0.:
-#                         full_rewards.append(base_score)
-#                         continue
-
-#                     # 总分计算
-#                     # difficulty = 0.5 * (1.0 - np.mean(weak_scores))
-#                     # if np.mean(strong_scores) > 0.:
-#                     #     difficulty += 0.5 * (1.0 - np.mean(strong_scores))
-
-#                     difficulty = 0.0
-#                     difficulty1 = (1.0-math.log2(1+np.sum(weak_scores))/math.log2(
-#                         1+weak_bon))
-
-#                     difficulty += difficulty1
-#                     if np.mean(strong_scores) > 0.:
-#                         difficulty2 = (1.0-math.log2(1+np.sum(strong_scores)) /
-#                                        math.log2(1+strong_bon))
-#                         difficulty += difficulty2
-
-#                     base_score = difficulty
-#                 except Exception as err:
-#                     pass
-
-#                 full_rewards.append(base_score)
-#             else:
-#                 pass_rates.append({})
-#                 full_rewards.append(0.0)
-#         return full_rewards, pass_rates
-
-#     async def llm_as_judge_similarity(
-#         self,
-#         batch_data_sources,
-#         batch_solution_str,
-#         batch_ground_truth,
-#         max_concurrent_requests=128,
-#     ):
-#         indices = []
-#         fabricates, authentics = [], []
-#         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-#             fabricate = self.parse_solution_fn(sol)
-#             if fabricate is not None:
-#                 fabricates.append(fabricate)
-#                 authentics.append(gt["authentic_question"])
-#                 indices.append(i)
-#             else:
-#                 continue
-
-#         similarity = await question_similarity(
-#             agent=self.verify_agent,
-#             authentic=authentics,
-#             fabricate=fabricates,
-#             max_concurrent_requests=max_concurrent_requests
-#         )
-
-#         scores = [0.0] * len(batch_solution_str)
-#         for sim, index in zip(similarity, indices):
-#             if sim is None:
-#                 pass
-#             else:
-#                 if sim < 3:
-#                     pass
-#                 elif sim >= 4:
-#                     scores[index] = 1.0
-#                 elif sim == 3:
-#                     scores[index] = 0.5
-#         return scores
-
-#     def log_solution(self, solution):
-#         norm = self.parse_solution_fn(solution)
-#         if norm is None:
-#             return repr(self.clip_string(solution))
-#         return repr(self.format_question(norm[0], norm[1]))
-
-#     def log_ground_truth(self, ground_truth):
-#         return repr(self.clip_string(ground_truth["authentic_question"]))
-
-#     async def _compute_score(self,
-#                              batch_data_sources,
-#                              batch_solution_str,
-#                              batch_ground_truth,
-#                              ):
-#         penalty = defaultdict(list)
-#         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-#             parsed = self.doc2query_parse_solution_fn(solution_str)
-#             if parsed is None:
-#                 penalty[i].append(-2.0)
-#             else:
-#                 penalty[i].append(0.0)
-#             for key in ("Format", "QSim"):
-#                 penalty[i].append(self.get_penalties()[key]
-#                                   (solution_str, ground_truth))
-
-#         difficulty_rewards, pass_rates = await self.get_difficulty_reward(
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth,
-#             max_concurrent_requests=MAX_CONCURRENT,
-#         )
-
-#         # # FIXME
-#         # difficulty_rewards, pass_rates = [
-#         #     0.0]*len(batch_solution_str), [{}] * len(batch_solution_str)
-
-#         similarity_rewards = await self.llm_as_judge_similarity(
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth,
-#             max_concurrent_requests=MAX_CONCURRENT,
-#         )
-
-#         final_results = []
-#         for i in range(len(batch_solution_str)):
-#             scores = copy.deepcopy(penalty[i])
-#             scores.append(difficulty_rewards[i])
-#             cur_score = 0
-
-#             for j, _score in enumerate(scores):
-#                 if _score < 0:
-#                     cur_score = _score
-#                     break
-#                 else:
-#                     if j == 2:  # BLEU
-#                         if difficulty_rewards[i] > 0:
-#                             cur_score += _score
-#                     else:
-#                         cur_score += _score
-
-#             if difficulty_rewards[i] > 0:
-#                 cur_score += 0.25 * similarity_rewards[i]
-
-#             penalty_log_str = f'Parse/Format/AnsFeature/QSim={penalty[i]}'
-
-#             final_results.append(cur_score)
-
-#             if (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
-#                 log = True
-#                 log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
-#             else:
-#                 log = False
-
-#             if log:
-#                 print(
-#                     f"--------------------------------{log_flag}--------------------------------")
-#                 print(
-#                     f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
-#                 try:
-#                     print(
-#                         f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
-#                 except Exception as err:
-#                     print(f'[ERROR] {err}')
-#                 print(
-#                     f'[Final Reward]={cur_score:.3f}|[Pass@{self.difficulty_bon}]={pass_rates[i]}|Sim={similarity_rewards[i]:.3f}|Difficulty={difficulty_rewards[i]}|{penalty_log_str}\n')
-#         return final_results
-
-#     def clip_string(self, s: str):
-#         if len(s) > 1500:
-#             return f'{s[:700]}... [省略] ...{s[-800:]}'
-#         return s
+    @classmethod
+    def respond(cls, question, answer_type, gt):
+        _if = cls.get_instruct(gt, answer_type)
+        return f'{_if}\n\n{question}'
 
 
-# _qwq_longcot_fabricate_qa_compute_score_train = QwQLongCoTFabricateQAComputeScore(
-#     split="train")
-# _qwq_longcot_fabricate_qa_compute_score_valid = QwQLongCoTFabricateQAComputeScore(
-#     split="valid")
-# qwq_longcot_fabricate_qa_compute_score_train = _qwq_longcot_fabricate_qa_compute_score_train.compute_score
-# qwq_longcot_fabricate_qa_compute_score_valid = _qwq_longcot_fabricate_qa_compute_score_valid.compute_score
+FABRICATE_QA_DEFAULT_PARAMS = {
+    "difficulty_run_args": {
+        "weak": {
+            "model": FabricateQAComputeScore.get_weak_agent(),
+            "repeat": 24,
+            "fn": FabricateQAComputeScore.respond,
+            "desc": 'weak'
+        },
+        "strong": {
+            "model": FabricateQAComputeScore.get_strong_agent(),
+            "repeat": 6,
+            "fn": FabricateQAComputeScore.respond,
+            "desc": 'strong'
+        }
+    },
+    "difficulty_metric_args": {
+        "advantage": 'strong',
+        "weakness": 'weak',
+        "advantage_oversimplified_threshold": 1.0,
+        "weakness_oversimplified_threshold": 21/24,
+        "advantage_overcomplex_threshold": 1/6,
+        "weakness_overcomplex_threshold": 1/24,
+        "advantage_threshold": 1/6,
+        "advantage_weight": 0.5,
+        "weakness_weight": 0.5,
+        "confidence_bonus_threshold": 2/6,
+        "confidence_bonus_weight": 0.25
+    },
+    "similarity_run_args":  {
+        "threshold": {
+            3: 0.5,
+            4: 1.0
+        },
+        "weight": 0.25,
+    }
+}
+
+_default_fabricate_qa_compute_score_train = FabricateQAComputeScore(
+    calc_qa_parse_solution_fn, split="train", args=FABRICATE_QA_DEFAULT_PARAMS)
+_default_fabricate_qa_compute_score_valid = FabricateQAComputeScore(
+    calc_qa_parse_solution_fn, split="valid", args=FABRICATE_QA_DEFAULT_PARAMS)
+fabricate_qa_default_stage1_compute_score_train = partial(
+    _default_fabricate_qa_compute_score_train.compute_score, stage="1")
+fabricate_qa_default_stage1_compute_score_valid = partial(
+    _default_fabricate_qa_compute_score_valid.compute_score, stage="1")
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 问题合成
 # ------------------------------------------------------------------------------------------------------------------------------------------------------

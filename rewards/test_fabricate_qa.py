@@ -19,6 +19,7 @@ from fabricate_qa import (
     Doc2QueryV2ComputeScore,
     DOC2QUERY_DEFAULT_PARAMS,
     doc2query_v2_default_stage1_compute_score_valid,
+    fabricate_qa_default_stage1_compute_score_valid,
     calc_qa_parse_solution_fn,
     calc_qa_parse_thought_fn,
     batchify,
@@ -65,7 +66,7 @@ def load_fabricate_aio_data(num=100, format="wrong_question"):
                 continue
             gt = row["reward_model"]["question"]
             batch_solution_str.append(
-                f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
+                f'<think>\nSelf-Validation\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
             batch_ground_truth.append(row["reward_model"])
             count += 1
             continue
@@ -304,8 +305,9 @@ class TestFabricate(unittest.TestCase):
     def test_fabricate_qa_compute_score(self):
         batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
             format="fabricate_qa", num=32)
-        print(len(batch_solution_str))
-        print(batch_solution_str[0])
+        print(fabricate_qa_default_stage1_compute_score_valid(
+            [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        ))
 
 
 if __name__ == '__main__':
