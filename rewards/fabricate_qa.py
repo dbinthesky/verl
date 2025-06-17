@@ -2452,12 +2452,12 @@ class Doc2QueryV2ComputeScore(object):
                     break
                 else:
                     if j == penalties.index("QSim"):  # BLEU
-                        if stage == "2" and _difficulty > 0:
+                        if stage == "2" and _difficulty_score > 0:
                             cur_score += _score
                     else:
                         cur_score += _score
 
-            if stage == "2" and _difficulty > 0:
+            if stage == "2" and _difficulty_score > 0:
                 cur_score += similarity_rewards[i]
 
             final_results.append(cur_score)

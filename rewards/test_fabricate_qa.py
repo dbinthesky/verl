@@ -322,7 +322,7 @@ class TestFabricate(unittest.TestCase):
                 sources.append("doc2query_v2")
             else:
                 sources.append("fabricate_qa")
-        rewards = fabricate_aio_default_stage1_compute_score_valid(
+        rewards = fabricate_aio_default_stage2_compute_score_valid(
             sources, batch_solution_str, batch_ground_truth,
         )
         print(len(rewards), len(batch_solution_str))
