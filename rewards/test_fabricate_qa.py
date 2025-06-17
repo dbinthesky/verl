@@ -320,10 +320,11 @@ class TestFabricate(unittest.TestCase):
                     "threshold": {
                         3: 0.5,
                         4: 1.0
-                    }
+                    },
+                    "weight": 0.25,
                 },
             )
-            self.assertTrue(all(_ == 1.0 for _ in results))
+            self.assertTrue(all(_ == 1.0 * 0.25 for _ in results))
         aio.run(main())
 
 

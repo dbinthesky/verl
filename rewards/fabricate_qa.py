@@ -2287,7 +2287,7 @@ class Doc2QueryV2ComputeScore(object):
                 for threshold, set_val in run_args["threshold"].items():
                     if sim >= threshold:
                         _score = max(_score, set_val)
-                scores[index] = _score
+                scores[index] = _score * run_args["weight"]
         return scores
 
 #     def log_solution(self, solution):
