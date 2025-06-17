@@ -21,6 +21,7 @@ from fabricate_qa import (
     doc2query_v2_default_stage1_compute_score_valid,
     fabricate_qa_default_stage1_compute_score_valid,
     fabricate_aio_default_stage1_compute_score_valid,
+    fabricate_aio_default_stage2_compute_score_valid,
     calc_qa_parse_solution_fn,
     calc_qa_parse_thought_fn,
     batchify,
@@ -314,7 +315,7 @@ class TestFabricate(unittest.TestCase):
 
     def test_fabricate_aio_compute_score(self):
         batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
-            format="fabricate_qa", num=32)
+            format="doc2query_v2", num=32)
         sources = []
         for _ in range(len(batch_solution_str)):
             if random.random() > 0.5:
@@ -324,6 +325,7 @@ class TestFabricate(unittest.TestCase):
         rewards = fabricate_aio_default_stage1_compute_score_valid(
             sources, batch_solution_str, batch_ground_truth,
         )
+        print(len(rewards), len(batch_solution_str))
         self.assertTrue(len(rewards) == len(batch_solution_str))
 
 

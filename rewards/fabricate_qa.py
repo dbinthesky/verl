@@ -2641,13 +2641,13 @@ class FabricateAIOComputeScore(object):
                 _batch_solution_str.append(sol)
                 _batch_ground_truth.append(gt)
 
-                _results = self.processors[source].compute_score(
-                    batch_data_sources=_batch_data_sources,
-                    batch_solution_str=_batch_solution_str,
-                    batch_ground_truth=_batch_ground_truth,
-                    stage=stage,
-                )
-                results[source] = _results
+            _results = self.processors[source].compute_score(
+                batch_data_sources=_batch_data_sources,
+                batch_solution_str=_batch_solution_str,
+                batch_ground_truth=_batch_ground_truth,
+                stage=stage,
+            )
+            results[source] = _results
 
         final_results = []
         for i, _ in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
@@ -2668,3 +2668,7 @@ fabricate_aio_default_stage1_compute_score_train = partial(
     _default_fabricate_aio_compute_score_train.compute_score, stage="1")
 fabricate_aio_default_stage1_compute_score_valid = partial(
     _default_fabricate_aio_compute_score_valid.compute_score, stage="1")
+fabricate_aio_default_stage2_compute_score_train = partial(
+    _default_fabricate_aio_compute_score_train.compute_score, stage="2")
+fabricate_aio_default_stage2_compute_score_valid = partial(
+    _default_fabricate_aio_compute_score_valid.compute_score, stage="2")
