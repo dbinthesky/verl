@@ -2177,23 +2177,14 @@ class Doc2QueryV2ComputeScore(object):
                     def calc_difficulty(scores, total_attempts):
                         return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
 
-                    print(calc_difficulty(
-                        weak, run_args[weak_name]["repeat"]))
-                    print(calc_difficulty(adv, run_args[adv_name]["repeat"]))
 
-                    # difficulty = 0.0
-                    # difficulty1 = (1.0-math.log2(1+np.sum(weak_scores))/math.log2(
-                    #     1+weak_bon))
 
-                    # difficulty += difficulty1
-                    # if np.mean(strong_scores) > 0.:
-                    #     difficulty2 = (1.0-math.log2(1+np.sum(strong_scores)) /
-                    #                    math.log2(1+strong_bon))
-                    #     difficulty += difficulty2
+                    difficulty_reward = metric_args["weakness_weight"] * calc_difficulty(
+                        weak, run_args[weak_name]["repeat"]) + metric_args["advantage_weight"] * calc_difficulty(adv, run_args[adv_name]["repeat"])
 
-                    #                     #     full_rewards.append(base_score)
-                    #                     #     continue
-
+                    print("mlgb",difficulty_reward )
+                    print('='*80)
+ 
                     #                     # 总分计算
                     #                     difficulty1 = (1.0-math.log2(1+np.sum(wo_content_scores))/math.log2(
                     #                         1+wo_content_bon))

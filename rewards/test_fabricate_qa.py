@@ -295,7 +295,10 @@ class TestFabricate(unittest.TestCase):
                     "advantage_overcomplex_threshold": 0.0,
                     "weakness_overcomplex_threshold": 1/8,
                     "advantage_threshold": 1e-5,
-                    # "confidence_bonus": 
+                    "advantage_weight": 0.5,
+                    "weakness_weight": 0.5,
+                    # "confidence_bonus":
+
                 }
             )
             print(results)
