@@ -2170,39 +2170,33 @@ class Doc2QueryV2ComputeScore(object):
                     #     full_rewards.append(base_score)
                     #     continue
 
-                    # # 置信度奖励
-                    # if np.mean(w_content_scores) < 0.3:
-
                     # 难度奖励
                     def calc_difficulty(scores, total_attempts):
                         return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
 
+                    difficulty_reward = + \
+                        metric_args["advantage_weight"] * \
+                        calc_difficulty(adv, run_args[adv_name]["repeat"])
 
+                    # 置信度奖励
+                    confidence_bonus = 0.0
+                    if np.mean(adv) >= metric_args["confidence_bonus_threshold"]:
+                        confidence_bonus = metric_args["confidence_bonus_weight"]
 
-                    difficulty_reward = metric_args["weakness_weight"] * calc_difficulty(
-                        weak, run_args[weak_name]["repeat"]) + metric_args["advantage_weight"] * calc_difficulty(adv, run_args[adv_name]["repeat"])
-
-                    print("mlgb",difficulty_reward )
-                    print('='*80)
- 
-                    #                     # 总分计算
-                    #                     difficulty1 = (1.0-math.log2(1+np.sum(wo_content_scores))/math.log2(
-                    #                         1+wo_content_bon))
-                    #                     difficulty2 = (1.0-math.log2(1+np.sum(w_content_scores)) /
-                    #                                    math.log2(1+w_content_bon))
-
-                    #                     confidence = (1.0 if np.mean(w_content_scores)
-                    #                                   > 0.5 else np.mean(w_content_scores))
-                    #                     base_score = [difficulty1, difficulty2, confidence]
+                    base_score = [
+                        metric_args["weakness_weight"] *
+                        calc_difficulty(weak, run_args[weak_name]["repeat"]),
+                        metric_args["advantage_weight"] *
+                        calc_difficulty(adv, run_args[adv_name]["repeat"]),
+                        confidence_bonus
+                    ]
                 except Exception as err:
                     print(f'[ERROR] {err}')
-                    pass
-
-        #                 full_rewards.append(base_score)
-        #             else:
-        #                 pass_rates.append({})
-        #                 full_rewards.append(0.0)
-        #         return full_rewards, pass_rates
+                    full_rewards.append(base_score)
+            else:
+                pass_rates.append({})
+                full_rewards.append(0.0)
+        return full_rewards, pass_rates
 
     async def simulate_respondent(
             self,

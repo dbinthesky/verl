@@ -297,8 +297,8 @@ class TestFabricate(unittest.TestCase):
                     "advantage_threshold": 1e-5,
                     "advantage_weight": 0.5,
                     "weakness_weight": 0.5,
-                    # "confidence_bonus":
-
+                    "confidence_bonus_threshold": 2/6,
+                    "confidence_bonus_weight": 0.25
                 }
             )
             print(results)
