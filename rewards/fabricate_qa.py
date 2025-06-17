@@ -2150,18 +2150,24 @@ class Doc2QueryV2ComputeScore(object):
                         full_rewards.append(base_score)
                         continue
 
+                    print(weak, adv)
                     # 题目过难
                     if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
+                        print(1, np.mean(weak), metric_args["weakness_overcomplex_threshold"], np.mean(
+                            adv), metric_args["advantage_overcomplex_threshold"])
+                        print("="*80)
                         full_rewards.append(base_score)
                         continue
 
                     # 题目过易
                     if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
+                        print(2)
                         full_rewards.append(base_score)
                         continue
 
                     # adv 应该比 weakness 显著好
                     if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
+                        print(3)
                         full_rewards.append(base_score)
                         continue
 
@@ -2180,6 +2186,7 @@ class Doc2QueryV2ComputeScore(object):
                         calc_difficulty(adv, run_args[adv_name]["repeat"]),
                         confidence_bonus
                     ]
+                    full_rewards.append(base_score)
                 except Exception as err:
                     print(f'[ERROR] {err}')
                     full_rewards.append(base_score)

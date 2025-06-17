@@ -294,13 +294,15 @@ class TestFabricate(unittest.TestCase):
                     # "advantage_overcomplex_threshold": 1/2,
                     "advantage_overcomplex_threshold": 0.0,
                     "weakness_overcomplex_threshold": 1/8,
-                    "advantage_threshold": 1e-5,
+                    # "advantage_threshold": 1e-5,
+                    "advantage_threshold": -9999.,
                     "advantage_weight": 0.5,
                     "weakness_weight": 0.5,
                     "confidence_bonus_threshold": 2/6,
                     "confidence_bonus_weight": 0.25
                 }
             )
+            assert len(results[0]) == len(results[1])
             print(results)
         aio.run(main())
 
