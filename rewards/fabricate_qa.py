@@ -1821,14 +1821,15 @@ class CalculationAnswerFormatVerify(PenaltyOrReward):
 class ThoughtBonus(PenaltyOrReward):
     def __init__(self, parse_solution_fn=calc_qa_parse_thought_fn, base_score=0.1):
         self.parse_solution_fn = parse_solution_fn
-        self.base_score = 0.1
+        self.base_score = 0.2
         self.keywords = {
             "zh": ("自检", "答案校验", "完备性检查", "冗余审查", "干扰", "真实性校验", "隐性化",
-                   "难度优化", "最终修改", "初拟", "雏形构建"),
+                   "难度优化", "最终修改", "初拟", "雏形构建", "设定自洽", "换一种方式设计"),
             "en": (
                 "self-validation", "final modification", "completeness check",
                 "redundancy review", "implicit condition", "redundant interference", "initial draft",
-                "difficulty optimization", "prototype construction", "answer verification"
+                "difficulty optimization", "prototype construction", "answer verification", "another idea",
+                "another angle"
             )
         }
 
@@ -2283,11 +2284,18 @@ class Doc2QueryV2ComputeScore(object):
             if result is not None:
                 question, answer, answer_type = result
                 answer_map[i] = (question, answer, answer_type)
+                # 答案格式不符合规范
                 ans_format_strict = self.format.get_penalty_or_reward(
                     solution_str, gt
                 )
-                # 答案格式不符合规范
                 if ans_format_strict < 0.0:
+                    continue
+
+                # 语言不一致
+                lang_consist = self.language.get_penalty_or_reward(
+                    solution_str, gt
+                )
+                if lang_consist < 0.0:
                     continue
 
                 lang_code = gt["lang_code"]
