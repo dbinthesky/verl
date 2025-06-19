@@ -1984,6 +1984,19 @@ class Doc2QueryV2ComputeScore(object):
     @classmethod
     def get_weak_agent(cls):
         return Agent(**{
+            "model": "DeepSeek-V3-0324",
+            "base_url": "https://sd138cdmeq1emkiunptm0.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.9,
+                "timeout": 360,
+                "max_tokens": 4096,
+            }
+        })
+
+    @classmethod
+    def get_strong_agent(cls):
+        return Agent(**{
             "model": "qwen25_32B_instruct",
             "base_url": "http://10.130.131.138:8000/v1",
             "api_keys": "EMPTY",
@@ -1993,23 +2006,6 @@ class Doc2QueryV2ComputeScore(object):
                 "max_tokens": 2048,
             },
         })
-
-    @classmethod
-    def get_strong_agent(cls):
-        return cls.get_weak_agent()
-
-    # @classmethod
-    # def get_strong_agent(cls):
-    #     return Agent(**{
-    #         "model": "DeepSeek-V3-0324",
-    #         "base_url": "https://sd138cdmeq1emkiunptm0.apigateway-cn-beijing.volceapi.com/v1",
-    #         "api_keys": "EMPTY",
-    #         "request_kwargs": {
-    #             "temperature": 0.9,
-    #             "timeout": 360,
-    #             "max_tokens": 4096,
-    #         }
-    #     })
 
     @classmethod
     def get_verify_agent(cls):
@@ -2512,13 +2508,13 @@ DOC2QUERY_DEFAULT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": Doc2QueryV2ComputeScore.get_weak_agent(),
-            "repeat": 32,
+            "repeat": 8,
             "fn": Doc2QueryV2ComputeScore.respond_wo_context,
             "desc": 'w/o ctx'
         },
         "w_content": {
             "model": Doc2QueryV2ComputeScore.get_strong_agent(),
-            "repeat": 16,
+            "repeat": 32,
             "fn": Doc2QueryV2ComputeScore.respond_w_context,
             "desc": 'w ctx'
         }
@@ -2526,15 +2522,15 @@ DOC2QUERY_DEFAULT_PARAMS = {
     "difficulty_metric_args": {
         "advantage": 'w_content',
         "weakness": 'w/o_content',
-        "advantage_oversimplified_threshold": 1.0,
-        "weakness_oversimplified_threshold": 28/32,
-        "advantage_overcomplex_threshold": 1/16,
-        "weakness_overcomplex_threshold": 1/32,
-        "advantage_threshold": 1/16,
-        "advantage_weight": 0.5,
-        "weakness_weight": 0.5,
+        "advantage_oversimplified_threshold": 28/32,
+        "weakness_oversimplified_threshold": 7/8,
+        "advantage_overcomplex_threshold": 1/32,
+        "weakness_overcomplex_threshold": 1/8,
+        "advantage_threshold": 1/8,
+        "advantage_weight": 0.0,
+        "weakness_weight": 1.0,
         "confidence_bonus_threshold": 4/16,
-        "confidence_bonus_weight": 0.5
+        "confidence_bonus_weight": 0.
     },
     "similarity_run_args":  {
         "threshold": {
@@ -2563,8 +2559,6 @@ doc2query_v2_default_stage1_compute_score_valid = partial(
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 问题合成
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-
 class FabricateQAComputeScore(Doc2QueryV2ComputeScore):
     def __init__(self, parse_solution_fn, split="train", args=None):
         super().__init__(
@@ -2576,6 +2570,19 @@ class FabricateQAComputeScore(Doc2QueryV2ComputeScore):
     def respond(cls, question, answer_type, gt):
         _if = cls.get_instruct(gt, answer_type)
         return f'{_if}\n\n{question}'
+
+    @classmethod
+    def get_weak_agent(cls):
+        return Agent(**{
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.131.138:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.9,
+                "timeout": 360,
+                "max_tokens": 2048,
+            },
+        })
 
     @classmethod
     def get_strong_agent(cls):
