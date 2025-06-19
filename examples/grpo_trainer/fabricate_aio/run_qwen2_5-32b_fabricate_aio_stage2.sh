@@ -54,9 +54,9 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-fabricate_qa_v10"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0616.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_test_0616.parquet"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/distillv12_stage1_roll4_bsz32_w_kl_coef_4e3_w_entropy_5e4_grpo_step_90"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0619.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_test_0619.parquet"
 
     experiment_name="distill-qwen-32b_fabricate_aio-${YYMMDD}-${HHMMSS}"
     project_name="fabricate_aio"
@@ -116,7 +116,7 @@ run_training() {
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=16384 \
         actor_rollout_ref.actor.use_kl_loss=True \
         actor_rollout_ref.actor.kl_loss_coef=0.004 \
-        actor_rollout_ref.actor.entropy_coeff=0.0005 \
+        actor_rollout_ref.actor.entropy_coeff=0.001 \
         actor_rollout_ref.actor.kl_loss_type="low_var_kl" \
         actor_rollout_ref.model.enable_gradient_checkpointing=True \
         +actor_rollout_ref.model.trust_remote_code=True \
