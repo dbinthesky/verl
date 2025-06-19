@@ -1755,7 +1755,7 @@ WithUnitSymbol_en = """
         - Lowercase: m (meter), kg (kilogram), s (second), mol (mole), etc.
         - Leave a space between the unit and the numerical value: `2.91 m` ✅, `2.91m` ❌.
         - Use a slash for composite units: `kJ/(mol·K)` ✅, and power forms are prohibited (such as `kJ·mol⁻¹·K⁻¹` ❌).  
-
+    
     3. **Note** that unlike numerical answers, there is no need to enclose it with \(\\boxed{}\) !!! For example, Answer: `1.040 mol` ✅, `Answer: \\boxed{1.040\\ mol}` ❌.
 """
 
