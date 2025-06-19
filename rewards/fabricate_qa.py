@@ -1996,16 +1996,20 @@ class Doc2QueryV2ComputeScore(object):
 
     @classmethod
     def get_strong_agent(cls):
-        return Agent(**{
-            "model": "DeepSeek-V3-0324",
-            "base_url": "https://sd138cdmeq1emkiunptm0.apigateway-cn-beijing.volceapi.com/v1",
-            "api_keys": "EMPTY",
-            "request_kwargs": {
-                "temperature": 0.9,
-                "timeout": 360,
-                "max_tokens": 4096,
-            }
-        })
+        return cls.get_weak_agent()
+
+    # @classmethod
+    # def get_strong_agent(cls):
+    #     return Agent(**{
+    #         "model": "DeepSeek-V3-0324",
+    #         "base_url": "https://sd138cdmeq1emkiunptm0.apigateway-cn-beijing.volceapi.com/v1",
+    #         "api_keys": "EMPTY",
+    #         "request_kwargs": {
+    #             "temperature": 0.9,
+    #             "timeout": 360,
+    #             "max_tokens": 4096,
+    #         }
+    #     })
 
     @classmethod
     def get_verify_agent(cls):
@@ -2226,7 +2230,6 @@ class Doc2QueryV2ComputeScore(object):
                     if len(weak) == 0 or len(adv) == 0:
                         full_rewards.append(base_score)
                         continue
-
                     # 题目过难
                     if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
                         full_rewards.append(base_score)
@@ -2249,7 +2252,8 @@ class Doc2QueryV2ComputeScore(object):
                     # 置信度奖励
                     confidence_bonus = 0.0
                     if np.mean(adv) >= metric_args["confidence_bonus_threshold"]:
-                        confidence_bonus = metric_args["confidence_bonus_weight"]
+                        confidence_bonus = metric_args["confidence_bonus_weight"] * max(
+                            (np.mean(adv)-np.mean(weak)), 0.0)
                     base_score = [
                         metric_args["weakness_weight"] *
                         calc_difficulty(weak, run_args[weak_name]["repeat"]),
@@ -2257,6 +2261,7 @@ class Doc2QueryV2ComputeScore(object):
                         calc_difficulty(adv, run_args[adv_name]["repeat"]),
                         confidence_bonus
                     ]
+
                     full_rewards.append(base_score)
                 except Exception as err:
                     print(f'[ERROR] {err}')
@@ -2513,7 +2518,7 @@ DOC2QUERY_DEFAULT_PARAMS = {
         },
         "w_content": {
             "model": Doc2QueryV2ComputeScore.get_strong_agent(),
-            "repeat": 8,
+            "repeat": 16,
             "fn": Doc2QueryV2ComputeScore.respond_w_context,
             "desc": 'w ctx'
         }
@@ -2523,13 +2528,13 @@ DOC2QUERY_DEFAULT_PARAMS = {
         "weakness": 'w/o_content',
         "advantage_oversimplified_threshold": 1.0,
         "weakness_oversimplified_threshold": 28/32,
-        "advantage_overcomplex_threshold": 1/8,
+        "advantage_overcomplex_threshold": 1/16,
         "weakness_overcomplex_threshold": 1/32,
-        "advantage_threshold": 1/8,
+        "advantage_threshold": 1/16,
         "advantage_weight": 0.5,
         "weakness_weight": 0.5,
-        "confidence_bonus_threshold": 2/8,
-        "confidence_bonus_weight": 0.25
+        "confidence_bonus_threshold": 4/16,
+        "confidence_bonus_weight": 0.5
     },
     "similarity_run_args":  {
         "threshold": {
@@ -2571,6 +2576,19 @@ class FabricateQAComputeScore(Doc2QueryV2ComputeScore):
     def respond(cls, question, answer_type, gt):
         _if = cls.get_instruct(gt, answer_type)
         return f'{_if}\n\n{question}'
+
+    @classmethod
+    def get_strong_agent(cls):
+        return Agent(**{
+            "model": "DeepSeek-V3-0324",
+            "base_url": "https://sd138cdmeq1emkiunptm0.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.9,
+                "timeout": 360,
+                "max_tokens": 4096,
+            }
+        })
 
 
 FABRICATE_QA_DEFAULT_PARAMS = {
