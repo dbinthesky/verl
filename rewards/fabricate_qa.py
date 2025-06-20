@@ -1997,6 +1997,19 @@ class Doc2QueryV2ComputeScore(object):
     @classmethod
     def get_strong_agent(cls):
         return Agent(**{
+            "model": "DeepSeek-V3-0324",
+            "base_url": "https://sd138cdmeq1emkiunptm0.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.9,
+                "timeout": 360,
+                "max_tokens": 4096,
+            }
+        })
+
+    @classmethod
+    def get_verify_agent(cls):
+        return Agent(**{
             "model": "qwen25_32B_instruct",
             "base_url": "http://10.130.131.138:8000/v1",
             "api_keys": "EMPTY",
@@ -2006,10 +2019,6 @@ class Doc2QueryV2ComputeScore(object):
                 "max_tokens": 2048,
             },
         })
-
-    @classmethod
-    def get_verify_agent(cls):
-        return cls.get_strong_agent()
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
@@ -2514,7 +2523,7 @@ DOC2QUERY_DEFAULT_PARAMS = {
         },
         "w_content": {
             "model": Doc2QueryV2ComputeScore.get_strong_agent(),
-            "repeat": 32,
+            "repeat": 8,
             "fn": Doc2QueryV2ComputeScore.respond_w_context,
             "desc": 'w ctx'
         }
@@ -2522,14 +2531,14 @@ DOC2QUERY_DEFAULT_PARAMS = {
     "difficulty_metric_args": {
         "advantage": 'w_content',
         "weakness": 'w/o_content',
-        "advantage_oversimplified_threshold": 32/32,
+        "advantage_oversimplified_threshold": 8/8,
         "weakness_oversimplified_threshold": 7/8,
-        "advantage_overcomplex_threshold": 1/32,
+        "advantage_overcomplex_threshold": 1/8,
         "weakness_overcomplex_threshold": 1/8,
         "advantage_threshold": 1/8,
         "advantage_weight": 0.0,
         "weakness_weight": 1.0,
-        "confidence_bonus_threshold": 4/16,
+        "confidence_bonus_threshold": 2/8,
         "confidence_bonus_weight": 0.
     },
     "similarity_run_args":  {
