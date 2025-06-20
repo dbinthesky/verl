@@ -2009,7 +2009,7 @@ class Doc2QueryV2ComputeScore(object):
 
     @classmethod
     def get_verify_agent(cls):
-        return cls.get_weak_agent()
+        return cls.get_strong_agent()
 
     def get_penalties(self) -> Dict[str, Callable]:
         return {
@@ -2522,7 +2522,7 @@ DOC2QUERY_DEFAULT_PARAMS = {
     "difficulty_metric_args": {
         "advantage": 'w_content',
         "weakness": 'w/o_content',
-        "advantage_oversimplified_threshold": 28/32,
+        "advantage_oversimplified_threshold": 32/32,
         "weakness_oversimplified_threshold": 7/8,
         "advantage_overcomplex_threshold": 1/32,
         "weakness_overcomplex_threshold": 1/8,
@@ -2570,6 +2570,10 @@ class FabricateQAComputeScore(Doc2QueryV2ComputeScore):
     def respond(cls, question, answer_type, gt):
         _if = cls.get_instruct(gt, answer_type)
         return f'{_if}\n\n{question}'
+
+    @classmethod
+    def get_verify_agent(cls):
+        return cls.get_weak_agent()
 
     @classmethod
     def get_weak_agent(cls):
