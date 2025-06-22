@@ -1984,14 +1984,14 @@ class Doc2QueryV2ComputeScore(object):
     @classmethod
     def get_weak_agent(cls):
         return Agent(**{
-            "model": "DeepSeek-V3-0324",
-            "base_url": "https://sd138cdmeq1emkiunptm0.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.131.138:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.8,
                 "timeout": 360,
-                "max_tokens": 4096,
-            }
+                "max_tokens": 2048,
+            },
         })
 
     @classmethod
@@ -2520,7 +2520,7 @@ DOC2QUERY_DEFAULT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": Doc2QueryV2ComputeScore.get_weak_agent(),
-            "repeat": 8,
+            "repeat": 48,
             "fn": Doc2QueryV2ComputeScore.respond_wo_context,
             "desc": 'w/o ctx'
         },
@@ -2529,18 +2529,18 @@ DOC2QUERY_DEFAULT_PARAMS = {
             "repeat": 8,
             "fn": Doc2QueryV2ComputeScore.respond_w_context,
             "desc": 'w ctx'
-        }
+        },
     },
     "difficulty_metric_args": {
         "advantage": 'w_content',
         "weakness": 'w/o_content',
         "advantage_oversimplified_threshold": 8/8,
-        "weakness_oversimplified_threshold": 7/8,
+        "weakness_oversimplified_threshold": 45/48,
         "advantage_overcomplex_threshold": 1/8,
-        "weakness_overcomplex_threshold": 1/8,
+        "weakness_overcomplex_threshold": 1/48,
         "advantage_threshold": 1/8,
         "advantage_weight": 0.0,
-        "weakness_weight": 1.0,
+        "weakness_weight": 2.0,
         "confidence_bonus_threshold": 2/8,
         "confidence_bonus_weight": 0.
     },
@@ -2668,7 +2668,7 @@ class FabricateQAComputeScore(Doc2QueryV2ComputeScore):
             "base_url": "http://10.130.131.138:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
-                "temperature": 0.8,
+                "temperature": 0.9,
                 "timeout": 360,
                 "max_tokens": 2048,
             },
