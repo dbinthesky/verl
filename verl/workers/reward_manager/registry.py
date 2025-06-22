@@ -12,9 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from verl.workers.reward_manager.custom import CustomRewardManager
+
 __all__ = ["register", "get_reward_manager_cls"]
 
-REWARD_MANAGER_REGISTRY = {}
+REWARD_MANAGER_REGISTRY = {
+    "custom": CustomRewardManager
+}
 
 
 def register(name):

@@ -14,6 +14,7 @@ setup_env() {
     export VLLM_ATTENTION_BACKEND="XFORMERS"
     export VLLM_USE_MODELSCOPE="False"
     export HOME="/cpfs01/shared/llm_ddd/tongjian"
+    export HYDRA_FULL_ERROR=1
 }
 setup_env
 
@@ -39,7 +40,6 @@ setup_proxy() {
 # Conda Environment Setup
 # ------------------------------
 activate_conda() {
-    # Hard Code: InternLM3-8B支持
     source /cpfs01/shared/llm_ddd/guoxu/public/verl_env/verl_env/bin/activate /cpfs01/shared/llm_ddd/tongjian/verl
 }
 activate_conda
@@ -119,7 +119,6 @@ run_training() {
         actor_rollout_ref.actor.entropy_coeff=0.001 \
         actor_rollout_ref.actor.kl_loss_type="low_var_kl" \
         actor_rollout_ref.model.enable_gradient_checkpointing=True \
-        +actor_rollout_ref.model.trust_remote_code=True \
         actor_rollout_ref.actor.fsdp_config.param_offload=True \
         actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
         actor_rollout_ref.rollout.tensor_model_parallel_size=4 \
@@ -127,7 +126,7 @@ run_training() {
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
         actor_rollout_ref.rollout.temperature=1.0 \
-        actor_rollout_ref.rollout.n=4 \
+        actor_rollout_ref.rollout.n=16 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
@@ -136,7 +135,6 @@ run_training() {
         trainer.logger='["console", "wandb"]' \
         trainer.project_name="${project_name}" \
         trainer.experiment_name="${experiment_name}" \
-        +trainer.val_before_train=True \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
         trainer.save_freq=10 \

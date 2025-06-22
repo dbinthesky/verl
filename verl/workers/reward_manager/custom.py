@@ -15,27 +15,35 @@
 from verl import DataProto
 from verl.utils.reward_score import _default_compute_score
 import torch
+from collections import defaultdict
+
 
 
 class CustomRewardManager:
     """The reward manager.
     """
 
-    def __init__(self, tokenizer, num_examine, compute_score=None) -> None:
+    def __init__(self, tokenizer, num_examine, compute_score=None, reward_fn_key="data_source") -> None:
         self.tokenizer = tokenizer
         # the number of batches of decoded responses to print to the console
         self.num_examine = num_examine
         self.compute_score = compute_score or _default_compute_score
+        self.reward_fn_key = reward_fn_key  # Store the key for accessing the data source
 
-    def __call__(self, data: DataProto):
+    def __call__(self, data: DataProto, return_dict=False):
         """We will expand this function gradually based on the available datasets"""
 
         # If there is rm score, we directly return rm score. Otherwise, we compute via rm_score_fn
-        if 'rm_scores' in data.batch.keys():
-            return data.batch['rm_scores']
+        if "rm_scores" in data.batch.keys():
+            if return_dict:
+                return {"reward_tensor": data.batch["rm_scores"]}
+            else:
+                return data.batch["rm_scores"]
 
         reward_tensor = torch.zeros_like(
             data.batch['responses'], dtype=torch.float32)
+        reward_extra_info = defaultdict(list)
+
         batch_solution_str, batch_ground_truth, batch_data_sources = [], [], []
 
         already_print_data_sources = {}
@@ -88,4 +96,10 @@ class CustomRewardManager:
 
             reward_tensor[i, valid_response_length - 1] = scores[i]
 
-        return reward_tensor
+        if return_dict:
+            return {
+                "reward_tensor": reward_tensor,
+                "reward_extra_info": reward_extra_info,
+            }
+        else:
+            return reward_tensor
