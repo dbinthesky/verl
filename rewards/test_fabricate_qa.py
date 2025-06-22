@@ -179,6 +179,8 @@ class TestFabricate(unittest.TestCase):
         self.assertEqual(verifier.verify("\\boxed{-5}"), True)
         self.assertEqual(verifier.verify("\\boxed{0.500}"), True)
         self.assertEqual(verifier.verify("\\boxed{0.210}"), True)
+        self.assertEqual(verifier.verify("\\boxed{5.5}"), False)
+        self.assertEqual(verifier.verify("\\boxed{-0.0500}"), True)
 
     def test_calc_qa_parse_solution_fn(self):
         self.assertFalse(calc_qa_parse_solution_fn(

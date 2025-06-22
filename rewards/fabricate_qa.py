@@ -1988,7 +1988,7 @@ class Doc2QueryV2ComputeScore(object):
             "base_url": "https://sd138cdmeq1emkiunptm0.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
-                "temperature": 0.9,
+                "temperature": 0.8,
                 "timeout": 360,
                 "max_tokens": 4096,
             }
@@ -2001,7 +2001,7 @@ class Doc2QueryV2ComputeScore(object):
             "base_url": "https://sd138cdmeq1emkiunptm0.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
-                "temperature": 0.9,
+                "temperature": 0.8,
                 "timeout": 360,
                 "max_tokens": 4096,
             }
@@ -2014,7 +2014,7 @@ class Doc2QueryV2ComputeScore(object):
             "base_url": "http://10.130.131.138:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
-                "temperature": 0.9,
+                "temperature": 0.8,
                 "timeout": 360,
                 "max_tokens": 2048,
             },
@@ -2472,6 +2472,9 @@ class Doc2QueryV2ComputeScore(object):
                     if j == penalties.index("QSim"):  # BLEU
                         if stage == "2" and _difficulty_score > 0:
                             cur_score += _score
+                    if j == penalties.index("Thought"):
+                        if stage == "2" and _difficulty_score > 0:
+                            cur_score += _score
                     else:
                         cur_score += _score
 
@@ -2591,7 +2594,7 @@ class FabricateQAComputeScore(Doc2QueryV2ComputeScore):
             "base_url": "http://10.130.131.138:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
-                "temperature": 0.9,
+                "temperature": 0.8,
                 "timeout": 360,
                 "max_tokens": 2048,
             },
