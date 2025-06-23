@@ -2469,17 +2469,19 @@ class Doc2QueryV2ComputeScore(object):
                     cur_score = _score
                     break
                 else:
-                    if j == penalties.index("QSim"):  # BLEU
+                    if (j == penalties.index("QSim")) or (j == penalties.index("Thought")):  # BLEU
                         if stage == "2" and _difficulty_score > 0:
                             cur_score += _score
-                    if j == penalties.index("Thought"):
-                        if stage == "2" and _difficulty_score > 0:
-                            cur_score += _score
+                        elif stage == "1":
+                            pass
                     else:
                         cur_score += _score
 
             if stage == "2" and _difficulty_score > 0:
                 cur_score += similarity_rewards[i]
+
+            if stage == "1" and cur_score > 0.0:
+                cur_score = 0.0
 
             final_results.append(cur_score)
 
@@ -2513,6 +2515,8 @@ class Doc2QueryV2ComputeScore(object):
                     print(f'[Thought]\n{thought}')
                     print()
 
+        if self.split == "valid":
+            pass
         return final_results
 
 
