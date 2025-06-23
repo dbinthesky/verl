@@ -2440,14 +2440,14 @@ class Doc2QueryV2ComputeScore(object):
                 metric_args=self.args["difficulty_metric_args"],
                 max_concurrent_requests=max_concurrent_requests,
             )
-            # 相似度奖励
-            similarity_rewards = await self.get_similarity_reward(
-                batch_data_sources,
-                batch_solution_str,
-                batch_ground_truth,
-                max_concurrent_requests=max_concurrent_requests,
-                run_args=self.args["similarity_run_args"],
-            )
+            # # 相似度奖励
+            # similarity_rewards = await self.get_similarity_reward(
+            #     batch_data_sources,
+            #     batch_solution_str,
+            #     batch_ground_truth,
+            #     max_concurrent_requests=max_concurrent_requests,
+            #     run_args=self.args["similarity_run_args"],
+            # )
 
         final_results = []
         for i in range(len(batch_solution_str)):
@@ -2477,8 +2477,8 @@ class Doc2QueryV2ComputeScore(object):
                     else:
                         cur_score += _score
 
-            if stage == "2" and _difficulty_score > 0:
-                cur_score += similarity_rewards[i]
+            # if stage == "2" and _difficulty_score > 0:
+            #     cur_score += similarity_rewards[i]
 
             if stage == "1" and cur_score > 0.0:
                 cur_score = 0.0
@@ -2508,7 +2508,7 @@ class Doc2QueryV2ComputeScore(object):
                         f'[Final Reward]={cur_score:.3f}|{penalty_log_str}\n')
                 elif stage == "2":
                     print(
-                        f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|Sim={similarity_rewards[i]:.3f}|{penalty_log_str}\n')
+                        f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|{penalty_log_str}\n')
 
                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
                 if thought is not None and random.random() < 0.1:
