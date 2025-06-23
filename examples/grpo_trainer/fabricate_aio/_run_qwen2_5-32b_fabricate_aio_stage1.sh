@@ -31,6 +31,8 @@ setup_proxy() {
     export https_proxy="https://${PROXY_CREDENTIALS}@${PROXY_URL}"
     export HTTP_PROXY="${https_proxy}"
     export HTTPS_PROXY="${https_proxy}"
+
+    # export no_proxy="localhost,127.0.0.1,*local,10.130.133.200"
 }
 # setup_proxy
 
@@ -42,6 +44,7 @@ activate_conda() {
 }
 activate_conda
 
+
 # ------------------------------
 # Path Configuration
 # ------------------------------
@@ -51,8 +54,8 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-fabricate_qa_v14"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0623.parquet"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-fabricate_qa_v12"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0619.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_test_0619.parquet"
 
     experiment_name="distill-qwen-32b_fabricate_aio-${YYMMDD}-${HHMMSS}"
@@ -63,6 +66,7 @@ setup_path() {
 }
 setup_path
 
+
 # ------------------------------
 # Install Package
 # ------------------------------
@@ -70,6 +74,7 @@ setup_path
 #     pip3 install -U torchdata
 # }
 # setup_package
+
 
 # ------------------------------
 # Main Training Command
@@ -87,11 +92,11 @@ run_training() {
     # self.config.actor.ppo_mini_batch_size //= (self.device_mesh.size() // self.ulysses_sequence_parallel_size)
     # self.config.actor.ppo_micro_batch_size_per_gpu = self.config.actor.ppo_micro_batch_size
 
-    python3 -m recipe.dapo.main_dapo \
+    python3 -m verl.trainer.main_ppo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        custom_reward_function.name=fabricate_aio_default_stage2_compute_score_train \
+        custom_reward_function.name=fabricate_aio_default_stage1_compute_score_train \
         +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        +custom_valid_reward_function.name=fabricate_aio_default_stage2_compute_score_valid \
+        +custom_valid_reward_function.name=fabricate_aio_default_stage1_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
@@ -110,16 +115,13 @@ run_training() {
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=20480 \
         actor_rollout_ref.actor.use_kl_loss=True \
-        actor_rollout_ref.actor.kl_loss_coef=0.0 \
-        actor_rollout_ref.actor.entropy_coeff=0.0 \
+        actor_rollout_ref.actor.kl_loss_coef=0.004 \
+        actor_rollout_ref.actor.entropy_coeff=0.001 \
+        actor_rollout_ref.actor.kl_loss_type="low_var_kl" \
         actor_rollout_ref.actor.grad_clip=1.0 \
         actor_rollout_ref.actor.clip_ratio_low=0.2 \
         actor_rollout_ref.actor.clip_ratio_high=0.28 \
         actor_rollout_ref.actor.clip_ratio_c=10.0 \
-        reward_model.overlong_buffer.enable=True \
-        reward_model.overlong_buffer.len=$((1024 * 4)) \
-        reward_model.overlong_buffer.penalty_factor=1.0 \
-        algorithm.filter_groups.enable=False \
         actor_rollout_ref.model.enable_gradient_checkpointing=True \
         actor_rollout_ref.actor.fsdp_config.param_offload=True \
         actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
@@ -132,12 +134,9 @@ run_training() {
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
+        reward_model.reward_manager=custom \
         algorithm.kl_ctrl.kl_coef=0.000 \
         algorithm.lam=0.95 \
-        reward_model.reward_manager=dapo_custom \
-        reward_model.overlong_buffer.enable=True \
-        reward_model.overlong_buffer.len=$((1024 * 4)) \
-        reward_model.overlong_buffer.penalty_factor=1.0 \
         trainer.logger='["console", "wandb"]' \
         trainer.project_name="${project_name}" \
         trainer.experiment_name="${experiment_name}" \
@@ -146,16 +145,17 @@ run_training() {
         trainer.save_freq=10 \
         trainer.test_freq=10 \
         trainer.total_epochs=10000 \
-        "$@"
+        reward_model.reward_manager="custom" "$@"
     local training_status=$?
 
     # 显式传递训练状态
     if [ $training_status -ne 0 ]; then
         echo "Training failed with exit code $training_status"
-        exit $training_status # 退出码传递给全局
+        exit $training_status  # 退出码传递给全局
     fi
 }
 # run_training "$@"
+
 
 # ------------------------------
 # Ray Cluster Setup

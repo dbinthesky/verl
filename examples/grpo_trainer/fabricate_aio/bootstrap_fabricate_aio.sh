@@ -2,7 +2,7 @@
 
 DLC_PATH="/cpfs01/shared/public/dlc"
 
-JOB_NAME="fabricate_aio_rl_debug"
+JOB_NAME="fabricate_aio_rl"
 PYARGS="${@:3}"
 
 NUM_PROCESSES="${NUM_PROCESSES:-4}"
