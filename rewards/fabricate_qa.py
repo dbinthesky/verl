@@ -2542,7 +2542,7 @@ DOC2QUERY_DEFAULT_PARAMS = {
         "weakness_oversimplified_threshold": 45/48,
         "advantage_overcomplex_threshold": 1/8,
         "weakness_overcomplex_threshold": 1/48,
-        "advantage_threshold": 1/8,
+        "advantage_threshold": 2/8,
         "advantage_weight": 0.0,
         "weakness_weight": 2.0,
         "confidence_bonus_threshold": 2/8,
