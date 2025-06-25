@@ -32,17 +32,6 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 en_mt = MosesTokenizer(lang='en')
 
 
-RM_URLS = [
-    "http://10.130.2.51:25473",
-    "http://10.130.2.51:25954",
-    "http://10.130.2.51:32560",
-    "http://10.130.2.51:33547",
-    "http://10.130.2.51:28764",
-    "http://10.130.2.51:34113",
-    "http://10.130.2.51:33871",
-    "http://10.130.2.51:29538",
-]
-
 VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
@@ -2003,7 +1992,7 @@ class Doc2QueryV2ComputeScore(object):
             "request_kwargs": {
                 "temperature": 0.8,
                 "timeout": 360,
-                "max_tokens": 4096,
+                "max_tokens": 2048+512,
             }
         })
 
@@ -2490,8 +2479,10 @@ class Doc2QueryV2ComputeScore(object):
                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
             else:
                 log = False
+
             if cur_score == -2.0:
                 log = True
+                log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
 
             source = batch_ground_truth[i]["source"]
 
@@ -2513,7 +2504,7 @@ class Doc2QueryV2ComputeScore(object):
                         f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|{penalty_log_str}\n')
 
                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
-                if random.random() < 0.1:
+                if random.random() < 0.1 or cur_score == -2.0:
                     if thought is not None:
                         print(f'[Thought]\n{thought}')
                         print()
