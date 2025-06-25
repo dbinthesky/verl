@@ -16,6 +16,7 @@ from fabricate_qa import (
     ThoughtBonus,
     CalculationAnswerFormatVerify,
     LanguageConsistency,
+    BadQuestionDetection,
     Doc2QueryV2ComputeScore,
     DOC2QUERY_DEFAULT_PARAMS,
     doc2query_v2_default_stage1_compute_score_valid,
@@ -54,6 +55,17 @@ def load_fabricate_aio_data(num=100, format="wrong_question"):
             else:
                 continue
         if format == "zh_question":
+            if row["reward_model"]["lang_code"] != "zh":
+                continue
+            gt = row["reward_model"]["question"]
+            if gt is not None:
+                batch_solution_str.append(
+                    f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
+                batch_ground_truth.append(row["reward_model"])
+                count += 1
+            else:
+                continue
+        if format == "detect_bad_feature":
             if row["reward_model"]["lang_code"] != "zh":
                 continue
             gt = row["reward_model"]["question"]
@@ -224,6 +236,20 @@ class TestFabricate(unittest.TestCase):
         for response, gt in zip(batch_solution_str, batch_ground_truth):
             score = scorer.get_penalty_or_reward(response, gt)
             self.assertTrue(score < 0)
+
+    def test_detect_bad_question(self):
+        batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
+            format="detect_bad_feature", num=100)
+        scorer = BadQuestionDetection(calc_qa_parse_solution_fn)
+
+        for response, gt in zip(batch_solution_str, batch_ground_truth):
+            score = scorer.get_penalty_or_reward(response, gt)
+            print(score)
+            # self.assertTrue(score < 0)
+        # scorer = LanguageConsistency(calc_qa_parse_solution_fn)
+        # for response, gt in zip(batch_solution_str, batch_ground_truth):
+        #     score = scorer.get_penalty_or_reward(response, gt)
+        #     self.assertTrue(score < 0)
 
     def test_thought_bonus(self):
         batch_solution_str, batch_ground_truth = load_fabricate_aio_data(

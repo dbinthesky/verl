@@ -1901,6 +1901,47 @@ class LanguageConsistency(PenaltyOrReward):
         return 0.0
 
 
+class BadQuestionDetection(PenaltyOrReward):
+    def __init__(self, parse_solution_fn=calc_qa_parse_solution_fn):
+        self.parse_solution_fn = parse_solution_fn
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        raw_solution_str = solution_str
+        solution_str = self.parse_solution_fn(solution_str)
+
+        if solution_str is None:
+            return 0.0
+
+        question, answer, answer_type = solution_str
+        # 基于规则的问题检测
+
+        for bw in (
+            "根据公式", "se the formula", "由公式", "计算公式为", "using the formula",
+            "formula: ",  "公式：", "formula", "使用公式", "公式", "formula", "equation",
+            "not be needed", "折旧期", "干扰数据", "unrelated to this calculation", "未使用的",
+            "irrelevant to the calculation", "信息与当前问题无关", "无需使用", "维护成本", "折旧期",
+            "提示：", "note: ", "注："
+        ):
+            if bw in question.lower():
+                return -0.02
+
+        if question.count("美元") >= 2:
+            return -0.02
+        if len(re.findall(r'计算.*总费用', question)) > 0:
+            return -0.02
+        if len(re.findall(r'求.*成本', question)) > 0:
+            return -0.02
+        if len(re.findall(r'ignored for.*calculation', question)) > 0:
+            return -0.02
+        if len(re.findall(r'irrelevant to.*calculation', question)) > 0:
+            return -0.02
+        if "总费用" in question:
+            return -0.02
+        if "方程（" in question:
+            return -0.02
+        return 0.0
+
+
 def last_boxed_only_string(string):
     idx = string.rfind("\\boxed")
     if idx < 0:
@@ -1964,6 +2005,9 @@ class Doc2QueryV2ComputeScore(object):
             parse_solution_fn=self.parse_solution_fn)
         self.language = LanguageConsistency(
             parse_solution_fn=self.parse_solution_fn)
+        self.bad_question_detection = BadQuestionDetection(
+            parse_solution_fn=self.parse_solution_fn
+        )
         self.thought_bonus = ThoughtBonus(
             parse_solution_fn=calc_qa_parse_thought_fn
         )
@@ -2013,6 +2057,7 @@ class Doc2QueryV2ComputeScore(object):
         return {
             "Format": self.format.get_penalty_or_reward,
             "Lang": self.language.get_penalty_or_reward,
+            "BadQ": self.bad_question_detection.get_penalty_or_reward,
             "Thought": self.thought_bonus.get_penalty_or_reward,
             "QSim": self.question_similarity.get_penalty_or_reward,
         }
@@ -2392,8 +2437,11 @@ class Doc2QueryV2ComputeScore(object):
             "", "")
         )
 
-    def penalty_on(self):
-        return ("Format", "Lang", "Thought", "QSim")
+    def penalty_on(self, stage):
+        if stage == "1":
+            return ("Format", "Lang", "BadQ", "Thought", "QSim")
+        else:
+            return ("Format", "Lang", "Thought", "QSim")
 
     async def _compute_score(self,
                              batch_data_sources,
@@ -2412,7 +2460,7 @@ class Doc2QueryV2ComputeScore(object):
             else:
                 penalty[i].append(0.0)
 
-            for key in self.penalty_on():
+            for key in self.penalty_on(stage):
                 penalty[i].append(self.get_penalties()[key]
                                   (solution_str, ground_truth))
 
