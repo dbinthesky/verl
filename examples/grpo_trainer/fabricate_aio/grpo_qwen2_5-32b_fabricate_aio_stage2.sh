@@ -31,6 +31,8 @@ setup_proxy() {
     export https_proxy="https://${PROXY_CREDENTIALS}@${PROXY_URL}"
     export HTTP_PROXY="${https_proxy}"
     export HTTPS_PROXY="${https_proxy}"
+
+    # export no_proxy="localhost,127.0.0.1,*local,10.130.133.200"
 }
 # setup_proxy
 
@@ -38,10 +40,10 @@ setup_proxy() {
 # Conda Environment Setup
 # ------------------------------
 activate_conda() {
-    source /cpfs01/shared/llm_ddd/guoxu/public/verl_env/verl_env/bin/activate /cpfs01/shared/llm_ddd/tongjian/verl
+    source /cpfs01/shared/llm_ddd/tongjian/.bashrc
+    conda activate /cpfs01/shared/llm_ddd/gaoxuan/anaconda3/envs/Verl
 }
 activate_conda
-
 
 # ------------------------------
 # Path Configuration
@@ -52,8 +54,10 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/sftv13_stage1_roll4_bsz64_w_kl_coef_2e3_w_entropy_5e4_grpo_step_100"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0619.parquet"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/DeepSeek-R1-Distill-Qwen-32B-fabricate_qa_v15"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/opencompass/models/hf_hub/models--deepseek-ai--DeepSeek-R1-Distill-Qwen-32B_20250416/snapshots/2d78713b01ecefe27a89fafec248a5dfd731396f
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/distill-qwen-32b_fabricate_aio-2025-06-25-05-34-23_grpo_step_40"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0623.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_test_0619.parquet"
 
     experiment_name="distill-qwen-32b_fabricate_aio-${YYMMDD}-${HHMMSS}"
@@ -64,7 +68,6 @@ setup_path() {
 }
 setup_path
 
-
 # ------------------------------
 # Install Package
 # ------------------------------
@@ -72,7 +75,6 @@ setup_path
 #     pip3 install -U torchdata
 # }
 # setup_package
-
 
 # ------------------------------
 # Main Training Command
@@ -92,13 +94,13 @@ run_training() {
 
     python3 -m verl.trainer.main_ppo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        custom_reward_function.name=fabricate_aio_qwen32b_respondent_stage2_compute_score_train \
+        custom_reward_function.name=fabricate_aio_default_stage2_compute_score_train \
         +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        +custom_valid_reward_function.name=fabricate_aio_qwen32b_respondent_stage2_compute_score_valid \
+        +custom_valid_reward_function.name=fabricate_aio_default_stage2_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=64 \
+        data.train_batch_size=32 \
         data.max_prompt_length=8192 \
         data.max_response_length=12288 \
         data.filter_overlong_prompts=True \
@@ -107,15 +109,19 @@ run_training() {
         actor_rollout_ref.actor.optim.lr=1e-6 \
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=64 \
-        actor_rollout_ref.actor.ppo_micro_batch_size=64 \
-        actor_rollout_ref.actor.ulysses_sequence_parallel_size=4 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=32 \
+        actor_rollout_ref.actor.ppo_micro_batch_size=32 \
+        actor_rollout_ref.actor.ulysses_sequence_parallel_size=8 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=20480 \
         actor_rollout_ref.actor.use_kl_loss=True \
-        actor_rollout_ref.actor.kl_loss_coef=0.002 \
-        actor_rollout_ref.actor.entropy_coeff=0.0005 \
+        actor_rollout_ref.actor.kl_loss_coef=0.000 \
+        actor_rollout_ref.actor.entropy_coeff=0.000 \
         actor_rollout_ref.actor.kl_loss_type="low_var_kl" \
+        actor_rollout_ref.actor.grad_clip=1.0 \
+        actor_rollout_ref.actor.clip_ratio_low=0.2 \
+        actor_rollout_ref.actor.clip_ratio_high=0.28 \
+        actor_rollout_ref.actor.clip_ratio_c=10.0 \
         actor_rollout_ref.model.enable_gradient_checkpointing=True \
         actor_rollout_ref.actor.fsdp_config.param_offload=True \
         actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
@@ -124,10 +130,12 @@ run_training() {
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
         actor_rollout_ref.rollout.temperature=0.9 \
-        actor_rollout_ref.rollout.n=8 \
+        actor_rollout_ref.rollout.n=4 \
+        actor_rollout_ref.ref.ulysses_sequence_parallel_size=8 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
+        reward_model.reward_manager=custom \
         algorithm.kl_ctrl.kl_coef=0.000 \
         algorithm.lam=0.95 \
         trainer.logger='["console", "wandb"]' \
@@ -144,11 +152,10 @@ run_training() {
     # 显式传递训练状态
     if [ $training_status -ne 0 ]; then
         echo "Training failed with exit code $training_status"
-        exit $training_status  # 退出码传递给全局
+        exit $training_status # 退出码传递给全局
     fi
 }
 # run_training "$@"
-
 
 # ------------------------------
 # Ray Cluster Setup

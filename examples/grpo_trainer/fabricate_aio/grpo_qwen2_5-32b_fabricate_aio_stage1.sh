@@ -54,7 +54,9 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/DeepSeek-R1-Distill-Qwen-32B-fabricate_qa_v15"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/DeepSeek-R1-Distill-Qwen-32B-fabricate_qa_v15"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/opencompass/models/hf_hub/models--deepseek-ai--DeepSeek-R1-Distill-Qwen-32B_20250416/snapshots/2d78713b01ecefe27a89fafec248a5dfd731396f
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/distill-qwen-32b_fabricate_aio-2025-06-25-05-34-23_grpo_step_40"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0623.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_test_0619.parquet"
 
@@ -109,11 +111,11 @@ run_training() {
         actor_rollout_ref.actor.shuffle=True \
         actor_rollout_ref.actor.ppo_mini_batch_size=32 \
         actor_rollout_ref.actor.ppo_micro_batch_size=32 \
-        actor_rollout_ref.actor.ulysses_sequence_parallel_size=4 \
+        actor_rollout_ref.actor.ulysses_sequence_parallel_size=8 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=20480 \
         actor_rollout_ref.actor.use_kl_loss=True \
-        actor_rollout_ref.actor.kl_loss_coef=0.004 \
+        actor_rollout_ref.actor.kl_loss_coef=0.000 \
         actor_rollout_ref.actor.entropy_coeff=0.000 \
         actor_rollout_ref.actor.kl_loss_type="low_var_kl" \
         actor_rollout_ref.actor.grad_clip=1.0 \
@@ -129,6 +131,7 @@ run_training() {
         actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
         actor_rollout_ref.rollout.temperature=0.9 \
         actor_rollout_ref.rollout.n=4 \
+        actor_rollout_ref.ref.ulysses_sequence_parallel_size=8 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \

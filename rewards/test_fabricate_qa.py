@@ -246,10 +246,6 @@ class TestFabricate(unittest.TestCase):
             score = scorer.get_penalty_or_reward(response, gt)
             print(score)
             # self.assertTrue(score < 0)
-        # scorer = LanguageConsistency(calc_qa_parse_solution_fn)
-        # for response, gt in zip(batch_solution_str, batch_ground_truth):
-        #     score = scorer.get_penalty_or_reward(response, gt)
-        #     self.assertTrue(score < 0)
 
     def test_thought_bonus(self):
         batch_solution_str, batch_ground_truth = load_fabricate_aio_data(

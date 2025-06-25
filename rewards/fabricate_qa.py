@@ -1346,7 +1346,6 @@ class RuleBasedOptionMatch(PenaltyOrReward):
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query V2
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
 def calc_qa_parse_solution_fn(solution_str: str, remove_option_letter=True):
     if solution_str.count("</question>") > 1:
         return None
@@ -2031,7 +2030,7 @@ class Doc2QueryV2ComputeScore(object):
     def get_strong_agent(cls):
         return Agent(**{
             "model": "DeepSeek-V3-0324",
-            "base_url": "https://sd138cdmeq1emkiunptm0.apigateway-cn-beijing.volceapi.com/v1",
+            "base_url": "https://sd1dtu9r54gpj4to1t33g.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.8,
@@ -2441,7 +2440,7 @@ class Doc2QueryV2ComputeScore(object):
         if stage == "1":
             return ("Format", "Lang", "BadQ", "Thought", "QSim")
         else:
-            return ("Format", "Lang", "Thought", "QSim")
+            return ("Format", "Thought", "QSim")
 
     async def _compute_score(self,
                              batch_data_sources,
@@ -2489,7 +2488,7 @@ class Doc2QueryV2ComputeScore(object):
         final_results = []
         for i in range(len(batch_solution_str)):
             scores = copy.deepcopy(penalty[i])
-            penalties = ["Parse"]+list(self.penalty_on())
+            penalties = ["Parse"]+list(self.penalty_on(stage))
             penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
                                        s in zip(penalties, scores)])
 
@@ -2530,7 +2529,7 @@ class Doc2QueryV2ComputeScore(object):
 
             if cur_score == -2.0:
                 log = True
-                log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+                log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN CORRUPT RESPONSE]"
 
             source = batch_ground_truth[i]["source"]
 
@@ -2552,13 +2551,14 @@ class Doc2QueryV2ComputeScore(object):
                         f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|{penalty_log_str}\n')
 
                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
-                if random.random() < 0.1 or cur_score == -2.0:
-                    if thought is not None:
-                        print(f'[Thought]\n{thought}')
-                        print()
-                    else:
-                        print(f'[Response]\n{batch_solution_str[i]}')
-                        print()
+
+                if random.random() < 0.1 and thought is not None:
+                    print(f'[Thought]\n{thought}')
+                    print()
+
+                if cur_score == -2.0:
+                    print(f'[Response]\n{batch_solution_str[i]}')
+                    print()
 
         if self.split == "valid":
             pass
@@ -2727,7 +2727,7 @@ class FabricateQAComputeScore(Doc2QueryV2ComputeScore):
     def get_strong_agent(cls):
         return Agent(**{
             "model": "DeepSeek-V3-0324",
-            "base_url": "https://sd138cdmeq1emkiunptm0.apigateway-cn-beijing.volceapi.com/v1",
+            "base_url": "https://sd1dtu9r54gpj4to1t33g.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.9,
