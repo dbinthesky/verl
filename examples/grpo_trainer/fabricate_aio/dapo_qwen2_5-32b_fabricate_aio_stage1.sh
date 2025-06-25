@@ -42,7 +42,6 @@ activate_conda() {
 }
 activate_conda
 
-
 # ------------------------------
 # Path Configuration
 # ------------------------------
@@ -64,7 +63,6 @@ setup_path() {
 }
 setup_path
 
-
 # ------------------------------
 # Install Package
 # ------------------------------
@@ -72,7 +70,6 @@ setup_path
 #     pip3 install -U torchdata
 # }
 # setup_package
-
 
 # ------------------------------
 # Main Training Command
@@ -92,13 +89,13 @@ run_training() {
 
     python3 -m recipe.dapo.main_dapo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        custom_reward_function.name=fabricate_aio_default_stage2_compute_score_train \
+        custom_reward_function.name=fabricate_aio_default_stage1_compute_score_train \
         +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        +custom_valid_reward_function.name=fabricate_aio_default_stage2_compute_score_valid \
+        +custom_valid_reward_function.name=fabricate_aio_default_stage1_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=64 \
+        data.train_batch_size=32 \
         data.max_prompt_length=8192 \
         data.max_response_length=12288 \
         data.filter_overlong_prompts=True \
@@ -107,19 +104,18 @@ run_training() {
         actor_rollout_ref.actor.optim.lr=1e-6 \
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=64 \
-        actor_rollout_ref.actor.ppo_micro_batch_size=64 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=32 \
+        actor_rollout_ref.actor.ppo_micro_batch_size=32 \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=4 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=20480 \
         actor_rollout_ref.actor.use_kl_loss=True \
-        actor_rollout_ref.actor.kl_loss_coef=0.0 \
-        actor_rollout_ref.actor.entropy_coeff=0.0 \
+        actor_rollout_ref.actor.kl_loss_coef=0.004 \
+        actor_rollout_ref.actor.entropy_coeff=0.001 \
         actor_rollout_ref.actor.grad_clip=1.0 \
         actor_rollout_ref.actor.clip_ratio_low=0.2 \
         actor_rollout_ref.actor.clip_ratio_high=0.28 \
         actor_rollout_ref.actor.clip_ratio_c=10.0 \
-        reward_model.reward_manager=dapo \
         reward_model.overlong_buffer.enable=True \
         reward_model.overlong_buffer.len=$((1024 * 4)) \
         reward_model.overlong_buffer.penalty_factor=1.0 \
@@ -138,7 +134,7 @@ run_training() {
         +actor_rollout_ref.rollout.n_val=1 \
         algorithm.kl_ctrl.kl_coef=0.000 \
         algorithm.lam=0.95 \
-        reward_model.reward_manager=dapo \
+        reward_model.reward_manager=dapo_custom \
         reward_model.overlong_buffer.enable=True \
         reward_model.overlong_buffer.len=$((1024 * 4)) \
         reward_model.overlong_buffer.penalty_factor=1.0 \
@@ -156,11 +152,10 @@ run_training() {
     # 显式传递训练状态
     if [ $training_status -ne 0 ]; then
         echo "Training failed with exit code $training_status"
-        exit $training_status  # 退出码传递给全局
+        exit $training_status # 退出码传递给全局
     fi
 }
 # run_training "$@"
-
 
 # ------------------------------
 # Ray Cluster Setup

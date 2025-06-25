@@ -46,7 +46,7 @@ RM_URLS = [
 VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
-MAX_CONCURRENT = 96
+MAX_CONCURRENT = 256
 # MAX_CONCURRENT = 160
 
 
@@ -832,7 +832,7 @@ class QuestionSimilarity(PenaltyOrReward):
             gt_tokens = " ".join(tokenize(gt.lower(), "en"))
             sl_tokens = " ".join(tokenize(question.lower(), "en"))
             bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
-            return bleu / 100
+            return bleu / 100 * 0.1
         except Exception as err:
             return 0.0
 
@@ -1588,7 +1588,7 @@ class NumericalAnswer(object):
         try:
             value = float(content)
             sig_figs = self.count_significant_figures(content)
-            if sig_figs >= 3:
+            if sig_figs >= 2:
                 return True, "格式正确"
             else:
                 return False, f"有效位数不足（当前{sig_figs}位，要求≥3位）"
@@ -2490,6 +2490,8 @@ class Doc2QueryV2ComputeScore(object):
                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
             else:
                 log = False
+            if cur_score == -2.0:
+                log = True
 
             source = batch_ground_truth[i]["source"]
 
@@ -2511,9 +2513,13 @@ class Doc2QueryV2ComputeScore(object):
                         f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|{penalty_log_str}\n')
 
                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
-                if thought is not None and random.random() < 0.1:
-                    print(f'[Thought]\n{thought}')
-                    print()
+                if random.random() < 0.1:
+                    if thought is not None:
+                        print(f'[Thought]\n{thought}')
+                        print()
+                    else:
+                        print(f'[Response]\n{batch_solution_str[i]}')
+                        print()
 
         if self.split == "valid":
             pass
