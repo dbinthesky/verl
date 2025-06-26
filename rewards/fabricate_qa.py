@@ -2527,7 +2527,7 @@ class Doc2QueryV2ComputeScore(object):
             else:
                 log = False
 
-            if cur_score == -2.0:
+            if cur_score == -2.0 and stage != "2":
                 log = True
                 log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN CORRUPT RESPONSE]"
 
@@ -2556,7 +2556,7 @@ class Doc2QueryV2ComputeScore(object):
                     print(f'[Thought]\n{thought}')
                     print()
 
-                if cur_score == -2.0:
+                if cur_score == -2.0 and stage != "2":
                     print(f'[Response]\n{batch_solution_str[i]}')
                     print()
 

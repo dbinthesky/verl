@@ -115,8 +115,8 @@ run_training() {
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=20480 \
         actor_rollout_ref.actor.use_kl_loss=True \
-        actor_rollout_ref.actor.kl_loss_coef=0.000 \
-        actor_rollout_ref.actor.entropy_coeff=0.000 \
+        actor_rollout_ref.actor.kl_loss_coef=0.002 \
+        actor_rollout_ref.actor.entropy_coeff=0.0005 \
         actor_rollout_ref.actor.kl_loss_type="low_var_kl" \
         actor_rollout_ref.actor.grad_clip=1.0 \
         actor_rollout_ref.actor.clip_ratio_low=0.2 \
@@ -130,7 +130,7 @@ run_training() {
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
         actor_rollout_ref.rollout.temperature=0.9 \
-        actor_rollout_ref.rollout.n=4 \
+        actor_rollout_ref.rollout.n=6 \
         actor_rollout_ref.ref.ulysses_sequence_parallel_size=8 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
