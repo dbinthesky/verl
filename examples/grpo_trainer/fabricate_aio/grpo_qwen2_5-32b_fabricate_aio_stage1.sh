@@ -54,7 +54,7 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/DeepSeek-R1-Distill-Qwen-32B-fabricate_qa_v15/checkpoint-364"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/DeepSeek-R1-Distill-Qwen-32B-fabricate_qa_v16"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0623.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_test_0619.parquet"
 
@@ -98,7 +98,7 @@ run_training() {
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=16 \
+        data.train_batch_size=32 \
         data.max_prompt_length=8192 \
         data.max_response_length=8192 \
         data.filter_overlong_prompts=True \
@@ -109,13 +109,13 @@ run_training() {
         actor_rollout_ref.actor.optim.weight_decay=0.1 \
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=16 \
-        actor_rollout_ref.actor.ppo_micro_batch_size=16 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=32 \
+        actor_rollout_ref.actor.ppo_micro_batch_size=32 \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=2 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=16384 \
         actor_rollout_ref.actor.use_kl_loss=True \
-        actor_rollout_ref.actor.kl_loss_coef=0.002 \
+        actor_rollout_ref.actor.kl_loss_coef=0.001 \
         actor_rollout_ref.actor.entropy_coeff=0.0005 \
         actor_rollout_ref.actor.kl_loss_type="low_var_kl" \
         actor_rollout_ref.actor.grad_clip=1.0 \

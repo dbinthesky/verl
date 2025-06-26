@@ -1833,7 +1833,9 @@ class ThoughtBonus(PenaltyOrReward):
         lang_code = ground_truth["lang_code"]
         keywords = self.keywords[lang_code]
         cover_score = [1.0 if kw in thought else 0.0 for kw in keywords]
-        return -0.5 + np.mean(cover_score) * self.base_score
+        # FIXME: do not set bonus
+        # return -0.5 + np.mean(cover_score) * self.base_score
+        return 0.0
 
 
 class LanguageConsistency(PenaltyOrReward):
