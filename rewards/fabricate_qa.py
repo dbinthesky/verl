@@ -1785,7 +1785,7 @@ class CalculationAnswerFormatVerify(PenaltyOrReward):
         question, answer, answer_type = solution_str
 
         if answer_type not in ("NumericalAnswer", "WithUnitSymbol"):
-            return -1.5
+            return -1.75
         if answer_type == "NumericalAnswer":
             parser = NumericalAnswer()
         elif answer_type == "WithUnitSymbol":
@@ -1798,18 +1798,18 @@ class CalculationAnswerFormatVerify(PenaltyOrReward):
                 if answer_type == "NumericalAnswer":
                     # 特定校验（避免构造0、1、2等常见答案）
                     if not parser.exclude_common_answer_pattern(answer):
-                        return -0.1
+                        return -1.25
                 return 0.0
             else:
-                return -0.2
+                return -1.5
         except Exception as err:
-            return -0.2
+            return -1.5
 
 
 class ThoughtBonus(PenaltyOrReward):
     def __init__(self, parse_solution_fn=calc_qa_parse_thought_fn, base_score=0.1):
         self.parse_solution_fn = parse_solution_fn
-        self.base_score = 0.2
+        self.base_score = 0.5
         self.keywords = {
             "zh": ("自检", "答案校验", "完备性检查", "冗余审查", "干扰", "真实性校验", "隐性化",
                    "难度优化", "最终修改", "初拟", "雏形构建", "设定自洽", "换一种方式设计"),
@@ -1833,7 +1833,7 @@ class ThoughtBonus(PenaltyOrReward):
         lang_code = ground_truth["lang_code"]
         keywords = self.keywords[lang_code]
         cover_score = [1.0 if kw in thought else 0.0 for kw in keywords]
-        return np.mean(cover_score) * self.base_score
+        return -0.5 + np.mean(cover_score) * self.base_score
 
 
 class LanguageConsistency(PenaltyOrReward):
@@ -1879,14 +1879,14 @@ class LanguageConsistency(PenaltyOrReward):
 
         lang_code = ground_truth["lang_code"]
 
-        base_score = -0.1
+        base_score = -1.0
 
         if lang_code == "en" and contain_chinese(question):
             return base_score
         elif lang_code == "zh" and (not contain_chinese(question)):
             return base_score
 
-        base_score += 0.05
+        base_score += 0.25
 
         if lang_code == "en":
             if contain_chinese(raw_solution_str):
@@ -1922,22 +1922,22 @@ class BadQuestionDetection(PenaltyOrReward):
             "提示：", "note: ", "注："
         ):
             if bw in question.lower():
-                return -0.02
+                return -0.5
 
         if question.count("美元") >= 2:
-            return -0.02
+            return -0.5
         if len(re.findall(r'计算.*总费用', question)) > 0:
-            return -0.02
+            return -0.5
         if len(re.findall(r'求.*成本', question)) > 0:
-            return -0.02
+            return -0.5
         if len(re.findall(r'ignored for.*calculation', question)) > 0:
-            return -0.02
+            return -0.5
         if len(re.findall(r'irrelevant to.*calculation', question)) > 0:
-            return -0.02
+            return -0.5
         if "总费用" in question:
-            return -0.02
+            return -0.5
         if "方程（" in question:
-            return -0.02
+            return -0.5
         return 0.0
 
 

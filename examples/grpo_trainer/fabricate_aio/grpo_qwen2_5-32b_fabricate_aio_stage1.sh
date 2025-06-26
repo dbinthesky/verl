@@ -106,7 +106,7 @@ run_training() {
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
-        actor_rollout_ref.actor.optim.lr=1e-5 \
+        actor_rollout_ref.actor.optim.lr=1e-6 \
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
         actor_rollout_ref.actor.ppo_mini_batch_size=32 \
@@ -115,7 +115,7 @@ run_training() {
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=20480 \
         actor_rollout_ref.actor.use_kl_loss=True \
-        actor_rollout_ref.actor.kl_loss_coef=0.01 \
+        actor_rollout_ref.actor.kl_loss_coef=0.002 \
         actor_rollout_ref.actor.entropy_coeff=0.0005 \
         actor_rollout_ref.actor.kl_loss_type="low_var_kl" \
         actor_rollout_ref.actor.grad_clip=1.0 \
@@ -148,9 +148,6 @@ run_training() {
         trainer.total_epochs=10000 \
         reward_model.reward_manager="custom" "$@"
 
-        # actor_rollout_ref.actor.kl_loss_coef=0.000 \
-        # actor_rollout_ref.actor.entropy_coeff=0.000 \
-        # actor_rollout_ref.actor.optim.lr=1e-6 \
     local training_status=$?
 
     # 显式传递训练状态
