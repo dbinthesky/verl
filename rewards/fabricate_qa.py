@@ -2442,7 +2442,7 @@ class Doc2QueryV2ComputeScore(object):
         if stage == "1":
             return ("Format", "Lang", "BadQ", "Thought", "QSim")
         else:
-            return ("Format", "Thought", "QSim")
+            return ("Format", "Lang", "Thought", "QSim")
 
     async def _compute_score(self,
                              batch_data_sources,
