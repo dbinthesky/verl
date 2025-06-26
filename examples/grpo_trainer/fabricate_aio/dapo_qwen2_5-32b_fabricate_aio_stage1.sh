@@ -104,7 +104,7 @@ run_training() {
         actor_rollout_ref.actor.optim.lr=1e-6 \
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=32 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=16 \
         actor_rollout_ref.actor.ppo_micro_batch_size=32 \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=4 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
