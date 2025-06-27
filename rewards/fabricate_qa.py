@@ -2014,17 +2014,30 @@ class Doc2QueryV2ComputeScore(object):
         self.question_similarity = QuestionSimilarity(
             parse_solution_fn=self.parse_solution_fn)
 
+    # @classmethod
+    # def get_weak_agent(cls):
+    #     return Agent(**{
+    #         "model": "qwen25_32B_instruct",
+    #         "base_url": "http://10.130.131.138:8000/v1",
+    #         "api_keys": "EMPTY",
+    #         "request_kwargs": {
+    #             "temperature": 0.8,
+    #             "timeout": 360,
+    #             "max_tokens": 2048,
+    #         },
+    #     })
+
     @classmethod
     def get_weak_agent(cls):
         return Agent(**{
-            "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.131.138:8000/v1",
+            "model": "DeepSeek-V3-0324",
+            "base_url": "https://sd1dtu9r54gpj4to1t33g.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
-                "temperature": 0.8,
+                "temperature": 0.9,
                 "timeout": 360,
-                "max_tokens": 2048,
-            },
+                "max_tokens": 4096,
+            }
         })
 
     @classmethod
@@ -2577,7 +2590,7 @@ DOC2QUERY_DEFAULT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": Doc2QueryV2ComputeScore.get_weak_agent(),
-            "repeat": 32,
+            "repeat": 8,
             "fn": Doc2QueryV2ComputeScore.respond_wo_context,
             "desc": 'w/o ctx'
         },
@@ -2592,9 +2605,9 @@ DOC2QUERY_DEFAULT_PARAMS = {
         "advantage": 'w_content',
         "weakness": 'w/o_content',
         "advantage_oversimplified_threshold": 8/8,
-        "weakness_oversimplified_threshold": 28/32,
+        "weakness_oversimplified_threshold": 7/8,
         "advantage_overcomplex_threshold": 1/8,
-        "weakness_overcomplex_threshold": 1/32,
+        "weakness_overcomplex_threshold": 1/8,
         "advantage_threshold": 2/8,
         "advantage_weight": 0.0,
         "weakness_weight": 2.0,
