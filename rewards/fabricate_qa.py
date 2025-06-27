@@ -2703,10 +2703,6 @@ _qwen32b_respondent_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScoreWi
     calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_QWEN32B_RESPONDENT_PARAMS)
 _qwen32b_respondent_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScoreWithQwen32bRespondent(
     calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_QWEN32B_RESPONDENT_PARAMS)
-qwen32b_respondent_doc2query_v2_compute_score_train = partial(
-    _qwen32b_respondent_doc2query_v2_compute_score_train.compute_score, stage="1")
-qwen32b_respondent_doc2query_v2_compute_score_valid = partial(
-    _qwen32b_respondent_doc2query_v2_compute_score_valid.compute_score, stage="1")
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query V2
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
