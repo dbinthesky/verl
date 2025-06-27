@@ -35,8 +35,7 @@ en_mt = MosesTokenizer(lang='en')
 VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
-MAX_CONCURRENT = 256
-# MAX_CONCURRENT = 160
+MAX_CONCURRENT = 160
 
 
 def tokenize(s, lang_code):
@@ -2343,6 +2342,13 @@ class Doc2QueryV2ComputeScore(object):
                 if lang_consist < 0.0:
                     continue
 
+                # 问题包含非预期的结构
+                bad_q = self.bad_question_detection.get_penalty_or_reward(
+                    solution_str, gt
+                )
+                if bad_q < 0.0:
+                    continue
+
                 lang_code = gt["lang_code"]
                 for name, v in run_args.items():
                     fn = v["fn"]
@@ -2442,7 +2448,7 @@ class Doc2QueryV2ComputeScore(object):
         if stage == "1":
             return ("Format", "Lang", "BadQ", "Thought", "QSim")
         else:
-            return ("Format", "Lang", "Thought", "QSim")
+            return ("Format", "Lang", "BadQ", "Thought", "QSim")
 
     async def _compute_score(self,
                              batch_data_sources,
