@@ -35,7 +35,7 @@ en_mt = MosesTokenizer(lang='en')
 VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
-MAX_CONCURRENT = 160
+MAX_CONCURRENT = 128
 
 
 def tokenize(s, lang_code):
@@ -2665,13 +2665,13 @@ DOC2QUERY_QWEN32B_RESPONDENT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": Doc2QueryV2ComputeScoreWithQwen32bRespondent.get_weak_agent(),
-            "repeat": 16,
+            "repeat": 32,
             "fn": Doc2QueryV2ComputeScoreWithQwen32bRespondent.respond_wo_context,
             "desc": 'w/o ctx'
         },
         "w_content": {
             "model": Doc2QueryV2ComputeScoreWithQwen32bRespondent.get_strong_agent(),
-            "repeat": 16,
+            "repeat": 32,
             "fn": Doc2QueryV2ComputeScoreWithQwen32bRespondent.respond_w_context,
             "desc": 'w ctx'
         }
@@ -2679,10 +2679,10 @@ DOC2QUERY_QWEN32B_RESPONDENT_PARAMS = {
     "difficulty_metric_args": {
         "advantage": 'w_content',
         "weakness": 'w/o_content',
-        "advantage_oversimplified_threshold": 16/16,
-        "weakness_oversimplified_threshold": 14/16,
-        "advantage_overcomplex_threshold": 1/16,
-        "weakness_overcomplex_threshold": 1/16,
+        "advantage_oversimplified_threshold": 32/32,
+        "weakness_oversimplified_threshold": 28/32,
+        "advantage_overcomplex_threshold": 1/32,
+        "weakness_overcomplex_threshold": 1/32,
         "advantage_threshold": 3/16,
         "advantage_weight": 0.0,
         "weakness_weight": 1.0,
