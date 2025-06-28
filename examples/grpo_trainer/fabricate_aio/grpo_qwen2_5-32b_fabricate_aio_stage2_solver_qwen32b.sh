@@ -92,9 +92,9 @@ run_training() {
 
     python3 -m verl.trainer.main_ppo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        custom_reward_function.name=fabricate_aio_default_stage2_compute_score_train \
+        custom_reward_function.name=fabricate_aio_qwen32b_respondent_stage2_compute_score_train \
         +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        +custom_valid_reward_function.name=fabricate_aio_default_stage2_compute_score_valid \
+        +custom_valid_reward_function.name=fabricate_aio_qwen32b_respondent_stage2_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
@@ -164,7 +164,7 @@ run_training() {
 # ------------------------------
 setup_ray() {
     export MASTER_ADDR=${MASTER_ADDR:-"127.0.0.1"}
-    export MASTER_PORT=${MASTER_PORT:-$(shuf -i 20001-29999 -n 1)}
+    export MASTER_PORT=29905
     export WORLD_SIZE=${WORLD_SIZE:-1}
     export RANK=${RANK:-0}
     # export no_proxy="localhost,127.0.0.1,*local,10.130.133.200"
@@ -185,7 +185,6 @@ setup_ray() {
                 --port="$MASTER_PORT"
             sleep 240
         else
-            sleep 10
             ray start --address "${MASTER_ADDR}:${MASTER_PORT}" \
                 --block
         fi
