@@ -86,19 +86,21 @@ class Agent:
         if request_kwargs is not None:
             self.request_kwargs.update(request_kwargs)
 
-    async def run(self, messages, max_concurrent, desc, postprocess_fns):
+    async def run(self, messages, max_concurrent, desc, postprocess_fns, pbar=True):
         semaphore = aio.Semaphore(max_concurrent)
         async with AsyncOpenAI(api_key=self.api_keys, base_url=self.base_url) as client:
             results = []
             tasks = [self.process_prompt(client, message, semaphore, postprocess_fn)
                      for message, postprocess_fn in zip(messages, postprocess_fns)]
 
-            if desc is not None:
+            if desc is not None and pbar:
                 for f in tqdm.asyncio.tqdm.as_completed(tasks, dynamic_ncols=True, desc=desc):
                     results.append(await f)
             else:
                 try:
+                    print(f'{desc} RUN...')
                     results = await asyncio.gather(*tasks)
+                    print(f'{desc} FINISHED...')
                 except Exception as err:
                     print(f'[ERROR] asyncio.gather failed: {err}')
                     return None
