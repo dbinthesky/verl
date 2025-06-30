@@ -2080,13 +2080,21 @@ class Doc2QueryV2ComputeScore(object):
         self.question_similarity = QuestionSimilarity(
             parse_solution_fn=self.parse_solution_fn)
 
+        self.initial_record_rollout_samples_module = False
+        self.record_rollout_max_capacity = record_rollout_max_capacity
+        self.record_rollout_samples_path = record_rollout_samples_path
+
+    def initialize_record_rollout_samples_module(self):
+        if self.initial_record_rollout_samples_module:
+            return
+
         # 保存rollout高质量数据
-        if record_rollout_samples_path is None:
+        if self.record_rollout_samples_path is None:
             record_rollout_samples_path = os.path.join(
                 ROLLOUT_SAVE_DIR, f'{self.task_name}_{uuid.uuid4().hex}.json')
         else:
             record_rollout_samples_path = os.path.join(
-                ROLLOUT_SAVE_DIR, record_rollout_samples_path)
+                ROLLOUT_SAVE_DIR, self.record_rollout_samples_path)
 
         self.save_rollout_samples_path = record_rollout_samples_path
 
@@ -2095,7 +2103,7 @@ class Doc2QueryV2ComputeScore(object):
             f'[INFO] Save {self.task_name} rollout data into path: {self.save_rollout_samples_path}')
 
         self.rollout_database = {}
-        self.record_rollout_max_capacity = record_rollout_max_capacity
+        self.initial_record_rollout_samples_module = True
 
     # @classmethod
     # def get_weak_agent(cls):
@@ -2590,6 +2598,8 @@ class Doc2QueryV2ComputeScore(object):
                              stage,
                              max_concurrent_requests=MAX_CONCURRENT,
                              ):
+        self.initialize_record_rollout_samples_module()
+
         assert stage in ("1", "2")
 
         penalty = defaultdict(list)
