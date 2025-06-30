@@ -1,3 +1,4 @@
+import os
 import re
 import sys
 import json
@@ -36,6 +37,7 @@ VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 MAX_CONCURRENT = 128 + 32
+ROLLOUT_SAVE_DIR = "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
 
 DEFAULT_MAX_CONCURRENT = {
     "self_deployment": 128,
@@ -2051,7 +2053,7 @@ def extract_boxed_answer(solution: str) -> str:
 
 
 class Doc2QueryV2ComputeScore(object):
-    def __init__(self, parse_solution_fn, split="train", args=None):
+    def __init__(self, parse_solution_fn, split="train", args=None, record_rollout_samples_path=None):
         self.split = split
         self.parse_solution_fn = parse_solution_fn
         assert args is not None
@@ -2070,6 +2072,22 @@ class Doc2QueryV2ComputeScore(object):
         )
         self.question_similarity = QuestionSimilarity(
             parse_solution_fn=self.parse_solution_fn)
+
+        # 保存rollout高质量数据
+        if record_rollout_samples_path is None:
+            record_rollout_samples_path = os.path.join(
+                ROLLOUT_SAVE_DIR, f'{self.task_name}_{uuid.uuid4().hex}.json')
+        else:
+            record_rollout_samples_path = os.path.join(
+                ROLLOUT_SAVE_DIR, record_rollout_samples_path)
+
+        self.save_rollout_samples_path = record_rollout_samples_path
+
+        assert self.save_rollout_samples_path
+        print(
+            f'[INFO] Save {self.task_name} rollout data into path: {self.save_rollout_samples_path}')
+
+        self.rollout_database = {}
 
     # @classmethod
     # def get_weak_agent(cls):
