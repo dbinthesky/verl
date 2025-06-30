@@ -92,7 +92,7 @@ class LRUCache(dict):
 
     def get_items(self):
         """获取所有项（按访问顺序），不改变访问顺序"""
-        return {k: self._access_order[k] for k in list(_access_order.keys())}.items()
+        return {k: self.__getitem__(k) for k in list(self._access_order.keys())}.items()
 
     def popitem(self, last: bool = True):
         """移除并返回项（默认移除最近最少使用的项）"""
@@ -2551,13 +2551,20 @@ class Doc2QueryV2ComputeScore(object):
             self.rollout_database[inst_id] = LRUCache(
                 capacity=self.record_rollout_max_capacity)
 
+        args = copy.deepcopy(self.args)
+        for k, v in args["difficulty_run_args"].items():
+            del v["fn"]
+            for field, value in v.items():
+                if field == "model":
+                    args["difficulty_run_args"][k][field] = value.model
+
         self.rollout_database[inst_id][question] = {
             "prompt_generation_process": solution_str,
             "question": question,
             "answer": answer,
             "answer_type": answer_type,
             "difficulty": {
-                "meta": self.args,
+                "meta": args,
                 "pass_rate": difficulty
             }
         }
@@ -2565,7 +2572,8 @@ class Doc2QueryV2ComputeScore(object):
     def save_rollout_info(self):
         """将缓存保存为JSON文件"""
         data = {k: {"capacity": v.capacity, "items": list(v.get_items()), "access_order": list(
-            v._access_time.keys())} for k, v in self.rollout_database.items()}
+            v._access_order.keys())} for k, v in self.rollout_database.items()}
+
         with open(self.save_rollout_samples_path, "wt") as f:
             json.dump(data, f, ensure_ascii=False, indent="  ")
 
