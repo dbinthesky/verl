@@ -37,6 +37,11 @@ VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 MAX_CONCURRENT = 128 + 32
 
+DEFAULT_MAX_CONCURRENT = {
+    "self_deployment": 128,
+    "dsv3": 160
+}
+
 
 def tokenize(s, lang_code):
     if lang_code == "en":
@@ -98,9 +103,9 @@ class Agent:
                     results.append(await f)
             else:
                 try:
-                    print(f'{desc} RUN...')
+                    print(f'{desc} (p={max_concurrent}) RUN...')
                     results = await aio.gather(*tasks)
-                    print(f'{desc} FINISHED...')
+                    print(f'{desc} (p={max_concurrent}) FINISHED...')
                 except Exception as err:
                     print(f'[ERROR] asyncio.gather failed: {err}')
                     return None
@@ -2439,9 +2444,10 @@ class Doc2QueryV2ComputeScore(object):
                       batch_solution_str,
                       batch_ground_truth,
                       stage,
+                      max_concurrent_requests=MAX_CONCURRENT,
                       ):
         async def main():
-            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, stage=stage)
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, stage=stage, max_concurrent_requests=max_concurrent_requests)
         return aio.run(main())
 
     def log_solution(self, solution):
@@ -2815,6 +2821,7 @@ class FabricateAIOComputeScore(object):
                       batch_solution_str,
                       batch_ground_truth,
                       stage,
+                      max_concurrent_requests=MAX_CONCURRENT,
                       ):
         source_mapper = {}
         splitter = defaultdict(list)
@@ -2837,6 +2844,7 @@ class FabricateAIOComputeScore(object):
                 batch_solution_str=_batch_solution_str,
                 batch_ground_truth=_batch_ground_truth,
                 stage=stage,
+                max_concurrent_requests=max_concurrent_requests
             )
             results[source] = _results
 
@@ -2860,9 +2868,11 @@ fabricate_aio_default_stage1_compute_score_train = partial(
 fabricate_aio_default_stage1_compute_score_valid = partial(
     _default_fabricate_aio_compute_score_valid.compute_score, stage="1")
 fabricate_aio_default_stage2_compute_score_train = partial(
-    _default_fabricate_aio_compute_score_train.compute_score, stage="2")
+    _default_fabricate_aio_compute_score_train.compute_score, stage="2",
+    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
 fabricate_aio_default_stage2_compute_score_valid = partial(
-    _default_fabricate_aio_compute_score_valid.compute_score, stage="2")
+    _default_fabricate_aio_compute_score_valid.compute_score, stage="2",
+    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
 
 
 # Qwen2.5-32B Respondent
@@ -2875,6 +2885,8 @@ _qwen32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore
     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
 })
 fabricate_aio_qwen32b_respondent_stage2_compute_score_train = partial(
-    _qwen32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2")
+    _qwen32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2", 
+    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])
 fabricate_aio_qwen32b_respondent_stage2_compute_score_valid = partial(
-    _qwen32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2")
+    _qwen32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2", 
+    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])
