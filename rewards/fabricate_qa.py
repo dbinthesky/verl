@@ -2053,7 +2053,14 @@ def extract_boxed_answer(solution: str) -> str:
 
 
 class Doc2QueryV2ComputeScore(object):
-    def __init__(self, parse_solution_fn, split="train", args=None, record_rollout_samples_path=None):
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 record_rollout_samples_path=None,
+                 record_rollout_max_capacity=100,
+                 ):
+
         self.split = split
         self.parse_solution_fn = parse_solution_fn
         assert args is not None
@@ -2088,6 +2095,7 @@ class Doc2QueryV2ComputeScore(object):
             f'[INFO] Save {self.task_name} rollout data into path: {self.save_rollout_samples_path}')
 
         self.rollout_database = {}
+        self.record_rollout_max_capacity = record_rollout_max_capacity
 
     # @classmethod
     # def get_weak_agent(cls):
@@ -2533,6 +2541,34 @@ class Doc2QueryV2ComputeScore(object):
             "", "")
         )
 
+    def update_rollout_info(self, solution_str, ground_truth, difficulty):
+        parsed = self.parse_solution_fn(solution_str)
+        if parsed is None:
+            return
+        question, answer, answer_type = parsed
+        inst_id = ground_truth["extra_info"]["uuid"]
+        if inst_id not in self.rollout_database:
+            self.rollout_database[inst_id] = LRUCache(
+                capacity=self.record_rollout_max_capacity)
+
+        self.rollout_database[inst_id][question] = {
+            "prompt_generation_process": solution_str,
+            "question": question,
+            "answer": answer,
+            "answer_type": answer_type,
+            "difficulty": {
+                "meta": self.args,
+                "pass_rate": difficulty
+            }
+        }
+
+    def save_rollout_info(self):
+        """将缓存保存为JSON文件"""
+        data = {k: {"capacity": v.capacity, "items": list(v.get_items()), "access_order": list(
+            v._access_time.keys())} for k, v in self.rollout_database.items()}
+        with open(self.save_rollout_samples_path, "wt") as f:
+            json.dump(data, f, ensure_ascii=False, indent="  ")
+
     def penalty_on(self, stage):
         if stage == "1":
             return ("Format", "Lang", "BadQ", "Thought", "QSim")
@@ -2613,6 +2649,14 @@ class Doc2QueryV2ComputeScore(object):
             # if stage == "2" and _difficulty_score > 0:
             #     cur_score += similarity_rewards[i]
 
+            # 保存Rollout信息
+            if cur_score >= 0:
+                self.update_rollout_info(
+                    solution_str=batch_solution_str[i],
+                    ground_truth=batch_ground_truth[i],
+                    difficulty=pass_rates[i]
+                )
+
             if stage == "1" and cur_score > 0.0:
                 cur_score = 0.0
 
@@ -2659,6 +2703,9 @@ class Doc2QueryV2ComputeScore(object):
 
         if self.split == "valid":
             pass
+
+        self.save_rollout_info()
+
         return final_results
 
 

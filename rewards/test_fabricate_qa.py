@@ -1,5 +1,6 @@
 import os
 import re
+import uuid
 import time
 import json
 import random
@@ -128,7 +129,10 @@ def load_fabricate_aio_data(num=100, format="wrong_question"):
                     "document": "<skip_content>",
                     "question": q,
                     "lang_code": "en",
-                    "source": ""
+                    "source": "",
+                    "extra_info": {
+                        "uuid": uuid.uuid4().hex
+                    }
                 })
             count += 1
         if count > num-1:
