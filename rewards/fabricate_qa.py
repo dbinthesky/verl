@@ -18,7 +18,7 @@ from abc import abstractmethod
 from typing import Any, Dict, Callable, List
 from decimal import Decimal, ROUND_HALF_UP
 from tqdm import tqdm as tqdm_nonasync
-from collections import namedtuple, defaultdict
+from collections import namedtuple, defaultdict, OrderedDict
 from sacremoses import MosesTokenizer, MosesDetokenizer
 
 
@@ -57,6 +57,56 @@ class APIError(Exception):
 
 class PostprocessError(Exception):
     pass
+
+
+class LRUCache(dict):
+    """支持JSON序列化的LRU缓存"""
+
+    def __init__(self, capacity: int = 128):
+        """初始化LRU缓存"""
+        super().__init__()
+        self.capacity = capacity
+        self._access_order = OrderedDict()  # 维护访问顺序
+
+    def __getitem__(self, key):
+        """获取缓存项，更新访问顺序"""
+        if key in self:
+            # 移动到最近使用位置
+            self._access_order.move_to_end(key)
+            return super().__getitem__(key)
+        raise KeyError(key)
+
+    def __setitem__(self, key, value):
+        """设置缓存项，更新访问顺序"""
+        # 如果键已存在，先删除以保持正确的顺序
+        if key in self:
+            del self[key]
+        elif len(self) >= self.capacity:
+            # 超出容量时淘汰最久未使用的项
+            self.popitem(last=False)
+
+        super().__setitem__(key, value)
+        self._access_order[key] = None  # 记录访问顺序
+
+    def get_items(self):
+        """获取所有项（按访问顺序），不改变访问顺序"""
+        return {k: self._access_order[k] for k in list(_access_order.keys())}.items()
+
+    def popitem(self, last: bool = True):
+        """移除并返回项（默认移除最近最少使用的项）"""
+        if not self:
+            raise KeyError("cache is empty")
+
+        # 获取要移除的键
+        key = next(reversed(self._access_order)) if last else next(
+            iter(self._access_order))
+        value = super().__getitem__(key)
+
+        # 从字典和访问顺序中移除
+        del self[key]
+        del self._access_order[key]
+
+        return key, value
 
 
 class Agent:
@@ -2885,8 +2935,8 @@ _qwen32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore
     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
 })
 fabricate_aio_qwen32b_respondent_stage2_compute_score_train = partial(
-    _qwen32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2", 
+    _qwen32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])
 fabricate_aio_qwen32b_respondent_stage2_compute_score_valid = partial(
-    _qwen32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2", 
+    _qwen32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])

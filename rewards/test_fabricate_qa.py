@@ -12,6 +12,7 @@ from tqdm import tqdm
 from collections import defaultdict
 from fabricate_qa import (
     agent,
+    LRUCache,
     QuestionSimilarity,
     ThoughtBonus,
     CalculationAnswerFormatVerify,
@@ -136,6 +137,24 @@ def load_fabricate_aio_data(num=100, format="wrong_question"):
 
 
 class TestFabricate(unittest.TestCase):
+    def test_lru_cache(self):
+        cache = LRUCache(capacity=3)
+
+        cache['a'] = 1
+        cache['b'] = 2
+        cache['c'] = 3
+        print(cache)  # 输出: {'a': 1, 'b': 2, 'c': 3}
+        print(cache._access_order)
+
+        # 访问'a'使其变为最近使用
+        print(cache['a'])  # 输出: 1
+        print(cache._access_order)
+
+        # 添加'd'会淘汰最久未使用的'b'
+        cache['d'] = 4
+        print(cache)  # 输出: {'a': 1, 'c': 3, 'd': 4}
+        print(cache._access_order)
+
     def test_with_unit_symbol(self):
         verifier = WithUnitSymbol()
         self.assertEqual(verifier.verify("1.275 mol"), True)
