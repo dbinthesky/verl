@@ -35,7 +35,7 @@ en_mt = MosesTokenizer(lang='en')
 VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
-MAX_CONCURRENT = 128
+MAX_CONCURRENT = 128 + 32
 
 
 def tokenize(s, lang_code):
@@ -2200,7 +2200,7 @@ class Doc2QueryV2ComputeScore(object):
                     )
                     verify_mapper[eval_prompt].append((index, name))
 
-        _results = await self.get_verify_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.get_verify_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=True)
+        _results = await self.get_verify_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.get_verify_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
 
         results_mapper = defaultdict(list)
         for (k, v) in _results:
