@@ -35,7 +35,7 @@ en_mt = MosesTokenizer(lang='en')
 VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
-MAX_CONCURRENT = 128
+MAX_CONCURRENT = 128 + 32
 
 
 def tokenize(s, lang_code):
@@ -86,19 +86,21 @@ class Agent:
         if request_kwargs is not None:
             self.request_kwargs.update(request_kwargs)
 
-    async def run(self, messages, max_concurrent, desc, postprocess_fns):
+    async def run(self, messages, max_concurrent, desc, postprocess_fns, pbar=False):
         semaphore = aio.Semaphore(max_concurrent)
         async with AsyncOpenAI(api_key=self.api_keys, base_url=self.base_url) as client:
             results = []
             tasks = [self.process_prompt(client, message, semaphore, postprocess_fn)
                      for message, postprocess_fn in zip(messages, postprocess_fns)]
 
-            if desc is not None:
+            if desc is not None and pbar:
                 for f in tqdm.asyncio.tqdm.as_completed(tasks, dynamic_ncols=True, desc=desc):
                     results.append(await f)
             else:
                 try:
-                    results = await asyncio.gather(*tasks)
+                    print(f'{desc} RUN...')
+                    results = await aio.gather(*tasks)
+                    print(f'{desc} FINISHED...')
                 except Exception as err:
                     print(f'[ERROR] asyncio.gather failed: {err}')
                     return None
@@ -2198,7 +2200,7 @@ class Doc2QueryV2ComputeScore(object):
                     )
                     verify_mapper[eval_prompt].append((index, name))
 
-        _results = await self.get_verify_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.get_verify_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),))
+        _results = await self.get_verify_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.get_verify_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
 
         results_mapper = defaultdict(list)
         for (k, v) in _results:
@@ -2372,7 +2374,7 @@ class Doc2QueryV2ComputeScore(object):
         for name, v in prompt2index.items():
             prompts = list(v.keys()) * run_args[name]["repeat"]
             tasks.append(run_args[name]["model"].run(
-                prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]',
+                prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
                 postprocess_fns=[
                     partial(self.response_postprocess, debug=debug)] * len(prompts)
             ))
@@ -2542,7 +2544,7 @@ class Doc2QueryV2ComputeScore(object):
 
             final_results.append(cur_score)
 
-            if (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+            if cur_score > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
                 log = True
                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
             else:

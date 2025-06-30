@@ -351,12 +351,12 @@ class TestFabricate(unittest.TestCase):
         # rewards = fabricate_aio_qwen32b_respondent_stage2_compute_score_valid(
         #     sources, batch_solution_str, batch_ground_truth,
         # )
-        # rewards = fabricate_aio_default_stage2_compute_score_valid(
-        #     sources, batch_solution_str, batch_ground_truth,
-        # )
-        rewards = fabricate_aio_qwen32b_respondent_stage2_compute_score_valid(
+        rewards = fabricate_aio_default_stage2_compute_score_valid(
             sources, batch_solution_str, batch_ground_truth,
         )
+        # rewards = fabricate_aio_qwen32b_respondent_stage2_compute_score_valid(
+        #     sources, batch_solution_str, batch_ground_truth,
+        # )
         print(len(rewards), len(batch_solution_str))
         self.assertTrue(len(rewards) == len(batch_solution_str))
 
