@@ -2225,6 +2225,11 @@ class Doc2QueryV2ComputeScore(object):
             try:
                 conclusion = s.strip()
 
+                judge = re.findall(
+                    r'\"判断结果\": \"(.*)\"', conclusion)
+                if len(judge) > 0 and judge[0] in ("正确", "错误"):
+                    return judge[0] == "正确"
+
                 conclusion = conclusion[conclusion.index(
                     "```json")+len("```json"):].strip()
                 conclusion = conclusion[:conclusion.index("```")].strip()
@@ -2479,12 +2484,17 @@ class Doc2QueryV2ComputeScore(object):
                 question, answer, answer_type = result
                 answer_map[i] = (question, answer, answer_type)
 
-                for module in self.do_not_simulate_respondent():
-                    cur_score = module.get_penalty_or_reward(
-                        solution_str, gt
-                    )
-                    if cur_score < 0.0:
-                        continue
+                skip = False
+                if not debug:
+                    for module in self.do_not_simulate_respondent():
+                        cur_score = module.get_penalty_or_reward(
+                            solution_str, gt
+                        )
+                        if cur_score < 0.0:
+                            skip = True
+                            break
+                if skip:
+                    continue
 
                 lang_code = gt["lang_code"]
                 for name, v in run_args.items():
@@ -3216,7 +3226,7 @@ class SALTQuestionAnswerFormatVerify(PenaltyOrReward):
         question, answer = solution_str
 
         # 中文
-        if contain_chinese(answe):
+        if contain_chinese(answer):
             tokens = list(jieba.cut(answer))
         else:
             tokens = list(answer.split(" "))
@@ -3394,52 +3404,271 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
         self.similarity_penalty = QuestionSimilarityPenalty(
             parse_solution_fn=self.parse_solution_fn)
 
-        @classmethod
-        def get_weak_agent(cls):
-            return Agent(**{
-                "model": "qwen25_32B_instruct",
-                "base_url": "http://10.130.131.138:8000/v1",
-                "api_keys": "EMPTY",
-                "request_kwargs": {
-                    "temperature": 0.8,
-                    "timeout": 360,
-                    "max_tokens": 4096,
-                },
-            })
-
-        @classmethod
-        def get_strong_agent(cls):
-            return Agent(**{
-                "model": "DeepSeek-V3-0324",
-                "base_url": "https://sd1dtu9r54gpj4to1t33g.apigateway-cn-beijing.volceapi.com/v1",
-                "api_keys": "EMPTY",
-                "request_kwargs": {
-                    "temperature": 0.8,
-                    "timeout": 360,
-                    "max_tokens": 4096,
-                }
-            })
-
-        @classmethod
-        def get_verify_agent(cls):
-            return Agent(**{
-                "model": "qwen25_32B_instruct",
-                "base_url": "http://10.130.131.138:8000/v1",
-                "api_keys": "EMPTY",
-                "request_kwargs": {
-                    "temperature": 0.8,
-                    "timeout": 360,
-                    "max_tokens": 2048,
-                },
-            })
-
-        def get_penalties(self) -> Dict[str, Callable]:
-            return {
-                "Format": self.format.get_penalty_or_reward,
-                "Lang": self.language.get_penalty_or_reward,
-                "BadQ": self.bad_question_detection.get_penalty_or_reward,
-                "QSimPenalty": self.similarity_penalty.get_penalty_or_reward,
+    @classmethod
+    def get_weak_agent(cls):
+        return Agent(**{
+            "model": "DeepSeek-V3-0324",
+            "base_url": "https://sd1dtu9r54gpj4to1t33g.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.8,
+                "timeout": 360,
+                "max_tokens": 4096,
             }
+        })
+
+    @classmethod
+    def get_strong_agent(cls):
+        return Agent(**{
+            "model": "DeepSeek-V3-0324",
+            "base_url": "https://sd1dtu9r54gpj4to1t33g.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.8,
+                "timeout": 360,
+                "max_tokens": 4096,
+            }
+        })
+
+    @classmethod
+    def get_verify_agent(cls):
+        return Agent(**{
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.131.138:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.8,
+                "timeout": 360,
+                "max_tokens": 2048,
+            },
+        })
+
+    def get_penalties(self) -> Dict[str, Callable]:
+        return {
+            "Format": self.format.get_penalty_or_reward,
+            "Lang": self.language.get_penalty_or_reward,
+            "BadQ": self.bad_question_detection.get_penalty_or_reward,
+            "QSimPenalty": self.similarity_penalty.get_penalty_or_reward,
+        }
+
+    def do_not_simulate_respondent(self):
+        return (
+            self.format,
+            self.language,
+            self.bad_question_detection,
+        )
+
+    @classmethod
+    def self_taught_template(cls, question, answer, gt):
+        if gt["lang_code"] == "zh":
+            hint = f'提示：[正确答案]\n{answer}'
+        else:
+            hint = f'Hint: [Correct Answer]\n{answer}'
+        return f'{question}\n\n{hint}'
+
+    def self_taught_response_postprocess(self, s, debug=False):
+        if "</think>" in s:
+            s = s[s.index("</think>")+len("</think>"):]
+        return s
+
+    async def self_taught(self,
+                          batch_data_sources,
+                          batch_solution_str,
+                          batch_ground_truth,
+                          run_args=None,
+                          max_concurrent_requests=MAX_CONCURRENT,
+                          debug=False):
+        assert run_args is not None
+
+        prompt2index = defaultdict(list)
+        answer_map = {}
+
+        for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            result = self.parse_solution_fn(solution_str)
+            if result is not None:
+                question, answer = result
+                answer_map[i] = (question, answer)
+
+                skip = False
+                if not debug:
+                    for module in self.do_not_simulate_respondent():
+                        cur_score = module.get_penalty_or_reward(
+                            solution_str, gt
+                        )
+                        if cur_score < 0.0:
+                            skip = True
+                            break
+                if skip:
+                    continue
+
+                lang_code = gt["lang_code"]
+                fn = run_args["self_taught"]["fn"]
+                _prompt = fn(question, answer, gt)
+                prompt2index[_prompt].append(i)
+
+        prompts = list(prompt2index.keys()) * 1
+        results = await run_args["self_taught"]["model"].run(
+            prompts, max_concurrent_requests, desc=f'[Generate Self-Taught Response {run_args["self_taught"]["model"].model}]', pbar=False,
+            postprocess_fns=[
+                partial(self.self_taught_response_postprocess, debug=debug)] * len(prompts)
+        )
+
+        self_taught_contexts = [None] * len(batch_solution_str)
+        for (p, r) in results:
+            for index in prompt2index[p]:
+                self_taught_contexts[index] = r
+        return self_taught_contexts
+
+    # @classmethod
+    # def respond_wo_context(cls, question, answer_type, gt):
+    #     _if = cls.get_instruct(gt, answer_type)
+    #     return f'{_if}\n\n{question}'
+
+    # @classmethod
+    # def respond_w_context(cls, question, answer_type, gt):
+    #     _if = cls.get_instruct(gt, answer_type)
+    #     return f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n{_if}\n\n{question}'
+
+    async def simulate_respondent(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            run_args=None,
+            max_concurrent_requests=MAX_CONCURRENT,
+            debug=False):
+        assert run_args is not None
+
+        contexts = self.self_taught(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            run_args=None,
+            max_concurrent_requests=max_concurrent_requests,
+            debug=False
+        )
+
+        prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
+        answer_map = {}
+
+        for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            result = self.parse_solution_fn(solution_str)
+            if result is not None:
+                question, answer = result
+                answer_map[i] = (question, answer)
+
+                skip = False
+                if not debug:
+                    for module in self.do_not_simulate_respondent():
+                        cur_score = module.get_penalty_or_reward(
+                            solution_str, gt
+                        )
+                        if cur_score < 0.0:
+                            skip = True
+                            break
+                if skip:
+                    continue
+
+                lang_code = gt["lang_code"]
+                for name, v in run_args.items():
+                    fn = v["fn"]
+                    print(question, contexts[i])
+                    # _prompt = fn(question, answer_type, gt)
+                #     prompt2index[name][_prompt].append(i)
+        # tasks = []
+        # task_names = []
+        # for name, v in prompt2index.items():
+        #     prompts = list(v.keys()) * run_args[name]["repeat"]
+        #     tasks.append(run_args[name]["model"].run(
+        #         prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
+        #         postprocess_fns=[
+        #             partial(self.response_postprocess, debug=debug)] * len(prompts)
+        #     ))
+        #     task_names.append(name)
+        # respond_questions = await aio.gather(*tasks)
+
+        # # 验证答案正确性
+        # verify_queue = []
+        # for name, results in zip(task_names, respond_questions):
+        #     for (p, r) in results:
+        #         for index in prompt2index[name][p]:
+        #             verify_queue.append((index, answer_map[index], name, p, r))
+
+        # correctness = await self.verify_results(
+        #     verify_queue=verify_queue, batch_solution_str=batch_solution_str, max_concurrent_requests=MAX_CONCURRENT,
+        #     split_names=task_names
+        # )
+        # return correctness
+
+        # FIXME
+        #     async def simulate_respondent(
+        #             self,
+        #             batch_data_sources,
+        #             batch_solution_str,
+        #             batch_ground_truth,
+        #             run_args=None,
+        #             max_concurrent_requests=MAX_CONCURRENT,
+        #             debug=False):
+        #         assert run_args is not None
+
+        #         prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
+        #         answer_map = {}
+
+        #         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+        #             result = self.parse_solution_fn(solution_str)
+        #             if result is not None:
+        #                 question, answer, answer_type = result
+        #                 answer_map[i] = (question, answer, answer_type)
+        #                 # 答案格式不符合规范
+        #                 ans_format_strict = self.format.get_penalty_or_reward(
+        #                     solution_str, gt
+        #                 )
+        #                 if ans_format_strict < 0.0:
+        #                     continue
+
+        #                 # 语言不一致
+        #                 lang_consist = self.language.get_penalty_or_reward(
+        #                     solution_str, gt
+        #                 )
+        #                 if lang_consist < 0.0:
+        #                     continue
+
+        #                 # 问题包含非预期的结构
+        #                 bad_q = self.bad_question_detection.get_penalty_or_reward(
+        #                     solution_str, gt
+        #                 )
+        #                 if bad_q < 0.0:
+        #                     continue
+
+        #                 lang_code = gt["lang_code"]
+        #                 for name, v in run_args.items():
+        #                     fn = v["fn"]
+        #                     _prompt = fn(question, answer_type, gt)
+        #                     prompt2index[name][_prompt].append(i)
+        #         tasks = []
+        #         task_names = []
+        #         for name, v in prompt2index.items():
+        #             prompts = list(v.keys()) * run_args[name]["repeat"]
+        #             tasks.append(run_args[name]["model"].run(
+        #                 prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
+        #                 postprocess_fns=[
+        #                     partial(self.response_postprocess, debug=debug)] * len(prompts)
+        #             ))
+        #             task_names.append(name)
+        #         respond_questions = await aio.gather(*tasks)
+
+        #         # 验证答案正确性
+        #         verify_queue = []
+        #         for name, results in zip(task_names, respond_questions):
+        #             for (p, r) in results:
+        #                 for index in prompt2index[name][p]:
+        #                     verify_queue.append((index, answer_map[index], name, p, r))
+
+        #         correctness = await self.verify_results(
+        #             verify_queue=verify_queue, batch_solution_str=batch_solution_str, max_concurrent_requests=MAX_CONCURRENT,
+        #             split_names=task_names
+        #         )
+        #         return correctness
 
         #     def response_postprocess(self, s, debug=False):
         #         if "</think>" in s:
@@ -3722,75 +3951,6 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
         #                 full_rewards.append(0.0)
         #         return full_rewards, pass_rates
 
-        #     async def simulate_respondent(
-        #             self,
-        #             batch_data_sources,
-        #             batch_solution_str,
-        #             batch_ground_truth,
-        #             run_args=None,
-        #             max_concurrent_requests=MAX_CONCURRENT,
-        #             debug=False):
-        #         assert run_args is not None
-
-        #         prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
-        #         answer_map = {}
-
-        #         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-        #             result = self.parse_solution_fn(solution_str)
-        #             if result is not None:
-        #                 question, answer, answer_type = result
-        #                 answer_map[i] = (question, answer, answer_type)
-        #                 # 答案格式不符合规范
-        #                 ans_format_strict = self.format.get_penalty_or_reward(
-        #                     solution_str, gt
-        #                 )
-        #                 if ans_format_strict < 0.0:
-        #                     continue
-
-        #                 # 语言不一致
-        #                 lang_consist = self.language.get_penalty_or_reward(
-        #                     solution_str, gt
-        #                 )
-        #                 if lang_consist < 0.0:
-        #                     continue
-
-        #                 # 问题包含非预期的结构
-        #                 bad_q = self.bad_question_detection.get_penalty_or_reward(
-        #                     solution_str, gt
-        #                 )
-        #                 if bad_q < 0.0:
-        #                     continue
-
-        #                 lang_code = gt["lang_code"]
-        #                 for name, v in run_args.items():
-        #                     fn = v["fn"]
-        #                     _prompt = fn(question, answer_type, gt)
-        #                     prompt2index[name][_prompt].append(i)
-        #         tasks = []
-        #         task_names = []
-        #         for name, v in prompt2index.items():
-        #             prompts = list(v.keys()) * run_args[name]["repeat"]
-        #             tasks.append(run_args[name]["model"].run(
-        #                 prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
-        #                 postprocess_fns=[
-        #                     partial(self.response_postprocess, debug=debug)] * len(prompts)
-        #             ))
-        #             task_names.append(name)
-        #         respond_questions = await aio.gather(*tasks)
-
-        #         # 验证答案正确性
-        #         verify_queue = []
-        #         for name, results in zip(task_names, respond_questions):
-        #             for (p, r) in results:
-        #                 for index in prompt2index[name][p]:
-        #                     verify_queue.append((index, answer_map[index], name, p, r))
-
-        #         correctness = await self.verify_results(
-        #             verify_queue=verify_queue, batch_solution_str=batch_solution_str, max_concurrent_requests=MAX_CONCURRENT,
-        #             split_names=task_names
-        #         )
-        #         return correctness
-
         #     async def get_similarity_reward(
         #         self,
         #         batch_data_sources,
@@ -3831,16 +3991,16 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
         #                 scores[index] = _score * run_args["weight"]
         #         return scores
 
-            def compute_score(self,
-                              batch_data_sources,
-                              batch_solution_str,
-                              batch_ground_truth,
-                              stage,
-                              max_concurrent_requests=MAX_CONCURRENT,
-                              ):
-                async def main():
-                    return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, stage=stage, max_concurrent_requests=max_concurrent_requests)
-                return aio.run(main())
+        def compute_score(self,
+                          batch_data_sources,
+                          batch_solution_str,
+                          batch_ground_truth,
+                          stage,
+                          max_concurrent_requests=MAX_CONCURRENT,
+                          ):
+            async def main():
+                return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, stage=stage, max_concurrent_requests=max_concurrent_requests)
+            return aio.run(main())
 
         #     def log_solution(self, solution):
         #         norm = self.parse_solution_fn(solution)
@@ -4034,6 +4194,48 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 
         #         return final_results
 
-        # ------------------------------------------------------------------------------------------------------------------------------------------------------
-        # SALT
-        # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+SALT_DEFAULT_PARAMS = {
+    "learnable_run_args": {
+        "self_taught": {
+            "model": SALTComputeScore.get_weak_agent(),
+            "fn": SALTComputeScore.self_taught_template,
+        },
+        "w/o_content": {
+            "model": SALTComputeScore.get_weak_agent(),
+            "repeat": 8,
+            "fn": SALTComputeScore.respond_wo_context,
+            "desc": 'w/o ctx'
+        },
+        "w_content": {
+            "model": SALTComputeScore.get_strong_agent(),
+            "repeat": 8,
+            "fn": SALTComputeScore.respond_w_context,
+            "desc": 'w ctx'
+        },
+    },
+    "learnable_metric_args": {
+        "advantage": 'w_content',
+        "weakness": 'w/o_content',
+        "advantage_oversimplified_threshold": 8/8,
+        "weakness_oversimplified_threshold": 7/8,
+        "advantage_overcomplex_threshold": 1/8,
+        "weakness_overcomplex_threshold": 1/8,
+        "advantage_threshold": 2/8,
+        "advantage_weight": 0.0,
+        "weakness_weight": 2.0,
+        "confidence_bonus_threshold": 2/8,
+        "confidence_bonus_weight": 0.
+    },
+    "similarity_run_args":  {
+        "threshold": {
+            3: 0.5,
+            4: 1.0
+        },
+        "weight": 0.25,
+    }
+}
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# SALT
+# ------------------------------------------------------------------------------------------------------------------------------------------------------

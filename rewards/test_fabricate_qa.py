@@ -22,7 +22,9 @@ from fabricate_qa import (
     SALTBadQuestionDetection,
     QuestionSimilarityPenalty,
     Doc2QueryV2ComputeScore,
+    SALTComputeScore,
     DOC2QUERY_DEFAULT_PARAMS,
+    SALT_DEFAULT_PARAMS,
     doc2query_v2_default_stage1_compute_score_valid,
     fabricate_qa_default_stage1_compute_score_valid,
     fabricate_aio_default_stage1_compute_score_valid,
@@ -178,6 +180,21 @@ class TestSALT(unittest.TestCase):
         for response, gt in zip(batch_solution_str, batch_ground_truth):
             score = scorer.get_penalty_or_reward(response, gt)
             print(score)
+
+    def test_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_salt_data(num=100)
+
+        task = SALTComputeScore(
+            salt_parse_solution_fn, split="valid", args=SALT_DEFAULT_PARAMS)
+
+        async def main():
+            results = await task.self_taught(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth,
+                run_args=SALT_DEFAULT_PARAMS["learnable_run_args"], debug=True,
+                # metric_args=SALT_DEFAULT_PARAMS["learnable_metric_args"]
+            )
+        aio.run(main())
 
 
 class TestFabricate(unittest.TestCase):
