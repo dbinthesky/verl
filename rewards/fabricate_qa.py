@@ -3865,11 +3865,10 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                       batch_data_sources,
                       batch_solution_str,
                       batch_ground_truth,
-                      stage,
                       max_concurrent_requests=MAX_CONCURRENT,
                       ):
         async def main():
-            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, stage=stage, max_concurrent_requests=max_concurrent_requests)
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, max_concurrent_requests=max_concurrent_requests)
         return aio.run(main())
 
     def log_solution(self, solution):
@@ -4080,6 +4079,16 @@ SALT_DEFAULT_PARAMS = {
         "weight": 0.5,
     }
 }
+
+
+_default_salt_compute_score_train = SALTComputeScore(
+    salt_parse_solution_fn, split="train", args=SALT_DEFAULT_PARAMS)
+_default_salt_compute_score_valid = SALTComputeScore(
+    salt_parse_solution_fn, split="valid", args=SALT_DEFAULT_PARAMS)
+salt_default_compute_score_train = partial(
+    _default_salt_compute_score_train.compute_score)
+salt_default_compute_score_valid = partial(
+    _default_salt_compute_score_valid.compute_score)
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # SALT

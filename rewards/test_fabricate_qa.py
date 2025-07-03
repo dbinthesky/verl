@@ -31,6 +31,7 @@ from fabricate_qa import (
     fabricate_aio_default_stage2_compute_score_valid,
     fabricate_aio_qwq32b_respondent_stage2_compute_score_valid,
     fabricate_aio_qwen32b_respondent_stage2_compute_score_valid,
+    salt_default_compute_score_valid,
     calc_qa_parse_solution_fn,
     salt_parse_solution_fn,
     calc_qa_parse_thought_fn,
@@ -189,12 +190,16 @@ class TestSALT(unittest.TestCase):
         task = SALTComputeScore(
             salt_parse_solution_fn, split="valid", args=SALT_DEFAULT_PARAMS)
 
-        async def main():
-            results = await task._compute_score(
-                [None] *
-                len(batch_solution_str), batch_solution_str, batch_ground_truth, debug=True,
-            )
-        aio.run(main())
+        salt_default_compute_score_valid(
+            [None] *
+            len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        )
+        # async def main():
+        #     results = await task._compute_score(
+        #         [None] *
+        #         len(batch_solution_str), batch_solution_str, batch_ground_truth, debug=True,
+        #     )
+        # aio.run(main())
 
     def test_learnable_reward(self):
         batch_solution_str, batch_ground_truth = load_salt_data(num=100)
@@ -202,6 +207,10 @@ class TestSALT(unittest.TestCase):
         task = SALTComputeScore(
             salt_parse_solution_fn, split="valid", args=SALT_DEFAULT_PARAMS)
 
+        # salt_default_compute_score_valid(
+        #     [None] *
+        #     len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        # )
         async def main():
             # results = await task.get_learnable_reward(
             #     [None] *
