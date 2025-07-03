@@ -3541,10 +3541,10 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
         self_taught_contexts = [None] * len(batch_solution_str)
         for (p, r) in results:
             # FIXME
-            print(f'[STaR]{p}')
-            print('-'*80)
-            print(f'[STaR]{r}')
-            print("="*80)
+            # print(f'[STaR]{p}')
+            # print('-'*80)
+            # print(f'[STaR]{r}')
+            # print("="*80)
             for index in prompt2index[p]:
                 self_taught_contexts[index] = r
         return self_taught_contexts
@@ -3632,10 +3632,10 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
         for name, results in zip(task_names, respond_questions):
             for (p, r) in results:
                 # FIXME
-                print(p)
-                print('-'*80)
-                print(r)
-                print("="*80)
+                # print(p)
+                # print('-'*80)
+                # print(r)
+                # print("="*80)
                 for index in prompt2index[name][p]:
                     verify_queue.append((index, name, p, r))
 
@@ -3780,10 +3780,10 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
         _results = await self.get_verify_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.get_verify_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
 
         # FIXME
-        for (p, r) in _results:
-            print(f'[EVAL]{p}')
-            print(f'[EVAL]{r}')
-            print("="*80)
+        # for (p, r) in _results:
+        #     print(f'[EVAL]{p}')
+        #     print(f'[EVAL]{r}')
+        #     print("="*80)
 
         results_mapper = defaultdict(list)
         for (k, v) in _results:
@@ -3792,10 +3792,9 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                 if v is not None:
                     correctness[name][index].append(1.0 if v else 0.0)
                     # FIXME
-                    if not v:
-                        print(f'[FAILURE]', batch_ground_truth[index]
-                              ["extra_info"]["uuid"])
-        print(correctness)
+                    # if not v:
+                    #     print(f'[FAILURE]', batch_ground_truth[index]
+                    #           ["extra_info"]["uuid"])
         return correctness
 
         #     async def get_difficulty_reward(
