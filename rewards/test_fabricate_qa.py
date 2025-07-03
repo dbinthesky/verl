@@ -98,7 +98,7 @@ def load_fabricate_aio_data(num=100, format="wrong_question"):
             gt = row["reward_model"]["question"]
             if gt is not None:
                 batch_solution_str.append(
-                    f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
+                    f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}-Synthetic\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
                 batch_ground_truth.append(row["reward_model"])
                 count += 1
             else:
@@ -188,7 +188,7 @@ class TestSALT(unittest.TestCase):
             salt_parse_solution_fn, split="valid", args=SALT_DEFAULT_PARAMS)
 
         async def main():
-            results = await task.self_taught(
+            results = await task.simulate_respondent(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
                 run_args=SALT_DEFAULT_PARAMS["learnable_run_args"], debug=True,

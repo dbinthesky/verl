@@ -36,7 +36,8 @@ en_mt = MosesTokenizer(lang='en')
 VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
-MAX_CONCURRENT = 128 + 32
+# MAX_CONCURRENT = 128 + 32
+MAX_CONCURRENT = 32
 ROLLOUT_SAVE_DIR = "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
 
 DEFAULT_MAX_CONCURRENT = {
@@ -3407,28 +3408,48 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
     @classmethod
     def get_weak_agent(cls):
         return Agent(**{
-            "model": "DeepSeek-V3-0324",
-            "base_url": "https://sd1dtu9r54gpj4to1t33g.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.131.138:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.8,
                 "timeout": 360,
-                "max_tokens": 4096,
-            }
+                "max_tokens": 2048,
+            },
         })
+        # return Agent(**{
+        #     "model": "DeepSeek-V3-0324",
+        #     "base_url": "https://sd1dtu9r54gpj4to1t33g.apigateway-cn-beijing.volceapi.com/v1",
+        #     "api_keys": "EMPTY",
+        #     "request_kwargs": {
+        #         "temperature": 0.8,
+        #         "timeout": 360,
+        #         "max_tokens": 4096,
+        #     }
+        # })
 
     @classmethod
     def get_strong_agent(cls):
         return Agent(**{
-            "model": "DeepSeek-V3-0324",
-            "base_url": "https://sd1dtu9r54gpj4to1t33g.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.131.138:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.8,
                 "timeout": 360,
-                "max_tokens": 4096,
-            }
+                "max_tokens": 2048,
+            },
         })
+        # return Agent(**{
+        #     "model": "DeepSeek-V3-0324",
+        #     "base_url": "https://sd1dtu9r54gpj4to1t33g.apigateway-cn-beijing.volceapi.com/v1",
+        #     "api_keys": "EMPTY",
+        #     "request_kwargs": {
+        #         "temperature": 0.8,
+        #         "timeout": 360,
+        #         "max_tokens": 4096,
+        #     }
+        # })
 
     @classmethod
     def get_verify_agent(cls):
@@ -3508,7 +3529,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 
         prompts = list(prompt2index.keys()) * 1
         results = await run_args["self_taught"]["model"].run(
-            prompts, max_concurrent_requests, desc=f'[Generate Self-Taught Response {run_args["self_taught"]["model"].model}]', pbar=False,
+            prompts, max_concurrent_requests, desc=f'[Generate Self-Taught Response {run_args["self_taught"]["model"].model}]', pbar=True,
             postprocess_fns=[
                 partial(self.self_taught_response_postprocess, debug=debug)] * len(prompts)
         )
@@ -3519,15 +3540,13 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                 self_taught_contexts[index] = r
         return self_taught_contexts
 
-    # @classmethod
-    # def respond_wo_context(cls, question, answer_type, gt):
-    #     _if = cls.get_instruct(gt, answer_type)
-    #     return f'{_if}\n\n{question}'
+    @classmethod
+    def respond_wo_context(cls, context, gt):
+        return gt["instruct"].format(question=gt["question"])
 
-    # @classmethod
-    # def respond_w_context(cls, question, answer_type, gt):
-    #     _if = cls.get_instruct(gt, answer_type)
-    #     return f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n{_if}\n\n{question}'
+    @classmethod
+    def respond_w_context(cls, context, gt):
+        return f'{context}\n\n\n\n\n{gt["instruct"].format(question=gt["question"])}'
 
     async def simulate_respondent(
             self,
@@ -3539,13 +3558,13 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
             debug=False):
         assert run_args is not None
 
-        contexts = self.self_taught(
+        contexts = await self.self_taught(
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth,
-            run_args=None,
+            run_args=run_args,
             max_concurrent_requests=max_concurrent_requests,
-            debug=False
+            debug=debug
         )
 
         prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
@@ -3571,22 +3590,29 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 
                 lang_code = gt["lang_code"]
                 for name, v in run_args.items():
+                    if name == "self_taught":
+                        continue
                     fn = v["fn"]
-                    print(question, contexts[i])
-                    # _prompt = fn(question, answer_type, gt)
-                #     prompt2index[name][_prompt].append(i)
-        # tasks = []
-        # task_names = []
-        # for name, v in prompt2index.items():
-        #     prompts = list(v.keys()) * run_args[name]["repeat"]
-        #     tasks.append(run_args[name]["model"].run(
-        #         prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
-        #         postprocess_fns=[
-        #             partial(self.response_postprocess, debug=debug)] * len(prompts)
-        #     ))
-        #     task_names.append(name)
-        # respond_questions = await aio.gather(*tasks)
+                    context = f'```\n[Question]\n{question}\n\n[Solution]\n{contexts[i]}\n```'
+                    _prompt = fn(context, gt)
+                    prompt2index[name][_prompt].append(i)
 
+        tasks = []
+        task_names = []
+        for name, v in prompt2index.items():
+            if name == "self_taught":
+                continue
+
+            prompts = list(v.keys()) * run_args[name]["repeat"]
+            tasks.append(run_args[name]["model"].run(
+                prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
+                postprocess_fns=[
+                    partial(self.response_postprocess, debug=debug)] * len(prompts)
+            ))
+            task_names.append(name)
+        respond_questions = await aio.gather(*tasks)
+
+        print(respond_questions)
         # # 验证答案正确性
         # verify_queue = []
         # for name, results in zip(task_names, respond_questions):
