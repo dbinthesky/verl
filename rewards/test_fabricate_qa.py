@@ -51,7 +51,7 @@ def load_salt_data(num=100):
 
     df = pd.read_parquet(filename)
     count = 0
-    for _, row in df.iterrows():
+    for i, row in df.iterrows():
         row = row.to_dict()
         gt = row["reward_model"]["question"]
         if gt is not None:
