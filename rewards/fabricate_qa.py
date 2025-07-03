@@ -2545,6 +2545,7 @@ class Doc2QueryV2ComputeScore(object):
         fabricates, authentics = [], []
         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
             fabricate = self.parse_solution_fn(sol)
+            # FIXME: fabricate = question + answer?
             if fabricate is not None and gt.get("question", None):
                 fabricates.append(fabricate)
                 authentics.append(gt["question"])
@@ -3378,7 +3379,7 @@ class QuestionSimilarityPenalty(QuestionSimilarity):
             sl_tokens = " ".join(tokenize(question.lower(), "en"))
             bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
             similarity = bleu / 100
-            return -similarity
+            return -similarity * 0.5  # 权重0.5
         except Exception as err:
             return 0.0
 
@@ -3649,38 +3650,38 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 
         return correctness
 
-        #     def response_postprocess(self, s, debug=False):
-        #         if "</think>" in s:
-        #             s = s[s.index("</think>")+len("</think>"):]
+    def response_postprocess(self, s, debug=False):
+        if "</think>" in s:
+            s = s[s.index("</think>")+len("</think>"):]
 
-        #         if "**Final Answer**" in s:
-        #             s = s[s.index("**Final Answer**")+len("**Final Answer**"):]
-        #         if "**Final Solution**" in s:
-        #             s = s[s.index("**Final Solution**")+len("**Final Solution**"):]
+        if "**Final Answer**" in s:
+            s = s[s.index("**Final Answer**")+len("**Final Answer**"):]
+        if "**Final Solution**" in s:
+            s = s[s.index("**Final Solution**")+len("**Final Solution**"):]
 
-        #         if debug:
-        #             return s
-        #         try:
-        #             s = s.strip()
-        #             conclusion = s
-        #             if "最终答案是" in conclusion:
-        #                 conclusion = conclusion[conclusion.rindex(
-        #                     "最终答案是")+len("最终答案是"):].strip()
-        #                 return conclusion
-        #             else:
-        #                 conclusion = conclusion[conclusion.rindex(
-        #                     "final answer is")+len("final answer is"):].strip()
-        #                 return conclusion
-        #         except Exception as err:
-        #             try:
-        #                 s = s.strip()
-        #                 conclusion = s.split("\n")[-1].strip()
+        if debug:
+            return s
+        try:
+            s = s.strip()
+            conclusion = s
+            if "最终答案是" in conclusion:
+                conclusion = conclusion[conclusion.rindex(
+                    "最终答案是")+len("最终答案是"):].strip()
+                return conclusion
+            else:
+                conclusion = conclusion[conclusion.rindex(
+                    "final answer is")+len("final answer is"):].strip()
+                return conclusion
+        except Exception as err:
+            try:
+                s = s.strip()
+                conclusion = s.split("\n")[-1].strip()
 
-        #                 if len(conclusion) < 5:
-        #                     conclusion = "\n".join(s.split("\n")[-3:]).strip()
-        #                 return conclusion
-        #             except Exception as err:
-        #                 raise PostprocessError(f'parse conclusion failure')
+                if len(conclusion) < 5:
+                    conclusion = "\n".join(s.split("\n")[-3:]).strip()
+                return conclusion
+            except Exception as err:
+                raise PostprocessError(f'parse conclusion failure')
 
     def postprocess_authentic_question_response(self, s):
         s = s.strip()
@@ -3797,136 +3798,128 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                     #           ["extra_info"]["uuid"])
         return correctness
 
-        #     async def get_difficulty_reward(
-        #             self,
-        #             batch_data_sources,
-        #             batch_solution_str,
-        #             batch_ground_truth,
-        #             run_args=None,
-        #             metric_args=None,
-        #             max_concurrent_requests=MAX_CONCURRENT,
-        #             debug=False):
+    async def get_learnable_reward(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            run_args=None,
+            metric_args=None,
+            max_concurrent_requests=MAX_CONCURRENT,
+            debug=False):
 
-        #         assert metric_args is not None, f'`metric_args` missed'
-        #         assert run_args is not None, f'`run_args` missed'
+        assert metric_args is not None, f'`metric_args` missed'
+        assert run_args is not None, f'`run_args` missed'
 
-        #         correctness = await self.simulate_respondent(
-        #             batch_data_sources,
-        #             batch_solution_str,
-        #             batch_ground_truth,
-        #             run_args=run_args,
-        #             max_concurrent_requests=max_concurrent_requests,
-        #             debug=debug
-        #         )
+        correctness = await self.simulate_respondent(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            run_args=run_args,
+            max_concurrent_requests=max_concurrent_requests,
+            debug=debug
+        )
 
-        #         full_rewards = []
-        #         pass_rates = []
+        full_rewards = []
+        pass_rates = []
 
-        #         for i in range(len(batch_solution_str)):
-        #             if i in list(correctness.values())[0]:
-        #                 base_score = 0.0
-        #                 pass_rates.append({
-        #                     k: f'{np.sum(v[i])}/{len(v[i])}' for k, v in correctness.items()
-        #                 })
+        for i in range(len(batch_solution_str)):
+            if i in list(correctness.values())[0]:
+                base_score = 0.0
+                pass_rates.append({
+                    k: f'{np.sum(v[i])}/{len(v[i])}' for k, v in correctness.items()
+                })
 
-        #                 try:
-        #                     adv_name, weak_name = metric_args["advantage"], metric_args["weakness"]
-        #                     adv, weak = correctness[adv_name][i], correctness[weak_name][i]
+                try:
+                    adv_name, weak_name = metric_args["advantage"], metric_args["weakness"]
+                    adv, weak = correctness[adv_name][i], correctness[weak_name][i]
 
-        #                     if len(weak) == 0 or len(adv) == 0:
-        #                         full_rewards.append(base_score)
-        #                         continue
-        #                     # 题目过难
-        #                     if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
-        #                         full_rewards.append(base_score)
-        #                         continue
+                    if len(weak) == 0 or len(adv) == 0:
+                        full_rewards.append(base_score)
+                        continue
 
-        #                     # 题目过易
-        #                     if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
-        #                         full_rewards.append(base_score)
-        #                         continue
+                    # adv 应该比 weakness 显著好
+                    if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
+                        full_rewards.append(base_score)
+                        continue
 
-        #                     # adv 应该比 weakness 显著好
-        #                     if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
-        #                         full_rewards.append(base_score)
-        #                         continue
+                    # 难度函数
+                    def calc_difficulty(scores, total_attempts):
+                        return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
 
-        #                     # 难度奖励
-        #                     def calc_difficulty(scores, total_attempts):
-        #                         return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
+                    # 难度降低奖励
+                    diff_reduct_bonus = 0.5  # 基础分
 
-        #                     # 置信度奖励
-        #                     confidence_bonus = 0.0
-        #                     if np.mean(adv) >= metric_args["confidence_bonus_threshold"]:
-        #                         confidence_bonus = metric_args["confidence_bonus_weight"] * max(
-        #                             (np.mean(adv)-np.mean(weak)), 0.0)
-        #                     base_score = [
-        #                         metric_args["weakness_weight"] *
-        #                         calc_difficulty(weak, run_args[weak_name]["repeat"]),
-        #                         metric_args["advantage_weight"] *
-        #                         calc_difficulty(adv, run_args[adv_name]["repeat"]),
-        #                         confidence_bonus
-        #                     ]
+                    # 原问题难度
+                    # 合成题Fewshot -> 难度
 
-        #                     full_rewards.append(base_score)
-        #                 except Exception as err:
-        #                     print(f'[ERROR] {err}')
-        #                     full_rewards.append(base_score)
-        #             else:
-        #                 pass_rates.append({})
-        #                 full_rewards.append(0.0)
-        #         return full_rewards, pass_rates
+                    diff_reduct_bonus += (calc_difficulty(weak, run_args[weak_name]["repeat"])-calc_difficulty(
+                        adv, run_args[adv_name]["repeat"])) * metric_args["difficulty_reduction_bonus_weight"]
 
-        #     async def get_similarity_reward(
-        #         self,
-        #         batch_data_sources,
-        #         batch_solution_str,
-        #         batch_ground_truth,
-        #         max_concurrent_requests=128,
-        #         run_args=None
-        #     ):
-        #         assert run_args is not None
+                    base_score = [
+                        diff_reduct_bonus
+                    ]
 
-        #         indices = []
-        #         fabricates, authentics = [], []
-        #         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-        #             fabricate = self.parse_solution_fn(sol)
-        #             if fabricate is not None and gt.get("question", None):
-        #                 fabricates.append(fabricate)
-        #                 authentics.append(gt["question"])
-        #                 indices.append(i)
-        #             else:
-        #                 continue
+                    full_rewards.append(base_score)
+                except Exception as err:
+                    print(f'[ERROR] {err}')
+                    full_rewards.append(base_score)
+            else:
+                pass_rates.append({})
+                full_rewards.append(0.0)
+        return full_rewards, pass_rates
 
-        #         similarity = await question_similarity(
-        #             agent=self.get_verify_agent(),
-        #             authentic=authentics,
-        #             fabricate=fabricates,
-        #             max_concurrent_requests=max_concurrent_requests
-        #         )
+    async def get_similarity_penalty(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        max_concurrent_requests=128,
+        run_args=None
+    ):
+        assert run_args is not None
 
-        #         scores = [0.0] * len(batch_solution_str)
-        #         for sim, index in zip(similarity, indices):
-        #             if sim is None:
-        #                 pass
-        #             else:
-        #                 _score = 0.0
-        #                 for threshold, set_val in run_args["threshold"].items():
-        #                     if sim >= threshold:
-        #                         _score = max(_score, set_val)
-        #                 scores[index] = _score * run_args["weight"]
-        #         return scores
+        indices = []
+        fabricates, authentics = [], []
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            fabricate = self.parse_solution_fn(sol)
+            if fabricate is not None and gt.get("question", None):
+                fabricates.append(fabricate[0])
+                authentics.append(gt["question"])
+                indices.append(i)
+            else:
+                continue
 
-        def compute_score(self,
-                          batch_data_sources,
-                          batch_solution_str,
-                          batch_ground_truth,
-                          stage,
-                          max_concurrent_requests=MAX_CONCURRENT,
-                          ):
-            async def main():
-                return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, stage=stage, max_concurrent_requests=max_concurrent_requests)
-            return aio.run(main())
+        similarity = await question_similarity(
+            agent=self.get_verify_agent(),
+            authentic=authentics,
+            fabricate=fabricates,
+            max_concurrent_requests=max_concurrent_requests
+        )
+        print(similarity)
+
+        scores = [0.0] * len(batch_solution_str)
+        for sim, index in zip(similarity, indices):
+            if sim is None:
+                pass
+            else:
+                _score = 0.0
+                for threshold, set_val in run_args["threshold"].items():
+                    if sim >= threshold:
+                        _score = min(_score, set_val)
+                scores[index] = _score * run_args["weight"]
+        return scores
+
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      stage,
+                      max_concurrent_requests=MAX_CONCURRENT,
+                      ):
+        async def main():
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, stage=stage, max_concurrent_requests=max_concurrent_requests)
+        return aio.run(main())
 
         #     def log_solution(self, solution):
         #         norm = self.parse_solution_fn(solution)
@@ -4127,12 +4120,12 @@ SALT_DEFAULT_PARAMS = {
             "model": SALTComputeScore.get_weak_agent(),
             "fn": SALTComputeScore.self_taught_template,
         },
-        # "w/o_content": {
-        #     "model": SALTComputeScore.get_weak_agent(),
-        #     "repeat": 8,
-        #     "fn": SALTComputeScore.respond_wo_context,
-        #     "desc": 'w/o ctx'
-        # },
+        "w/o_content": {
+            "model": SALTComputeScore.get_weak_agent(),
+            "repeat": 8,
+            "fn": SALTComputeScore.respond_wo_context,
+            "desc": 'w/o ctx'
+        },
         "w_content": {
             "model": SALTComputeScore.get_strong_agent(),
             "repeat": 8,
@@ -4143,22 +4136,15 @@ SALT_DEFAULT_PARAMS = {
     "learnable_metric_args": {
         "advantage": 'w_content',
         "weakness": 'w/o_content',
-        "advantage_oversimplified_threshold": 8/8,
-        "weakness_oversimplified_threshold": 7/8,
-        "advantage_overcomplex_threshold": 1/8,
-        "weakness_overcomplex_threshold": 1/8,
         "advantage_threshold": 2/8,
-        "advantage_weight": 0.0,
-        "weakness_weight": 2.0,
-        "confidence_bonus_threshold": 2/8,
-        "confidence_bonus_weight": 0.
+        "difficulty_reduction_bonus_weight": 1.0
     },
     "similarity_run_args":  {
         "threshold": {
-            3: 0.5,
-            4: 1.0
+            4: -0.5,
+            5: -1.0
         },
-        "weight": 0.25,
+        "weight": 0.5,
     }
 }
 
