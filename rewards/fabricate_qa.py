@@ -3340,6 +3340,39 @@ class SALTBadQuestionDetection(BadQuestionDetection):
         return tokens
 
 
+class QuestionSimilarityPenalty(QuestionSimilarity):
+    """ 问题相似度惩罚：新问题应当与原问题有比较大的差异
+    """
+
+    def __init__(self, parse_solution_fn, authentic_key="question"):
+        super().__init__(
+            parse_solution_fn=parse_solution_fn, authentic_key=authentic_key
+        )
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        if ground_truth.get(self.key, None) is None:
+            return 0.0
+        try:
+            solution_str = self.parse_solution_fn(solution_str)
+
+            if solution_str is None:
+                return 0.0
+            question, answer = solution_str
+
+            if ground_truth.get(self.key, None):
+                gt = ground_truth[self.key]
+            else:
+                return 0.0
+
+            gt_tokens = " ".join(tokenize(gt.lower(), "en"))
+            sl_tokens = " ".join(tokenize(question.lower(), "en"))
+            bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
+            similarity = bleu / 100
+            return -similarity
+        except Exception as err:
+            return 0.0
+
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # SALT
 # ------------------------------------------------------------------------------------------------------------------------------------------------------

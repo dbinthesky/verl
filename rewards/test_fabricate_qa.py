@@ -20,6 +20,7 @@ from fabricate_qa import (
     LanguageConsistency,
     BadQuestionDetection,
     SALTBadQuestionDetection,
+    QuestionSimilarityPenalty,
     Doc2QueryV2ComputeScore,
     DOC2QUERY_DEFAULT_PARAMS,
     doc2query_v2_default_stage1_compute_score_valid,
@@ -169,8 +170,14 @@ class TestSALT(unittest.TestCase):
 
         for response, gt in zip(batch_solution_str, batch_ground_truth):
             score = scorer.get_penalty_or_reward(response, gt)
-        #     print(score)
-        #     # self.assertTrue(score < 0)
+
+    def test_question_similarity_penalty(self):
+        batch_solution_str, batch_ground_truth = load_salt_data(num=100)
+        scorer = QuestionSimilarityPenalty(salt_parse_solution_fn)
+
+        for response, gt in zip(batch_solution_str, batch_ground_truth):
+            score = scorer.get_penalty_or_reward(response, gt)
+            print(score)
 
 
 class TestFabricate(unittest.TestCase):
