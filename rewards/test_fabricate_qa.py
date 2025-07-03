@@ -54,6 +54,8 @@ def load_salt_data(num=100):
     for i, row in df.iterrows():
         row = row.to_dict()
         gt = row["reward_model"]["question"]
+        if i > 3:
+            break
         if gt is not None:
             batch_solution_str.append(
                 f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: {row["reward_model"]["answer"]}\n\nAnswer Type: NumericalAnswer\n</question>')

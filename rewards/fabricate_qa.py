@@ -3413,48 +3413,28 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
     @classmethod
     def get_weak_agent(cls):
         return Agent(**{
-            "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.131.138:8000/v1",
+            "model": "DeepSeek-V3-0324",
+            "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.8,
                 "timeout": 360,
-                "max_tokens": 2048,
-            },
+                "max_tokens": 4096,
+            }
         })
-        # return Agent(**{
-        #     "model": "DeepSeek-V3-0324",
-        #     "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
-        #     "api_keys": "EMPTY",
-        #     "request_kwargs": {
-        #         "temperature": 0.8,
-        #         "timeout": 360,
-        #         "max_tokens": 4096,
-        #     }
-        # })
 
     @classmethod
     def get_strong_agent(cls):
         return Agent(**{
-            "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.131.138:8000/v1",
+            "model": "DeepSeek-V3-0324",
+            "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.8,
                 "timeout": 360,
-                "max_tokens": 2048,
-            },
+                "max_tokens": 4096,
+            }
         })
-        # return Agent(**{
-        #     "model": "DeepSeek-V3-0324",
-        #     "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
-        #     "api_keys": "EMPTY",
-        #     "request_kwargs": {
-        #         "temperature": 0.8,
-        #         "timeout": 360,
-        #         "max_tokens": 4096,
-        #     }
-        # })
 
     @classmethod
     def get_verify_agent(cls):
@@ -3539,7 +3519,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 
         prompts = list(prompt2index.keys()) * 1
         results = await run_args["self_taught"]["model"].run(
-            prompts, max_concurrent_requests, desc=f'[Generate Self-Taught Response {run_args["self_taught"]["model"].model}]', pbar=True,
+            prompts, max_concurrent_requests, desc=f'[Generate Self-Taught Response {run_args["self_taught"]["model"].model}]', pbar=False,
             postprocess_fns=[
                 partial(self.self_taught_response_postprocess, debug=debug)] * len(prompts)
         )
@@ -3626,7 +3606,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 
             prompts = list(v.keys()) * run_args[name]["repeat"]
             tasks.append(run_args[name]["model"].run(
-                prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=True,
+                prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
                 postprocess_fns=[
                     partial(self.response_postprocess, debug=debug)] * len(prompts)
             ))
@@ -3896,7 +3876,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
         norm = self.parse_solution_fn(solution)
         if norm is None:
             return repr(self.clip_string(solution))
-        return repr(self.format_question(norm[0], norm[1], norm[2]))
+        return repr(self.format_question(norm[0], norm[1]))
 
     def format_question(self, question, answer):
         return f'Question: {question}\nAnswer: {answer}'
@@ -3985,15 +3965,14 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
             max_concurrent_requests=max_concurrent_requests,
             run_args=self.args["similarity_run_args"],
         )
-        print(difficulty_reduction_rewards, similarity_penalties)
 
         final_results = []
         for i in range(len(batch_solution_str)):
             scores = copy.deepcopy(penalty[i])
-            penalties = ["Parse"]+list(self.penalty_on(stage))
+
+            penalties = ["Parse"]+list(self.penalty_on())
             penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
                                         s in zip(penalties, scores)])
-
             _difficulty = difficulty_reduction_rewards[i]
             _difficulty_score = np.sum(_difficulty) if isinstance(
                 _difficulty, list) else _difficulty
@@ -4012,60 +3991,60 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                     else:
                         cur_score += _score
 
-                if _difficulty_score > 0:
-                    cur_score += similarity_penalties[i]
+            if _difficulty_score > 0:
+                cur_score += similarity_penalties[i]
 
-                # # 保存Rollout信息
-                # if cur_score >= 0:
-                #     self.update_rollout_info(
-                #         solution_str=batch_solution_str[i],
-                #         ground_truth=batch_ground_truth[i],
-                #         difficulty=pass_rates[i]
-                #     )
+            # # 保存Rollout信息
+            # if cur_score >= 0:
+            #     self.update_rollout_info(
+            #         solution_str=batch_solution_str[i],
+            #         ground_truth=batch_ground_truth[i],
+            #         difficulty=pass_rates[i]
+            #     )
 
-                final_results.append(cur_score)
+            final_results.append(cur_score)
 
-                if cur_score > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
-                    log = True
-                    log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
-                else:
-                    log = False
+            if cur_score > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+                log = True
+                log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+            else:
+                log = False
 
-                if cur_score == -2.0 and stage != "2":
-                    log = True
-                    log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN CORRUPT RESPONSE]"
+            if cur_score == -2.0 and stage != "2":
+                log = True
+                log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN CORRUPT RESPONSE]"
 
-                source = batch_ground_truth[i]["source"]
+            source = batch_ground_truth[i]["source"]
 
-                if log:
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f"【Solution】({source})`{self.log_solution(batch_solution_str[i])}`")
+                try:
                     print(
-                        f"--------------------------------{log_flag}--------------------------------")
-                    print(
-                        f"【Solution】({source})`{self.log_solution(batch_solution_str[i])}`")
-                    try:
-                        print(
-                            f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
-                    except Exception as err:
-                        pass
-                    print(
-                        f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|DiffReduction={str(difficulty_rewards[i])}|SimPenalty={str(similarity_penalties[i])}|{penalty_log_str}\n')
+                        f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
+                except Exception as err:
+                    pass
+                print(
+                    f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|DiffReduction={str(difficulty_reduction_rewards[i])}|SimPenalty={str(similarity_penalties[i])}|{penalty_log_str}\n')
 
-                    thought = calc_qa_parse_thought_fn(batch_solution_str[i])
+                thought = calc_qa_parse_thought_fn(batch_solution_str[i])
 
-                    if random.random() < 0.1 and thought is not None:
-                        print(f'[Thought]\n{thought}')
-                        print()
+                if random.random() < 0.1 and thought is not None:
+                    print(f'[Thought]\n{thought}')
+                    print()
 
-                    if cur_score == -2.0 and stage != "2":
-                        print(f'[Response]\n{batch_solution_str[i]}')
-                        print()
+                if cur_score == -2.0:
+                    print(f'[Response]\n{batch_solution_str[i]}')
+                    print()
 
                 if self.split == "valid":
                     pass
 
                 # self.save_rollout_info()
 
-                return final_results
+        return final_results
 
 
 SALT_DEFAULT_PARAMS = {
