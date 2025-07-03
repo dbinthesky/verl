@@ -2128,7 +2128,7 @@ class Doc2QueryV2ComputeScore(object):
     def get_weak_agent(cls):
         return Agent(**{
             "model": "DeepSeek-V3-0324",
-            "base_url": "https://sd1dtu9r54gpj4to1t33g.apigateway-cn-beijing.volceapi.com/v1",
+            "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.9,
@@ -2141,7 +2141,7 @@ class Doc2QueryV2ComputeScore(object):
     def get_strong_agent(cls):
         return Agent(**{
             "model": "DeepSeek-V3-0324",
-            "base_url": "https://sd1dtu9r54gpj4to1t33g.apigateway-cn-beijing.volceapi.com/v1",
+            "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.8,
@@ -2274,7 +2274,7 @@ class Doc2QueryV2ComputeScore(object):
 
     - 用户回答：54 g/mol
     - 参考答案：\\boxed{54.0}
-    
+
     回答正确
 
     - 用户回答：5.26
@@ -3013,7 +3013,7 @@ class FabricateQAComputeScore(Doc2QueryV2ComputeScore):
     def get_strong_agent(cls):
         return Agent(**{
             "model": "DeepSeek-V3-0324",
-            "base_url": "https://sd1dtu9r54gpj4to1t33g.apigateway-cn-beijing.volceapi.com/v1",
+            "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.9,
@@ -3423,7 +3423,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
         })
         # return Agent(**{
         #     "model": "DeepSeek-V3-0324",
-        #     "base_url": "https://sd1dtu9r54gpj4to1t33g.apigateway-cn-beijing.volceapi.com/v1",
+        #     "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
         #     "api_keys": "EMPTY",
         #     "request_kwargs": {
         #         "temperature": 0.8,
@@ -3446,7 +3446,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
         })
         # return Agent(**{
         #     "model": "DeepSeek-V3-0324",
-        #     "base_url": "https://sd1dtu9r54gpj4to1t33g.apigateway-cn-beijing.volceapi.com/v1",
+        #     "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
         #     "api_keys": "EMPTY",
         #     "request_kwargs": {
         #         "temperature": 0.8,
