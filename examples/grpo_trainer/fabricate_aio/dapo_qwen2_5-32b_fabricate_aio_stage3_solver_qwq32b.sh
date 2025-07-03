@@ -52,7 +52,7 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/distillv16_s3_roll16_bsz32_dapo_wo_kl_coef_wo_entropy_t08_solver_qwq_bo8_grpo_step_20"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/distillv16_s3_roll16_bsz32_dapo_wo_kl_coef_wo_entropy_t08_solver_dsv3_bo8_grpo_step_130"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0623.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_test_0619.parquet"
 
@@ -90,9 +90,9 @@ run_training() {
 
     python3 -m recipe.dapo.main_dapo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        custom_reward_function.name=fabricate_aio_default_stage2_compute_score_train \
+        custom_reward_function.name=fabricate_aio_qwq32b_respondent_stage2_compute_score_train \
         +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        +custom_valid_reward_function.name=fabricate_aio_default_stage2_compute_score_valid \
+        +custom_valid_reward_function.name=fabricate_aio_qwq32b_respondent_stage2_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \

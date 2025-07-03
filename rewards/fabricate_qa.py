@@ -166,11 +166,17 @@ class Agent:
     @retry(stop=stop_after_attempt(4), wait=wait_exponential(multiplier=1, min=5, max=20))
     async def chat_completion(self, client, messages, postprocess_fn) -> str | None:
         response = None
+        # FIXME: hard code
+        if self.model == "QwQ_32B":
+            suffix = "\n<think>\n"
+        else:
+            suffix = ""
         try:
             response = await client.chat.completions.create(
-                model=self.model, messages=[{
-                    "role": "user", "content": messages
-                }], **self.request_kwargs,
+                model=self.model, messages=[
+                    {"role": "system", "content": 'You are a helpful and harmless assistant. You are Qwen developed by Alibaba. You should think step-by-step.'},
+                    {"role": "user", "content": messages + suffix}
+                ], **self.request_kwargs,
             )
             return postprocess_fn(response.choices[0].message.content)
         except PostprocessError as e:
@@ -778,7 +784,6 @@ qwq_longcot_create_criteria_compute_score_valid = _qwq_longcot_create_criteria_c
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
 
 def doc2query_parse_solution_fn(solution_str: str, remove_option_letter=True):
     # FIXME: QwQ tokenizer config
@@ -2167,6 +2172,14 @@ class Doc2QueryV2ComputeScore(object):
         }
 
     def response_postprocess(self, s, debug=False):
+        if "</think>" in s:
+            s = s[s.index("</think>")+len("</think>"):]
+
+        if "**Final Answer**" in s:
+            s = s[s.index("**Final Answer**")+len("**Final Answer**"):]
+        if "**Final Solution**" in s:
+            s = s[s.index("**Final Solution**")+len("**Final Solution**"):]
+
         if debug:
             return s
         try:
@@ -2233,9 +2246,7 @@ class Doc2QueryV2ComputeScore(object):
                 raise PostprocessError(f'{err}')
 
         verify_prompt = """### **基于标准答案判断回答是否正确**
-任务描述：请根据提供的**题目**、**用户回答（答案部分）**和**标准答案**，判断用户回答是否正确，并按照指定格式输出结果。需严格比对答案，若用户回答与标准答案**内容一致**，则判定为正确，否则为错误。
-
-**必须与标准答案完全一致**（含数值、单位、符号等），如果数值是科学记数法或者是小数，只允许非常小的计算误差（有效计算部分最后一位），否则判错。 |
+任务描述：请根据提供的**题目**、**用户回答（答案部分）**和**标准答案**，判断用户回答是否正确。
 
 #### 输出要求
 ```json
@@ -2243,6 +2254,33 @@ class Doc2QueryV2ComputeScore(object):
 "判断结果": "正确/错误",
 }
 ```
+
+注意：
+    如果答案是小数，回答与答案有细微的计算精度误差，则注意结果**需要**判定为正确，如果数值差异较大则判错。
+    例如：
+    - 用户回答：1.79
+    - 参考答案：1.78
+    回答正确
+
+    - 用户回答：154322
+    - 参考答案：154222
+    回答错误
+
+    - 用户回答：54 g/mol
+    - 参考答案：\\boxed{54.0}
+    回答正确
+
+    - 用户回答：5.26
+    - 参考答案：5.25
+    回答正确
+
+    - 用户回答：7.937
+    - 参考答案：7.94
+    回答正确
+
+    - 用户回答：5.000
+    - 参考答案：1.667
+    回答错误
 
 现在对下面的回答判断正确性
 """
@@ -2844,6 +2882,86 @@ _qwen32b_respondent_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScoreWi
     calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_QWEN32B_RESPONDENT_PARAMS)
 _qwen32b_respondent_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScoreWithQwen32bRespondent(
     calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_QWEN32B_RESPONDENT_PARAMS)
+
+
+class Doc2QueryV2ComputeScoreWithQwQ32bRespondent(Doc2QueryV2ComputeScore):
+    def __init__(self, parse_solution_fn, split="train", args=None):
+        super().__init__(
+            split=split, parse_solution_fn=parse_solution_fn, args=args
+        )
+
+    @classmethod
+    def get_weak_agent(cls):
+        return Agent(**{
+            "model": "QwQ_32B",
+            "base_url": "http://10.130.131.138:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.65,
+                "timeout": 600,
+                "max_tokens": 32768,
+            },
+        })
+
+    @classmethod
+    def get_strong_agent(cls):
+        return cls.get_weak_agent()
+
+    @classmethod
+    def get_verify_agent(cls):
+        return Agent(**{
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.131.138:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.8,
+                "timeout": 360,
+                "max_tokens": 2048,
+            },
+        })
+
+
+DOC2QUERY_QWQ32B_RESPONDENT_PARAMS = {
+    "difficulty_run_args": {
+        "w/o_content": {
+            "model": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.get_weak_agent(),
+            "repeat": 8,
+            "fn": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.respond_wo_context,
+            "desc": 'w/o ctx'
+        },
+        "w_content": {
+            "model": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.get_strong_agent(),
+            "repeat": 8,
+            "fn": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.respond_w_context,
+            "desc": 'w ctx'
+        }
+    },
+    "difficulty_metric_args": {
+        "advantage": 'w_content',
+        "weakness": 'w/o_content',
+        "advantage_oversimplified_threshold": 8/8,
+        "weakness_oversimplified_threshold": 7/8,
+        "advantage_overcomplex_threshold": 1/8,
+        "weakness_overcomplex_threshold": 1/8,
+        "advantage_threshold": 2/8,
+        "advantage_weight": 0.0,
+        "weakness_weight": 2.0,
+        "confidence_bonus_threshold": 2/8,
+        "confidence_bonus_weight": 0.
+    },
+    "similarity_run_args":  {
+        "threshold": {
+            3: 0.5,
+            4: 1.0
+        },
+        "weight": 0.25,
+    }
+}
+
+_qwq32b_respondent_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScoreWithQwQ32bRespondent(
+    calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_QWQ32B_RESPONDENT_PARAMS)
+_qwq32b_respondent_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScoreWithQwQ32bRespondent(
+    calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_QWQ32B_RESPONDENT_PARAMS)
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query V2
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -3022,4 +3140,21 @@ fabricate_aio_qwen32b_respondent_stage2_compute_score_train = partial(
     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])
 fabricate_aio_qwen32b_respondent_stage2_compute_score_valid = partial(
     _qwen32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
+    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])
+
+
+# QwQ-32B Respondent
+_qwq32b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+    "doc2query_v2": _qwq32b_respondent_doc2query_v2_compute_score_train,
+    "fabricate_qa": _default_fabricate_qa_compute_score_train,
+})
+_qwq32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+    "doc2query_v2": _qwq32b_respondent_doc2query_v2_compute_score_valid,
+    "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+})
+fabricate_aio_qwq32b_respondent_stage2_compute_score_train = partial(
+    _qwq32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
+    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])
+fabricate_aio_qwq32b_respondent_stage2_compute_score_valid = partial(
+    _qwq32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])
