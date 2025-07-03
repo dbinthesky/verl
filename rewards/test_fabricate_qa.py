@@ -188,11 +188,9 @@ class TestSALT(unittest.TestCase):
             salt_parse_solution_fn, split="valid", args=SALT_DEFAULT_PARAMS)
 
         async def main():
-            results = await task.simulate_respondent(
+            results = await task._compute_score(
                 [None] *
-                len(batch_solution_str), batch_solution_str, batch_ground_truth,
-                run_args=SALT_DEFAULT_PARAMS["learnable_run_args"], debug=True,
-                # metric_args=SALT_DEFAULT_PARAMS["learnable_metric_args"]
+                len(batch_solution_str), batch_solution_str, batch_ground_truth, debug=True,
             )
         aio.run(main())
 
