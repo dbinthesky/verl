@@ -2411,6 +2411,7 @@ class Doc2QueryV2ComputeScore(object):
                     if len(weak) == 0 or len(adv) == 0:
                         full_rewards.append(base_score)
                         continue
+
                     # 题目过难
                     if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
                         full_rewards.append(base_score)
@@ -2452,6 +2453,13 @@ class Doc2QueryV2ComputeScore(object):
                 full_rewards.append(0.0)
         return full_rewards, pass_rates
 
+    def do_not_simulate_respondent(self):
+        return (
+            self.format,
+            self.language,
+            self.bad_question_detection,
+        )
+
     async def simulate_respondent(
             self,
             batch_data_sources,
@@ -2470,26 +2478,13 @@ class Doc2QueryV2ComputeScore(object):
             if result is not None:
                 question, answer, answer_type = result
                 answer_map[i] = (question, answer, answer_type)
-                # 答案格式不符合规范
-                ans_format_strict = self.format.get_penalty_or_reward(
-                    solution_str, gt
-                )
-                if ans_format_strict < 0.0:
-                    continue
 
-                # 语言不一致
-                lang_consist = self.language.get_penalty_or_reward(
-                    solution_str, gt
-                )
-                if lang_consist < 0.0:
-                    continue
-
-                # 问题包含非预期的结构
-                bad_q = self.bad_question_detection.get_penalty_or_reward(
-                    solution_str, gt
-                )
-                if bad_q < 0.0:
-                    continue
+                for module in self.do_not_simulate_respondent():
+                    cur_score = module.get_penalty_or_reward(
+                        solution_str, gt
+                    )
+                    if cur_score < 0.0:
+                        continue
 
                 lang_code = gt["lang_code"]
                 for name, v in run_args.items():
@@ -3373,6 +3368,672 @@ class QuestionSimilarityPenalty(QuestionSimilarity):
             return 0.0
 
 
-# ------------------------------------------------------------------------------------------------------------------------------------------------------
-# SALT
-# ------------------------------------------------------------------------------------------------------------------------------------------------------
+class SALTComputeScore(Doc2QueryV2ComputeScore):
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 record_rollout_samples_path=None,
+                 record_rollout_max_capacity=100,
+                 ):
+        super().__init__(
+            parse_solution_fn=parse_solution_fn, split=split,
+            args=args,
+            record_rollout_samples_path=record_rollout_samples_path,
+            record_rollout_max_capacity=record_rollout_max_capacity
+        )
+        self.task_name = "SALT"
+
+        self.format = SALTQuestionAnswerFormatVerify(
+            parse_solution_fn=self.parse_solution_fn)
+        self.language = SALTLanguageConsistency(
+            parse_solution_fn=self.parse_solution_fn)
+        self.bad_question_detection = SALTBadQuestionDetection(
+            parse_solution_fn=self.parse_solution_fn
+        )
+        self.similarity_penalty = QuestionSimilarityPenalty(
+            parse_solution_fn=self.parse_solution_fn)
+
+        @classmethod
+        def get_weak_agent(cls):
+            return Agent(**{
+                "model": "qwen25_32B_instruct",
+                "base_url": "http://10.130.131.138:8000/v1",
+                "api_keys": "EMPTY",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                },
+            })
+
+        @classmethod
+        def get_strong_agent(cls):
+            return Agent(**{
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd1dtu9r54gpj4to1t33g.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "EMPTY",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            })
+
+        @classmethod
+        def get_verify_agent(cls):
+            return Agent(**{
+                "model": "qwen25_32B_instruct",
+                "base_url": "http://10.130.131.138:8000/v1",
+                "api_keys": "EMPTY",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 2048,
+                },
+            })
+
+        def get_penalties(self) -> Dict[str, Callable]:
+            return {
+                "Format": self.format.get_penalty_or_reward,
+                "Lang": self.language.get_penalty_or_reward,
+                "BadQ": self.bad_question_detection.get_penalty_or_reward,
+                "QSimPenalty": self.similarity_penalty.get_penalty_or_reward,
+            }
+
+        #     def response_postprocess(self, s, debug=False):
+        #         if "</think>" in s:
+        #             s = s[s.index("</think>")+len("</think>"):]
+
+        #         if "**Final Answer**" in s:
+        #             s = s[s.index("**Final Answer**")+len("**Final Answer**"):]
+        #         if "**Final Solution**" in s:
+        #             s = s[s.index("**Final Solution**")+len("**Final Solution**"):]
+
+        #         if debug:
+        #             return s
+        #         try:
+        #             s = s.strip()
+        #             conclusion = s
+        #             if "最终答案是" in conclusion:
+        #                 conclusion = conclusion[conclusion.rindex(
+        #                     "最终答案是")+len("最终答案是"):].strip()
+        #                 return conclusion
+        #             else:
+        #                 conclusion = conclusion[conclusion.rindex(
+        #                     "final answer is")+len("final answer is"):].strip()
+        #                 return conclusion
+        #         except Exception as err:
+        #             try:
+        #                 s = s.strip()
+        #                 conclusion = s.split("\n")[-1].strip()
+
+        #                 if len(conclusion) < 5:
+        #                     conclusion = "\n".join(s.split("\n")[-3:]).strip()
+        #                 return conclusion
+        #             except Exception as err:
+        #                 raise PostprocessError(f'parse conclusion failure')
+
+        #     def verify_single_response(self, conclusion, answer, answer_type):
+        #         if answer_type == "WithUnitSymbol":
+        #             score = 1.0 if answer in conclusion else 0.0
+        #             if score > 0:
+        #                 return score
+        #             return 1.0 if all(part in conclusion for part in answer.split(" ")) else 0.0
+        #         elif answer_type == "NumericalAnswer":
+        #             gt = extract_answer(answer)
+        #             if gt is None:
+        #                 return 0.0
+        #             if extract_answer(conclusion) == gt:
+        #                 return 1.0
+        #             else:
+        #                 return 0.0
+
+        #     async def verify_results(self, verify_queue, batch_solution_str, max_concurrent_requests, split_names):
+        #         def validate_result(response):
+        #             s = response
+        #             try:
+        #                 conclusion = s.strip()
+
+        #                 conclusion = conclusion[conclusion.index(
+        #                     "```json")+len("```json"):].strip()
+        #                 conclusion = conclusion[:conclusion.index("```")].strip()
+        #                 try:
+        #                     conclusion = json.loads(conclusion)
+        #                     if conclusion["判断结果"] not in ("正确", "错误"):
+        #                         raise PostprocessError(f'corrupt')
+        #                     return conclusion["判断结果"] == "正确"
+        #                 except Exception as err:
+        #                     try:
+        #                         conclusion = re.findall(
+        #                             r'\"判断结果\": \"(.*)\"', conclusion)[0]
+        #                         if not conclusion in ("正确", "错误"):
+        #                             raise PostprocessError(f'corrupt')
+        #                         return conclusion == "正确"
+        #                     except Exception as err:
+        #                         raise PostprocessError(f'{err}')
+        #             except Exception as err:
+        #                 raise PostprocessError(f'{err}')
+
+        #         verify_prompt = """### **基于标准答案判断回答是否正确**
+        # 任务描述：请根据提供的**题目**、**用户回答（答案部分）**和**标准答案**，判断用户回答是否正确。
+
+        # #### 输出要求
+        # ```json
+        # {
+        # "判断结果": "正确/错误",
+        # }
+        # ```
+
+        # 注意：
+        #     如果答案是小数，回答与答案有细微的计算精度误差，则注意结果**需要**判定为正确，如果数值差异较大则判错。
+        #     例如：
+        #     - 用户回答：1.79
+        #     - 参考答案：1.78
+        #     回答正确
+
+        #     - 用户回答：154322
+        #     - 参考答案：154222
+        #     回答错误
+
+        #     - 用户回答：54 g/mol
+        #     - 参考答案：\\boxed{54.0}
+        #     回答正确
+
+        #     - 用户回答：5.26
+        #     - 参考答案：5.25
+        #     回答正确
+
+        #     - 用户回答：7.937
+        #     - 参考答案：7.94
+        #     回答正确
+
+        #     - 用户回答：5.000
+        #     - 参考答案：1.667
+        #     回答错误
+
+        # 现在对下面的回答判断正确性
+        # """
+
+        #         verify_template = """
+        # #### **输入：**
+        # ##### 题目
+        # ```
+        # {question}
+        # ```
+
+        # ##### 用户回答（答案部分）
+        # {conclusion}
+
+        # ##### 标准答案
+        # {answer}
+
+        # #### **输出：**
+        # """
+        #         correctness = {name: defaultdict(list) for name in split_names}
+
+        #         verify_mapper = defaultdict(list)
+
+        #         for example in verify_queue:
+        #             index, ans, name, prompt, conclusion = example
+        #             question, answer, answer_type = ans
+
+        #             # 基于规则解析答案
+        #             if conclusion is None:
+        #                 correctness[name][index].append(0.0)
+        #             else:
+        #                 correct = self.verify_single_response(
+        #                     conclusion, answer, answer_type)
+
+        #                 if correct > 0.0:
+        #                     correctness[name][index].append(correct)
+        #                 else:
+        #                     instruct = f'仔细一步步思考，并回答下面的问题。你回应的最后一行必须采用 “... 最终答案是 $ANSWER 的格式（不带引号），其中 $ANSWER 的格式要求需要满足下面的说明。\n\n{self.get_answer_format(answer_type, "zh")}'
+        #                     prompt = f'{instruct}\n\n{question}'
+        #                     eval_prompt = verify_prompt + "\n\n" + verify_template.format(
+        #                         question=prompt,
+        #                         answer=answer,
+        #                         conclusion=conclusion
+        #                     )
+        #                     verify_mapper[eval_prompt].append((index, name))
+
+        #         _results = await self.get_verify_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.get_verify_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
+
+        #         results_mapper = defaultdict(list)
+        #         for (k, v) in _results:
+        #             for meta in verify_mapper[k]:
+        #                 index, name = meta
+        #                 if v is not None:
+        #                     correctness[name][index].append(1.0 if v else 0.0)
+
+        #         return correctness
+
+        #     @classmethod
+        #     def get_answer_format(cls, answer_type, lang_code):
+        #         return {
+        #             "WithUnitSymbol": WithUnitSymbol_zh,
+        #             "NumericalAnswer": NumericalAnswer_zh
+        #         }[answer_type] if lang_code == "zh" else {
+        #             "WithUnitSymbol": WithUnitSymbol_en,
+        #             "NumericalAnswer": NumericalAnswer_en
+        #         }[answer_type]
+
+        #     @classmethod
+        #     def get_instruct(cls, gt, answer_type):
+        #         lang_code = gt["lang_code"]
+        #         if lang_code == "zh":
+        #             instruct = f'仔细一步步思考，并回答下面的问题。你回应的最后一行必须采用 “最终答案是 $ANSWER 的格式（不带引号），其中 $ANSWER 的格式要求需要满足下面的说明。\n\n{cls.get_answer_format(answer_type, lang_code)}'
+        #         else:
+        #             instruct = f'Think step by step in detail and answer the following questions. The last line of your response must be in the format "The final answer is $ANSWER" (without quotes), where the format requirements for $ANSWER need to meet the instructions below.\n\n{cls.get_answer_format(answer_type, lang_code)}'
+        #         return instruct
+
+        #     @classmethod
+        #     def respond_wo_context(cls, question, answer_type, gt):
+        #         _if = cls.get_instruct(gt, answer_type)
+        #         return f'{_if}\n\n{question}'
+
+        #     @classmethod
+        #     def respond_w_context(cls, question, answer_type, gt):
+        #         _if = cls.get_instruct(gt, answer_type)
+        #         return f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n{_if}\n\n{question}'
+
+        #     def clip_string(self, s: str):
+        #         if len(s) > 1500:
+        #             return f'{s[:700]}... [省略] ...{s[-800:]}'
+        #         return s
+
+        #     async def get_difficulty_reward(
+        #             self,
+        #             batch_data_sources,
+        #             batch_solution_str,
+        #             batch_ground_truth,
+        #             run_args=None,
+        #             metric_args=None,
+        #             max_concurrent_requests=MAX_CONCURRENT,
+        #             debug=False):
+
+        #         assert metric_args is not None, f'`metric_args` missed'
+        #         assert run_args is not None, f'`run_args` missed'
+
+        #         correctness = await self.simulate_respondent(
+        #             batch_data_sources,
+        #             batch_solution_str,
+        #             batch_ground_truth,
+        #             run_args=run_args,
+        #             max_concurrent_requests=max_concurrent_requests,
+        #             debug=debug
+        #         )
+
+        #         full_rewards = []
+        #         pass_rates = []
+
+        #         for i in range(len(batch_solution_str)):
+        #             if i in list(correctness.values())[0]:
+        #                 base_score = 0.0
+        #                 pass_rates.append({
+        #                     k: f'{np.sum(v[i])}/{len(v[i])}' for k, v in correctness.items()
+        #                 })
+
+        #                 try:
+        #                     adv_name, weak_name = metric_args["advantage"], metric_args["weakness"]
+        #                     adv, weak = correctness[adv_name][i], correctness[weak_name][i]
+
+        #                     if len(weak) == 0 or len(adv) == 0:
+        #                         full_rewards.append(base_score)
+        #                         continue
+        #                     # 题目过难
+        #                     if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
+        #                         full_rewards.append(base_score)
+        #                         continue
+
+        #                     # 题目过易
+        #                     if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
+        #                         full_rewards.append(base_score)
+        #                         continue
+
+        #                     # adv 应该比 weakness 显著好
+        #                     if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
+        #                         full_rewards.append(base_score)
+        #                         continue
+
+        #                     # 难度奖励
+        #                     def calc_difficulty(scores, total_attempts):
+        #                         return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
+
+        #                     # 置信度奖励
+        #                     confidence_bonus = 0.0
+        #                     if np.mean(adv) >= metric_args["confidence_bonus_threshold"]:
+        #                         confidence_bonus = metric_args["confidence_bonus_weight"] * max(
+        #                             (np.mean(adv)-np.mean(weak)), 0.0)
+        #                     base_score = [
+        #                         metric_args["weakness_weight"] *
+        #                         calc_difficulty(weak, run_args[weak_name]["repeat"]),
+        #                         metric_args["advantage_weight"] *
+        #                         calc_difficulty(adv, run_args[adv_name]["repeat"]),
+        #                         confidence_bonus
+        #                     ]
+
+        #                     full_rewards.append(base_score)
+        #                 except Exception as err:
+        #                     print(f'[ERROR] {err}')
+        #                     full_rewards.append(base_score)
+        #             else:
+        #                 pass_rates.append({})
+        #                 full_rewards.append(0.0)
+        #         return full_rewards, pass_rates
+
+        #     async def simulate_respondent(
+        #             self,
+        #             batch_data_sources,
+        #             batch_solution_str,
+        #             batch_ground_truth,
+        #             run_args=None,
+        #             max_concurrent_requests=MAX_CONCURRENT,
+        #             debug=False):
+        #         assert run_args is not None
+
+        #         prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
+        #         answer_map = {}
+
+        #         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+        #             result = self.parse_solution_fn(solution_str)
+        #             if result is not None:
+        #                 question, answer, answer_type = result
+        #                 answer_map[i] = (question, answer, answer_type)
+        #                 # 答案格式不符合规范
+        #                 ans_format_strict = self.format.get_penalty_or_reward(
+        #                     solution_str, gt
+        #                 )
+        #                 if ans_format_strict < 0.0:
+        #                     continue
+
+        #                 # 语言不一致
+        #                 lang_consist = self.language.get_penalty_or_reward(
+        #                     solution_str, gt
+        #                 )
+        #                 if lang_consist < 0.0:
+        #                     continue
+
+        #                 # 问题包含非预期的结构
+        #                 bad_q = self.bad_question_detection.get_penalty_or_reward(
+        #                     solution_str, gt
+        #                 )
+        #                 if bad_q < 0.0:
+        #                     continue
+
+        #                 lang_code = gt["lang_code"]
+        #                 for name, v in run_args.items():
+        #                     fn = v["fn"]
+        #                     _prompt = fn(question, answer_type, gt)
+        #                     prompt2index[name][_prompt].append(i)
+        #         tasks = []
+        #         task_names = []
+        #         for name, v in prompt2index.items():
+        #             prompts = list(v.keys()) * run_args[name]["repeat"]
+        #             tasks.append(run_args[name]["model"].run(
+        #                 prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
+        #                 postprocess_fns=[
+        #                     partial(self.response_postprocess, debug=debug)] * len(prompts)
+        #             ))
+        #             task_names.append(name)
+        #         respond_questions = await aio.gather(*tasks)
+
+        #         # 验证答案正确性
+        #         verify_queue = []
+        #         for name, results in zip(task_names, respond_questions):
+        #             for (p, r) in results:
+        #                 for index in prompt2index[name][p]:
+        #                     verify_queue.append((index, answer_map[index], name, p, r))
+
+        #         correctness = await self.verify_results(
+        #             verify_queue=verify_queue, batch_solution_str=batch_solution_str, max_concurrent_requests=MAX_CONCURRENT,
+        #             split_names=task_names
+        #         )
+        #         return correctness
+
+        #     async def get_similarity_reward(
+        #         self,
+        #         batch_data_sources,
+        #         batch_solution_str,
+        #         batch_ground_truth,
+        #         max_concurrent_requests=128,
+        #         run_args=None
+        #     ):
+        #         assert run_args is not None
+
+        #         indices = []
+        #         fabricates, authentics = [], []
+        #         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+        #             fabricate = self.parse_solution_fn(sol)
+        #             if fabricate is not None and gt.get("question", None):
+        #                 fabricates.append(fabricate)
+        #                 authentics.append(gt["question"])
+        #                 indices.append(i)
+        #             else:
+        #                 continue
+
+        #         similarity = await question_similarity(
+        #             agent=self.get_verify_agent(),
+        #             authentic=authentics,
+        #             fabricate=fabricates,
+        #             max_concurrent_requests=max_concurrent_requests
+        #         )
+
+        #         scores = [0.0] * len(batch_solution_str)
+        #         for sim, index in zip(similarity, indices):
+        #             if sim is None:
+        #                 pass
+        #             else:
+        #                 _score = 0.0
+        #                 for threshold, set_val in run_args["threshold"].items():
+        #                     if sim >= threshold:
+        #                         _score = max(_score, set_val)
+        #                 scores[index] = _score * run_args["weight"]
+        #         return scores
+
+            def compute_score(self,
+                              batch_data_sources,
+                              batch_solution_str,
+                              batch_ground_truth,
+                              stage,
+                              max_concurrent_requests=MAX_CONCURRENT,
+                              ):
+                async def main():
+                    return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, stage=stage, max_concurrent_requests=max_concurrent_requests)
+                return aio.run(main())
+
+        #     def log_solution(self, solution):
+        #         norm = self.parse_solution_fn(solution)
+        #         if norm is None:
+        #             return repr(self.clip_string(solution))
+        #         return repr(self.format_question(norm[0], norm[1], norm[2]))
+
+        #     def format_question(self, question, answer, ans_type):
+        #         return f'Question: {question}\nAnswer: {answer}\nAnswer Type: {ans_type}'
+
+        #     def log_ground_truth(self, ground_truth):
+        #         return repr(self.format_question(
+        #             ground_truth["question"],
+        #             "", "")
+        #         )
+
+        #     def update_rollout_info(self, solution_str, ground_truth, difficulty):
+        #         parsed = self.parse_solution_fn(solution_str)
+        #         if parsed is None:
+        #             return
+        #         question, answer, answer_type = parsed
+        #         inst_id = ground_truth["extra_info"]["uuid"]
+        #         if inst_id not in self.rollout_database:
+        #             self.rollout_database[inst_id] = LRUCache(
+        #                 capacity=self.record_rollout_max_capacity)
+
+        #         args = copy.deepcopy(self.args)
+        #         for k, v in args["difficulty_run_args"].items():
+        #             del v["fn"]
+        #             for field, value in v.items():
+        #                 if field == "model":
+        #                     args["difficulty_run_args"][k][field] = value.model
+
+        #         self.rollout_database[inst_id][question] = {
+        #             "prompt_generation_process": solution_str,
+        #             "question": question,
+        #             "answer": answer,
+        #             "answer_type": answer_type,
+        #             "difficulty": {
+        #                 "meta": args,
+        #                 "pass_rate": difficulty
+        #             }
+        #         }
+
+        #     def save_rollout_info(self):
+        #         """将缓存保存为JSON文件"""
+        #         data = {k: {"capacity": v.capacity, "items": list(v.get_items()), "access_order": list(
+        #             v._access_order.keys())} for k, v in self.rollout_database.items()}
+
+        #         with open(self.save_rollout_samples_path, "wt") as f:
+        #             json.dump(data, f, ensure_ascii=False, indent="  ")
+
+        #     def penalty_on(self, stage):
+        #         if stage == "1":
+        #             return ("Format", "Lang", "BadQ", "Thought", "QSim")
+        #         else:
+        #             return ("Format", "Lang", "Thought", "QSim")
+
+        #     async def _compute_score(self,
+        #                              batch_data_sources,
+        #                              batch_solution_str,
+        #                              batch_ground_truth,
+        #                              stage,
+        #                              max_concurrent_requests=MAX_CONCURRENT,
+        #                              ):
+        #         self.initialize_record_rollout_samples_module()
+
+        #         assert stage in ("1", "2")
+
+        #         penalty = defaultdict(list)
+        #         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+        #             parsed = self.parse_solution_fn(solution_str)
+        #             if parsed is None:
+        #                 penalty[i].append(-2.0)
+        #             else:
+        #                 penalty[i].append(0.0)
+
+        #             for key in self.penalty_on(stage):
+        #                 penalty[i].append(self.get_penalties()[key]
+        #                                   (solution_str, ground_truth))
+
+        #         # 二阶段训练(全量奖励)
+        #         # 一阶段训练(格式奖励)
+
+        #         if stage == "2":
+        #             # 难度奖励
+        #             difficulty_rewards, pass_rates = await self.get_difficulty_reward(
+        #                 batch_data_sources,
+        #                 batch_solution_str,
+        #                 batch_ground_truth,
+        #                 run_args=self.args["difficulty_run_args"],
+        #                 metric_args=self.args["difficulty_metric_args"],
+        #                 max_concurrent_requests=max_concurrent_requests,
+        #             )
+        #             # # 相似度奖励
+        #             # similarity_rewards = await self.get_similarity_reward(
+        #             #     batch_data_sources,
+        #             #     batch_solution_str,
+        #             #     batch_ground_truth,
+        #             #     max_concurrent_requests=max_concurrent_requests,
+        #             #     run_args=self.args["similarity_run_args"],
+        #             # )
+
+        #         final_results = []
+        #         for i in range(len(batch_solution_str)):
+        #             scores = copy.deepcopy(penalty[i])
+        #             penalties = ["Parse"]+list(self.penalty_on(stage))
+        #             penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
+        #                                        s in zip(penalties, scores)])
+
+        #             if stage == "2":
+        #                 _difficulty = difficulty_rewards[i]
+        #                 _difficulty_score = np.sum(_difficulty) if isinstance(
+        #                     _difficulty, list) else _difficulty
+        #                 scores.append(_difficulty_score)
+
+        #             cur_score = 0
+
+        #             for j, _score in enumerate(scores):
+        #                 if _score < 0:
+        #                     cur_score = _score
+        #                     break
+        #                 else:
+        #                     if (j == penalties.index("QSim")) or (j == penalties.index("Thought")):  # BLEU
+        #                         if stage == "2" and _difficulty_score > 0:
+        #                             cur_score += _score
+        #                         elif stage == "1":
+        #                             pass
+        #                     else:
+        #                         cur_score += _score
+
+        #             # if stage == "2" and _difficulty_score > 0:
+        #             #     cur_score += similarity_rewards[i]
+
+        #             # 保存Rollout信息
+        #             if cur_score >= 0:
+        #                 self.update_rollout_info(
+        #                     solution_str=batch_solution_str[i],
+        #                     ground_truth=batch_ground_truth[i],
+        #                     difficulty=pass_rates[i]
+        #                 )
+
+        #             if stage == "1" and cur_score > 0.0:
+        #                 cur_score = 0.0
+
+        #             final_results.append(cur_score)
+
+        #             if cur_score > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+        #                 log = True
+        #                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+        #             else:
+        #                 log = False
+
+        #             if cur_score == -2.0 and stage != "2":
+        #                 log = True
+        #                 log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN CORRUPT RESPONSE]"
+
+        #             source = batch_ground_truth[i]["source"]
+
+        #             if log:
+        #                 print(
+        #                     f"--------------------------------{log_flag}--------------------------------")
+        #                 print(
+        #                     f"【Solution】({source})`{self.log_solution(batch_solution_str[i])}`")
+        #                 try:
+        #                     print(
+        #                         f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
+        #                 except Exception as err:
+        #                     pass
+        #                 if stage == "1":
+        #                     print(
+        #                         f'[Final Reward]={cur_score:.3f}|{penalty_log_str}\n')
+        #                 elif stage == "2":
+        #                     print(
+        #                         f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|{penalty_log_str}\n')
+
+        #                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
+
+        #                 if random.random() < 0.1 and thought is not None:
+        #                     print(f'[Thought]\n{thought}')
+        #                     print()
+
+        #                 if cur_score == -2.0 and stage != "2":
+        #                     print(f'[Response]\n{batch_solution_str[i]}')
+        #                     print()
+
+        #         if self.split == "valid":
+        #             pass
+
+        #         self.save_rollout_info()
+
+        #         return final_results
+
+        # ------------------------------------------------------------------------------------------------------------------------------------------------------
+        # SALT
+        # ------------------------------------------------------------------------------------------------------------------------------------------------------
