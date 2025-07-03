@@ -3158,3 +3158,183 @@ fabricate_aio_qwq32b_respondent_stage2_compute_score_train = partial(
 fabricate_aio_qwq32b_respondent_stage2_compute_score_valid = partial(
     _qwq32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# SALT
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# SALT
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+def salt_parse_solution_fn(solution_str: str, remove_option_letter=True):
+    if solution_str.count("</question>") > 1:
+        return None
+
+    if solution_str.count("</think>") > 1:
+        return None
+
+    solution_str = postprocess_solution(solution_str)
+    if not solution_str.startswith("<think>"):
+        solution_str = f'<think>\n{solution_str}'
+
+    try:
+        thought = re.findall(r'<think>.*</think>',
+                             solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+
+    solution_str = solution_str.replace(thought, "")
+
+    try:
+        conclusion = re.findall(r'<question>(.*)</question>',
+                                solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+    if ("<question>" in conclusion) or ("</question>" in conclusion):
+        return None
+
+    try:
+        question = conclusion[conclusion.index(
+            "Question: ")+len("Question: "):conclusion.index("Answer:")].strip()
+
+        answer = conclusion[conclusion.index(
+            "Answer:")+len("Answer:"):conclusion.index("Answer Type:")].strip()
+
+        return question, answer
+    except Exception as err:
+        return None
+
+
+class SALTQuestionAnswerFormatVerify(PenaltyOrReward):
+    def __init__(self, parse_solution_fn=calc_qa_parse_solution_fn):
+        self.parse_solution_fn = parse_solution_fn
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        solution_str = self.parse_solution_fn(solution_str)
+
+        if solution_str is None:
+            return 0.0
+
+        question, answer = solution_str
+
+        # 中文
+        if contain_chinese(answe):
+            tokens = list(jieba.cut(answer))
+        else:
+            tokens = list(answer.split(" "))
+
+        # 答案长度过长
+        if len(tokens) > 10:
+            return -1.6
+
+        if any(kw in answer for kw in ("A. ", "B. ", "C. ", "D. ", "A) ", "B) ", "C) ", "D)")):
+            return -1.6
+
+        # 疑似选择题
+        if all(kw in question for kw in ("A. ", "B. ", "C. ", "D. ")):
+            return -1.6
+
+        # 疑似选择题
+        if all(kw in question for kw in ("A) ", "B) ", "C) ", "D) ")):
+            return -1.6
+
+        # 疑似选择题
+        if all(kw in question for kw in ("A）", "B）", "C）", "D）")):
+            return -1.6
+
+
+class SALTLanguageConsistency(LanguageConsistency):
+    def __init__(self, parse_solution_fn=calc_qa_parse_solution_fn):
+        super().__init__(
+            parse_solution_fn=parse_solution_fn
+        )
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        raw_solution_str = solution_str
+        solution_str = self.parse_solution_fn(solution_str)
+
+        if solution_str is None:
+            return 0.0
+
+        question, answer = solution_str
+
+        lang_code = ground_truth["lang_code"]
+
+        base_score = -1.2
+
+        if lang_code == "en" and contain_chinese(question):
+            return base_score
+        elif lang_code == "zh" and (not contain_chinese(question)):
+            return base_score
+
+        base_score += 0.4
+
+        if lang_code == "en":
+            if contain_chinese(raw_solution_str):
+                return base_score
+        elif lang_code == "zh":
+            if not self.detect_zh(raw_solution_str, 0.75):
+                return base_score
+        else:
+            pass
+
+        return 0.0
+
+
+class SALTBadQuestionDetection(BadQuestionDetection):
+    def __init__(self, parse_solution_fn=calc_qa_parse_solution_fn, ngram=4):
+        super().__init__(
+            parse_solution_fn=parse_solution_fn
+        )
+        self.ngram = ngram
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        raw_solution_str = solution_str
+        solution_str = self.parse_solution_fn(solution_str)
+
+        if solution_str is None:
+            return 0.0
+
+        question, answer = solution_str
+        # 基于规则的问题检测
+
+        contam, _ = self.valid_ten_gram(
+            self.generate_ngrams(question, self.ngram, ground_truth),
+            self.generate_ngrams(
+                ground_truth["question"], self.ngram, ground_truth)
+        )
+        if contam:
+            return -0.4
+        return 0.0
+
+    def replace_spaces(self, text):
+        # 这个函数接受一个字符串作为输入，然后返回一个新的字符串，其中所有的三个或更多连续的空格都被替换为两个空格。
+        # 这个正则表达式 ' {3,}' 的意思是匹配三个或更多的连续空格。{3,} 是一个数量词，表示匹配前面的字符（在这里是空格）三次或更多次。
+        return re.sub(' {4,}', '  ', text)
+
+    def generate_ngrams(self, text, n, ground_truth):
+        text = self.replace_spaces(text)
+        text = self.tokenize(text, ground_truth)
+        ngrams = set()
+        for i in range(len(text) - n + 1):
+            ngram = ' '.join(text[i:i + n])
+            if re.search('[a-zA-Z\u4e00-\u9fff]', ngram):
+                if ngram not in ngrams:
+                    ngrams.add(ngram)
+        return ngrams
+
+    def valid_ten_gram(self, set1, set2, verbose=False):
+        intersection = set1.intersection(set2)
+        # union = set1.union(set2)
+        if verbose:
+            if len(intersection) > 0:
+                pass
+        return len(intersection) > 0, intersection
+
+    def tokenize(self, s, ground_truth):
+        lang_code = ground_truth["lang_code"]
+        tokens = tokenize(s, lang_code)
+        return tokens

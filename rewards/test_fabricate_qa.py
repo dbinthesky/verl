@@ -19,6 +19,7 @@ from fabricate_qa import (
     CalculationAnswerFormatVerify,
     LanguageConsistency,
     BadQuestionDetection,
+    SALTBadQuestionDetection,
     Doc2QueryV2ComputeScore,
     DOC2QUERY_DEFAULT_PARAMS,
     doc2query_v2_default_stage1_compute_score_valid,
@@ -28,6 +29,7 @@ from fabricate_qa import (
     fabricate_aio_qwq32b_respondent_stage2_compute_score_valid,
     fabricate_aio_qwen32b_respondent_stage2_compute_score_valid,
     calc_qa_parse_solution_fn,
+    salt_parse_solution_fn,
     calc_qa_parse_thought_fn,
     batchify,
     WithUnitSymbol,
@@ -38,6 +40,25 @@ from fabricate_qa import (
 def generate_random_string(n):
     all_characters = string.ascii_letters + string.digits + " "
     return ''.join(random.choice(all_characters) for _ in range(n))
+
+
+def load_salt_data(num=100):
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/salt/runtu_error_collection_0703_test.parquet"
+    batch_solution_str, batch_ground_truth = [], []
+
+    df = pd.read_parquet(filename)
+    count = 0
+    for _, row in df.iterrows():
+        row = row.to_dict()
+        gt = row["reward_model"]["question"]
+        if gt is not None:
+            batch_solution_str.append(
+                f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: {row["reward_model"]["answer"]}\n\nAnswer Type: NumericalAnswer\n</question>')
+            batch_ground_truth.append(row["reward_model"])
+            count += 1
+        else:
+            continue
+    return batch_solution_str, batch_ground_truth
 
 
 def load_fabricate_aio_data(num=100, format="wrong_question"):
@@ -139,6 +160,17 @@ def load_fabricate_aio_data(num=100, format="wrong_question"):
         if count > num-1:
             break
     return batch_solution_str, batch_ground_truth
+
+
+class TestSALT(unittest.TestCase):
+    def test_detect_bad_question(self):
+        batch_solution_str, batch_ground_truth = load_salt_data(num=100)
+        scorer = SALTBadQuestionDetection(salt_parse_solution_fn)
+
+        for response, gt in zip(batch_solution_str, batch_ground_truth):
+            score = scorer.get_penalty_or_reward(response, gt)
+        #     print(score)
+        #     # self.assertTrue(score < 0)
 
 
 class TestFabricate(unittest.TestCase):
