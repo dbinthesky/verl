@@ -2913,7 +2913,7 @@ class Doc2QueryV2ComputeScoreWithQwQ32bRespondent(Doc2QueryV2ComputeScore):
             "base_url": "http://10.130.131.138:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
-                "temperature": 0.65,
+                "temperature": 0.6,
                 "timeout": 600,
                 "max_tokens": 32768,
             },
@@ -2941,7 +2941,7 @@ DOC2QUERY_QWQ32B_RESPONDENT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.get_weak_agent(),
-            "repeat": 8,
+            "repeat": 16,
             "fn": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.respond_wo_context,
             "desc": 'w/o ctx'
         },
@@ -2956,10 +2956,10 @@ DOC2QUERY_QWQ32B_RESPONDENT_PARAMS = {
         "advantage": 'w_content',
         "weakness": 'w/o_content',
         "advantage_oversimplified_threshold": 8/8,
-        "weakness_oversimplified_threshold": 7/8,
+        "weakness_oversimplified_threshold": 14/16,
         "advantage_overcomplex_threshold": 1/8,
-        "weakness_overcomplex_threshold": 1/8,
-        "advantage_threshold": 2/8,
+        "weakness_overcomplex_threshold": 1/16,
+        "advantage_threshold": 3/16,
         "advantage_weight": 0.0,
         "weakness_weight": 2.0,
         "confidence_bonus_threshold": 2/8,
