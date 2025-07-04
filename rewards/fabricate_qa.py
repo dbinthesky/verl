@@ -2225,7 +2225,7 @@ class Doc2QueryV2ComputeScore(object):
             else:
                 return 0.0
 
-    async def verify_results(self, verify_queue, batch_solution_str, max_concurrent_requests, group_names):
+    async def verify_results(self, verify_queue, batch_solution_str, max_concurrent_requests, split_names):
         def validate_result(response):
             s = response
             try:
@@ -2493,7 +2493,7 @@ class Doc2QueryV2ComputeScore(object):
 
                 skip = False
                 if not debug:
-                    for module in self.do_not_simulate_respondent():
+                    for module in self.do_not_simulate_respondent(debug=debug):
                         cur_score = module.get_penalty_or_reward(
                             solution_str, gt
                         )
@@ -4288,7 +4288,7 @@ SALT_DEFAULT_PARAMS = {
     },
     "hack_detection_run_args":  {
         "threshold": {
-            2: -1.0,
+            2: -0.5,
             3: -1.5,
             4: -2.0
         },
