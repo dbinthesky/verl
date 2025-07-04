@@ -3980,13 +3980,13 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
             cur_score = 0
 
             for j, _score in enumerate(scores):
-                if _score < 0:
-                    cur_score = _score
-                    break
+                if (j == penalties.index("QSimPenalty")): # BLEU
+                    if _difficulty_score > 0:
+                        cur_score += _score
                 else:
-                    if (j == penalties.index("QSimPenalty")):  # BLEU
-                        if _difficulty_score > 0:
-                            cur_score += _score
+                    if _score < 0:
+                        cur_score = _score
+                        break
                     else:
                         cur_score += _score
 
