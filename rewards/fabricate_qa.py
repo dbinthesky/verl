@@ -3258,7 +3258,6 @@ class SALTQuestionAnswerFormatVerify(PenaltyOrReward):
         if all(kw in question for kw in ("A）", "B）", "C）", "D）")):
             return -1.6
 
-
         # 疑似选择题
         if any(kw == answer.strip() for kw in ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N")):
             return -1.6
@@ -3894,7 +3893,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
         return f'Question: {question}\nAnswer: {answer}'
 
     def log_ground_truth(self, ground_truth):
-        return repr(self.format_question(ground_truth["question"], "")
+        return repr(self.format_question(ground_truth["question"], ground_truth["answer"])
         )
 
 #     def update_rollout_info(self, solution_str, ground_truth, difficulty):
