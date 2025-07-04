@@ -3793,6 +3793,10 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                         continue
 
                     # adv 应该比 weakness 显著好
+                    if not np.mean(adv) > np.mean(weak):
+                        full_rewards.append(base_score)
+                        continue
+
                     if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
                         full_rewards.append(base_score)
                         continue
