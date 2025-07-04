@@ -3482,11 +3482,8 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 
     @classmethod
     def self_taught_template(cls, question, answer, gt):
-        if gt["lang_code"] == "zh":
-            hint = f'提示：[正确答案]\n{answer}'
-        else:
-            hint = f'Hint: [Correct Answer] is {answer}'
-        return f'{question}\n\n{hint}'
+        """ Reject Sampling """
+        return question
 
     def self_taught_response_postprocess(self, s, debug=False):
         if "</think>" in s:
@@ -3528,25 +3525,43 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                 _prompt = fn(question, answer, gt)
                 prompt2index[_prompt].append(i)
 
+        # 拒绝采样
         prompts = list(prompt2index.keys()) * run_args["self_taught"]["repeat"]
         results = await run_args["self_taught"]["model"].run(
             prompts, max_concurrent_requests, desc=f'[Generate Self-Taught Response {run_args["self_taught"]["model"].model}]', pbar=False,
             postprocess_fns=[
                 partial(self.self_taught_response_postprocess, debug=debug)] * len(prompts)
         )
-        # print(len(results))
-        # raise NotImplementedError
-
-        self_taught_contexts = [None] * len(batch_solution_str)
-        for (p, r) in results:
-            # FIXME
-            # print(f'[STaR]{p}')
-            # print('-'*80)
-            # print(f'[STaR]{r}')
-            # print("="*80)
+        # 答案
+        verify_queue = []
+        for results_index, (p, r) in enumerate(results):
             for index in prompt2index[p]:
-                self_taught_contexts[index] = r
-        return self_taught_contexts
+                # 注：验证的是合成题准确率
+                verify_queue.append(VerifyInfo(
+                    index=results_index,  # 对应`results`中的偏移量
+                    tag=index,  # 对应instance index
+                    prompt=answer_map[index][0],  # 合成题问题
+                    response=r,
+                    answer=answer_map[index][1]  # 合成题答案
+                ))
+
+        correctness = await self.verify_batch_results(
+            verify_queue=verify_queue,
+            max_concurrent_requests=MAX_CONCURRENT,
+            group_names=list(range(len(batch_solution_str)))
+        )
+
+        self_taught_rationale = [None] * len(batch_solution_str)
+
+        for results_index, (p, r) in enumerate(results):
+            for index in prompt2index[p]:
+                try:
+                    # Reject Sample: 回答正确
+                    if correctness[index][results_index] > 0.0:
+                        self_taught_rationale[index] = r
+                except Exception as err:
+                    continue
+        return self_taught_rationale
 
     @classmethod
     def respond_wo_context(cls, context, gt):
@@ -3574,7 +3589,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
             debug=False):
         assert run_args is not None
 
-        contexts = await self.self_taught(
+        synthetic_qa_rationales = await self.self_taught(
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth,
@@ -3589,6 +3604,10 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
             result = self.parse_solution_fn(solution_str)
             if result is not None:
                 fabricate_question, _ = result
+
+                # 合成题没有rollout出正确答案
+                if synthetic_qa_rationales[i] is None:
+                    continue
 
                 skip = False
                 if not debug:
@@ -3607,7 +3626,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                     if name == "self_taught":
                         continue
                     fn = v["fn"]
-                    context = f'```\n[Question]\n{fabricate_question}\n\n[Solution]\n{contexts[i]}\n```'
+                    context = f'```\n[Question]\n{fabricate_question}\n\n[Solution]\n{synthetic_qa_rationales[i]}\n```'
                     _prompt = fn(context, gt)
                     prompt2index[name][_prompt].append(i)
 

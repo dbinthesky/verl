@@ -224,7 +224,6 @@ class TestSALT(unittest.TestCase):
             #     run_args=SALT_DEFAULT_PARAMS["learnable_run_args"], debug=True
             # )
 
-            # assert len(results[0]) == len(results[1])
             print(len(results))
         aio.run(main())
 
