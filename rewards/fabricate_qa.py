@@ -4275,8 +4275,8 @@ SALT_DEFAULT_PARAMS = {
     },
     "hack_detection_run_args":  {
         "threshold": {
-            2: -0.25,
-            3: -0.5,
+            2: -0.5,
+            3: -1.5,
             4: -2.0
         },
         "weight": 1.0,
