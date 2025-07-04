@@ -3482,7 +3482,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 
     @classmethod
     def self_taught_template(cls, question, answer, gt):
-        """ Reject Sampling """
+        """ 拒绝采样：合成题不提供答案,需要模型自己rollout对 """
         return question
 
     def self_taught_response_postprocess(self, s, debug=False):
@@ -3532,7 +3532,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
             postprocess_fns=[
                 partial(self.self_taught_response_postprocess, debug=debug)] * len(prompts)
         )
-        # 答案
+        # 答案验证
         verify_queue = []
         for results_index, (p, r) in enumerate(results):
             for index in prompt2index[p]:

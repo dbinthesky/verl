@@ -54,6 +54,7 @@ setup_path() {
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/DeepSeek-R1-Distill-Qwen-32B-fabricate_qa_v16"
     BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/salt_distillv16_roll16_bsz32_dapo_wo_kl_coef_wo_entropy_t09_solver_dsv3_bo8_grpo_step_15"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/opencompass/models/hf_hub/models--deepseek-ai--DeepSeek-R1-Distill-Qwen-32B_20250416/snapshots/2d78713b01ecefe27a89fafec248a5dfd731396f"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/salt/runtu_error_collection_0703_train.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/salt/runtu_error_collection_0703_test.parquet"
 
