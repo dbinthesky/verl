@@ -3258,6 +3258,11 @@ class SALTQuestionAnswerFormatVerify(PenaltyOrReward):
         if all(kw in question for kw in ("A）", "B）", "C）", "D）")):
             return -1.6
 
+
+        # 疑似选择题
+        if any(kw == answer.strip() for kw in ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N")):
+            return -1.6
+
         return 0.0
 
 
@@ -3314,8 +3319,8 @@ class SALTBadQuestionDetection(BadQuestionDetection):
             return 0.0
 
         question, answer = solution_str
-        # 基于规则的问题检测
 
+        # 基于规则的问题检测
         contam, _ = self.valid_ten_gram(
             self.generate_ngrams(question, self.ngram, ground_truth),
             self.generate_ngrams(
@@ -4036,7 +4041,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 
                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
 
-                if random.random() < 0.1 and thought is not None:
+                if (random.random() < 0.1 or cur_score > 0.) and thought is not None:
                     print(f'[Thought]\n{thought}')
                     print()
 
