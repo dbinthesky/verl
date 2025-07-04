@@ -46,6 +46,9 @@ DEFAULT_MAX_CONCURRENT = {
 }
 
 
+VerifyInfo = namedtuple("VerifyInfo", "index,tag,prompt,response,answer")
+
+
 def tokenize(s, lang_code):
     if lang_code == "en":
         tokenized_text = en_mt.tokenize(s.lower())
@@ -2222,7 +2225,7 @@ class Doc2QueryV2ComputeScore(object):
             else:
                 return 0.0
 
-    async def verify_results(self, verify_queue, batch_solution_str, max_concurrent_requests, split_names):
+    async def verify_results(self, verify_queue, batch_solution_str, max_concurrent_requests, group_names):
         def validate_result(response):
             s = response
             try:
@@ -3525,12 +3528,14 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                 _prompt = fn(question, answer, gt)
                 prompt2index[_prompt].append(i)
 
-        prompts = list(prompt2index.keys()) * 1
+        prompts = list(prompt2index.keys()) * run_args["self_taught"]["repeat"]
         results = await run_args["self_taught"]["model"].run(
             prompts, max_concurrent_requests, desc=f'[Generate Self-Taught Response {run_args["self_taught"]["model"].model}]', pbar=False,
             postprocess_fns=[
                 partial(self.self_taught_response_postprocess, debug=debug)] * len(prompts)
         )
+        # print(len(results))
+        # raise NotImplementedError
 
         self_taught_contexts = [None] * len(batch_solution_str)
         for (p, r) in results:
@@ -3623,22 +3628,21 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 
         # 验证答案正确性
         verify_queue = []
-        for name, results in zip(task_names, respond_questions):
+        for task_name, results in zip(task_names, respond_questions):
             for (p, r) in results:
-                # FIXME
-                # print(p)
-                # print('-'*80)
-                # print(r)
-                # print("="*80)
-                for index in prompt2index[name][p]:
-                    verify_queue.append((index, name, p, r))
+                for index in prompt2index[task_name][p]:
+                    # 注：验证时是验证在真题上的准确率
+                    verify_queue.append(VerifyInfo(
+                        index=index,
+                        tag=task_name,
+                        prompt=batch_ground_truth[index]["question"],
+                        response=r,
+                        answer=batch_ground_truth[index]["answer"]))
 
-        correctness = await self.verify_results(
+        correctness = await self.verify_batch_results(
             verify_queue=verify_queue,
-            batch_solution_str=batch_solution_str,
-            batch_ground_truth=batch_ground_truth,
             max_concurrent_requests=MAX_CONCURRENT,
-            split_names=task_names
+            group_names=task_names
         )
 
         return correctness
@@ -3659,7 +3663,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 
         return conclusion
 
-    async def verify_results(self, verify_queue, batch_solution_str, batch_ground_truth, max_concurrent_requests, split_names):
+    async def verify_batch_results(self, verify_queue, max_concurrent_requests, group_names):
         def validate_result(response):
             s = response
             try:
@@ -3718,33 +3722,27 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 
 #### **输出：**
 """
-        correctness = {name: defaultdict(list) for name in split_names}
+        correctness = {name: defaultdict(list) for name in group_names}
 
         verify_mapper = defaultdict(list)
 
-        for example in verify_queue:
-            index, name, prompt, conclusion = example
+        for info in verify_queue:
+            conclusion = info.response
 
             # 基于规则解析答案
             if conclusion is None:
-                correctness[name][index].append(0.0)
+                correctness[info.tag][info.index].append(0.0)
             else:
                 conclusion = self.postprocess_authentic_question_response(
                     conclusion)
                 eval_prompt = verify_prompt + "\n\n" + verify_template.format(
-                    question=batch_ground_truth[index]["question"],  # 真题
-                    answer=batch_ground_truth[index]["answer"],  # 真题答案
+                    question=info.prompt,
+                    answer=info.answer,
                     conclusion=conclusion
                 )
-                verify_mapper[eval_prompt].append((index, name))
+                verify_mapper[eval_prompt].append((info.index, info.tag))
 
         _results = await self.get_verify_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.get_verify_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
-
-        # FIXME
-        # for (p, r) in _results:
-        #     print(f'[EVAL]{p}')
-        #     print(f'[EVAL]{r}')
-        #     print("="*80)
 
         results_mapper = defaultdict(list)
         for (k, v) in _results:
@@ -3752,10 +3750,6 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                 index, name = meta
                 if v is not None:
                     correctness[name][index].append(1.0 if v else 0.0)
-                    # FIXME
-                    # if not v:
-                    #     print(f'[FAILURE]', batch_ground_truth[index]
-                    #           ["extra_info"]["uuid"])
         return correctness
 
     async def get_learnable_reward(
@@ -4246,6 +4240,7 @@ SALT_DEFAULT_PARAMS = {
         "self_taught": {
             "model": SALTComputeScore.get_weak_agent(),
             "fn": SALTComputeScore.self_taught_template,
+            "repeat": 5,
         },
         "w/o_content": {
             "model": SALTComputeScore.get_weak_agent(),

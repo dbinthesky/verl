@@ -212,20 +212,20 @@ class TestSALT(unittest.TestCase):
         #     len(batch_solution_str), batch_solution_str, batch_ground_truth,
         # )
         async def main():
-            # results = await task.get_learnable_reward(
-            #     [None] *
-            #     len(batch_solution_str), batch_solution_str, batch_ground_truth,
-            #     run_args=SALT_DEFAULT_PARAMS["learnable_run_args"], debug=True,
-            #     metric_args=SALT_DEFAULT_PARAMS["learnable_metric_args"]
-            # )
-            results = await task.get_similarity_penalty(
+            results = await task.get_learnable_reward(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
-                run_args=SALT_DEFAULT_PARAMS["similarity_run_args"],
+                run_args=SALT_DEFAULT_PARAMS["learnable_run_args"], debug=True,
+                metric_args=SALT_DEFAULT_PARAMS["learnable_metric_args"]
             )
+            # results = await task.self_taught(
+            #     [None] *
+            #     len(batch_solution_str), batch_solution_str, batch_ground_truth,
+            #     run_args=SALT_DEFAULT_PARAMS["learnable_run_args"], debug=True
+            # )
 
             # assert len(results[0]) == len(results[1])
-            print(results)
+            print(len(results))
         aio.run(main())
 
     def test_hack_detect(self):
