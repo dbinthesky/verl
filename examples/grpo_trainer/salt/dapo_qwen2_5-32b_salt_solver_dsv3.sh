@@ -146,7 +146,7 @@ run_training() {
         trainer.experiment_name="${experiment_name}" \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
-        trainer.save_freq=10 \
+        trainer.save_freq=5 \
         trainer.test_freq=10 \
         trainer.total_epochs=10000 \
         "$@"
