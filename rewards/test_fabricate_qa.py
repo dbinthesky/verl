@@ -59,7 +59,7 @@ def load_salt_data(num=100):
             break
         if gt is not None:
             batch_solution_str.append(
-                f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: {row["reward_model"]["answer"]}\n\nAnswer Type: NumericalAnswer\n</question>')
+                f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: {row["reward_model"]["answer"]}\n</question>')
             batch_ground_truth.append(row["reward_model"])
             count += 1
         else:

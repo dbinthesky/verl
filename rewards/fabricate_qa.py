@@ -3212,7 +3212,7 @@ def salt_parse_solution_fn(solution_str: str, remove_option_letter=True):
             "Question: ")+len("Question: "):conclusion.index("Answer:")].strip()
 
         answer = conclusion[conclusion.index(
-            "Answer:")+len("Answer:"):conclusion.index("Answer Type:")].strip()
+            "Answer:")+len("Answer:"):].strip()
 
         return question, answer
     except Exception as err:
@@ -3255,6 +3255,8 @@ class SALTQuestionAnswerFormatVerify(PenaltyOrReward):
         # 疑似选择题
         if all(kw in question for kw in ("A）", "B）", "C）", "D）")):
             return -1.6
+
+        return 0.0
 
 
 class SALTLanguageConsistency(LanguageConsistency):
@@ -3881,9 +3883,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
         return f'Question: {question}\nAnswer: {answer}'
 
     def log_ground_truth(self, ground_truth):
-        return repr(self.format_question(
-            ground_truth["question"],
-            "", "")
+        return repr(self.format_question(ground_truth["question"], "")
         )
 
 #     def update_rollout_info(self, solution_str, ground_truth, difficulty):
@@ -4009,7 +4009,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
             else:
                 log = False
 
-            if cur_score == -2.0 and stage != "2":
+            if cur_score == -2.0:
                 log = True
                 log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN CORRUPT RESPONSE]"
 
