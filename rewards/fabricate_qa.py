@@ -3387,7 +3387,7 @@ class QuestionSimilarityPenalty(QuestionSimilarity):
             sl_tokens = " ".join(tokenize(question.lower(), "en"))
             bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
             similarity = bleu / 100
-            return -similarity * 0.5  # 权重0.5
+            return -similarity  # 权重0.5
         except Exception as err:
             return 0.0
 
@@ -4086,7 +4086,7 @@ SALT_DEFAULT_PARAMS = {
             4: -0.5,
             5: -1.0
         },
-        "weight": 0.5,
+        "weight": 1.0,
     }
 }
 
