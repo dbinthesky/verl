@@ -37,7 +37,7 @@ VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 # MAX_CONCURRENT = 128 + 32
-MAX_CONCURRENT = 32
+MAX_CONCURRENT = 128
 ROLLOUT_SAVE_DIR = "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
 
 DEFAULT_MAX_CONCURRENT = {
@@ -3557,7 +3557,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
             for index in prompt2index[p]:
                 try:
                     # Reject Sample: 回答正确
-                    if correctness[index][results_index] > 0.0:
+                    if correctness[index][results_index][0] > 0.0:
                         self_taught_rationale[index] = r
                 except Exception as err:
                     continue
@@ -3597,7 +3597,6 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
             max_concurrent_requests=max_concurrent_requests,
             debug=debug
         )
-
         prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
 
         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
