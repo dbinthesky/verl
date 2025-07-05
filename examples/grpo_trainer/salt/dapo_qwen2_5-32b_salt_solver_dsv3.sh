@@ -115,7 +115,7 @@ run_training() {
         actor_rollout_ref.actor.use_kl_loss=False \
         actor_rollout_ref.actor.kl_loss_coef=0.0 \
         actor_rollout_ref.actor.entropy_coeff=0.0 \
-        actor_rollout_ref.actor.grad_clip=1.0 \
+        actor_rollout_ref.actor.grad_clip=0.85 \
         actor_rollout_ref.actor.clip_ratio_low=0.2 \
         actor_rollout_ref.actor.clip_ratio_high=0.28 \
         actor_rollout_ref.actor.clip_ratio_c=10.0 \
