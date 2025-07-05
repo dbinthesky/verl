@@ -42,8 +42,8 @@ ROLLOUT_SAVE_DIR = "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/ver
 DEFAULT_MAX_CONCURRENT = {
     "self_deployment": 128,
     "dsv3": 256,
-    "qwen3_8b": 512,
-    "qwen3_moe_235b": 1024
+    "qwen3_8b": 128,
+    "qwen3_32b": 256
 }
 
 
@@ -160,9 +160,11 @@ class Agent:
                     results.append(await f)
             else:
                 try:
-                    print(f'{desc} (p={max_concurrent}) RUN...')
+                    print(
+                        f'{desc} (p={max_concurrent}) TOTAL {len(messages)} RUN...')
                     results = await aio.gather(*tasks)
-                    print(f'{desc} (p={max_concurrent}) FINISHED...')
+                    print(
+                        f'{desc} (p={max_concurrent}) TOTAL {len(messages)} FINISHED...')
                 except Exception as err:
                     print(f'[ERROR] asyncio.gather failed: {err}')
                     return None
@@ -2304,8 +2306,8 @@ class Doc2QueryV2ComputeScoreWithQwQ32bRespondent(Doc2QueryV2ComputeScore):
     @classmethod
     def get_weak_agent(cls):
         return Agent(**{
-            "model": "	Qwen3-235B-A22B",
-            "base_url": "https://sd1kinkr54gpj4to2iqp0.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "Qwen3-32B",
+            "base_url": "https://sd1kkcef6rmou3g0tl7d0.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.65,
@@ -2548,10 +2550,10 @@ _qwen32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore
 })
 fabricate_aio_qwen32b_respondent_stage2_compute_score_train = partial(
     _qwen32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_moe_235b"])
+    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
 fabricate_aio_qwen32b_respondent_stage2_compute_score_valid = partial(
     _qwen32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_moe_235b"])
+    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
 
 
 # QwQ-32B Respondent
@@ -2565,10 +2567,10 @@ _qwq32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(
 })
 fabricate_aio_qwq32b_respondent_stage2_compute_score_train = partial(
     _qwq32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_moe_235b"])
+    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
 fabricate_aio_qwq32b_respondent_stage2_compute_score_valid = partial(
     _qwq32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_moe_235b"])
+    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 问题合成
@@ -4021,7 +4023,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             result = self.parse_solution_fn(solution_str)
             if result is not None:
                 question, options, answer = result
-                answer_map[i] = answer
+                answer_map[i] = (options, answer)
 
                 skip = False
                 if not debug:
@@ -4039,12 +4041,9 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                 for name, v in run_args.items():
                     fn = v["fn"]
                     _prompt = fn(question, options, gt)
-                    print(_prompt)
-                    print("="*80)
                     prompt2index[name][_prompt].append(i)
         tasks = []
         task_names = []
-        raise NotImplementedError
 
         for name, v in prompt2index.items():
             prompts = list(v.keys()) * run_args[name]["repeat"]
@@ -4056,9 +4055,6 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             ))
             task_names.append(name)
         respond_questions = await aio.gather(*tasks)
-        # FIXME
-        print(respond_questions)
-        raise NotImplementedError
 
         # 验证答案正确性
         verify_queue = []
@@ -4074,6 +4070,9 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             max_concurrent_requests=64,
             group_names=task_names
         )
+        # FIXME
+        print(respond_questions)
+        raise NotImplementedError
         return correctness
 
     def compute_score(self,
