@@ -4251,7 +4251,7 @@ SALT_DEFAULT_PARAMS = {
         "self_taught": {
             "model": SALTComputeScore.get_weak_agent(),
             "fn": SALTComputeScore.self_taught_template,
-            "repeat": 5,
+            "repeat": 8,
         },
         "w/o_content": {
             "model": SALTComputeScore.get_weak_agent(),
