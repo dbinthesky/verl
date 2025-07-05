@@ -2201,11 +2201,7 @@ class Doc2QueryV2ComputeScore(object):
         except Exception as err:
             try:
                 s = s.strip()
-                conclusion = s.split("\n")[-1].strip()
-
-                if len(conclusion) < 5:
-                    conclusion = "\n".join(s.split("\n")[-3:]).strip()
-                return conclusion
+                return s
             except Exception as err:
                 raise PostprocessError(f'parse conclusion failure')
 
@@ -3297,7 +3293,8 @@ class SALTLanguageConsistency(LanguageConsistency):
             if contain_chinese(raw_solution_str):
                 return base_score
         elif lang_code == "zh":
-            if not self.detect_zh(raw_solution_str, 0.75):
+            # FIXME: xxx 0.75
+            if not self.detect_zh(raw_solution_str, 0.):
                 return base_score
         else:
             pass
@@ -4436,11 +4433,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         except Exception as err:
             try:
                 s = s.strip()
-                conclusion = s.split("\n")[-1].strip()
-
-                if len(conclusion) < 5:
-                    conclusion = "\n".join(s.split("\n")[-3:]).strip()
-                return conclusion
+                return s
             except Exception as err:
                 raise PostprocessError(f'parse conclusion failure')
 
@@ -4521,12 +4514,14 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 
         _results = await self.get_verify_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.get_verify_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
 
+        count = 0
         results_mapper = defaultdict(list)
         for (k, v) in _results:
             for meta in verify_mapper[k]:
+                count += 1
                 index, name = meta
                 if v is not None:
-                    correctness[name][example.index].append(1.0 if v else 0.0)
+                    correctness[name][index].append(1.0 if v else 0.0)
 
         return correctness
 
@@ -4582,6 +4577,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                     prompt2index[name][_prompt].append(i)
         tasks = []
         task_names = []
+
         for name, v in prompt2index.items():
             prompts = list(v.keys()) * run_args[name]["repeat"]
 
