@@ -3694,9 +3694,9 @@ _default_salt_compute_score_train = SALTComputeScore(
 _default_salt_compute_score_valid = SALTComputeScore(
     salt_parse_solution_fn, split="valid", args=SALT_DEFAULT_PARAMS)
 salt_default_compute_score_train = partial(
-    _default_salt_compute_score_train.compute_score)
+    _default_salt_compute_score_train.compute_score, max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
 salt_default_compute_score_valid = partial(
-    _default_salt_compute_score_valid.compute_score)
+    _default_salt_compute_score_valid.compute_score, max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # SALT
