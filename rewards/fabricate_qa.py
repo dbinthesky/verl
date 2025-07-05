@@ -3957,12 +3957,21 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 
     @classmethod
     def respond_wo_context(cls, question, options, gt):
-        return f'{cls.format_question(question=question, options=cls.add_distractor_options(options, gt), answer=None)}'
+        ans_format = cls.get_answer_format(gt)
+        return f'{ans_format}\n\n{cls.format_question(question=question, options=cls.add_distractor_options(options, gt), answer=None)}'
 
     @classmethod
     def respond_w_context(cls, question, options, gt):
-        print("fuckign!!!", cls.get_distractor_option_letters(options))
-        return f'[DOC]\n{gt["document"]}\n[/DOC]\n\n{cls.format_question(question=question, options=cls.add_distractor_options(options, gt), answer=None)}'
+        ans_format = cls.get_answer_format(gt)
+        return f'[DOC]\n{gt["document"]}\n[/DOC]\n\n{ans_format}\n\n{cls.format_question(question=question, options=cls.add_distractor_options(options, gt), answer=None)}'
+
+    @classmethod
+    def get_answer_format(cls, gt):
+        lang_code = gt["lang_code"]
+        if lang_code == "zh":
+            return '回答下面的不定项选择题。'
+        else:
+            return 'Answer the following multiple-choice questions with one or more correct answers.'
 
     @classmethod
     def get_distractor_option_letters(cls, options):
@@ -3985,15 +3994,6 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             self.format,
             self.language,
         )
-
-#                 lang_code = gt["lang_code"]
-#                 if lang_code == "zh":
-#                     instruct = '回答以下单项选择题。只有一个正确答案。你回应的最后一行必须采用 “Answer: $LETTER” 的格式（不带引号），其中 LETTER 为选项字母之一。你必须首先通过非常详细的思考过程逐步分析。'
-#                 else:
-#                     instruct = 'Answer the following multiple choice question. There is only one correct answer. The last line of your response should be in the format "Answer: $LETTER" (without quotes), where LETTER is one of the option letters. You must first think step by step with very detail thinking process.'
-
-#                 prompt = f'{instruct}\n\n' + self.prepare_question_for_test(
-#                     question, options, lang_code=lang_code)
 
     @classmethod
     def format_question(cls, question, options, answer):
@@ -4091,8 +4091,6 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
     #     if norm is None:
     #         return repr(self.clip_string(solution))
     #     return repr(self.format_question(norm[0], norm[1]))
-
-
 
     def penalty_on(self):
         return ("Format", "Lang")
