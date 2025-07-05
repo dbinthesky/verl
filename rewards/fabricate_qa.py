@@ -2076,7 +2076,7 @@ class Doc2QueryV2ComputeScore(object):
         self.parse_solution_fn = parse_solution_fn
         assert args is not None
         self.args = args
-        self.task_name = "DOC2QUERY"
+        self.task_name = "DOC2QUERY_V2"
 
         self.format = CalculationAnswerFormatVerify(
             parse_solution_fn=self.parse_solution_fn)
