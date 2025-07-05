@@ -2307,7 +2307,7 @@ class Doc2QueryV2ComputeScoreWithQwQ32bRespondent(Doc2QueryV2ComputeScore):
             "request_kwargs": {
                 "temperature": 0.65,
                 "timeout": 600,
-                "max_tokens": 16384,
+                "max_tokens": 32768,
             },
         })
 
@@ -2562,10 +2562,10 @@ _qwq32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(
 })
 fabricate_aio_qwq32b_respondent_stage2_compute_score_train = partial(
     _qwq32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])
+    max_concurrent_requests=256)
 fabricate_aio_qwq32b_respondent_stage2_compute_score_valid = partial(
     _qwq32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])
+    max_concurrent_requests=256)
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 问题合成
