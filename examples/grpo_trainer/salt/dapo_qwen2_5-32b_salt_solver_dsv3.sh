@@ -53,7 +53,7 @@ setup_path() {
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/salt_distillv16_roll16_bsz32_dapo_wo_kl_coef_wo_entropy_t09_solver_dsv3_bo8_grpo_step_50"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/salt/runtu_error_collection_0703_train.parquet"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/salt/runtu_error_collection_0705_train.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/salt/runtu_error_collection_0703_test.parquet"
 
     experiment_name="distill-qwen-32b_salt-${YYMMDD}-${HHMMSS}"
@@ -106,7 +106,7 @@ run_training() {
         actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
         actor_rollout_ref.actor.optim.weight_decay=0.1 \
         actor_rollout_ref.model.use_remove_padding=True \
-        actor_rollout_ref.actor.shuffle=False \
+        actor_rollout_ref.actor.shuffle=True \
         actor_rollout_ref.actor.ppo_mini_batch_size=32 \
         actor_rollout_ref.actor.ppo_micro_batch_size=32 \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=2 \
