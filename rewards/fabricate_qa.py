@@ -43,7 +43,7 @@ DEFAULT_MAX_CONCURRENT = {
     "self_deployment": 128,
     "dsv3": 256,
     "qwen3_8b": 128,
-    "qwen3_32b": 256
+    "qwen3_32b": 1024
 }
 
 
@@ -1906,7 +1906,7 @@ class Doc2QueryV2ComputeScore(object):
             prompts = list(v.keys()) * run_args[name]["repeat"]
 
             tasks.append(run_args[name]["model"].run(
-                prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
+                prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=True,
                 postprocess_fns=[
                     partial(self.response_postprocess, debug=debug)] * len(prompts)
             ))
@@ -2561,10 +2561,10 @@ _qwq32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(
 })
 fabricate_aio_qwq32b_respondent_stage2_compute_score_train = partial(
     _qwq32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])
+    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
 fabricate_aio_qwq32b_respondent_stage2_compute_score_valid = partial(
     _qwq32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])
+    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 问题合成
