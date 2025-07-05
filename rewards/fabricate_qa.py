@@ -36,13 +36,12 @@ en_mt = MosesTokenizer(lang='en')
 VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
 VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
-# MAX_CONCURRENT = 128 + 32
 MAX_CONCURRENT = 128
 ROLLOUT_SAVE_DIR = "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
 
 DEFAULT_MAX_CONCURRENT = {
     "self_deployment": 128,
-    "dsv3": 160,
+    "dsv3": 256,
     "qwen3_8b": 512,
     "qwen3_moe_235b": 256
 }
