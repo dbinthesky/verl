@@ -3815,18 +3815,8 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                         full_rewards.append(base_score)
                         continue
 
-                    # 难度函数
-                    def calc_difficulty(scores, total_attempts):
-                        return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
-
-                    # 难度降低奖励
-                    diff_reduct_bonus = 0.5  # 基础分
-
-                    # 原问题难度
-                    # 合成题Fewshot -> 难度
-
-                    diff_reduct_bonus += (calc_difficulty(weak, run_args[weak_name]["repeat"])-calc_difficulty(
-                        adv, run_args[adv_name]["repeat"])) * metric_args["difficulty_reduction_bonus_weight"]
+                    # 固定难度降低奖励
+                    diff_reduct_bonus = 1.2
 
                     base_score = [
                         diff_reduct_bonus
