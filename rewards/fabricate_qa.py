@@ -546,7 +546,7 @@ SIMILARITY=4
             f'\n\n现在需要你比较下面两个问题的相似度。\n\n[原问题]\n{a}\n\n[对比问题]\n{b}\n\n[输出]\n'
         prompts[prompt].append(index)
 
-    results = await agent.run(list(prompts.keys()), max_concurrent_requests, desc=f"[QA Similarity {agent.model}]", postprocess_fns=[postprocess]*len(list(prompts.keys())))
+    results = await agent.run(list(prompts.keys()), 64, desc=f"[QA Similarity {agent.model}]", postprocess_fns=[postprocess]*len(list(prompts.keys())))
 
     results_mapper = {}
     for (k, v) in results:
@@ -3352,7 +3352,7 @@ Hack=1
                 f'\n\n\n现在需要你对下面的模型响应分析hack程度。\n\n[原题]\n{a}\n\n[大模型出题]\n{b}\n\n[输出]\n'
             prompts[prompt].append(index)
 
-        results = await agent.run(list(prompts.keys()), max_concurrent_requests, desc=f"[Hack Detection {agent.model}]", postprocess_fns=[postprocess]*len(list(prompts.keys())))
+        results = await agent.run(list(prompts.keys()), 64, desc=f"[Hack Detection {agent.model}]", postprocess_fns=[postprocess]*len(list(prompts.keys())))
 
         results_mapper = {}
         for (k, v) in results:
@@ -3956,12 +3956,12 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         return correctness
 
     @classmethod
-    def respond_wo_context(cls, question, gt):
-        return f'{question}'
+    def respond_wo_context(cls, question, options, gt):
+        return f'{self.format_question(question=question, options=options, answer=None)}'
 
     @classmethod
-    def respond_w_context(cls, question, gt):
-        return f'[DOC]\n{gt["document"]}\n[/DOC]\n\n{question}'
+    def respond_w_context(cls, question, options, gt):
+        return f'[DOC]\n{gt["document"]}\n[/DOC]\n\n{self.format_question(question=question, options=options, answer=None)}'
 
     def do_not_simulate_respondent(self, debug):
         return (
@@ -3978,13 +3978,13 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 #                 prompt = f'{instruct}\n\n' + self.prepare_question_for_test(
 #                     question, options, lang_code=lang_code)
 
-#     def format_question(self, question, options, answer):
-#         options_str = "\n".join([f'{x}) {y}' for x, y in zip(
-#             self.MULTICHOICE_LETTER, options)])
-#         if answer is not None:
-#             return f'Question: {question}\n\nOptions:\n{options_str}\n\nAnswer: {answer}'
-#         else:
-#             return f'Question: {question}\n\nOptions:\n{options_str}'
+    def format_question(self, question, options, answer):
+        options_str = "\n".join([f'{x}) {y}' for x, y in zip(
+            self.MULTICHOICE_LETTER, options)])
+        if answer is not None:
+            return f'Question: {question}\n\nOptions:\n{options_str}\n\nAnswer: {answer}'
+        else:
+            return f'Question: {question}\n\nOptions:\n{options_str}'
 
     async def simulate_respondent(
             self,
@@ -4002,7 +4002,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
             result = self.parse_solution_fn(solution_str)
             if result is not None:
-                question, answer = result
+                question, options, answer = result
                 answer_map[i] = answer
 
                 skip = False
@@ -4020,10 +4020,13 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                 lang_code = gt["lang_code"]
                 for name, v in run_args.items():
                     fn = v["fn"]
-                    _prompt = fn(question, gt)
+                    _prompt = fn(question, options, gt)
+                    print(_prompt)
+                    print("="*80)
                     prompt2index[name][_prompt].append(i)
         tasks = []
         task_names = []
+        raise NotImplementedError
 
         for name, v in prompt2index.items():
             prompts = list(v.keys()) * run_args[name]["repeat"]
@@ -4065,14 +4068,14 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth,  max_concurrent_requests=max_concurrent_requests)
         return aio.run(main())
 
-    def log_solution(self, solution):
-        norm = self.parse_solution_fn(solution)
-        if norm is None:
-            return repr(self.clip_string(solution))
-        return repr(self.format_question(norm[0], norm[1]))
+    # def log_solution(self, solution):
+    #     norm = self.parse_solution_fn(solution)
+    #     if norm is None:
+    #         return repr(self.clip_string(solution))
+    #     return repr(self.format_question(norm[0], norm[1]))
 
-    def format_question(self, question, answer):
-        return f'Question: {question}\nAnswer: {answer}'
+    # def format_question(self, question, answer):
+    #     return f'Question: {question}\nAnswer: {answer}'
 
     def penalty_on(self):
         return ("Format", "Lang")
