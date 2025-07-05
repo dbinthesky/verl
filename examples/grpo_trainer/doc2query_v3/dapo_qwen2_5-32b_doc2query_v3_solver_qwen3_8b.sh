@@ -57,7 +57,7 @@ setup_path() {
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/runtu_error_collection_0703_test.parquet"
 
     experiment_name="distill-qwen-32b_doc2query_v3-${YYMMDD}-${HHMMSS}"
-    project_name="salt"
+    project_name="doc2query_v3"
 
     OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/doc2query_v3/${experiment_name}/"
     mkdir -p "${OUTPUT_DIR}"
