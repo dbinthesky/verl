@@ -2299,7 +2299,7 @@ class Doc2QueryV2ComputeScoreWithQwQ32bRespondent(Doc2QueryV2ComputeScore):
     def get_weak_agent(cls):
         return Agent(**{
             "model": "QwQ_32B",
-            "base_url": "http://10.130.138.40:21001",
+            "base_url": "http://10.130.138.40:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.65,
