@@ -2685,7 +2685,13 @@ class SALTLanguageConsistency(LanguageConsistency):
         if solution_str is None:
             return 0.0
 
-        question, answer = solution_str
+        result = solution_str
+        if len(result) == 2:
+            question, answer = result
+        elif len(result) == 3:
+            question, options, answer = result
+        else:
+            raise NotImplementedError
 
         lang_code = ground_truth["lang_code"]
 
@@ -2702,8 +2708,7 @@ class SALTLanguageConsistency(LanguageConsistency):
             if contain_chinese(raw_solution_str):
                 return base_score
         elif lang_code == "zh":
-            # FIXME: xxx 0.75
-            if not self.detect_zh(raw_solution_str, 0.):
+            if not self.detect_zh(raw_solution_str, 0.75):
                 return base_score
         else:
             pass
@@ -3778,44 +3783,21 @@ class Doc2QueryV3QuestionAnswerFormatVerify(SALTQuestionAnswerFormatVerify):
         if solution_str is None:
             return 0.0
 
-        question, answer = solution_str
+        question, options, _ = solution_str
 
-        # 中文
-        if contain_chinese(answer):
-            tokens = list(jieba.cut(answer))
-        else:
-            tokens = list(answer.split(" "))
+        for option in options:
+            if contain_chinese(option):
+                tokens = list(jieba.cut(option))
+            else:
+                tokens = list(option.split(" "))
 
-        # 答案长度过长
-        if len(tokens) > 10:
-            return -1.6
+            # 答案长度过长
+            if len(tokens) > 10:
+                return -1.6
 
-        if any(kw in answer for kw in ("A. ", "B. ", "C. ", "D. ", "A) ", "B) ", "C) ", "D)")):
-            return -1.6
-
-        # 疑似选择题
-        if all(kw in question for kw in ("A. ", "B. ", "C. ", "D. ")):
-            return -1.6
-
-        # 疑似选择题
-        if all(kw in question for kw in ("A) ", "B) ", "C) ", "D) ")):
-            return -1.6
-
-        # 疑似选择题
-        if all(kw in question for kw in ("A）", "B）", "C）", "D）")):
-            return -1.6
-
-        # 疑似选择题
-        if any(kw == answer.strip() for kw in ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N")):
-            return -1.6
-
-        # 疑似判断题
-        if answer.strip().lower() in ("true", "false", "正确", "错误"):
-            return -1.6
-
-        # 疑似计算题
-        if match_decimal(answer):
-            return -1.6
+            # 疑似判断题
+            if option.strip().lower() in ("true", "false", "正确", "错误"):
+                return -1.6
 
         return 0.0
 
@@ -4046,6 +4028,9 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             ))
             task_names.append(name)
         respond_questions = await aio.gather(*tasks)
+        # FIXME
+        print(respond_questions)
+        raise NotImplementedError
 
         # 验证答案正确性
         verify_queue = []
@@ -4250,54 +4235,6 @@ doc2query_v3_default_compute_score_valid = partial(
 
 
 # class QwQLongCoTDoc2QueryComputeScore(object):
-#     async def chat_completion_with_retry(self, url, data, max_retries=3, retry_delay=5, suffix="/generate"):
-#         retries = 0
-#         while retries < max_retries:
-#             try:
-#                 async with aiohttp.ClientSession() as session:
-#                     async with session.post(f'{url}{suffix}', json=data, timeout=aiohttp.ClientTimeout(total=2400)) as response:
-#                         response.raise_for_status()
-#                         return await response.json()
-#             except (aiohttp.ClientError, aiohttp.ClientResponseError) as e:
-#                 print(
-#                     f"{url}请求(数据总量={len(data)})失败，错误信息: {e}，重试第 {retries + 1} 次...")
-#                 retries += 1
-#                 if retries < max_retries:
-#                     await aio.sleep(retry_delay)
-#         print(f"{url}达到最大重试次数，请求失败。")
-#         return None
-
-#     async def run_tasks_in_queues(self, tasks):
-#         """将任务分成n个队列并行执行"""
-#         n = len(self.get_respondent_urls())
-
-#         # 创建n个队列
-#         queues = [[] for _ in range(n)]
-
-#         # 平均分配任务到各个队列
-#         for i, task in enumerate(tasks):
-#             queue_id = i % n
-#             queues[queue_id].append(task)
-
-#         parallel_tasks = []
-#         for i, queue in enumerate(queues):
-#             parallel_tasks.append(self.chat_completion_with_retry(
-#                 url=self.get_respondent_urls()[i],
-#                 data=queue
-#             ))
-#         flattened_results = []
-#         for f in tqdm.asyncio.tqdm.as_completed(parallel_tasks, dynamic_ncols=True, desc=f'[Generate {len(tasks)} Responses]'):
-#             results = await f
-#             for result in results:
-#                 flattened_results.append(result)
-
-#         return flattened_results
-
-#     def get_respondent_urls(self):
-#         suffixes = [
-#         ]
-#         return [f'http://{_}' for _ in suffixes]
-
 #     def response_postprocess(self, s):
 #         ans = None
 #         try:

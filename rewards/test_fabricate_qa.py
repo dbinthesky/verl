@@ -275,11 +275,9 @@ class TestDoc2QueryV3(unittest.TestCase):
     def test_doc2query_v3_compute_score(self):
         batch_solution_str, batch_ground_truth = load_doc2query_v3_data(num=32)
 
-        for _ in batch_solution_str:
-            print(doc2query_v3_parse_solution_fn(_))
-        # print(doc2query_v3_default_compute_score_valid(
-        #     [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth,
-        # ))
+        print(doc2query_v3_default_compute_score_valid(
+            [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        ))
 
 
 class TestFabricate(unittest.TestCase):
