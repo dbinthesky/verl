@@ -42,7 +42,7 @@ ROLLOUT_SAVE_DIR = "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/ver
 DEFAULT_MAX_CONCURRENT = {
     "self_deployment": 128,
     "dsv3": 256,
-    "qwen3_8b": 128,
+    "qwen3_8b": 256,
     "qwen3_32b": 1024
 }
 
@@ -174,6 +174,7 @@ class Agent:
     async def chat_completion(self, client, messages, postprocess_fn) -> str | None:
         response = None
 
+        # FIXME
         if self.model == "QwQ_32B":
             suffix = "\n<think>\n"
         else:
@@ -2298,10 +2299,10 @@ class Doc2QueryV2ComputeScoreWithQwQ32bRespondent(Doc2QueryV2ComputeScore):
     @classmethod
     def get_weak_agent(cls):
         return Agent(**{
-            # "model": "QwQ_32B",
-            # "base_url": "http://10.130.138.40:8000/v1",
-            "model": "Qwen3-32b",
-            "base_url": "https://sd1kl7uj54gpj4to2ite0.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "QwQ_32B",
+            "base_url": "http://10.130.138.40:8000/v1",
+            # "model": "Qwen3-32b",
+            # "base_url": "https://sd1kl7uj54gpj4to2ite0.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.65,
@@ -2561,10 +2562,10 @@ _qwq32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(
 })
 fabricate_aio_qwq32b_respondent_stage2_compute_score_train = partial(
     _qwq32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
+    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])
 fabricate_aio_qwq32b_respondent_stage2_compute_score_valid = partial(
     _qwq32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
+    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 问题合成
@@ -3865,49 +3866,58 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 
     async def verify_batch_results(self, verify_queue, max_concurrent_requests, group_names):
         def validate_result(response):
-            s = response
             try:
-                conclusion = s.strip()
-
-                judge = re.findall(
-                    r'\"判断结果\": \"(.*)\"', conclusion)
-                if len(judge) > 0 and judge[0] in ("正确", "错误"):
-                    return judge[0] == "正确"
-
-                conclusion = conclusion[conclusion.index(
-                    "```json")+len("```json"):].strip()
-                conclusion = conclusion[:conclusion.index("```")].strip()
-                try:
-                    conclusion = json.loads(conclusion)
-                    if conclusion["判断结果"] not in ("正确", "错误"):
-                        raise PostprocessError(f'corrupt')
-                    return conclusion["判断结果"] == "正确"
-                except Exception as err:
-                    try:
-                        conclusion = re.findall(
-                            r'\"判断结果\": \"(.*)\"', conclusion)[0]
-                        if not conclusion in ("正确", "错误"):
-                            raise PostprocessError(f'corrupt')
-                        return conclusion == "正确"
-                    except Exception as err:
-                        raise PostprocessError(f'{err}')
+                ans_list = eval(response.strip())
+                return ans_list
             except Exception as err:
-                raise PostprocessError(f'{err}')
+                raise PostprocessError(f'Parse Python List Failed')
 
-        verify_prompt = """### **基于标准答案判断回答是否正确**
-任务描述：请根据提供的**题目**、**用户回答（答案部分）**和**标准答案**，判断用户回答是否正确。
+        verify_prompt = """### 按列表格式把用户回答的答案选项提取出来。
 
-#### 输出要求
-```json
-{
-"判断结果": "正确/错误",
-}
+下面是一些例子
+#### **输入：**
+##### 题目
+```
+If the depositor has died, but the holder of the deposit certificate does not inform the savings institution about the inheritance process, nor presents a judgment from the local court where the deposit is held, and directly goes to the savings institution to withdraw or transfer the deceased depositor's funds, the savings institution will consider it ( ). Any disputes over the inheritance of the deposit that arise later ( ). ( ) (From the \"Savings Management Regulations,\" Order No. 107 of the State Council of the People's Republic of China)\nA. Normal withdrawal or transfer\nB. Abnormal withdrawal or transfer\nC. The savings institution is not responsible\nD. The savings institution is partially responsible
 ```
 
-现在对下面的回答判断正确性
+##### 用户回答（答案部分）
+According to Article 40 of the \"Savings Management Regulations\" (Order No. 107 of the State Council of the People's Republic of China), if the depositor has died, but the holder of the deposit certificate does not inform the savings institution about the inheritance process nor presents a judgment from the local court where the deposit is held, and directly attempts to withdraw or transfer the funds, the savings institution will consider it a normal withdrawal or transfer. Furthermore, any disputes over the inheritance of the deposit that arise later are not the responsibility of the savings institution.\n\nThus, for the first blank, the correct option is A: \"Normal withdrawal or transfer.\" For the second blank, the correct option is C: \"The savings institution is not responsible.\"\n\n\\boxed{\\text{A, C}}
+
+#### **输出：**
+['A', 'C']
+
+
+
+##### 题目
+```
+Pyogenic meningitis | Tuberculous meningitis | Viral meningitis\nA. Significant increase in IgM\nB. Significant increase in IgA\nC. Significant decrease in IgA\nD. Significant decrease in IgM\nE. No significant changes in IgA and IgM
+```
+
+##### 用户回答（答案部分）
+Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOptions C (Significant decrease in IgA) and D (Significant decrease in IgM) are not characteristic of these infections, as decreases in immunoglobulins are more associated with immunodeficiencies rather than meningeal inflammation.\n\n\\boxed{\\text{A for Pyogenic, B for Tuberculous, E for Viral}}
+
+#### **输出：**
+['A', 'B', 'E']
+
+
+
+##### 题目
+```
+不定项选择题)(每题 2.00 分) 根据《中华人民共和国水污染防治法》在饮用水水源保护区内设置排污口的,()\nA. 由县级以上地方人民政府环境保护主管部门责令限期拆除,处二万元以上十万元以下的罚款\nB. 由县级以上地方人民政府责f限期拆除,处十万元以上五十万元以下的罚款\nC. 逾期不拆除的,强制拆除,所需费用由违法者承担,处十万元以上五十万元以下的罚款情节严重的,可以责令停产整治\nD. 逾期不拆除的,强制拆除,所需费用由违法者承担,处五十万元以上一百万元以下的罚款,并可以责令停产整治
+```
+
+##### 用户回答（答案部分）
+根据《中华人民共和国水污染防治法》的相关规定，我们可以逐步分析题目中的选项：\n\n1. **设置排污口的处罚**：\n   - 在饮用水水源保护区内设置排污口的行为，由**县级以上地方人民政府**（而非环境保护主管部门）责令限期拆除，并处以**十万元以上五十万元以下的罚款**。因此，**选项A错误**，**选项B正确**。\n\n2. **逾期不拆除的处罚**：\n   - 如果逾期不拆除排污口，将**强制拆除**，所需费用由违法者承担，并处以**五十万元以上一百万元以下的罚款**，同时**可以责令停产整治**。因此，**选项C错误**（罚款金额不正确），**选项D正确**。\n\n综上，正确答案是 **B** 和 **D**。\n\n最终答案为：\\boxed{B, D}
+
+#### **输出：**
+['B', 'D']
+
+
+如果用户没有给出最终答案，则返回空列表[]
 """
 
-        verify_template = """
+        verify_template = """现在对下面的用户回答提按格式提取出答案（参考上面的例子，输出后面直接输出提取出的列表）
 #### **输入：**
 ##### 题目
 ```
@@ -3916,9 +3926,6 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 
 ##### 用户回答（答案部分）
 {conclusion}
-
-##### 标准答案
-{answer}
 
 #### **输出：**
 """
@@ -3931,10 +3938,12 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                 correctness[example.tag][example.index].append(0.0)
             else:
                 prompt = f'{example.prompt}'
+                response = example.response
+                if "</think>" in response:
+                    response = response[response.index("</think>"):].strip()
                 eval_prompt = verify_prompt + "\n\n" + verify_template.format(
                     question=prompt,
-                    answer=example.answer,
-                    conclusion=example.response
+                    conclusion=response
                 )
                 verify_mapper[eval_prompt].append((example.index, example.tag))
 
@@ -3947,8 +3956,10 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                 count += 1
                 index, name = meta
                 if v is not None:
-                    correctness[name][index].append(1.0 if v else 0.0)
+                    correctness[name][index].append(v)
 
+        print(correctness)
+        raise NotImplementedError
         return correctness
 
     @classmethod
@@ -4064,9 +4075,6 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             max_concurrent_requests=64,
             group_names=task_names
         )
-        # FIXME
-        print(respond_questions)
-        raise NotImplementedError
         return correctness
 
     def compute_score(self,
