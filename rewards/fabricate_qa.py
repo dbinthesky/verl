@@ -4586,7 +4586,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             prompts = list(v.keys()) * run_args[name]["repeat"]
 
             tasks.append(run_args[name]["model"].run(
-                prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
+                prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses Qwen3-8B]', pbar=False,
                 postprocess_fns=[
                     partial(self.response_postprocess, debug=debug)] * len(prompts)
             ))
@@ -4625,11 +4625,38 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             return repr(self.clip_string(solution))
         return repr(self.format_question(norm[0], norm[1]))
 
-    def format_question(self, question, answer, ans_type):
+    def format_question(self, question, answer):
         return f'Question: {question}\nAnswer: {answer}'
 
     def penalty_on(self):
         return ("Format", "Lang")
+
+    def update_rollout_info(self, solution_str, ground_truth, difficulty):
+        parsed = self.parse_solution_fn(solution_str)
+        if parsed is None:
+            return
+        question, answer = parsed
+        inst_id = ground_truth["extra_info"]["uuid"]
+        if inst_id not in self.rollout_database:
+            self.rollout_database[inst_id] = LRUCache(
+                capacity=self.record_rollout_max_capacity)
+
+        args = copy.deepcopy(self.args)
+        for k, v in args["difficulty_run_args"].items():
+            del v["fn"]
+            for field, value in v.items():
+                if field == "model":
+                    args["difficulty_run_args"][k][field] = value.model
+
+        self.rollout_database[inst_id][question] = {
+            "prompt_generation_process": solution_str,
+            "question": question,
+            "answer": answer,
+            "difficulty": {
+                "meta": args,
+                "pass_rate": difficulty
+            }
+        }
 
     async def _compute_score(self,
                              batch_data_sources,
@@ -4692,7 +4719,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 
             final_results.append(cur_score)
 
-            if cur_score > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+            if cur_score > 0 or (self.split == "valid") or (self.split == "train" and random.random() < 0.1):
                 log = True
                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
             else:
