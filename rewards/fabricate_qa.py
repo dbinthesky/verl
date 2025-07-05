@@ -3957,11 +3957,28 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 
     @classmethod
     def respond_wo_context(cls, question, options, gt):
-        return f'{self.format_question(question=question, options=options, answer=None)}'
+        return f'{cls.format_question(question=question, options=cls.add_distractor_options(options, gt), answer=None)}'
 
     @classmethod
     def respond_w_context(cls, question, options, gt):
-        return f'[DOC]\n{gt["document"]}\n[/DOC]\n\n{self.format_question(question=question, options=options, answer=None)}'
+        print("fuckign!!!", cls.get_distractor_option_letters(options))
+        return f'[DOC]\n{gt["document"]}\n[/DOC]\n\n{cls.format_question(question=question, options=cls.add_distractor_options(options, gt), answer=None)}'
+
+    @classmethod
+    def get_distractor_option_letters(cls, options):
+        return [cls.MULTICHOICE_LETTER[len(options)], cls.MULTICHOICE_LETTER[len(options)+1]]
+
+    @classmethod
+    def add_distractor_options(cls, options, gt):
+        lang_code = gt["lang_code"]
+        if lang_code == "zh":
+            distractors = ["以上都不正确", "无法判断"]
+        else:
+            distractors = ["None of the above", "Cannot be determined"]
+
+        new_options = copy.deepcopy(options)
+        new_options.extend(distractors)
+        return new_options
 
     def do_not_simulate_respondent(self, debug):
         return (
@@ -3978,9 +3995,10 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 #                 prompt = f'{instruct}\n\n' + self.prepare_question_for_test(
 #                     question, options, lang_code=lang_code)
 
-    def format_question(self, question, options, answer):
+    @classmethod
+    def format_question(cls, question, options, answer):
         options_str = "\n".join([f'{x}) {y}' for x, y in zip(
-            self.MULTICHOICE_LETTER, options)])
+            cls.MULTICHOICE_LETTER, options)])
         if answer is not None:
             return f'Question: {question}\n\nOptions:\n{options_str}\n\nAnswer: {answer}'
         else:
@@ -4074,8 +4092,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
     #         return repr(self.clip_string(solution))
     #     return repr(self.format_question(norm[0], norm[1]))
 
-    # def format_question(self, question, answer):
-    #     return f'Question: {question}\nAnswer: {answer}'
+
 
     def penalty_on(self):
         return ("Format", "Lang")
