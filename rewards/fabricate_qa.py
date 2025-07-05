@@ -173,11 +173,16 @@ class Agent:
     @retry(stop=stop_after_attempt(4), wait=wait_exponential(multiplier=1, min=5, max=20))
     async def chat_completion(self, client, messages, postprocess_fn) -> str | None:
         response = None
+
+        if self.model == "QwQ_32B":
+            suffix = "\n<think>\n"
+        else:
+            suffix = ""
         try:
             response = await client.chat.completions.create(
                 model=self.model, messages=[
                     {"role": "system", "content": 'You are a helpful and harmless assistant. You are Qwen developed by Alibaba. You should think step-by-step.'},
-                    {"role": "user", "content": messages}
+                    {"role": "user", "content": messages + suffix}
                 ], **self.request_kwargs,
             )
             return postprocess_fn(response.choices[0].message.content)
@@ -1521,19 +1526,6 @@ class Doc2QueryV2ComputeScore(object):
         self.rollout_database = {}
         self.initial_record_rollout_samples_module = True
 
-    # @classmethod
-    # def get_weak_agent(cls):
-    #     return Agent(**{
-    #         "model": "qwen25_32B_instruct",
-    #         "base_url": "http://10.130.131.138:8000/v1",
-    #         "api_keys": "EMPTY",
-    #         "request_kwargs": {
-    #             "temperature": 0.8,
-    #             "timeout": 360,
-    #             "max_tokens": 2048,
-    #         },
-    #     })
-
     @classmethod
     def get_weak_agent(cls):
         return Agent(**{
@@ -2306,13 +2298,13 @@ class Doc2QueryV2ComputeScoreWithQwQ32bRespondent(Doc2QueryV2ComputeScore):
     @classmethod
     def get_weak_agent(cls):
         return Agent(**{
-            "model": "Qwen3-32B",
-            "base_url": "https://sd1kkcef6rmou3g0tl7d0.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "QwQ_32B",
+            "base_url": "http://10.130.138.40:21001",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.65,
                 "timeout": 600,
-                "max_tokens": 16384,
+                "max_tokens": 32768,
             },
         })
 
