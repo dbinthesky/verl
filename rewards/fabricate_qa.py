@@ -2117,9 +2117,6 @@ class Doc2QueryV2ComputeScore(object):
                     else:
                         cur_score += _score
 
-            # if stage == "2" and _difficulty_score > 0:
-            #     cur_score += similarity_rewards[i]
-
             # 保存Rollout信息
             if cur_score >= 0:
                 self.update_rollout_info(
@@ -3474,41 +3471,40 @@ Hack=1
         return repr(self.format_question(ground_truth["question"], ground_truth["answer"])
                     )
 
-#     def update_rollout_info(self, solution_str, ground_truth, difficulty):
-#         parsed = self.parse_solution_fn(solution_str)
-#         if parsed is None:
-#             return
-#         question, answer, answer_type = parsed
-#         inst_id = ground_truth["extra_info"]["uuid"]
-#         if inst_id not in self.rollout_database:
-#             self.rollout_database[inst_id] = LRUCache(
-#                 capacity=self.record_rollout_max_capacity)
+    def update_rollout_info(self, solution_str, ground_truth, difficulty):
+        parsed = self.parse_solution_fn(solution_str)
+        if parsed is None:
+            return
+        question, answer = parsed
+        inst_id = ground_truth["extra_info"]["uuid"]
+        if inst_id not in self.rollout_database:
+            self.rollout_database[inst_id] = LRUCache(
+                capacity=self.record_rollout_max_capacity)
 
-#         args = copy.deepcopy(self.args)
-#         for k, v in args["difficulty_run_args"].items():
-#             del v["fn"]
-#             for field, value in v.items():
-#                 if field == "model":
-#                     args["difficulty_run_args"][k][field] = value.model
+        args = copy.deepcopy(self.args)
+        for k, v in args["learnable_run_args"].items():
+            del v["fn"]
+            for field, value in v.items():
+                if field == "model":
+                    args["learnable_run_args"][k][field] = value.model
 
-#         self.rollout_database[inst_id][question] = {
-#             "prompt_generation_process": solution_str,
-#             "question": question,
-#             "answer": answer,
-#             "answer_type": answer_type,
-#             "difficulty": {
-#                 "meta": args,
-#                 "pass_rate": difficulty
-#             }
-#         }
+        self.rollout_database[inst_id][question] = {
+            "prompt_generation_process": solution_str,
+            "question": question,
+            "answer": answer,
+            "difficulty": {
+                "meta": args,
+                "pass_rate": difficulty
+            }
+        }
 
-#     def save_rollout_info(self):
-#         """将缓存保存为JSON文件"""
-#         data = {k: {"capacity": v.capacity, "items": list(v.get_items()), "access_order": list(
-#             v._access_order.keys())} for k, v in self.rollout_database.items()}
+    def save_rollout_info(self):
+        """将缓存保存为JSON文件"""
+        data = {k: {"capacity": v.capacity, "items": list(v.get_items()), "access_order": list(
+            v._access_order.keys())} for k, v in self.rollout_database.items()}
 
-#         with open(self.save_rollout_samples_path, "wt") as f:
-#             json.dump(data, f, ensure_ascii=False, indent="  ")
+        with open(self.save_rollout_samples_path, "wt") as f:
+            json.dump(data, f, ensure_ascii=False, indent="  ")
 
     def penalty_on(self):
         return ("Format", "Lang", "BadQ", "QSimPenalty")
@@ -3520,7 +3516,7 @@ Hack=1
                              max_concurrent_requests=MAX_CONCURRENT,
                              debug=False
                              ):
-        # self.initialize_record_rollout_samples_module()
+        self.initialize_record_rollout_samples_module()
 
         penalty = defaultdict(list)
         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
@@ -3592,13 +3588,13 @@ Hack=1
             # Hack惩罚
             cur_score += hack_penalties[i]
 
-            # # 保存Rollout信息
-            # if cur_score >= 0:
-            #     self.update_rollout_info(
-            #         solution_str=batch_solution_str[i],
-            #         ground_truth=batch_ground_truth[i],
-            #         difficulty=pass_rates[i]
-            #     )
+            # 保存Rollout信息
+            if cur_score >= 0:
+                self.update_rollout_info(
+                    solution_str=batch_solution_str[i],
+                    ground_truth=batch_ground_truth[i],
+                    difficulty=pass_rates[i]
+                )
 
             final_results.append(cur_score)
 
@@ -3640,7 +3636,7 @@ Hack=1
                 if self.split == "valid":
                     pass
 
-                # self.save_rollout_info()
+                self.save_rollout_info()
 
         return final_results
 
