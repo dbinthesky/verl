@@ -43,7 +43,8 @@ ROLLOUT_SAVE_DIR = "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/ver
 DEFAULT_MAX_CONCURRENT = {
     "self_deployment": 128,
     "dsv3": 160,
-    "qwen3_8b": 512
+    "qwen3_8b": 512,
+    "qwen3_moe_235b": 512
 }
 
 
@@ -171,16 +172,11 @@ class Agent:
     @retry(stop=stop_after_attempt(4), wait=wait_exponential(multiplier=1, min=5, max=20))
     async def chat_completion(self, client, messages, postprocess_fn) -> str | None:
         response = None
-        # FIXME: hard code
-        if self.model == "QwQ_32B":
-            suffix = "\n<think>\n"
-        else:
-            suffix = ""
         try:
             response = await client.chat.completions.create(
                 model=self.model, messages=[
                     {"role": "system", "content": 'You are a helpful and harmless assistant. You are Qwen developed by Alibaba. You should think step-by-step.'},
-                    {"role": "user", "content": messages + suffix}
+                    {"role": "user", "content": messages}
                 ], **self.request_kwargs,
             )
             return postprocess_fn(response.choices[0].message.content)
@@ -1797,7 +1793,6 @@ class Doc2QueryV2ComputeScore(object):
             metric_args=None,
             max_concurrent_requests=MAX_CONCURRENT,
             debug=False):
-
         assert metric_args is not None, f'`metric_args` missed'
         assert run_args is not None, f'`run_args` missed'
 
@@ -2313,11 +2308,11 @@ class Doc2QueryV2ComputeScoreWithQwQ32bRespondent(Doc2QueryV2ComputeScore):
     @classmethod
     def get_weak_agent(cls):
         return Agent(**{
-            "model": "QwQ_32B",
-            "base_url": "http://10.130.131.138:8000/v1",
+            "model": "	Qwen3-235B-A22B",
+            "base_url": "https://sd1kinkr54gpj4to2iqp0.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
-                "temperature": 0.6,
+                "temperature": 0.65,
                 "timeout": 600,
                 "max_tokens": 32768,
             },
@@ -2345,7 +2340,7 @@ DOC2QUERY_QWQ32B_RESPONDENT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.get_weak_agent(),
-            "repeat": 16,
+            "repeat": 8,
             "fn": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.respond_wo_context,
             "desc": 'w/o ctx'
         },
@@ -2360,10 +2355,10 @@ DOC2QUERY_QWQ32B_RESPONDENT_PARAMS = {
         "advantage": 'w_content',
         "weakness": 'w/o_content',
         "advantage_oversimplified_threshold": 8/8,
-        "weakness_oversimplified_threshold": 14/16,
+        "weakness_oversimplified_threshold": 7/8,
         "advantage_overcomplex_threshold": 1/8,
-        "weakness_overcomplex_threshold": 1/16,
-        "advantage_threshold": 3/16,
+        "weakness_overcomplex_threshold": 1/8,
+        "advantage_threshold": 2/8,
         "advantage_weight": 0.0,
         "weakness_weight": 2.0,
         "confidence_bonus_threshold": 2/8,
@@ -2557,10 +2552,10 @@ _qwen32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore
 })
 fabricate_aio_qwen32b_respondent_stage2_compute_score_train = partial(
     _qwen32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])
+    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_moe_235b"])
 fabricate_aio_qwen32b_respondent_stage2_compute_score_valid = partial(
     _qwen32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])
+    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_moe_235b"])
 
 
 # QwQ-32B Respondent
@@ -2574,10 +2569,10 @@ _qwq32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(
 })
 fabricate_aio_qwq32b_respondent_stage2_compute_score_train = partial(
     _qwq32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])
+    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_moe_235b"])
 fabricate_aio_qwq32b_respondent_stage2_compute_score_valid = partial(
     _qwq32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["self_deployment"])
+    max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_moe_235b"])
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # 问题合成
