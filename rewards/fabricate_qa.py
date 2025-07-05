@@ -3979,6 +3979,23 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             self.language,
         )
 
+#                 lang_code = gt["lang_code"]
+#                 if lang_code == "zh":
+#                     instruct = '回答以下单项选择题。只有一个正确答案。你回应的最后一行必须采用 “Answer: $LETTER” 的格式（不带引号），其中 LETTER 为选项字母之一。你必须首先通过非常详细的思考过程逐步分析。'
+#                 else:
+#                     instruct = 'Answer the following multiple choice question. There is only one correct answer. The last line of your response should be in the format "Answer: $LETTER" (without quotes), where LETTER is one of the option letters. You must first think step by step with very detail thinking process.'
+
+#                 prompt = f'{instruct}\n\n' + self.prepare_question_for_test(
+#                     question, options, lang_code=lang_code)
+
+#     def format_question(self, question, options, answer):
+#         options_str = "\n".join([f'{x}) {y}' for x, y in zip(
+#             self.MULTICHOICE_LETTER, options)])
+#         if answer is not None:
+#             return f'Question: {question}\n\nOptions:\n{options_str}\n\nAnswer: {answer}'
+#         else:
+#             return f'Question: {question}\n\nOptions:\n{options_str}'
+
     async def simulate_respondent(
             self,
             batch_data_sources,
@@ -4256,30 +4273,6 @@ doc2query_v3_default_compute_score_valid = partial(
 #             return None
 #         return ans
 
-#     async def generate_responses(self, prompts):
-#         prompts_w_ids = [{"prompt": _, "uuid": uuid.uuid4().hex}
-#                          for _ in prompts]
-#         ids = [_["uuid"] for _ in prompts_w_ids]
-
-#         random.shuffle(prompts_w_ids)
-#         # prompts_w_ids = sorted(prompts_w_ids, key=lambda x: x["prompt"])
-#         results = await self.run_tasks_in_queues(prompts_w_ids)
-
-#         post_results = {}
-#         for result in results:
-#             if result and "uuid" in result and "response" in result:
-#                 post_results[result["uuid"]] = (
-#                     result["prompt"],
-#                     self.response_postprocess(result["response"])
-#                 )
-
-#         outputs = []
-#         for prompt, _uuid in zip(prompts, ids):
-#             if _uuid in post_results:
-#                 outputs.append(post_results[_uuid])
-#             else:
-#                 outputs.append((prompt, None))
-#         return outputs
 
 #     async def get_difficulty_reward(
 #             self,
@@ -4504,13 +4497,6 @@ doc2query_v3_default_compute_score_valid = partial(
 #             return repr(self.clip_string(solution))
 #         return repr(self.format_question(norm[0], norm[1], norm[2]))
 
-#     def format_question(self, question, options, answer):
-#         options_str = "\n".join([f'{x}) {y}' for x, y in zip(
-#             self.MULTICHOICE_LETTER, options)])
-#         if answer is not None:
-#             return f'Question: {question}\n\nOptions:\n{options_str}\n\nAnswer: {answer}'
-#         else:
-#             return f'Question: {question}\n\nOptions:\n{options_str}'
 
 #     def prepare_question_for_test(self, question, options, lang_code):
 #         if lang_code == "zh":
