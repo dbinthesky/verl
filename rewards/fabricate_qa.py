@@ -43,7 +43,7 @@ DEFAULT_MAX_CONCURRENT = {
     "self_deployment": 128,
     "dsv3": 256,
     "qwen3_8b": 512,
-    "qwen3_moe_235b": 256
+    "qwen3_moe_235b": 1024
 }
 
 
