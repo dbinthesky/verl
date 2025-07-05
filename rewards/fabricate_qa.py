@@ -2900,7 +2900,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                           batch_solution_str,
                           batch_ground_truth,
                           run_args=None,
-                          max_concurrent_requests=MAX_CONCURRENT,
+                          max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"],
                           debug=False):
         assert run_args is not None
 

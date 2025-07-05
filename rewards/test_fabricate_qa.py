@@ -216,16 +216,8 @@ class TestSALT(unittest.TestCase):
 
     def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_salt_data(num=100)
-
-        task = SALTComputeScore(
-            salt_parse_solution_fn, split="valid", args=SALT_DEFAULT_PARAMS)
-
-        async def main():
-            results = await task._compute_score(
-                [None] *
-                len(batch_solution_str), batch_solution_str, batch_ground_truth, debug=True,
-            )
-        aio.run(main())
+        salt_default_compute_score_valid([None]*len(batch_solution_str),
+                                         batch_solution_str, batch_ground_truth)
 
     def test_learnable_reward(self):
         batch_solution_str, batch_ground_truth = load_salt_data(num=100)
