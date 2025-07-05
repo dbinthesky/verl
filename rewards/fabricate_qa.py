@@ -2298,8 +2298,10 @@ class Doc2QueryV2ComputeScoreWithQwQ32bRespondent(Doc2QueryV2ComputeScore):
     @classmethod
     def get_weak_agent(cls):
         return Agent(**{
-            "model": "QwQ_32B",
-            "base_url": "http://10.130.138.40:8000/v1",
+            # "model": "QwQ_32B",
+            # "base_url": "http://10.130.138.40:8000/v1",
+            "model": "Qwen3-32b",
+            "base_url": "https://sd1kl7uj54gpj4to2ite0.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.65,
