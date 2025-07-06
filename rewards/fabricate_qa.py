@@ -4305,6 +4305,8 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                     full_rewards.append(base_score)
                     continue
 
+                # TODO: 增加限制：带参考回答Majority Vote必须和答案一致
+
                 # 难度奖励
                 def calc_difficulty(scores, total_attempts):
                     return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
