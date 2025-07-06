@@ -53,7 +53,7 @@ setup_path() {
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/DeepSeek-R1-Distill-Qwen-32B-fabricate_qa_v16"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/seed_discipline_250426_4k_train.parquet"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_high_equation_rl_8k_0623_very_easy.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/seed_discipline_250426_4k_test.parquet"
 
     experiment_name="distill-qwen-32b_doc2query_v3-${YYMMDD}-${HHMMSS}"
@@ -97,8 +97,8 @@ run_training() {
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
         data.train_batch_size=32 \
-        data.max_prompt_length=6144 \
-        data.max_response_length=12288 \
+        data.max_prompt_length=8192 \
+        data.max_response_length=10240 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
