@@ -4182,12 +4182,6 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth,  max_concurrent_requests=max_concurrent_requests)
         return aio.run(main())
 
-    # def log_solution(self, solution):
-    #     norm = self.parse_solution_fn(solution)
-    #     if norm is None:
-    #         return repr(self.clip_string(solution))
-    #     return repr(self.format_question(norm[0], norm[1]))
-
     def penalty_on(self):
         return ("Format", "Lang")
 
@@ -4291,47 +4285,44 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                     weak_name: f'{np.sum(weak)}/{len(weak)} ANS={answer} {_weak}',
                 }
                 pass_rates.append(_pass_rate)
-                try:
-                    if len(weak) == 0 or len(adv) == 0:
-                        full_rewards.append(base_score)
-                        continue
 
-                    # 题目过难
-                    if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
-                        full_rewards.append(base_score)
-                        continue
-
-                    # 题目过易
-                    if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
-                        full_rewards.append(base_score)
-                        continue
-
-                    # adv 应该比 weakness 显著好
-                    if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
-                        full_rewards.append(base_score)
-                        continue
-
-                    # 难度奖励
-                    def calc_difficulty(scores, total_attempts):
-                        return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
-
-                    # 置信度奖励
-                    confidence_bonus = 0.0
-                    if np.mean(adv) >= metric_args["confidence_bonus_threshold"]:
-                        confidence_bonus = metric_args["confidence_bonus_weight"] * max(
-                            (np.mean(adv)-np.mean(weak)), 0.0)
-                    base_score = [
-                        metric_args["weakness_weight"] *
-                        calc_difficulty(weak, run_args[weak_name]["repeat"]),
-                        metric_args["advantage_weight"] *
-                        calc_difficulty(adv, run_args[adv_name]["repeat"]),
-                        confidence_bonus
-                    ]
-
+                if len(weak) == 0 or len(adv) == 0:
                     full_rewards.append(base_score)
-                except Exception as err:
-                    print(f'[ERROR] {err}')
+                    continue
+
+                # 题目过难
+                if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
                     full_rewards.append(base_score)
+                    continue
+
+                # 题目过易
+                if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
+                    full_rewards.append(base_score)
+                    continue
+
+                # adv 应该比 weakness 显著好
+                if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
+                    full_rewards.append(base_score)
+                    continue
+
+                # 难度奖励
+                def calc_difficulty(scores, total_attempts):
+                    return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
+
+                # 置信度奖励
+                confidence_bonus = 0.0
+                if np.mean(adv) >= metric_args["confidence_bonus_threshold"]:
+                    confidence_bonus = metric_args["confidence_bonus_weight"] * max(
+                        (np.mean(adv)-np.mean(weak)), 0.0)
+                base_score = [
+                    metric_args["weakness_weight"] *
+                    calc_difficulty(weak, run_args[weak_name]["repeat"]),
+                    metric_args["advantage_weight"] *
+                    calc_difficulty(adv, run_args[adv_name]["repeat"]),
+                    confidence_bonus
+                ]
+
+                full_rewards.append(base_score)
             else:
                 pass_rates.append({})
                 full_rewards.append(0.0)

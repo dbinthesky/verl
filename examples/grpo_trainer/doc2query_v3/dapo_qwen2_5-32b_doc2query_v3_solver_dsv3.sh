@@ -52,7 +52,7 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v3_distillv16_roll16_bsz32_dapo_wo_kl_coef_wo_entropy_t09_solver_dsv3_bo8_grpo_step_15"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/DeepSeek-R1-Distill-Qwen-32B-fabricate_qa_v16"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/seed_discipline_250426_4k_train.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/seed_discipline_250426_4k_test.parquet"
 
@@ -106,7 +106,7 @@ run_training() {
         actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
         actor_rollout_ref.actor.optim.weight_decay=0.1 \
         actor_rollout_ref.model.use_remove_padding=True \
-        actor_rollout_ref.actor.shuffle=False \
+        actor_rollout_ref.actor.shuffle=True \
         actor_rollout_ref.actor.ppo_mini_batch_size=32 \
         actor_rollout_ref.actor.ppo_micro_batch_size=32 \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=2 \
