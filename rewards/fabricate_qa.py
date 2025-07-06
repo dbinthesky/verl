@@ -2112,7 +2112,7 @@ class Doc2QueryV2ComputeScore(object):
                         cur_score += _score
 
             # 保存Rollout信息
-            if cur_score >= 0:
+            if cur_score > 0:
                 self.update_rollout_info(
                     solution_str=batch_solution_str[i],
                     ground_truth=batch_ground_truth[i],
@@ -3682,7 +3682,7 @@ Hack=1
             cur_score += hack_penalties[i]
 
             # 保存Rollout信息
-            if cur_score >= 0:
+            if cur_score > 0:
                 self.update_rollout_info(
                     solution_str=batch_solution_str[i],
                     ground_truth=batch_ground_truth[i],
@@ -4380,7 +4380,7 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                     cur_score += _score
 
             # 保存Rollout信息
-            if cur_score >= 0:
+            if cur_score > 0:
                 self.update_rollout_info(
                     solution_str=batch_solution_str[i],
                     ground_truth=batch_ground_truth[i],
