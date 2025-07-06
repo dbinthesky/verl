@@ -3976,7 +3976,15 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
     async def verify_batch_results(self, verify_queue, max_concurrent_requests, group_names):
         def validate_result(response):
             try:
+                response = response.strip()
+                if "\n\n" in response and len(response.split("\n\n")) > 1:
+                    response = response.split("\n\n")[0].strip()
+
                 ans_list = eval(response.strip())
+                if not isinstance(ans_list, list):
+                    raise PostprocessError(f'Parse Python List Failed')
+                if not all(_ans in self.MULTICHOICE_LETTER for _ans in ans_list):
+                    raise PostprocessError(f'Parse Python List Failed')
                 return ans_list
             except Exception as err:
                 raise PostprocessError(f'Parse Python List Failed')
@@ -4253,8 +4261,7 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
             if i in list(ans_lists.values())[0]:
                 base_score = 0.0
 
-                result = self.parse_solution_fn(
-                    batch_solution_str[i])
+                result = self.parse_solution_fn(batch_solution_str[i])
                 if result is None:
                     pass_rates.append({})
                     full_rewards.append(0.0)
