@@ -52,7 +52,7 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/fabricate_aio_distillv16_s3_roll16_bsz32_dapo_wo_kl_coef_wo_entropy_t08_solver_qwq_bo8_grpo_step_80"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v3_distillv16_roll16_bsz32_dapo_wo_kl_coef_wo_entropy_t09_solver_dsv3_bo8_grpo_step_15"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/seed_discipline_250426_4k_train.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/seed_discipline_250426_4k_test.parquet"
 
