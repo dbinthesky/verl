@@ -31,6 +31,7 @@ from fabricate_qa import (
     fabricate_aio_default_stage2_compute_score_valid,
     fabricate_aio_qwq32b_respondent_stage2_compute_score_valid,
     fabricate_aio_qwen32b_respondent_stage2_compute_score_valid,
+    fabricate_aio_qwen3_8b_respondent_compute_score_valid,
     salt_default_compute_score_valid,
     doc2query_v3_default_compute_score_valid,
     calc_qa_parse_solution_fn,
@@ -501,7 +502,10 @@ class TestFabricate(unittest.TestCase):
         for _ in range(len(batch_solution_str)):
             sources.append("doc2query_v2")
 
-        rewards = fabricate_aio_qwq32b_respondent_stage2_compute_score_valid(
+        # rewards = fabricate_aio_qwq32b_respondent_stage2_compute_score_valid(
+        #     sources, batch_solution_str, batch_ground_truth,
+        # )
+        rewards = fabricate_aio_qwen3_8b_respondent_compute_score_valid(
             sources, batch_solution_str, batch_ground_truth,
         )
 

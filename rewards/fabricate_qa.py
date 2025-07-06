@@ -2370,6 +2370,87 @@ _qwq32b_respondent_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScoreWit
     calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_QWQ32B_RESPONDENT_PARAMS)
 _qwq32b_respondent_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScoreWithQwQ32bRespondent(
     calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_QWQ32B_RESPONDENT_PARAMS)
+
+
+class Doc2QueryV2ComputeScoreWithQwen3_8BRespondent(Doc2QueryV2ComputeScore):
+    def __init__(self, parse_solution_fn, split="train", args=None):
+        super().__init__(
+            split=split, parse_solution_fn=parse_solution_fn, args=args
+        )
+
+    @classmethod
+    def get_weak_agent(cls):
+        return Agent(**{
+            "model": "",  # Qwen3-8B
+            "base_url": "https://sd14mdmqramstnm4j9mk0.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "2ce8f136-861e-4ea9-8c30-5a57078d2ed8",
+            "request_kwargs": {
+                "temperature": 0.7,
+                "timeout": 360,
+                "max_tokens": 32768,
+            },
+        })
+
+    @classmethod
+    def get_strong_agent(cls):
+        return cls.get_weak_agent()
+
+    @classmethod
+    def get_verify_agent(cls):
+        return Agent(**{
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.131.138:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.8,
+                "timeout": 360,
+                "max_tokens": 2048,
+            },
+        })
+
+
+DOC2QUERY_QWEN3_8B_RESPONDENT_PARAMS = {
+    "difficulty_run_args": {
+        "w/o_content": {
+            "model": Doc2QueryV2ComputeScoreWithQwen3_8BRespondent.get_weak_agent(),
+            "repeat": 10,
+            "fn": Doc2QueryV2ComputeScoreWithQwen3_8BRespondent.respond_wo_context,
+            "desc": 'w/o ctx'
+        },
+        "w_content": {
+            "model": Doc2QueryV2ComputeScoreWithQwen3_8BRespondent.get_strong_agent(),
+            "repeat": 8,
+            "fn": Doc2QueryV2ComputeScoreWithQwen3_8BRespondent.respond_w_context,
+            "desc": 'w ctx'
+        }
+    },
+    "difficulty_metric_args": {
+        "advantage": 'w_content',
+        "weakness": 'w/o_content',
+        "advantage_oversimplified_threshold": 8/8,
+        "weakness_oversimplified_threshold": 8/10,
+        "advantage_overcomplex_threshold": 1/8,
+        "weakness_overcomplex_threshold": 1/10,
+        "advantage_threshold": 2/8,
+        "advantage_weight": 0.0,
+        "weakness_weight": 2.0,
+        "confidence_bonus_threshold": 2/8,
+        "confidence_bonus_weight": 0.
+    },
+    "similarity_run_args":  {
+        "threshold": {
+            3: 0.5,
+            4: 1.0
+        },
+        "weight": 0.25,
+    }
+}
+
+
+_qwen3_8b_respondent_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScoreWithQwen3_8BRespondent(
+    calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_QWEN3_8B_RESPONDENT_PARAMS)
+_qwen3_8b_respondent_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScoreWithQwen3_8BRespondent(
+    calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_QWEN3_8B_RESPONDENT_PARAMS)
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query V2
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2562,9 +2643,25 @@ _qwq32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(
 })
 fabricate_aio_qwq32b_respondent_stage2_compute_score_train = partial(
     _qwq32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-    max_concurrent_requests=256)
+    max_concurrent_requests=128)
 fabricate_aio_qwq32b_respondent_stage2_compute_score_valid = partial(
     _qwq32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
+    max_concurrent_requests=128)
+
+# Qwen3-8B Respondent
+_qwen3_8b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+    "doc2query_v2": _qwen3_8b_respondent_doc2query_v2_compute_score_train,
+    "fabricate_qa": _default_fabricate_qa_compute_score_train,
+})
+_qwen3_8b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+    "doc2query_v2": _qwen3_8b_respondent_doc2query_v2_compute_score_valid,
+    "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+})
+fabricate_aio_qwen3_8b_respondent_compute_score_train = partial(
+    _qwen3_8b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
+    max_concurrent_requests=256)
+fabricate_aio_qwen3_8b_respondent_compute_score_valid = partial(
+    _qwen3_8b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
     max_concurrent_requests=256)
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
