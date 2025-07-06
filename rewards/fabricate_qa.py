@@ -3912,14 +3912,14 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
     @classmethod
     def get_weak_agent(cls):
         return Agent(**{
-            "model": "",  # Qwen3-8B
-            "base_url": "https://sd14mdmqramstnm4j9mk0.apigateway-cn-beijing.volceapi.com/v1",
-            "api_keys": "2ce8f136-861e-4ea9-8c30-5a57078d2ed8",
+            "model": "DeepSeek-V3-0324",
+            "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "EMPTY",
             "request_kwargs": {
-                "temperature": 0.7,
+                "temperature": 0.9,
                 "timeout": 360,
-                "max_tokens": 2048,
-            },
+                "max_tokens": 4096,
+            }
         })
 
     @classmethod
@@ -4055,8 +4055,6 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                 if v is not None:
                     correctness[name][index].append(v)
 
-        print(correctness)
-        raise NotImplementedError
         return correctness
 
     @classmethod
@@ -4151,7 +4149,7 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
             prompts = list(v.keys()) * run_args[name]["repeat"]
 
             tasks.append(run_args[name]["model"].run(
-                prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses Qwen3-8B]', pbar=False,
+                prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
                 postprocess_fns=[
                     partial(self.response_postprocess, debug=debug)] * len(prompts)
             ))
@@ -4197,7 +4195,7 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
         parsed = self.parse_solution_fn(solution_str)
         if parsed is None:
             return
-        question, answer = parsed
+        question, options, answer = parsed
         inst_id = ground_truth["extra_info"]["uuid"]
         if inst_id not in self.rollout_database:
             self.rollout_database[inst_id] = LRUCache(
@@ -4213,12 +4211,131 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
         self.rollout_database[inst_id][question] = {
             "prompt_generation_process": solution_str,
             "question": question,
+            "options": options,
             "answer": answer,
             "difficulty": {
                 "meta": args,
                 "pass_rate": difficulty
             }
         }
+
+    async def get_difficulty_reward(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            run_args=None,
+            metric_args=None,
+            max_concurrent_requests=MAX_CONCURRENT,
+            debug=False):
+        assert metric_args is not None, f'`metric_args` missed'
+        assert run_args is not None, f'`run_args` missed'
+
+        ans_lists = await self.simulate_respondent(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            run_args=run_args,
+            max_concurrent_requests=max_concurrent_requests,
+            debug=debug
+        )
+
+        full_rewards = []
+        pass_rates = []
+
+        for i in range(len(batch_solution_str)):
+            if i in list(ans_lists.values())[0]:
+                base_score = 0.0
+
+                result = self.parse_solution_fn(
+                    batch_solution_str[i])
+                if result is None:
+                    pass_rates.append({})
+                    full_rewards.append(0.0)
+                    continue
+
+                question, options, answer = result
+                distractors = self.get_distractor_option_letters(options)
+
+                adv_name, weak_name = metric_args["advantage"], metric_args["weakness"]
+                _adv, _weak = ans_lists[adv_name][i], ans_lists[weak_name][i]
+
+                ill_form_question = False
+                if any([len(_ans) > 1 for _ans in _adv+_weak]):
+                    ill_form_question = True
+
+                if any([_ans in distractors for _ans in _adv+_weak]):
+                    ill_form_question = True
+
+                adv, weak = [], []
+                for a in _adv:
+                    if ill_form_question:
+                        adv.append(0.0)
+                    else:
+                        if len(a) > 0 and a[0] == answer:
+                            adv.append(1.0)
+                        else:
+                            adv.append(0.0)
+
+                for w in _weak:
+                    if ill_form_question:
+                        weak.append(0.0)
+                    else:
+                        if len(w) > 0 and w[0] == answer:
+                            weak.append(1.0)
+                        else:
+                            weak.append(0.0)
+
+                _pass_rate = {
+                    adv_name: f'{np.sum(adv)}/{len(adv)} ANS={answer} {_adv}',
+                    weak_name: f'{np.sum(weak)}/{len(weak)} ANS={answer} {_weak}',
+                }
+                pass_rates.append(_pass_rate)
+                try:
+                    if len(weak) == 0 or len(adv) == 0:
+                        full_rewards.append(base_score)
+                        continue
+
+                    # 题目过难
+                    if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
+                        full_rewards.append(base_score)
+                        continue
+
+                    # 题目过易
+                    if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
+                        full_rewards.append(base_score)
+                        continue
+
+                    # adv 应该比 weakness 显著好
+                    if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
+                        full_rewards.append(base_score)
+                        continue
+
+                    # 难度奖励
+                    def calc_difficulty(scores, total_attempts):
+                        return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
+
+                    # 置信度奖励
+                    confidence_bonus = 0.0
+                    if np.mean(adv) >= metric_args["confidence_bonus_threshold"]:
+                        confidence_bonus = metric_args["confidence_bonus_weight"] * max(
+                            (np.mean(adv)-np.mean(weak)), 0.0)
+                    base_score = [
+                        metric_args["weakness_weight"] *
+                        calc_difficulty(weak, run_args[weak_name]["repeat"]),
+                        metric_args["advantage_weight"] *
+                        calc_difficulty(adv, run_args[adv_name]["repeat"]),
+                        confidence_bonus
+                    ]
+
+                    full_rewards.append(base_score)
+                except Exception as err:
+                    print(f'[ERROR] {err}')
+                    full_rewards.append(base_score)
+            else:
+                pass_rates.append({})
+                full_rewards.append(0.0)
+        return full_rewards, pass_rates
 
     async def _compute_score(self,
                              batch_data_sources,
