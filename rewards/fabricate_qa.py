@@ -3899,7 +3899,7 @@ class Doc2QueryV3QuestionAnswerFormatVerify(SALTQuestionAnswerFormatVerify):
 
 class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
     MULTICHOICE_LETTER = ('A', 'B', 'C', 'D', 'E', 'F', 'G',
-                          'H', 'I', 'J', 'K')
+                          'H', 'I', 'J', 'K', 'L')
 
     def __init__(self,
                  parse_solution_fn,
@@ -4267,6 +4267,11 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                     continue
 
                 question, options, answer = result
+                if len(options)+1 > len(cls.MULTICHOICE_LETTER)-1:
+                    pass_rates.append({})
+                    full_rewards.append(0.0)
+                    continue
+                
                 distractors = self.get_distractor_option_letters(options)
 
                 adv_name, weak_name = metric_args["advantage"], metric_args["weakness"]
