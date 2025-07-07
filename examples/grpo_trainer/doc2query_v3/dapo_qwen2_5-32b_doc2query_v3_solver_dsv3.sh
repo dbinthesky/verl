@@ -97,8 +97,8 @@ run_training() {
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
         data.train_batch_size=32 \
-        data.max_prompt_length=8192 \
-        data.max_response_length=10240 \
+        data.max_prompt_length=12288 \
+        data.max_response_length=6144 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \

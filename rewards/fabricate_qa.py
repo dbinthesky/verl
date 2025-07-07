@@ -1907,7 +1907,7 @@ class Doc2QueryV2ComputeScore(object):
             prompts = list(v.keys()) * run_args[name]["repeat"]
 
             tasks.append(run_args[name]["model"].run(
-                prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=True,
+                prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
                 postprocess_fns=[
                     partial(self.response_postprocess, debug=debug)] * len(prompts)
             ))
