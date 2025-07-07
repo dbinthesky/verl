@@ -4315,22 +4315,40 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                     full_rewards.append(base_score)
                     continue
 
-                # 题目过难
-                if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
+                # # 题目过难
+                # if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
+                #     full_rewards.append(base_score)
+                #     continue
+
+                # # 题目过易
+                # if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
+                #     full_rewards.append(base_score)
+                #     continue
+
+                # # adv 应该比 weakness 显著好
+                # if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
+                #     full_rewards.append(base_score)
+                #     continue
+
+                # 增加限制：带参考回答Majority Vote必须和答案一致
+                majority_votes = defaultdict(int)
+                for adv_attempt in _adv:
+                    if isinstance(adv_attempt, list) and len(adv_attempt) == 1:
+                        majority_votes[adv_attempt[0]] += 1
+
+                success = True
+                for k, v in majority_votes.items():
+                    if k != answer:
+                        if v >= majority_votes[answer]:
+                            success = False
+                            break
+                if not success:
                     full_rewards.append(base_score)
                     continue
 
-                # 题目过易
-                if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
-                    full_rewards.append(base_score)
-                    continue
-
-                # adv 应该比 weakness 显著好
-                if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
-                    full_rewards.append(base_score)
-                    continue
-
-                # TODO: 增加限制：带参考回答Majority Vote必须和答案一致
+                print(majority_votes, answer)
+                print(success)
+                raise NotImplementedError
 
                 # 难度奖励
                 def calc_difficulty(scores, total_attempts):
