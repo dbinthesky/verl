@@ -4131,7 +4131,6 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
             batch_solution_str,
             batch_ground_truth,
             run_args=None,
-            max_concurrent_requests=MAX_CONCURRENT,
             debug=False):
         assert run_args is not None
 
@@ -4164,6 +4163,7 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
         tasks = []
         task_names = []
 
+        raise NotImplementedError
         for name, v in prompt2index.items():
             prompts = list(v.keys()) * run_args[name]["repeat"]
 
@@ -4195,10 +4195,9 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                       batch_data_sources,
                       batch_solution_str,
                       batch_ground_truth,
-                      max_concurrent_requests=MAX_CONCURRENT,
                       ):
         async def main():
-            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth,  max_concurrent_requests=max_concurrent_requests)
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
         return aio.run(main())
 
     def penalty_on(self):
@@ -4239,7 +4238,6 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
             batch_ground_truth,
             run_args=None,
             metric_args=None,
-            max_concurrent_requests=MAX_CONCURRENT,
             debug=False):
         assert metric_args is not None, f'`metric_args` missed'
         assert run_args is not None, f'`run_args` missed'
@@ -4249,7 +4247,6 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
             batch_solution_str,
             batch_ground_truth,
             run_args=run_args,
-            max_concurrent_requests=max_concurrent_requests,
             debug=debug
         )
 
@@ -4363,7 +4360,6 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                              batch_data_sources,
                              batch_solution_str,
                              batch_ground_truth,
-                             max_concurrent_requests=MAX_CONCURRENT,
                              ):
         self.initialize_record_rollout_samples_module()
 
@@ -4386,7 +4382,6 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
             batch_ground_truth,
             run_args=self.args["difficulty_run_args"],
             metric_args=self.args["difficulty_metric_args"],
-            max_concurrent_requests=max_concurrent_requests,
         )
 
         final_results = []
@@ -4486,9 +4481,9 @@ _default_doc2query_v3_compute_score_train = Doc2QueryV3ComputeScore(
 _default_doc2query_v3_compute_score_valid = Doc2QueryV3ComputeScore(
     doc2query_v3_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
 doc2query_v3_default_compute_score_train = partial(
-    _default_doc2query_v3_compute_score_train.compute_score, max_concurrent_requests=256)
+    _default_doc2query_v3_compute_score_train.compute_score)
 doc2query_v3_default_compute_score_valid = partial(
-    _default_doc2query_v3_compute_score_valid.compute_score, max_concurrent_requests=256)
+    _default_doc2query_v3_compute_score_valid.compute_score)
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
