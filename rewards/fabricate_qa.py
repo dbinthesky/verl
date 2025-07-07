@@ -3937,6 +3937,19 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
     def get_strong_agent(cls):
         return cls.get_weak_agent()
 
+    @classmethod
+    def get_anchor_agent(cls):
+        return Agent(**{
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.131.138:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.9,
+                "timeout": 360,
+                "max_tokens": 4096,
+            },
+        })
+
     def get_penalties(self) -> Dict[str, Callable]:
         return {
             "Format": self.format.get_penalty_or_reward,
@@ -4270,8 +4283,9 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
 
                 distractors = self.get_distractor_option_letters(options)
 
-                adv_name, weak_name = metric_args["advantage"], metric_args["weakness"]
-                _adv, _weak = ans_lists[adv_name][i], ans_lists[weak_name][i]
+                adv_name, weak_name, anchor_name = metric_args[
+                    "advantage"], metric_args["weakness"], metric_args["anchor"]
+                _adv, _weak, _anch = ans_lists[adv_name][i], ans_lists[weak_name][i], ans_lists[anchor_name][i]
 
                 ill_form_question = False
                 for _ans in _adv+_weak:
@@ -4286,7 +4300,7 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                     if any([any(x in distractors for x in _ans) for _ans in _adv+_weak]):
                         ill_form_question = True
 
-                adv, weak = [], []
+                adv, weak, anchor = [], [], []
                 for a in _adv:
                     if ill_form_question:
                         adv.append(0.0)
@@ -4305,9 +4319,19 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                         else:
                             weak.append(0.0)
 
+                for c in _anch:
+                    if ill_form_question:
+                        anchor.append(0.0)
+                    else:
+                        if len(c) > 0 and c[0] == answer:
+                            anchor.append(1.0)
+                        else:
+                            anchor.append(0.0)
+
                 _pass_rate = {
                     adv_name: f'{np.sum(adv)}/{len(adv)} ANS={answer} {_adv}',
                     weak_name: f'{np.sum(weak)}/{len(weak)} ANS={answer} {_weak}',
+                    anchor_name: f'{np.sum(anchor)}/{len(anchor)} ANS={answer} {_anch}',
                 }
                 pass_rates.append(_pass_rate)
 
@@ -4315,20 +4339,25 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                     full_rewards.append(base_score)
                     continue
 
-                # # 题目过难
-                # if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
-                #     full_rewards.append(base_score)
-                #     continue
+                # 题目过难
+                if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
+                    full_rewards.append(base_score)
+                    continue
 
-                # # 题目过易
-                # if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
-                #     full_rewards.append(base_score)
-                #     continue
+                # 题目过易
+                if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
+                    full_rewards.append(base_score)
+                    continue
 
-                # # adv 应该比 weakness 显著好
-                # if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
-                #     full_rewards.append(base_score)
-                #     continue
+                # adv 应该比 weakness 显著好
+                if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
+                    full_rewards.append(base_score)
+                    continue
+
+                # adv 应该比 anchor 显著好
+                if not (np.mean(adv) > np.mean(anchor)):
+                    full_rewards.append(base_score)
+                    continue
 
                 # 增加限制：带参考回答Majority Vote必须和答案一致
                 majority_votes = defaultdict(int)
@@ -4346,27 +4375,20 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                     full_rewards.append(base_score)
                     continue
 
-                print(majority_votes, answer)
-                print(success)
-                raise NotImplementedError
-
                 # 难度奖励
                 def calc_difficulty(scores, total_attempts):
                     return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
 
-                # 置信度奖励
-                confidence_bonus = 0.0
-                if np.mean(adv) >= metric_args["confidence_bonus_threshold"]:
-                    confidence_bonus = metric_args["confidence_bonus_weight"] * max(
-                        (np.mean(adv)-np.mean(weak)), 0.0)
-                base_score = [
-                    metric_args["weakness_weight"] *
-                    calc_difficulty(weak, run_args[weak_name]["repeat"]),
-                    metric_args["advantage_weight"] *
-                    calc_difficulty(adv, run_args[adv_name]["repeat"]),
-                    confidence_bonus
-                ]
+                # 两部分构成
+                in_context_difficulty = metric_args["weakness_weight"] * \
+                    calc_difficulty(weak, run_args[weak_name]["repeat"])
+                output_context_difficulty = metric_args["anchor_weight"] * (calc_difficulty(
+                    anchor, run_args[anchor_name]["repeat"]) - calc_difficulty(adv, run_args[adv_name]["repeat"]))
 
+                base_score = [
+                    in_context_difficulty,
+                    output_context_difficulty
+                ]
                 full_rewards.append(base_score)
             else:
                 pass_rates.append({})
@@ -4479,17 +4501,26 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             "desc": 'w ctx',
             "max_concurrent_requests": 256
         },
+        "anchor": {
+            "model": Doc2QueryV3ComputeScore.get_anchor_agent(),
+            "repeat": 8,
+            "fn": Doc2QueryV3ComputeScore.respond_w_context,
+            "desc": 'anchor w ctx',
+            "max_concurrent_requests": 64
+        },
     },
     "difficulty_metric_args": {
         "advantage": 'w_content',
         "weakness": 'w/o_content',
+        "anchor": 'anchor',
         "advantage_oversimplified_threshold": 8/8,
         "weakness_oversimplified_threshold": 7/8,
         "advantage_overcomplex_threshold": 1/8,
         "weakness_overcomplex_threshold": 1/8,
         "advantage_threshold": 2/8,
         "advantage_weight": 0.0,
-        "weakness_weight": 2.0,
+        "weakness_weight": 1.0,
+        "anchor_weight": 1.5,
         "confidence_bonus_threshold": 2/8,
         "confidence_bonus_weight": 0.
     },
