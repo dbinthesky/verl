@@ -4267,11 +4267,11 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                     continue
 
                 question, options, answer = result
-                if len(options)+1 > len(cls.MULTICHOICE_LETTER)-1:
+                if len(options)+1 > len(self.MULTICHOICE_LETTER)-1:
                     pass_rates.append({})
                     full_rewards.append(0.0)
                     continue
-                
+
                 distractors = self.get_distractor_option_letters(options)
 
                 adv_name, weak_name = metric_args["advantage"], metric_args["weakness"]
