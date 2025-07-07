@@ -52,8 +52,7 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/DeepSeek-R1-Distill-Qwen-32B-fabricate_qa_v16"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v3_distillv16_roll16_bsz32_dapo_wo_kl_coef_wo_entropy_t09_solver_dsv3_bo8_grpo_step_30"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/DeepSeek-R1-Distill-Qwen-32B-fabricate_qa_v16"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_high_equation_rl_8k_0623_very_easy.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/seed_discipline_250426_4k_test.parquet"
 
@@ -97,7 +96,7 @@ run_training() {
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=32 \
+        data.train_batch_size=16 \
         data.max_prompt_length=12288 \
         data.max_response_length=6144 \
         data.filter_overlong_prompts=True \
@@ -108,8 +107,8 @@ run_training() {
         actor_rollout_ref.actor.optim.weight_decay=0.1 \
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=32 \
-        actor_rollout_ref.actor.ppo_micro_batch_size=32 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=16 \
+        actor_rollout_ref.actor.ppo_micro_batch_size=16 \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=2 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=18432 \
@@ -124,6 +123,7 @@ run_training() {
         reward_model.overlong_buffer.len=$((1024 * 4)) \
         reward_model.overlong_buffer.penalty_factor=1.0 \
         algorithm.filter_groups.enable=False \
+        actor_rollout_ref.max_num_seqs=512 \
         actor_rollout_ref.model.enable_gradient_checkpointing=True \
         actor_rollout_ref.actor.fsdp_config.param_offload=True \
         actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \

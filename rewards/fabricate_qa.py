@@ -4273,7 +4273,7 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                 _adv, _weak = ans_lists[adv_name][i], ans_lists[weak_name][i]
 
                 ill_form_question = False
-                if _ans in _adv+_weak:
+                for _ans in _adv+_weak:
                     if not isinstance(_ans, list):
                         ill_form_question = True
                         break
