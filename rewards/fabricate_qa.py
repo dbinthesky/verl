@@ -3887,7 +3887,7 @@ class Doc2QueryV3QuestionAnswerFormatVerify(SALTQuestionAnswerFormatVerify):
                 tokens = list(option.split(" "))
 
             # 答案长度过长
-            if len(tokens) > 10:
+            if len(tokens) > 20:
                 return -1.6
 
             # 疑似判断题
