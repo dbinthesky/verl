@@ -4163,12 +4163,11 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
         tasks = []
         task_names = []
 
-        raise NotImplementedError
         for name, v in prompt2index.items():
             prompts = list(v.keys()) * run_args[name]["repeat"]
 
             tasks.append(run_args[name]["model"].run(
-                prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
+                prompts, run_args[name]["max_concurrent_requests"], desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
                 postprocess_fns=[
                     partial(self.response_postprocess, debug=debug)] * len(prompts)
             ))
@@ -4452,13 +4451,15 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             "model": Doc2QueryV3ComputeScore.get_weak_agent(),
             "repeat": 8,
             "fn": Doc2QueryV3ComputeScore.respond_wo_context,
-            "desc": 'w/o ctx'
+            "desc": 'w/o ctx',
+            "max_concurrent_requests": 256
         },
         "w_content": {
             "model": Doc2QueryV3ComputeScore.get_strong_agent(),
             "repeat": 8,
             "fn": Doc2QueryV3ComputeScore.respond_w_context,
-            "desc": 'w ctx'
+            "desc": 'w ctx',
+            "max_concurrent_requests": 256
         },
     },
     "difficulty_metric_args": {
