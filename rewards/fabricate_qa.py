@@ -4051,7 +4051,7 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
 
         for example in verify_queue:
             if example.response is None:
-                correctness[example.tag][example.index].append(0.0)
+                pass
             else:
                 prompt = f'{example.prompt}'
                 response = example.response
