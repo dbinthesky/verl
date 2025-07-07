@@ -4279,7 +4279,7 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                         break
 
                 if not ill_form_question:
-                    if any([len(_ans) > 1 for _ans in _adv+_weak]):
+                    if any([(not isinstance(_ans, list)) or len(_ans) > 1 for _ans in _adv+_weak]):
                         ill_form_question = True
 
                     if any([any(x in distractors for x in _ans) for _ans in _adv+_weak]):
