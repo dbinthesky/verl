@@ -3314,20 +3314,20 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                         full_rewards.append(base_score)
                         continue
 
-                    # 固定难度降低奖励
-                    diff_reduct_bonus = 1.2
+                    # # 固定难度降低奖励
+                    # diff_reduct_bonus = 1.2
 
-                    # # 难度函数
-                    # def calc_difficulty(scores, total_attempts):
-                    #     return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
+                    # 难度函数
+                    def calc_difficulty(scores, total_attempts):
+                        return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
 
-                    # # 难度降低奖励
-                    # diff_reduct_bonus = 0.5  # 基础分
+                    # 难度降低奖励
+                    diff_reduct_bonus = 0.5  # 基础分
 
-                    # # 原问题难度 - 合成题Fewshot难度
+                    # 原问题难度 - 合成题Fewshot难度
 
-                    # diff_reduct_bonus += (calc_difficulty(weak, run_args[weak_name]["repeat"])-calc_difficulty(
-                    #     adv, run_args[adv_name]["repeat"])) * metric_args["difficulty_reduction_bonus_weight"]
+                    diff_reduct_bonus += (calc_difficulty(weak, run_args[weak_name]["repeat"])-calc_difficulty(
+                        adv, run_args[adv_name]["repeat"])) * metric_args["difficulty_reduction_bonus_weight"]
 
                     base_score = [
                         diff_reduct_bonus
@@ -3781,7 +3781,6 @@ SALT_DEFAULT_PARAMS = {
     },
     "hack_detection_run_args":  {
         "threshold": {
-            2: -0.5,
             3: -1.5,
             4: -2.0
         },
@@ -4274,11 +4273,17 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                 _adv, _weak = ans_lists[adv_name][i], ans_lists[weak_name][i]
 
                 ill_form_question = False
-                if any([len(_ans) > 1 for _ans in _adv+_weak]):
-                    ill_form_question = True
+                if _ans in _adv+_weak:
+                    if not isinstance(_ans, list):
+                        ill_form_question = True
+                        break
 
-                if any([any(x in distractors for x in _ans) for _ans in _adv+_weak]):
-                    ill_form_question = True
+                if not ill_form_question:
+                    if any([len(_ans) > 1 for _ans in _adv+_weak]):
+                        ill_form_question = True
+
+                    if any([any(x in distractors for x in _ans) for _ans in _adv+_weak]):
+                        ill_form_question = True
 
                 adv, weak = [], []
                 for a in _adv:
