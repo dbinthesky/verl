@@ -4356,6 +4356,11 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                     full_rewards.append(base_score)
                     continue
 
+                # 但是也不能好的太多
+                if np.mean(adv) - min(np.mean(weak)) > metric_args["advantage_threshold_limit"]:
+                    full_rewards.append(base_score)
+                    continue
+
                 # # adv 应该比 anchor 显著好
                 # if not (np.mean(adv) > np.mean(anchor)):
                 #     full_rewards.append(base_score)
@@ -4519,6 +4524,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
         "advantage_overcomplex_threshold": 1/8,
         "weakness_overcomplex_threshold": 1/8,
         "advantage_threshold": 2/8,
+        "advantage_threshold_limit": 6/8,
         "advantage_weight": 0.0,
         "weakness_weight": 1.0,
         "anchor_weight": 1.5,
