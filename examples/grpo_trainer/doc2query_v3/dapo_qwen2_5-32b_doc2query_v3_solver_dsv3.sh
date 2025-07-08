@@ -66,7 +66,7 @@ setup_path() {
 setup_path
 
 # ------------------------------
-# Install Package
+
 # ------------------------------
 # setup_package() {
 #     pip3 install -U torchdata
