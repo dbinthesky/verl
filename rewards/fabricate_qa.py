@@ -4152,7 +4152,8 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
             result = self.parse_solution_fn(solution_str)
             if result is not None:
                 question, options, answer = result
-                answer_map[i] = (question, (options, answer))
+                # NOTICE
+                answer_map[i] = (self.respond_wo_context(question, options, gt), (options, answer))
 
                 skip = False
                 if not debug:
@@ -4357,7 +4358,7 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                     continue
 
                 # 但是也不能好的太多
-                if np.mean(adv) - min(np.mean(weak)) > metric_args["advantage_threshold_limit"]:
+                if np.mean(adv) - np.mean(weak) > metric_args["advantage_threshold_limit"]:
                     full_rewards.append(base_score)
                     continue
 
@@ -4524,7 +4525,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
         "advantage_overcomplex_threshold": 1/8,
         "weakness_overcomplex_threshold": 1/8,
         "advantage_threshold": 2/8,
-        "advantage_threshold_limit": 6/8,
+        "advantage_threshold_limit": 5/8,
         "advantage_weight": 0.0,
         "weakness_weight": 1.0,
         "anchor_weight": 1.5,
