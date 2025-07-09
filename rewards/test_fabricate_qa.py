@@ -283,7 +283,6 @@ class TestDoc2QueryV3(unittest.TestCase):
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth, run_args=None
             )
-            # assert len(results[0]) == len(results[1])
             print(results)
         aio.run(main())
 

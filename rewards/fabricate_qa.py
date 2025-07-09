@@ -4731,27 +4731,27 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": Doc2QueryV3ComputeScore.get_anchor_agent(),
-            "repeat": 8,
-            "fn": Doc2QueryV3ComputeScore.respond_w_context,
-            "desc": 'anchor w ctx',
+            "repeat": 10,
+            "fn": Doc2QueryV3ComputeScore.respond_wo_context,
+            "desc": 'w/o ctx',
             "max_concurrent_requests": 64
         },
         "w_content": {
             "model": Doc2QueryV3ComputeScore.get_strong_agent(),
-            "repeat": 8,
+            "repeat": 4,
             "fn": Doc2QueryV3ComputeScore.respond_w_context,
             "desc": 'w ctx',
-            "max_concurrent_requests": 256
+            "max_concurrent_requests": 128
         },
     },
     "difficulty_metric_args": {
         "advantage": 'w_content',
         "weakness": 'w/o_content',
-        "advantage_oversimplified_threshold": 8/8,
-        "weakness_oversimplified_threshold": 7/8,
-        "advantage_overcomplex_threshold": 1/8,
-        "weakness_overcomplex_threshold": 1/8,
-        "advantage_threshold": 2/8,
+        "advantage_oversimplified_threshold": 4/4,
+        "weakness_oversimplified_threshold": 8/10,
+        "advantage_overcomplex_threshold": 1/4,
+        "weakness_overcomplex_threshold": 1/10,
+        "advantage_threshold": 1/4,
         "advantage_weight": 0.0,
         "weakness_weight": 1.0,
         "anchor_weight": 1.5,
