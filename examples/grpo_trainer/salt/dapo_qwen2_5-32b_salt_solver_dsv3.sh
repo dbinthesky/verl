@@ -52,8 +52,8 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/salt_distillv16_roll16_bsz32_dapo_wo_kl_coef_wo_entropy_t09_solver_dsv3_bo8_grpo_step_50"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/salt/runtu_error_collection_0706_train.parquet"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/salt_distillv16_roll16_bsz32_dapo_wo_kl_coef_wo_entropy_t09_solver_dsv3_bo8_grpo_step_185"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/salt/runtu_error_collection_0709_train.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/salt/runtu_error_collection_0703_test.parquet"
 
     experiment_name="distill-qwen-32b_salt-${YYMMDD}-${HHMMSS}"

@@ -34,7 +34,7 @@ en_mt = MosesTokenizer(lang='en')
 
 
 VERIFIER_MODEL_NAME = "qwen25_7B_fabricate_qa_criteria_judge_ehance_0518"
-VERIFIER_MODEL_PATH = "http://10.130.133.200:8000/v1"
+VERIFIER_MODEL_PATH = "http://10.130.142.154:8000/v1"
 DEFAULT_PARSE_FAILURE_REWARD = -2.
 MAX_CONCURRENT = 128
 ROLLOUT_SAVE_DIR = "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
@@ -1557,7 +1557,7 @@ class Doc2QueryV2ComputeScore(object):
     def get_verify_agent(cls):
         return Agent(**{
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.131.138:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.8,
@@ -2228,7 +2228,7 @@ class Doc2QueryV2ComputeScoreWithQwen32bRespondent(Doc2QueryV2ComputeScore):
     def get_weak_agent(cls):
         return Agent(**{
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.131.138:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.8,
@@ -2299,10 +2299,8 @@ class Doc2QueryV2ComputeScoreWithQwQ32bRespondent(Doc2QueryV2ComputeScore):
     @classmethod
     def get_weak_agent(cls):
         return Agent(**{
-            "model": "QwQ_32B",
-            "base_url": "http://10.130.138.40:8000/v1",
-            # "model": "Qwen3-32b",
-            # "base_url": "https://sd1kl7uj54gpj4to2ite0.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "distill_qwen25_7B",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.65,
@@ -2319,7 +2317,7 @@ class Doc2QueryV2ComputeScoreWithQwQ32bRespondent(Doc2QueryV2ComputeScore):
     def get_verify_agent(cls):
         return Agent(**{
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.131.138:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.8,
@@ -2399,7 +2397,7 @@ class Doc2QueryV2ComputeScoreWithQwen3_8BRespondent(Doc2QueryV2ComputeScore):
     def get_verify_agent(cls):
         return Agent(**{
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.131.138:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.8,
@@ -2479,7 +2477,7 @@ class FabricateQAComputeScore(Doc2QueryV2ComputeScore):
     def get_weak_agent(cls):
         return Agent(**{
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.131.138:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.9,
@@ -2946,7 +2944,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
     def get_verify_agent(cls):
         return Agent(**{
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.131.138:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.8,
@@ -3941,7 +3939,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
     def get_anchor_agent(cls):
         return Agent(**{
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.131.138:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.9,
@@ -4153,7 +4151,8 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
             if result is not None:
                 question, options, answer = result
                 # NOTICE
-                answer_map[i] = (self.respond_wo_context(question, options, gt), (options, answer))
+                answer_map[i] = (self.respond_wo_context(
+                    question, options, gt), (options, answer))
 
                 skip = False
                 if not debug:
@@ -4192,7 +4191,8 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
             for (p, r) in results:
                 for index in prompt2index[name][p]:
                     verify_queue.append(VerifyInfo(
-                        index=index, tag=name, prompt=answer_map[index][0], response=r, answer=answer_map[index][1]
+                        index=index, tag=name, prompt=answer_map[index][
+                            0], response=r, answer=answer_map[index][1]
                     ))
 
         correctness = await self.verify_batch_results(
@@ -4357,10 +4357,10 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                     full_rewards.append(base_score)
                     continue
 
-                # 但是也不能好的太多
-                if np.mean(adv) - np.mean(weak) > metric_args["advantage_threshold_limit"]:
-                    full_rewards.append(base_score)
-                    continue
+                # # 但是也不能好的太多
+                # if np.mean(adv) - np.mean(weak) > metric_args["advantage_threshold_limit"]:
+                #     full_rewards.append(base_score)
+                #     continue
 
                 # # adv 应该比 anchor 显著好
                 # if not (np.mean(adv) > np.mean(anchor)):
