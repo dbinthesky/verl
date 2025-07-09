@@ -4624,6 +4624,13 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
             metric_args=self.args["difficulty_metric_args"],
         )
 
+        bad_q_penalties = await self.get_bad_question_penalty(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            max_concurrent_requests=32
+        )
+
         final_results = []
         for i in range(len(batch_solution_str)):
             scores = copy.deepcopy(penalty[i])
@@ -4631,6 +4638,9 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
             penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
                                        s in zip(penalties, scores)])
 
+            scores.append(bad_q_penalties[i])
+
+            # 难度奖励
             _difficulty = difficulty_rewards[i]
             _difficulty_score = np.sum(_difficulty) if isinstance(
                 _difficulty, list) else _difficulty
@@ -4670,7 +4680,7 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                     f"【Solution】({source})`{self.log_solution(batch_solution_str[i])}`")
 
                 print(
-                    f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|{penalty_log_str}\n')
+                    f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|BadQ={bad_q_penalties[i]}|{penalty_log_str}\n')
 
                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
 
