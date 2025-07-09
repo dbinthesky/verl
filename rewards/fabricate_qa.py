@@ -4284,8 +4284,8 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
 
                 adv_name, weak_name = metric_args[
                     "advantage"], metric_args["weakness"]
-                anchor_name = metric_args["anchor"]
-                _adv, _weak, _anch = ans_lists[adv_name][i], ans_lists[weak_name][i], ans_lists[anchor_name][i]
+                # anchor_name = metric_args["anchor"]
+                # _adv, _weak, _anch = ans_lists[adv_name][i], ans_lists[weak_name][i], ans_lists[anchor_name][i]
                 _adv, _weak = ans_lists[adv_name][i], ans_lists[weak_name][i]
 
                 ill_form_question = False
@@ -4322,19 +4322,19 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                         else:
                             weak.append(0.0)
 
-                for c in _anch:
-                    if ill_form_question:
-                        anchor.append(0.0)
-                    else:
-                        if len(c) > 0 and c[0] == answer:
-                            anchor.append(1.0)
-                        else:
-                            anchor.append(0.0)
+                # for c in _anch:
+                #     if ill_form_question:
+                #         anchor.append(0.0)
+                #     else:
+                #         if len(c) > 0 and c[0] == answer:
+                #             anchor.append(1.0)
+                #         else:
+                #             anchor.append(0.0)
 
                 _pass_rate = {
                     adv_name: f'{np.sum(adv)}/{len(adv)} ANS={answer} {_adv}',
                     weak_name: f'{np.sum(weak)}/{len(weak)} ANS={answer} {_weak}',
-                    anchor_name: f'{np.sum(anchor)}/{len(anchor)} ANS={answer} {_anch}',
+                    # anchor_name: f'{np.sum(anchor)}/{len(anchor)} ANS={answer} {_anch}',
                 }
                 pass_rates.append(_pass_rate)
 
@@ -4390,12 +4390,12 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                 # 两部分构成
                 in_context_difficulty = metric_args["weakness_weight"] * \
                     calc_difficulty(weak, run_args[weak_name]["repeat"])
-                output_context_difficulty = metric_args["anchor_weight"] * (calc_difficulty(
-                    anchor, run_args[anchor_name]["repeat"]) - calc_difficulty(adv, run_args[adv_name]["repeat"]))
+                # output_context_difficulty = metric_args["anchor_weight"] * (calc_difficulty(
+                #     anchor, run_args[anchor_name]["repeat"]) - calc_difficulty(adv, run_args[adv_name]["repeat"]))
 
                 base_score = [
                     in_context_difficulty,
-                    output_context_difficulty
+                    # output_context_difficulty
                 ]
                 full_rewards.append(base_score)
             else:
@@ -4492,56 +4492,14 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
         return final_results
 
 
-DOC2QUERY_V3_DEFAULT_PARAMS = {
-    "difficulty_run_args": {
-        "w/o_content": {
-            "model": Doc2QueryV3ComputeScore.get_weak_agent(),
-            "repeat": 8,
-            "fn": Doc2QueryV3ComputeScore.respond_wo_context,
-            "desc": 'w/o ctx',
-            "max_concurrent_requests": 256
-        },
-        "w_content": {
-            "model": Doc2QueryV3ComputeScore.get_strong_agent(),
-            "repeat": 8,
-            "fn": Doc2QueryV3ComputeScore.respond_w_context,
-            "desc": 'w ctx',
-            "max_concurrent_requests": 256
-        },
-        "anchor": {
-            "model": Doc2QueryV3ComputeScore.get_anchor_agent(),
-            "repeat": 8,
-            "fn": Doc2QueryV3ComputeScore.respond_w_context,
-            "desc": 'anchor w ctx',
-            "max_concurrent_requests": 64
-        },
-    },
-    "difficulty_metric_args": {
-        "advantage": 'w_content',
-        "weakness": 'w/o_content',
-        "anchor": 'anchor',
-        "advantage_oversimplified_threshold": 8/8,
-        "weakness_oversimplified_threshold": 7/8,
-        "advantage_overcomplex_threshold": 1/8,
-        "weakness_overcomplex_threshold": 1/8,
-        "advantage_threshold": 2/8,
-        "advantage_threshold_limit": 5/8,
-        "advantage_weight": 0.0,
-        "weakness_weight": 1.0,
-        "anchor_weight": 1.5,
-        "confidence_bonus_threshold": 2/8,
-        "confidence_bonus_weight": 0.
-    },
-}
-
 # DOC2QUERY_V3_DEFAULT_PARAMS = {
 #     "difficulty_run_args": {
 #         "w/o_content": {
-#             "model": Doc2QueryV3ComputeScore.get_anchor_agent(),
+#             "model": Doc2QueryV3ComputeScore.get_weak_agent(),
 #             "repeat": 8,
-#             "fn": Doc2QueryV3ComputeScore.respond_w_context,
-#             "desc": 'anchor w ctx',
-#             "max_concurrent_requests": 64
+#             "fn": Doc2QueryV3ComputeScore.respond_wo_context,
+#             "desc": 'w/o ctx',
+#             "max_concurrent_requests": 256
 #         },
 #         "w_content": {
 #             "model": Doc2QueryV3ComputeScore.get_strong_agent(),
@@ -4550,15 +4508,24 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
 #             "desc": 'w ctx',
 #             "max_concurrent_requests": 256
 #         },
+#         "anchor": {
+#             "model": Doc2QueryV3ComputeScore.get_anchor_agent(),
+#             "repeat": 8,
+#             "fn": Doc2QueryV3ComputeScore.respond_w_context,
+#             "desc": 'anchor w ctx',
+#             "max_concurrent_requests": 64
+#         },
 #     },
 #     "difficulty_metric_args": {
 #         "advantage": 'w_content',
 #         "weakness": 'w/o_content',
+#         "anchor": 'anchor',
 #         "advantage_oversimplified_threshold": 8/8,
 #         "weakness_oversimplified_threshold": 7/8,
 #         "advantage_overcomplex_threshold": 1/8,
 #         "weakness_overcomplex_threshold": 1/8,
 #         "advantage_threshold": 2/8,
+#         "advantage_threshold_limit": 5/8,
 #         "advantage_weight": 0.0,
 #         "weakness_weight": 1.0,
 #         "anchor_weight": 1.5,
@@ -4566,6 +4533,39 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
 #         "confidence_bonus_weight": 0.
 #     },
 # }
+
+DOC2QUERY_V3_DEFAULT_PARAMS = {
+    "difficulty_run_args": {
+        "w/o_content": {
+            "model": Doc2QueryV3ComputeScore.get_anchor_agent(),
+            "repeat": 8,
+            "fn": Doc2QueryV3ComputeScore.respond_w_context,
+            "desc": 'anchor w ctx',
+            "max_concurrent_requests": 64
+        },
+        "w_content": {
+            "model": Doc2QueryV3ComputeScore.get_strong_agent(),
+            "repeat": 8,
+            "fn": Doc2QueryV3ComputeScore.respond_w_context,
+            "desc": 'w ctx',
+            "max_concurrent_requests": 256
+        },
+    },
+    "difficulty_metric_args": {
+        "advantage": 'w_content',
+        "weakness": 'w/o_content',
+        "advantage_oversimplified_threshold": 8/8,
+        "weakness_oversimplified_threshold": 7/8,
+        "advantage_overcomplex_threshold": 1/8,
+        "weakness_overcomplex_threshold": 1/8,
+        "advantage_threshold": 2/8,
+        "advantage_weight": 0.0,
+        "weakness_weight": 1.0,
+        "anchor_weight": 1.5,
+        "confidence_bonus_threshold": 2/8,
+        "confidence_bonus_weight": 0.
+    },
+}
 
 
 _default_doc2query_v3_compute_score_train = Doc2QueryV3ComputeScore(
