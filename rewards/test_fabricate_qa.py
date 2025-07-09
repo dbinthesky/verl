@@ -22,9 +22,11 @@ from fabricate_qa import (
     SALTBadQuestionDetection,
     QuestionSimilarityPenalty,
     Doc2QueryV2ComputeScore,
+    Doc2QueryV3ComputeScore,
     SALTComputeScore,
     DOC2QUERY_DEFAULT_PARAMS,
     SALT_DEFAULT_PARAMS,
+    DOC2QUERY_V3_DEFAULT_PARAMS,
     doc2query_v2_default_stage1_compute_score_valid,
     fabricate_qa_default_stage1_compute_score_valid,
     fabricate_aio_default_stage1_compute_score_valid,
@@ -271,6 +273,19 @@ class TestDoc2QueryV3(unittest.TestCase):
         print(doc2query_v3_default_compute_score_valid(
             [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth,
         ))
+
+    def test_get_bad_question_penalty(self):
+        batch_solution_str, batch_ground_truth = load_doc2query_v3_data(num=32)
+        task = Doc2QueryV3ComputeScore(
+            doc2query_v3_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
+        async def main():
+            results = await task.get_bad_question_penalty(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth, run_args=None
+            )
+            # assert len(results[0]) == len(results[1])
+            print(results)
+        aio.run(main())
 
 
 class TestFabricate(unittest.TestCase):
