@@ -1203,7 +1203,7 @@ class Doc2QueryV2ComputeScore(object):
             else:
                 return 0.0
 
-    async def verify_results(self, verify_queue, batch_solution_str, max_concurrent_requests, split_names):
+    async def verify_batch_results(self, verify_queue, batch_solution_str, max_concurrent_requests, group_names):
         def validate_result(response):
             s = response
             try:
@@ -1290,32 +1290,33 @@ class Doc2QueryV2ComputeScore(object):
 
 #### **输出：**
 """
-        correctness = {name: defaultdict(list) for name in split_names}
+        correctness = {name: defaultdict(list) for name in group_names}
 
         verify_mapper = defaultdict(list)
 
         for example in verify_queue:
-            index, ans, name, prompt, conclusion = example
-            question, answer, answer_type = ans
+            conclusion = example.response
+            answer, answer_type = example.answer
 
             # 基于规则解析答案
             if conclusion is None:
-                correctness[name][index].append(0.0)
+                correctness[example.tag][example.index].append(0.0)
             else:
                 correct = self.verify_single_response(
                     conclusion, answer, answer_type)
 
                 if correct > 0.0:
-                    correctness[name][index].append(correct)
+                    correctness[example.tag][example.index].append(correct)
                 else:
                     instruct = f'仔细一步步思考，并回答下面的问题。你回应的最后一行必须采用 “... 最终答案是 $ANSWER 的格式（不带引号），其中 $ANSWER 的格式要求需要满足下面的说明。\n\n{self.get_answer_format(answer_type, "zh")}'
-                    prompt = f'{instruct}\n\n{question}'
+                    prompt = f'{instruct}\n\n{example.prompt}'
                     eval_prompt = verify_prompt + "\n\n" + verify_template.format(
                         question=prompt,
                         answer=answer,
                         conclusion=conclusion
                     )
-                    verify_mapper[eval_prompt].append((index, name))
+                    verify_mapper[eval_prompt].append(
+                        (example.index, example.tag))
 
         _results = await self.get_verify_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.get_verify_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
 
@@ -1503,13 +1504,18 @@ class Doc2QueryV2ComputeScore(object):
         for name, results in zip(task_names, respond_questions):
             for (p, r) in results:
                 for index in prompt2index[name][p]:
-                    verify_queue.append((index, answer_map[index], name, p, r))
+                    verify_queue.append(VerifyInfo(
+                        index=index,
+                        tag=name,
+                        prompt=answer_map[index][0],
+                        response=r,
+                        answer=(answer_map[index][1], answer_map[index][2])))
 
-        correctness = await self.verify_results(
+        correctness = await self.verify_batch_results(
             verify_queue=verify_queue,
             batch_solution_str=batch_solution_str,
             max_concurrent_requests=64,
-            split_names=task_names
+            group_names=task_names
         )
         return correctness
 
@@ -1882,6 +1888,16 @@ class Doc2QueryV2ComputeScoreWithQwQ32bRespondent(Doc2QueryV2ComputeScore):
 
     @classmethod
     def get_weak_agent(cls):
+        # return Agent(**{
+        #     "model": "DeepSeek-V3-0324",
+        #     "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
+        #     "api_keys": "EMPTY",
+        #     "request_kwargs": {
+        #         "temperature": 0.9,
+        #         "timeout": 360,
+        #         "max_tokens": 4096,
+        #     }
+        # })
         return Agent(**{
             "model": "distill_qwen25_7B",
             "base_url": "http://10.130.142.154:8000/v1",

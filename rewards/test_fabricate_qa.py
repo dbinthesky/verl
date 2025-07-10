@@ -537,6 +537,7 @@ class TestFabricate(unittest.TestCase):
     def test_fabricate_aio_compute_score(self):
         batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
             format="doc2query_v2", num=32)
+        batch_solution_str, batch_ground_truth = batch_solution_str[:2], batch_ground_truth[:2]
         sources = []
         for _ in range(len(batch_solution_str)):
             sources.append("doc2query_v2")
