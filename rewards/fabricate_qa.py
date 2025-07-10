@@ -254,66 +254,6 @@ def postprocess_solution(solution_str):
     return solution_str
 
 
-async def rm_request_with_retry(urls, data, max_retries=3, retry_delay=5, suffix="/reward"):
-    retries = 0
-    while retries < max_retries:
-        try:
-            url = random.choice(urls)
-            async with aiohttp.ClientSession() as session:
-                async with session.post(f'{url}{suffix}', json=data, timeout=aiohttp.ClientTimeout(total=3000)) as response:
-                    response.raise_for_status()
-                    return await response.json()
-        except (aiohttp.ClientError, aiohttp.ClientResponseError) as e:
-            print(f"请求(数据总量={len(data)})失败，错误信息: {e}，重试第 {retries + 1} 次...")
-            retries += 1
-            if retries < max_retries:
-                await asyncio.sleep(retry_delay)
-    print(f"达到最大重试次数，请求失败。")
-    return None
-
-
-async def compute_rm_score(
-        urls: List[str],
-        batch_solution_str,
-        batch_ground_truth,
-        postprocess_solution_fn,
-        parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD,
-        judge_prompt_key="ground_truth",
-        desc=""
-):
-    input_datas = []
-    rewards = {}
-
-    for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-        solution_str = postprocess_solution_fn(solution_str)
-        if solution_str is None:
-            rewards[i] = parse_result_failure_score
-            continue
-        if ground_truth is None:
-            rewards[i] = parse_result_failure_score
-            continue
-
-        input_data = {
-            "prompt": ground_truth[judge_prompt_key], "response": solution_str, "id": i
-        }
-        input_datas.append(input_data)
-
-    if len(input_datas) > 0:
-        for batch in tqdm_nonasync(batchify(input_datas, n=32), desc=f'[RM{desc}][{urls}] batchify inference (batch=32)'):
-            output_datas = await rm_request_with_retry(urls, batch)
-            for _ in output_datas['reward']:
-                _id = int(_["id"])
-                rewards[_id] = _["rm_score"]
-
-    final_results = []
-    for i in range(len(batch_solution_str)):
-        if i in rewards:
-            final_results.append(rewards[i])
-        else:
-            final_results.append(0.)
-    return final_results
-
-
 class PenaltyOrReward(object):
     @abstractmethod
     def get_penalty_or_reward(self, solution_str, ground_truth, lang_code=None):
@@ -2112,7 +2052,7 @@ class Doc2QueryV2ComputeScore(object):
                         cur_score += _score
 
             # 保存Rollout信息
-            if cur_score > 0 and self.split == "train": 
+            if cur_score > 0 and self.split == "train":
                 self.update_rollout_info(
                     solution_str=batch_solution_str[i],
                     ground_truth=batch_ground_truth[i],
@@ -3997,7 +3937,8 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                         ans_list = eval(response.strip())
                     else:
                         if "**输出：**" in response:
-                            response = response[response.index("**输出：**")+len("**输出：**"):].strip()
+                            response = response[response.index(
+                                "**输出：**")+len("**输出：**"):].strip()
                         ans_list = eval(response.strip())
 
                 if not isinstance(ans_list, list):
@@ -4289,7 +4230,8 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
             fabricate = self.parse_solution_fn(sol)
             if fabricate is not None:
-                fabricates.append(self.format_question(fabricate[0], fabricate[1], None))
+                fabricates.append(self.format_question(
+                    fabricate[0], fabricate[1], None))
                 indices.append(i)
             else:
                 continue
