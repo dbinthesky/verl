@@ -264,144 +264,6 @@ class PenaltyOrReward(object):
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-# ------------------------------------------------------------------------------------------------------------------------------------------------------
-# Criteria构造
-# ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-def criteria_parse_solution_fn(solution_str: str):
-    solution_str = postprocess_solution(solution_str)
-    try:
-        thought = re.findall(r'think>.*</think>',
-                             solution_str, re.DOTALL)[0]
-    except Exception as err:
-        return None
-
-    conclusion = solution_str.replace(thought, "")
-    try:
-        conclusion = conclusion[conclusion.index(
-            "[CRITERIA]"):conclusion.index("[/CRITERIA]")+len("[/CRITERIA]")].strip()
-        scores = re.findall(r'\[SCORE=(\d+)\]', conclusion)
-        if len(scores) > 20:
-            return None
-        if not all(int(_) > 0 and int(_) <= 3 for _ in scores):
-            return None
-    except Exception as err:
-        return None
-    return conclusion
-
-
-def get_total_score(criteria):
-    scores = re.findall(r'SCORE=(\d+)', criteria)
-    scores = [int(_) for _ in scores]
-    return sum(scores)
-
-
-async def criteria_get_score(questions, criteria, max_concurrent_requests=32):
-    def postprocess(s, max_score):
-        try:
-            s = s.strip()
-            conclusion = s.split("\n")[-1]
-            conclusion = conclusion[conclusion.index(
-                "最终得分：")+len("最终得分："):].strip()
-            score = int(conclusion)
-            if score > max_score:
-                raise PostprocessError(
-                    f'score exceeds maximum value. ({score}>{max_score})')
-            return score / max_score
-        except Exception as err:
-            raise PostprocessError(f'{err}')
-
-    TEMPLATE = '# 目标概述 \n给定一道题目，和一个要点评分表，你需要严格按照要点评分表的内容和分值，逐项对问题进行打分，并在最后给出最终分数。\n\n## 回答格式要求\n1. 你应当逐项按照列点的方式，对问题和评价项目进行比较，计算单个项目的分值，注意分值应当是整数，避免小数的出现，例如0.5\n2. 包含计算总分的计算步骤\n3. 在回答的最后部分，必须以“最终得分：***”这样的格式，给出总分\n\n\n下面提供你具体的范例，你需要参考范例进行回答\n\n\n[题目]\nFor a certain site, cement-mixed columns are planned to be used for ground reinforcement. It is known that the foundation depth is 2.0m, the diameter of the mixing column is 600mm, the column length is 14.0m, and the column strength is $f_{\\\\mathrm{cu}}=0.8\\\\, \\\\mathrm{MPa}$. The column strength reduction factor is taken as $\\\\eta=0.3$, the inter-column soil bearing capacity reduction factor is $\\\\beta=0.6$, and the column end soil bearing capacity reduction factor is $\\\\alpha=0.4$. The center-to-center spacing of the mixing columns is 1.0m, arranged in an equilateral triangular pattern. Which of the following options is appropriate for the characteristic value of the bearing capacity of the composite foundation with mixed columns?\n\n[打分表]\n[CRITERIA]\n- [SCORE=2] 题目是否属于选择题型\n- [SCORE=2] 题目是否涉及土木工程领域的地基处理\n- [SCORE=2] 题目是否要求计算复合地基的承载力\n- [SCORE=2] 题目是否提供所有必要参数（如桩长、桩径、强度、折减系数等）\n- [SCORE=2] 题目是否涉及多个折减系数的综合应用\n- [SCORE=2] 题目是否要求考虑桩间距和排列方式的影响\n- [SCORE=2] 题目是否需要综合运用公式进行数值计算\n- [SCORE=1] 题目是否涉及桩端土和桩间土的承载力计算\n- [SCORE=1] 题目是否要求选择一个合适的承载力值\n- [SCORE=1] 题目是否包含清晰的题干描述\n- [SCORE=1] 题目是否设置合理的选项\n- [SCORE=1] 题目是否考查记忆和理解能力\n- [SCORE=1] 题目是否考查应用和分析能力\n- [SCORE=1] 题目是否考查创造能力\n[/CRITERIA]\n\n\n[输出]\n### 评分表逐项打分（列点格式）  \n1. **题目是否属于选择题型**  \n   - 得分：2  \n   - 说明：题目以“Which of the following options is appropriate...”结尾，明确要求从选项中选择答案，属于选择题型。  \n\n2. **题目是否涉及土木工程领域的地基处理**  \n   - 得分：2  \n   - 说明：题目描述水泥搅拌桩（cement-mixed columns）用于地基加固（ground reinforcement），属于土木工程地基处理范畴。  \n\n3. **题目是否要求计算复合地基的承载力**  \n   - 得分：2  \n   - 说明：问题目标为求解“复合地基承载力特征值”（characteristic value of the bearing capacity of the composite foundation），需进行承载力计算。  \n\n4. **题目是否提供所有必要参数**  \n   - 得分：2  \n   - 说明：题目完整提供了桩长（14.0m）、桩径（600mm）、桩体强度（\\(f_{\\mathrm{cu}}=0.8\\,\\mathrm{MPa}\\)）、折减系数（\\(\\eta=0.3, \\beta=0.6, \\alpha=0.4\\)）、桩间距（1.0m）及排列方式（等边三角形），无参数缺失。  \n\n5. **题目是否涉及多个折减系数的综合应用**  \n   - 得分：2  \n   - 说明：涉及桩体强度折减系数 \\(\\eta\\)、桩间土承载力折减系数 \\(\\beta\\)、桩端土承载力折减系数 \\(\\alpha\\)，需在公式中综合考虑各系数的作用。  \n\n6. **题目是否要求考虑桩间距和排列方式的影响**  \n   - 得分：2  \n   - 说明：桩间距（1.0m）和等边三角形排列用于计算置换率 \\(m\\)（即桩的面积占总地基面积的比例），直接影响复合地基承载力公式中的权重分配。  \n\n7. **题目是否需要综合运用公式进行数值计算**  \n   - 得分：2  \n   - 说明：需应用复合地基承载力公式（如 \\(f_{\\mathrm{spk}} = m \\cdot \\eta \\cdot f_{\\mathrm{cu}} + \\beta(1-m) \\cdot f_{\\mathrm{sk}}\\)，其中 \\(f_{\\mathrm{sk}}\\) 可能涉及桩端土承载力），并结合几何参数计算置换率，属于数值计算类问题。  \n\n8. **题目是否涉及桩端土和桩间土的承载力计算**  \n   - 得分：1  \n   - 说明：桩间土承载力通过 \\(\\beta(1-m) \\cdot f_{\\mathrm{sk}}\\) 体现，桩端土承载力通过桩体承载力公式中的桩端阻力项（需考虑 \\(\\alpha\\) 折减）间接涉及，考查两者的协同作用。  \n\n9. **题目是否要求选择一个合适的承载力值**  \n   - 得分：1  \n   - 说明：题目要求从选项中选择“合适的”承载力特征值，属于结果选择类问题，需结合计算结果匹配选项。  \n\n10. **题目是否包含清晰的题干描述**  \n    - 得分：1  \n    - 说明：题干明确列出所有参数、工程背景（地基加固）及问题目标，无歧义或模糊表述，信息完整。  \n\n11. **题目是否设置合理的选项**  \n    - 得分：1  \n    - 说明：虽然题目未列出具体选项，但作为标准选择题，默认选项设置合理（如涵盖计算可能的误差范围或常见错误值）。  \n\n12. **题目是否考查记忆和理解能力**  \n    - 得分：1  \n    - 说明：需记忆复合地基承载力公式的结构及各参数定义（如折减系数的物理意义），考查对基本概念的理解。  \n\n13. **题目是否考查应用和分析能力**  \n    - 得分：1  \n    - 说明：需将公式应用于具体参数，分析桩间距和排列方式对置换率的影响，以及折减系数如何调整桩体和土体的承载力贡献。  \n\n14. **题目是否考查创造能力**  \n    - 得分：0  \n    - 说明：问题为公式直接应用，无需创新方法或创造性思维，仅需按步骤计算，故不涉及创造能力考查。  \n\n\n### 最终分数计算  \n利用乘法运算（几个相同的数相加用乘法表示更简便）将所有得分相加：\n$\n\\begin{align*}\n\\begin{align*}\n&2 + 2 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 0\\\\\n=&2\\times7 + 1\\times6+0\\\\\n=&14 + 6+0\\\\\n=&20+0\\\\\n=&20\n\\end{align*}\n\n最终得分：20\n\n\n\n[题目]\nUsing a magnetoelectric induction speed sensor to measure vibration at $f = 50 \\\\, \\\\text{Hz}$, the amplitude error should be less than $5\\\\%$, and the damping ratio is $\\\\xi = 0.6$. What should be the natural frequency of the sensor?\n\n[打分表]\n[CRITERIA]\n- [SCORE=2] 题目是否属于计算题类型，需应用特定公式进行计算\n- [SCORE=2] 题目是否涉及机械工程或物理学领域，特别是振动分析\n- [SCORE=2] 题目是否考察传感器的频率响应特性\n- [SCORE=2] 是否涉及阻尼比（ξ）的相关计算或概念理解\n- [SCORE=2] 是否需要在给定误差范围内计算参数\n- [SCORE=2] 题干描述是否清晰明确，提供了足够的已知条件\n- [SCORE=2] 问题是否明确，指向一个具体的计算目标\n- [SCORE=2] 是否考查学生对模态分析或机械振动的理解\n- [SCORE=2] 是否涉及传感器测量原理的基本理解\n- [SCORE=1] 题目是否需要应用特定公式或方程进行计算\n- [SCORE=1] 是否需要进行误差分析或计算误差范围\n- [SCORE=1] 是否涉及传感器的频率响应曲线或特性\n- [SCORE=1] 是否考查传感器的选择与应用原则\n- [SCORE=1] 是否需要考虑传感器的动态特性\n- [SCORE=1] 是否涉及振动测量中的基本概念或术语\n- [SCORE=1] 是否需要进行单位换算或量纲分析\n- [SCORE=1] 题目是否提供了明确的技术参数或性能指标\n- [SCORE=1] 是否涉及传感器测量误差的评估方法\n- [SCORE=1] 是否需要综合运用传感器与振动分析的知识点\n- [SCORE=1] 是否考查传感器在动态测量中的应用能力\n- [SCORE=1] 是否涉及传感器的选择与应用原则\n- [SCORE=1] 是否需要考虑传感器的安装与使用注意事项\n- [SCORE=1] 是否涉及传感器测量中的噪声与干扰问题\n[/CRITERIA]\n\n\n[输出]\n### 评分表逐项打分（列点格式）  \n1. **题目是否属于计算题类型，需应用特定公式进行计算**  \n   - 得分：2  \n   - 说明：题目要求根据给定的振动频率、阻尼比和振幅误差计算传感器的固有频率，需应用频率响应特性公式，属于计算题类型。  \n\n2. **题目是否涉及机械工程或物理学领域，特别是振动分析**  \n   - 得分：2  \n   - 说明：磁电感应速度传感器用于振动测量，涉及机械工程中的振动分析领域。  \n\n3. **题目是否考察传感器的频率响应特性**  \n   - 得分：2  \n   - 说明：题目中明确提到振动频率 \\(f = 50 \\, \\\\text{Hz}\\)、阻尼比 \\(\\xi = 0.6\\) 和振幅误差要求，直接关联传感器的频率响应特性分析。  \n\n4. **是否涉及阻尼比（ξ）的相关计算或概念理解**  \n   - 得分：2  \n   - 说明：阻尼比 \\(\\xi = 0.6\\) 是频率响应公式中的关键参数，需用于计算固有频率与振幅误差的关系。  \n\n5. **是否需要在给定误差范围内计算参数**  \n   - 得分：2  \n   - 说明：题目要求振幅误差小于 \\(5\\%\\)，需通过误差约束条件反推传感器的固有频率。  \n\n6. **题干描述是否清晰明确，提供了足够的已知条件**  \n   - 得分：2  \n   - 说明：题干明确给出振动频率、阻尼比、误差要求及目标参数（固有频率），信息完整无歧义。  \n\n7. **问题是否明确，指向一个具体的计算目标**  \n   - 得分：2  \n   - 说明：问题直接询问“传感器的固有频率应为多少”，目标明确，指向单一计算结果。  \n\n8. **是否考查学生对模态分析或机械振动的理解**  \n   - 得分：2  \n   - 说明：频率响应分析是模态分析的核心内容，需理解固有频率、阻尼比与振幅误差的动态关系。  \n\n9. **是否涉及传感器测量原理的基本理解**  \n   - 得分：2  \n   - 说明：磁电感应传感器的测量原理基于电磁感应，其频率响应特性是正确使用传感器的基础。  \n\n10. **题目是否需要应用特定公式或方程进行计算**  \n    - 得分：1  \n    - 说明：需应用幅频特性公式 \\(|H(\\omega)| = \\\\frac{1}{\\sqrt{(1 - (\\omega/\\omega_n)^2)^2 + (2\\xi\\omega/\\omega_n)^2}}\\)，通过误差条件建立方程求解 \\(\\omega_n\\)。  \n\n11. **是否需要进行误差分析或计算误差范围**  \n    - 得分：1  \n    - 说明：需将振幅误差 \\(|H(\\omega)| \\leq 1.05\\)（或 \\(0.95 \\leq |H(\\omega)| \\leq 1.05\\)）转化为数学约束条件，分析固有频率的取值范围。  \n\n12. **是否涉及传感器的频率响应曲线或特性**  \n    - 得分：1  \n    - 说明：振幅误差与频率的关系通过频率响应曲线的幅频特性体现，需理解曲线形状对误差的影响。  \n\n13. **是否考查传感器的选择与应用原则**  \n    - 得分：1  \n    - 说明：根据测量需求（频率、误差）选择合适固有频率的传感器，属于传感器应用原则的考查。  \n\n14. **是否需要考虑传感器的动态特性**  \n    - 得分：1  \n    - 说明：频率响应特性属于传感器的动态特性，需分析其在动态测量中的表现。  \n\n15. **是否涉及振动测量中的基本概念或术语**  \n    - 得分：1  \n    - 说明：题目涉及振动频率、固有频率、阻尼比、振幅误差等振动测量的核心概念。  \n\n16. **是否需要进行单位换算或量纲分析**  \n    - 得分：0  \n    - 说明：题目中频率单位为 \\(\\\\text{Hz}\\)，参数单位统一，无需进行单位换算或量纲分析。  \n\n17. **题目是否提供了明确的技术参数或性能指标**  \n    - 得分：1  \n    - 说明：提供了振动频率（\\(50 \\, \\text{Hz}\\)）、阻尼比（\\(0.6\\)）、振幅误差限制（\\(<5\\%\\)）等明确技术指标。  \n\n18. **是否涉及传感器测量误差的评估方法**  \n    - 得分：1  \n    - 说明：通过幅频特性公式评估不同固有频率下的振幅误差，属于误差评估方法的应用。  \n\n19. **是否需要综合运用传感器与振动分析的知识点**  \n    - 得分：1  \n    - 说明：需结合传感器的频率响应特性（传感器知识）与振动系统的幅频特性分析（振动分析知识）完成计算。  \n\n20. **是否考查传感器在动态测量中的应用能力**  \n    - 得分：1  \n    - 说明：振动测量属于动态测量范畴，题目考查如何通过传感器参数设计满足动态测量的精度要求。  \n\n21. **是否涉及传感器的选择与应用原则**（重复项，按条目保留评分）  \n    - 得分：1  \n    - 说明：同第13项，仍属于传感器选择与应用原则的考查。  \n\n22. **是否需要考虑传感器的安装与使用注意事项**  \n    - 得分：0  \n    - 说明：题干未提及传感器的安装方式、环境条件等使用注意事项。  \n\n23. **是否涉及传感器测量中的噪声与干扰问题**  \n    - 得分：0  \n    - 说明：题目未涉及噪声源、抗干扰措施等相关内容。  \n\n\n\n### 最终分数计算  \n利用乘法运算（几个相同的数相加用乘法表示更简便）将所有得分相加：  \n$\n\\\\begin{align*}\n&2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 0 + 1 + 1 + 1 + 1 + 1 + 0 + 0\\\\\n=&2 \\\\times 9 + 1 \\\\times 11 + 0 \\times 3\\\\\n=&18 + 11 + 0\\\\\n=&29 + 0\\\\\n=&29\n\\end{align*}\n$  \n\n最终得分：29'
-
-    prompts, postprocesses = [], []
-    for q, c in zip(questions, criteria):
-        prompt = TEMPLATE + \
-            f'\n\n现在需要你对下面的问题计算分数。\n\n[题目]\n{q}\n\n[打分表]\n{c}\n\n[输出]\n'
-        prompts.append(prompt)
-        postprocesses.append(
-            partial(postprocess, max_score=get_total_score(c)))
-
-    results = await agent.run(prompts, max_concurrent_requests, desc="[Judge Question w Criteria]", postprocess_fns=postprocesses)
-    scores = [_[1] for _ in results]
-    return scores
-
-
-async def decode_to_question(criteria, max_concurrent_requests=32):
-    def postprocess(s):
-        try:
-            thought = re.findall(r'think>.*</think>', s, re.DOTALL)[0]
-            conclusion = s.replace(thought, "")
-            conclusion = conclusion[conclusion.index(
-                "[QUESTION]")+len("[QUESTION]"):conclusion.index("[/QUESTION]")].strip()
-            return conclusion
-        except Exception as err:
-            raise PostprocessError(f'{err}')
-
-    TEMPLATE = """
-# 目标概述
-你是一个出题大师，你的任务是基于一个题目打分表，你需要构建一道题目，完美符合打分表内的所有项目。即构造的题目，如果用打分表进行打分，将会获得满分。
-
-## 回答格式要求
-```
-<think>
-... ...
-<think>
-
-[QUESTION]
-{构造好的问题}}
-[/QUESTION]
-
-```
-
-下面是一个具体的例子：
-
-
-[打分表]
-[CRITERIA]
-- [SCORE=2] 题目是否属于选择题型
-- [SCORE=2] 题目是否涉及土木工程领域的地基处理
-- [SCORE=2] 题目是否要求计算复合地基的承载力
-- [SCORE=2] 题目是否提供所有必要参数（如桩长、桩径、强度、折减系数等）
-- [SCORE=2] 题目是否涉及多个折减系数的综合应用
-- [SCORE=2] 题目是否要求考虑桩间距和排列方式的影响
-- [SCORE=2] 题目是否需要综合运用公式进行数值计算
-- [SCORE=1] 题目是否涉及桩端土和桩间土的承载力计算
-- [SCORE=1] 题目是否要求选择一个合适的承载力值
-- [SCORE=1] 题目是否包含清晰的题干描述
-- [SCORE=1] 题目是否设置合理的选项
-- [SCORE=1] 题目是否考查记忆和理解能力
-- [SCORE=1] 题目是否考查应用和分析能力
-- [SCORE=1] 题目是否考查创造能力
-[/CRITERIA]
-
-
-[输出]
-<think>
-用户让我构造一道符合打分表所有项目的选择题，涉及土木工程的地基处理，特别是复合地基承载力计算。首先，我需要确保题目是选择题型，所以格式上要有选项。接下来，必须涵盖地基处理，复合地基承载力计算，所以题干需要包括桩长、桩径、强度、折减系数等参数。打分表提到多个折减系数的综合应用，比如桩间土和桩身强度的折减，还有桩间距和排列方式的影响，比如正方形布置，桩间距影响面积置换率。
-然后，需要考虑桩端土和桩间土的承载力计算，可能需要分别计算桩体承载力和桩间土承载力，再用面积置换率综合。题目需要数值计算，所以要给出具体的数值，比如桩长 10m，桩径 0.5m，压缩模量，天然地基承载力，折减系数等。选项设置要合理，正确答案需要通过公式计算得出，其他选项可以是计算过程中的中间值或错误应用公式的结果。
-还要考查记忆、理解、应用、分析和创造能力，虽然创造能力在选择题中可能较难，但通过综合运用多个公式和考虑不同因素，可以体现分析和应用能力。题干描述要清晰，参数齐全，比如明确桩的布置方式，计算复合地基承载力特征值，并选择合适的选项。需要检查每个打分点是否覆盖，比如选择题型、地基处理、复合地基计算、必要参数、多个折减系数、桩间距和排列、数值计算、桩端和桩间土计算、选择合适值、清晰题干、合理选项，以及考查多种能力。确保每个评分项都满足，特别是分数高的项目，如前几项每个 2 分的点，必须全部涵盖。最后，组织题干和选项，确保计算过程正确，选项中的正确答案符合公式应用，比如复合地基承载力公式是桩体承载力乘以置换率加上桩间土承载力乘以（1 - 置换率），置换率根据桩间距和桩径计算，正方形布置时置换率为桩径平方除以桩间距平方。
-</think>
-
-[QUESTION]
-某多层建筑采用水泥粉煤灰碎石桩（CFG 桩）复合地基，正方形布桩，桩径 d=0.5m，桩间距 s=1.5m，桩长 L=10m。已知桩体试块抗压强度平均值 f_cu=30MPa，桩间土承载力特征值 f_sk=120kPa，桩间土承载力折减系数 β=0.9，桩体强度折减系数 η=0.8，桩端天然地基土承载力特征值 q_p=800kPa，桩侧阻力忽略不计。按《建筑地基处理技术规范》计算，该复合地基的承载力特征值（kPa）最接近下列哪个选项？
-A. 210
-B. 245
-C. 280
-D. 315
-[/QUESTION]
-
-"""
-
-    prompts = []
-    for c in criteria:
-        prompt = TEMPLATE + \
-            f'\n\n现在需要你基于下面打分表构造一道完美符合要求的问题。\n*注意*最终你只需要生成问题，不要尝试解答问题\n\n[打分表]\n{c}\n\n[输出]\n'
-        prompts.append(prompt)
-
-    results = await agent.run(prompts, max_concurrent_requests, desc="[Fabricate QA]", postprocess_fns=[postprocess]*len(prompts))
-    return [_[1] for _ in results]
-
 
 async def question_similarity(agent, authentic, fabricate, max_concurrent_requests=32):
     TEMPLATE = """### 问题相似程度评价标准（1-5分）
@@ -508,225 +370,6 @@ SIMILARITY=4
         else:
             outputs.append(0)
     return outputs
-
-
-class QwQLongCoTCreateCriteriaComputeScore(object):
-    def __init__(self,
-                 split="train",
-                 parse_result_failure_score=DEFAULT_PARSE_FAILURE_REWARD,
-                 max_concurrent_requests=32):
-        self.split = split
-        self.parse_result_failure_score = parse_result_failure_score
-        self.max_concurrent_requests = max_concurrent_requests
-
-    async def calc_classify_acc_reward(
-        self,
-        batch_data_sources,
-        batch_solution_str,
-        batch_ground_truth,
-        max_concurrent_requests=32,
-        diff_threshold=0.1,
-        return_single_score=True
-    ):
-        """
-            计算Criteria是否可以准确区分出真题/合成题
-            Score分为两个部分
-            Score1: 有效区分出真题/合成题的准确率 (真题分数-合成题分数 >= diff_threshold) 分值-1～+1
-            Score2: 真题通过Criteria判定的得分，越接近1越好。分值正则化到-1～+1
-
-        """
-        questions, criteria = [], []
-
-        indices = []
-        for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-            criterion = criteria_parse_solution_fn(solution_str)
-            if criterion is not None:
-                questions.append(gt["positive"])
-                criteria.append(criterion)
-                indices.append((i, "positive"))
-
-                for negative in gt["negatives"]:
-                    questions.append(negative)
-                    criteria.append(criterion)
-                    indices.append((i, "negative"))
-
-        results = await criteria_get_score(
-            questions, criteria, max_concurrent_requests=max_concurrent_requests)
-
-        pos = {}
-        neg = defaultdict(list)
-        for result, index in zip(results, indices):
-            index, tag = index
-            if tag == "positive":
-                pos[index] = result
-            else:
-                neg[index].append(result)
-
-        score1, score2 = [0.0] * \
-            len(batch_solution_str), [0.0] * len(batch_solution_str)
-
-        def normalize(value):
-            return 2 * value - 1.0
-
-        for i in range(len(batch_solution_str)):
-            # 解析错误
-            if i not in pos:
-                continue
-            else:
-                if pos[i] == None:
-                    continue
-                else:
-                    score2[i] = normalize(pos[i])
-
-                    acc = []
-                    for val in neg[i]:
-                        if val is not None:
-                            _acc = (pos[i] - val) >= diff_threshold
-                            if _acc:
-                                acc.append(normalize(1.0))
-                            else:
-                                acc.append(normalize(0.0))
-                    if len(acc) > 0:
-                        score1[i] = np.mean(acc)
-                    else:
-                        score1[i] = 0.0
-
-        if return_single_score:
-            total_score = []
-            for x, y in zip(score1, score2):
-                total_score.append(x+y)
-            return total_score
-        else:
-            return score1, score2
-
-    async def calc_compression_ratio_reward(
-            self,
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-            max_concurrent_requests=32,
-            similarity_threshold=4,
-    ):
-        """
-            计算Criteria对应原问题的信息压缩率, score取值区间-1～+1
-        """
-
-        indices = []
-        criteria = []
-        for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-            criterion = criteria_parse_solution_fn(sol)
-            if criterion is not None:
-                criteria.append(criterion)
-                indices.append(i)
-            else:
-                continue
-
-        results = await decode_to_question(criteria)
-        new_indices, fabricates, authentics = [], [], []
-
-        for fabricate, index in zip(results, indices):
-            if fabricate is None:
-                continue
-            else:
-                fabricates.append(fabricate)
-                new_indices.append(index)
-                authentics.append(batch_ground_truth[index]["positive"])
-
-        similarity = await question_similarity(
-            authentic=authentics,
-            fabricate=fabricates,
-            max_concurrent_requests=max_concurrent_requests
-        )
-        scores = [0.0] * len(batch_solution_str)
-        for sim, index in zip(similarity, new_indices):
-            if sim is None:
-                pass
-            else:
-                # 相似度过高，泄题 => 负
-                if sim >= similarity_threshold:
-                    scores[index] = -1.0
-                else:
-                    scores[index] = 1.0
-
-        return scores
-
-    def compute_score(self,
-                      batch_data_sources,
-                      batch_solution_str,
-                      batch_ground_truth,
-                      stage,
-                      ):
-        async def main():
-            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, stage=stage)
-        return aio.run(main())
-
-    async def _compute_score(self,
-                             batch_data_sources,
-                             batch_solution_str,
-                             batch_ground_truth,
-                             ):
-        scores1 = await self.calc_classify_acc_reward(
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-            self.max_concurrent_requests
-        )
-        scores2 = await self.calc_compression_ratio_reward(
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-            self.max_concurrent_requests
-        )
-
-        final_results = []
-        for gt, solution, score1, score2 in zip(batch_ground_truth, batch_solution_str, scores1, scores2):
-            criteria = criteria_parse_solution_fn(solution)
-            if criteria is None:
-                final_results.append(self.parse_result_failure_score)
-            else:
-                final_results.append(score1+score2)
-
-            if self.split == "valid" or (self.split == "train" and random.random() < 0.1):
-                log = True
-                log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
-            else:
-                log = False
-
-            if log:
-                print(
-                    f"--------------------------------{log_flag}--------------------------------")
-                print(
-                    f"【Question】`{self.log_ground_truth(gt)}`")
-                print(
-                    f"【Criteria】`{self.log_solution(solution)}`")
-                print(
-                    f'[Final Reward]={final_results[-1]:.3f}\n')
-        return final_results
-
-    def log_solution(self, solution):
-        criteria = criteria_parse_solution_fn(solution)
-        if criteria is None:
-            return repr(self.clip_string(solution))
-        return repr(self.clip_string(criteria))
-
-    def log_ground_truth(self, ground_truth):
-        return repr(self.clip_string(ground_truth["positive"]))
-
-    def clip_string(self, s: str):
-        if len(s) > 1500:
-            return f'{s[:700]}... [省略] ...{s[-800:]}'
-        return s
-
-
-_qwq_longcot_create_criteria_compute_score_train = QwQLongCoTCreateCriteriaComputeScore(
-    split="train", max_concurrent_requests=MAX_CONCURRENT)
-_qwq_longcot_create_criteria_compute_score_valid = QwQLongCoTCreateCriteriaComputeScore(
-    split="valid", max_concurrent_requests=MAX_CONCURRENT)
-qwq_longcot_create_criteria_compute_score_train = _qwq_longcot_create_criteria_compute_score_train.compute_score
-qwq_longcot_create_criteria_compute_score_valid = _qwq_longcot_create_criteria_compute_score_valid.compute_score
-# ------------------------------------------------------------------------------------------------------------------------------------------------------
-# Criteria构造
-# ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -4734,4 +4377,639 @@ doc2query_v3_default_compute_score_valid = partial(
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # DOC2QUERY V3
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# Criteria RM
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+def criteria_parse_solution_fn(solution_str: str):
+    solution_str = postprocess_solution(solution_str)
+    try:
+        thought = re.findall(r'think>.*</think>',
+                             solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+
+    conclusion = solution_str.replace(thought, "")
+    try:
+        conclusion = conclusion[conclusion.index("# 评价标准"):].strip()
+        return conclusion
+    except Exception as err:
+        return None
+    return conclusion
+
+
+# def get_total_score(criteria):
+#     scores = re.findall(r'SCORE=(\d+)', criteria)
+#     scores = [int(_) for _ in scores]
+#     return sum(scores)
+
+
+# async def criteria_get_score(questions, criteria, max_concurrent_requests=32):
+#     def postprocess(s, max_score):
+#         try:
+#             s = s.strip()
+#             conclusion = s.split("\n")[-1]
+#             conclusion = conclusion[conclusion.index(
+#                 "最终得分：")+len("最终得分："):].strip()
+#             score = int(conclusion)
+#             if score > max_score:
+#                 raise PostprocessError(
+#                     f'score exceeds maximum value. ({score}>{max_score})')
+#             return score / max_score
+#         except Exception as err:
+#             raise PostprocessError(f'{err}')
+
+#     TEMPLATE = '# 目标概述 \n给定一道题目，和一个要点评分表，你需要严格按照要点评分表的内容和分值，逐项对问题进行打分，并在最后给出最终分数。\n\n## 回答格式要求\n1. 你应当逐项按照列点的方式，对问题和评价项目进行比较，计算单个项目的分值，注意分值应当是整数，避免小数的出现，例如0.5\n2. 包含计算总分的计算步骤\n3. 在回答的最后部分，必须以“最终得分：***”这样的格式，给出总分\n\n\n下面提供你具体的范例，你需要参考范例进行回答\n\n\n[题目]\nFor a certain site, cement-mixed columns are planned to be used for ground reinforcement. It is known that the foundation depth is 2.0m, the diameter of the mixing column is 600mm, the column length is 14.0m, and the column strength is $f_{\\\\mathrm{cu}}=0.8\\\\, \\\\mathrm{MPa}$. The column strength reduction factor is taken as $\\\\eta=0.3$, the inter-column soil bearing capacity reduction factor is $\\\\beta=0.6$, and the column end soil bearing capacity reduction factor is $\\\\alpha=0.4$. The center-to-center spacing of the mixing columns is 1.0m, arranged in an equilateral triangular pattern. Which of the following options is appropriate for the characteristic value of the bearing capacity of the composite foundation with mixed columns?\n\n[打分表]\n[CRITERIA]\n- [SCORE=2] 题目是否属于选择题型\n- [SCORE=2] 题目是否涉及土木工程领域的地基处理\n- [SCORE=2] 题目是否要求计算复合地基的承载力\n- [SCORE=2] 题目是否提供所有必要参数（如桩长、桩径、强度、折减系数等）\n- [SCORE=2] 题目是否涉及多个折减系数的综合应用\n- [SCORE=2] 题目是否要求考虑桩间距和排列方式的影响\n- [SCORE=2] 题目是否需要综合运用公式进行数值计算\n- [SCORE=1] 题目是否涉及桩端土和桩间土的承载力计算\n- [SCORE=1] 题目是否要求选择一个合适的承载力值\n- [SCORE=1] 题目是否包含清晰的题干描述\n- [SCORE=1] 题目是否设置合理的选项\n- [SCORE=1] 题目是否考查记忆和理解能力\n- [SCORE=1] 题目是否考查应用和分析能力\n- [SCORE=1] 题目是否考查创造能力\n[/CRITERIA]\n\n\n[输出]\n### 评分表逐项打分（列点格式）  \n1. **题目是否属于选择题型**  \n   - 得分：2  \n   - 说明：题目以“Which of the following options is appropriate...”结尾，明确要求从选项中选择答案，属于选择题型。  \n\n2. **题目是否涉及土木工程领域的地基处理**  \n   - 得分：2  \n   - 说明：题目描述水泥搅拌桩（cement-mixed columns）用于地基加固（ground reinforcement），属于土木工程地基处理范畴。  \n\n3. **题目是否要求计算复合地基的承载力**  \n   - 得分：2  \n   - 说明：问题目标为求解“复合地基承载力特征值”（characteristic value of the bearing capacity of the composite foundation），需进行承载力计算。  \n\n4. **题目是否提供所有必要参数**  \n   - 得分：2  \n   - 说明：题目完整提供了桩长（14.0m）、桩径（600mm）、桩体强度（\\(f_{\\mathrm{cu}}=0.8\\,\\mathrm{MPa}\\)）、折减系数（\\(\\eta=0.3, \\beta=0.6, \\alpha=0.4\\)）、桩间距（1.0m）及排列方式（等边三角形），无参数缺失。  \n\n5. **题目是否涉及多个折减系数的综合应用**  \n   - 得分：2  \n   - 说明：涉及桩体强度折减系数 \\(\\eta\\)、桩间土承载力折减系数 \\(\\beta\\)、桩端土承载力折减系数 \\(\\alpha\\)，需在公式中综合考虑各系数的作用。  \n\n6. **题目是否要求考虑桩间距和排列方式的影响**  \n   - 得分：2  \n   - 说明：桩间距（1.0m）和等边三角形排列用于计算置换率 \\(m\\)（即桩的面积占总地基面积的比例），直接影响复合地基承载力公式中的权重分配。  \n\n7. **题目是否需要综合运用公式进行数值计算**  \n   - 得分：2  \n   - 说明：需应用复合地基承载力公式（如 \\(f_{\\mathrm{spk}} = m \\cdot \\eta \\cdot f_{\\mathrm{cu}} + \\beta(1-m) \\cdot f_{\\mathrm{sk}}\\)，其中 \\(f_{\\mathrm{sk}}\\) 可能涉及桩端土承载力），并结合几何参数计算置换率，属于数值计算类问题。  \n\n8. **题目是否涉及桩端土和桩间土的承载力计算**  \n   - 得分：1  \n   - 说明：桩间土承载力通过 \\(\\beta(1-m) \\cdot f_{\\mathrm{sk}}\\) 体现，桩端土承载力通过桩体承载力公式中的桩端阻力项（需考虑 \\(\\alpha\\) 折减）间接涉及，考查两者的协同作用。  \n\n9. **题目是否要求选择一个合适的承载力值**  \n   - 得分：1  \n   - 说明：题目要求从选项中选择“合适的”承载力特征值，属于结果选择类问题，需结合计算结果匹配选项。  \n\n10. **题目是否包含清晰的题干描述**  \n    - 得分：1  \n    - 说明：题干明确列出所有参数、工程背景（地基加固）及问题目标，无歧义或模糊表述，信息完整。  \n\n11. **题目是否设置合理的选项**  \n    - 得分：1  \n    - 说明：虽然题目未列出具体选项，但作为标准选择题，默认选项设置合理（如涵盖计算可能的误差范围或常见错误值）。  \n\n12. **题目是否考查记忆和理解能力**  \n    - 得分：1  \n    - 说明：需记忆复合地基承载力公式的结构及各参数定义（如折减系数的物理意义），考查对基本概念的理解。  \n\n13. **题目是否考查应用和分析能力**  \n    - 得分：1  \n    - 说明：需将公式应用于具体参数，分析桩间距和排列方式对置换率的影响，以及折减系数如何调整桩体和土体的承载力贡献。  \n\n14. **题目是否考查创造能力**  \n    - 得分：0  \n    - 说明：问题为公式直接应用，无需创新方法或创造性思维，仅需按步骤计算，故不涉及创造能力考查。  \n\n\n### 最终分数计算  \n利用乘法运算（几个相同的数相加用乘法表示更简便）将所有得分相加：\n$\n\\begin{align*}\n\\begin{align*}\n&2 + 2 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 0\\\\\n=&2\\times7 + 1\\times6+0\\\\\n=&14 + 6+0\\\\\n=&20+0\\\\\n=&20\n\\end{align*}\n\n最终得分：20\n\n\n\n[题目]\nUsing a magnetoelectric induction speed sensor to measure vibration at $f = 50 \\\\, \\\\text{Hz}$, the amplitude error should be less than $5\\\\%$, and the damping ratio is $\\\\xi = 0.6$. What should be the natural frequency of the sensor?\n\n[打分表]\n[CRITERIA]\n- [SCORE=2] 题目是否属于计算题类型，需应用特定公式进行计算\n- [SCORE=2] 题目是否涉及机械工程或物理学领域，特别是振动分析\n- [SCORE=2] 题目是否考察传感器的频率响应特性\n- [SCORE=2] 是否涉及阻尼比（ξ）的相关计算或概念理解\n- [SCORE=2] 是否需要在给定误差范围内计算参数\n- [SCORE=2] 题干描述是否清晰明确，提供了足够的已知条件\n- [SCORE=2] 问题是否明确，指向一个具体的计算目标\n- [SCORE=2] 是否考查学生对模态分析或机械振动的理解\n- [SCORE=2] 是否涉及传感器测量原理的基本理解\n- [SCORE=1] 题目是否需要应用特定公式或方程进行计算\n- [SCORE=1] 是否需要进行误差分析或计算误差范围\n- [SCORE=1] 是否涉及传感器的频率响应曲线或特性\n- [SCORE=1] 是否考查传感器的选择与应用原则\n- [SCORE=1] 是否需要考虑传感器的动态特性\n- [SCORE=1] 是否涉及振动测量中的基本概念或术语\n- [SCORE=1] 是否需要进行单位换算或量纲分析\n- [SCORE=1] 题目是否提供了明确的技术参数或性能指标\n- [SCORE=1] 是否涉及传感器测量误差的评估方法\n- [SCORE=1] 是否需要综合运用传感器与振动分析的知识点\n- [SCORE=1] 是否考查传感器在动态测量中的应用能力\n- [SCORE=1] 是否涉及传感器的选择与应用原则\n- [SCORE=1] 是否需要考虑传感器的安装与使用注意事项\n- [SCORE=1] 是否涉及传感器测量中的噪声与干扰问题\n[/CRITERIA]\n\n\n[输出]\n### 评分表逐项打分（列点格式）  \n1. **题目是否属于计算题类型，需应用特定公式进行计算**  \n   - 得分：2  \n   - 说明：题目要求根据给定的振动频率、阻尼比和振幅误差计算传感器的固有频率，需应用频率响应特性公式，属于计算题类型。  \n\n2. **题目是否涉及机械工程或物理学领域，特别是振动分析**  \n   - 得分：2  \n   - 说明：磁电感应速度传感器用于振动测量，涉及机械工程中的振动分析领域。  \n\n3. **题目是否考察传感器的频率响应特性**  \n   - 得分：2  \n   - 说明：题目中明确提到振动频率 \\(f = 50 \\, \\\\text{Hz}\\)、阻尼比 \\(\\xi = 0.6\\) 和振幅误差要求，直接关联传感器的频率响应特性分析。  \n\n4. **是否涉及阻尼比（ξ）的相关计算或概念理解**  \n   - 得分：2  \n   - 说明：阻尼比 \\(\\xi = 0.6\\) 是频率响应公式中的关键参数，需用于计算固有频率与振幅误差的关系。  \n\n5. **是否需要在给定误差范围内计算参数**  \n   - 得分：2  \n   - 说明：题目要求振幅误差小于 \\(5\\%\\)，需通过误差约束条件反推传感器的固有频率。  \n\n6. **题干描述是否清晰明确，提供了足够的已知条件**  \n   - 得分：2  \n   - 说明：题干明确给出振动频率、阻尼比、误差要求及目标参数（固有频率），信息完整无歧义。  \n\n7. **问题是否明确，指向一个具体的计算目标**  \n   - 得分：2  \n   - 说明：问题直接询问“传感器的固有频率应为多少”，目标明确，指向单一计算结果。  \n\n8. **是否考查学生对模态分析或机械振动的理解**  \n   - 得分：2  \n   - 说明：频率响应分析是模态分析的核心内容，需理解固有频率、阻尼比与振幅误差的动态关系。  \n\n9. **是否涉及传感器测量原理的基本理解**  \n   - 得分：2  \n   - 说明：磁电感应传感器的测量原理基于电磁感应，其频率响应特性是正确使用传感器的基础。  \n\n10. **题目是否需要应用特定公式或方程进行计算**  \n    - 得分：1  \n    - 说明：需应用幅频特性公式 \\(|H(\\omega)| = \\\\frac{1}{\\sqrt{(1 - (\\omega/\\omega_n)^2)^2 + (2\\xi\\omega/\\omega_n)^2}}\\)，通过误差条件建立方程求解 \\(\\omega_n\\)。  \n\n11. **是否需要进行误差分析或计算误差范围**  \n    - 得分：1  \n    - 说明：需将振幅误差 \\(|H(\\omega)| \\leq 1.05\\)（或 \\(0.95 \\leq |H(\\omega)| \\leq 1.05\\)）转化为数学约束条件，分析固有频率的取值范围。  \n\n12. **是否涉及传感器的频率响应曲线或特性**  \n    - 得分：1  \n    - 说明：振幅误差与频率的关系通过频率响应曲线的幅频特性体现，需理解曲线形状对误差的影响。  \n\n13. **是否考查传感器的选择与应用原则**  \n    - 得分：1  \n    - 说明：根据测量需求（频率、误差）选择合适固有频率的传感器，属于传感器应用原则的考查。  \n\n14. **是否需要考虑传感器的动态特性**  \n    - 得分：1  \n    - 说明：频率响应特性属于传感器的动态特性，需分析其在动态测量中的表现。  \n\n15. **是否涉及振动测量中的基本概念或术语**  \n    - 得分：1  \n    - 说明：题目涉及振动频率、固有频率、阻尼比、振幅误差等振动测量的核心概念。  \n\n16. **是否需要进行单位换算或量纲分析**  \n    - 得分：0  \n    - 说明：题目中频率单位为 \\(\\\\text{Hz}\\)，参数单位统一，无需进行单位换算或量纲分析。  \n\n17. **题目是否提供了明确的技术参数或性能指标**  \n    - 得分：1  \n    - 说明：提供了振动频率（\\(50 \\, \\text{Hz}\\)）、阻尼比（\\(0.6\\)）、振幅误差限制（\\(<5\\%\\)）等明确技术指标。  \n\n18. **是否涉及传感器测量误差的评估方法**  \n    - 得分：1  \n    - 说明：通过幅频特性公式评估不同固有频率下的振幅误差，属于误差评估方法的应用。  \n\n19. **是否需要综合运用传感器与振动分析的知识点**  \n    - 得分：1  \n    - 说明：需结合传感器的频率响应特性（传感器知识）与振动系统的幅频特性分析（振动分析知识）完成计算。  \n\n20. **是否考查传感器在动态测量中的应用能力**  \n    - 得分：1  \n    - 说明：振动测量属于动态测量范畴，题目考查如何通过传感器参数设计满足动态测量的精度要求。  \n\n21. **是否涉及传感器的选择与应用原则**（重复项，按条目保留评分）  \n    - 得分：1  \n    - 说明：同第13项，仍属于传感器选择与应用原则的考查。  \n\n22. **是否需要考虑传感器的安装与使用注意事项**  \n    - 得分：0  \n    - 说明：题干未提及传感器的安装方式、环境条件等使用注意事项。  \n\n23. **是否涉及传感器测量中的噪声与干扰问题**  \n    - 得分：0  \n    - 说明：题目未涉及噪声源、抗干扰措施等相关内容。  \n\n\n\n### 最终分数计算  \n利用乘法运算（几个相同的数相加用乘法表示更简便）将所有得分相加：  \n$\n\\\\begin{align*}\n&2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 0 + 1 + 1 + 1 + 1 + 1 + 0 + 0\\\\\n=&2 \\\\times 9 + 1 \\\\times 11 + 0 \\times 3\\\\\n=&18 + 11 + 0\\\\\n=&29 + 0\\\\\n=&29\n\\end{align*}\n$  \n\n最终得分：29'
+
+#     prompts, postprocesses = [], []
+#     for q, c in zip(questions, criteria):
+#         prompt = TEMPLATE + \
+#             f'\n\n现在需要你对下面的问题计算分数。\n\n[题目]\n{q}\n\n[打分表]\n{c}\n\n[输出]\n'
+#         prompts.append(prompt)
+#         postprocesses.append(
+#             partial(postprocess, max_score=get_total_score(c)))
+
+#     results = await agent.run(prompts, max_concurrent_requests, desc="[Judge Question w Criteria]", postprocess_fns=postprocesses)
+#     scores = [_[1] for _ in results]
+#     return scores
+
+
+# async def decode_to_question(criteria, max_concurrent_requests=32):
+#     def postprocess(s):
+#         try:
+#             thought = re.findall(r'think>.*</think>', s, re.DOTALL)[0]
+#             conclusion = s.replace(thought, "")
+#             conclusion = conclusion[conclusion.index(
+#                 "[QUESTION]")+len("[QUESTION]"):conclusion.index("[/QUESTION]")].strip()
+#             return conclusion
+#         except Exception as err:
+#             raise PostprocessError(f'{err}')
+
+#     TEMPLATE = """
+# # 目标概述
+# 你是一个出题大师，你的任务是基于一个题目打分表，你需要构建一道题目，完美符合打分表内的所有项目。即构造的题目，如果用打分表进行打分，将会获得满分。
+
+# ## 回答格式要求
+# ```
+# <think>
+# ... ...
+# <think>
+
+# [QUESTION]
+# {构造好的问题}}
+# [/QUESTION]
+
+# ```
+
+# 下面是一个具体的例子：
+
+
+# [打分表]
+# [CRITERIA]
+# - [SCORE=2] 题目是否属于选择题型
+# - [SCORE=2] 题目是否涉及土木工程领域的地基处理
+# - [SCORE=2] 题目是否要求计算复合地基的承载力
+# - [SCORE=2] 题目是否提供所有必要参数（如桩长、桩径、强度、折减系数等）
+# - [SCORE=2] 题目是否涉及多个折减系数的综合应用
+# - [SCORE=2] 题目是否要求考虑桩间距和排列方式的影响
+# - [SCORE=2] 题目是否需要综合运用公式进行数值计算
+# - [SCORE=1] 题目是否涉及桩端土和桩间土的承载力计算
+# - [SCORE=1] 题目是否要求选择一个合适的承载力值
+# - [SCORE=1] 题目是否包含清晰的题干描述
+# - [SCORE=1] 题目是否设置合理的选项
+# - [SCORE=1] 题目是否考查记忆和理解能力
+# - [SCORE=1] 题目是否考查应用和分析能力
+# - [SCORE=1] 题目是否考查创造能力
+# [/CRITERIA]
+
+
+# [输出]
+# <think>
+# 用户让我构造一道符合打分表所有项目的选择题，涉及土木工程的地基处理，特别是复合地基承载力计算。首先，我需要确保题目是选择题型，所以格式上要有选项。接下来，必须涵盖地基处理，复合地基承载力计算，所以题干需要包括桩长、桩径、强度、折减系数等参数。打分表提到多个折减系数的综合应用，比如桩间土和桩身强度的折减，还有桩间距和排列方式的影响，比如正方形布置，桩间距影响面积置换率。
+# 然后，需要考虑桩端土和桩间土的承载力计算，可能需要分别计算桩体承载力和桩间土承载力，再用面积置换率综合。题目需要数值计算，所以要给出具体的数值，比如桩长 10m，桩径 0.5m，压缩模量，天然地基承载力，折减系数等。选项设置要合理，正确答案需要通过公式计算得出，其他选项可以是计算过程中的中间值或错误应用公式的结果。
+# 还要考查记忆、理解、应用、分析和创造能力，虽然创造能力在选择题中可能较难，但通过综合运用多个公式和考虑不同因素，可以体现分析和应用能力。题干描述要清晰，参数齐全，比如明确桩的布置方式，计算复合地基承载力特征值，并选择合适的选项。需要检查每个打分点是否覆盖，比如选择题型、地基处理、复合地基计算、必要参数、多个折减系数、桩间距和排列、数值计算、桩端和桩间土计算、选择合适值、清晰题干、合理选项，以及考查多种能力。确保每个评分项都满足，特别是分数高的项目，如前几项每个 2 分的点，必须全部涵盖。最后，组织题干和选项，确保计算过程正确，选项中的正确答案符合公式应用，比如复合地基承载力公式是桩体承载力乘以置换率加上桩间土承载力乘以（1 - 置换率），置换率根据桩间距和桩径计算，正方形布置时置换率为桩径平方除以桩间距平方。
+# </think>
+
+# [QUESTION]
+# 某多层建筑采用水泥粉煤灰碎石桩（CFG 桩）复合地基，正方形布桩，桩径 d=0.5m，桩间距 s=1.5m，桩长 L=10m。已知桩体试块抗压强度平均值 f_cu=30MPa，桩间土承载力特征值 f_sk=120kPa，桩间土承载力折减系数 β=0.9，桩体强度折减系数 η=0.8，桩端天然地基土承载力特征值 q_p=800kPa，桩侧阻力忽略不计。按《建筑地基处理技术规范》计算，该复合地基的承载力特征值（kPa）最接近下列哪个选项？
+# A. 210
+# B. 245
+# C. 280
+# D. 315
+# [/QUESTION]
+
+# """
+
+#     prompts = []
+#     for c in criteria:
+#         prompt = TEMPLATE + \
+#             f'\n\n现在需要你基于下面打分表构造一道完美符合要求的问题。\n*注意*最终你只需要生成问题，不要尝试解答问题\n\n[打分表]\n{c}\n\n[输出]\n'
+#         prompts.append(prompt)
+
+#     results = await agent.run(prompts, max_concurrent_requests, desc="[Fabricate QA]", postprocess_fns=[postprocess]*len(prompts))
+#     return [_[1] for _ in results]
+
+
+class CriteriaRMComputeScore(Doc2QueryV2ComputeScore):
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None):
+        super().__init__(
+            split=split, parse_solution_fn=parse_solution_fn, args=args
+        )
+
+    @classmethod
+    def judge_with_criteria(cls, instruction, response, criteria):
+        format_template = """
+
+你最终的回答部分需要包含**分析**和**结论**两部分
+- 分析：详细的分析过程
+- 结论：对于模型响应的打分，一定要给出最终的分数
+
+按照下面的格式
+[分析开始]
+... ...
+[分析结束]
+
+[结论开始]
+{得分}
+[结论结束]
+"""
+
+        return f'[用户指令]\n{instruction}\n\n[模型响应]\n{response}\n\n[评价标准]\n{criteria}\n\n\n' + format_template
+
+    @classmethod
+    def get_judge_agent(cls):
+        return Agent(**{
+            "model": "distill_qwen25_7B",
+            "base_url": "http://10.130.142.223:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.65,
+                "timeout": 600,
+                "max_tokens": 8192,
+            },
+        })
+
+    def get_analyze_agent(cls):
+        return Agent(**{
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.154:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.7,
+                "timeout": 360,
+                "max_tokens": 4096,
+            },
+        })
+
+    def response_postprocess(self, s, debug=False):
+        if "</think>" in s:
+            s = s[s.index("</think>")+len("</think>"):].strip()
+        return s
+
+    async def simulate_respondent(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            run_args=None,
+            max_concurrent_requests=MAX_CONCURRENT,
+            debug=False):
+        assert run_args is not None
+
+        prompt2index = defaultdict(list)
+        answer_map = {}
+
+        for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            result = self.parse_solution_fn(solution_str)
+            if result is not None:
+                criteria = result
+
+                judge_candidates = gt["completions"]
+                for cand in judge_candidates:
+                    fn = run_args["w_criteria"]["fn"]
+                    _prompt = fn(gt["instruction"], cand["response"], criteria)
+                    prompt2index[_prompt].append(gt["extra_info"]["uuid"])
+                    answer_map[gt["extra_info"]["uuid"]] = (
+                        gt["instruction"], cand["critique"])
+
+        prompts = list(prompt2index.keys())
+
+        tasks = []
+        tasks.append(run_args["w_criteria"]["model"].run(
+            prompts, max_concurrent_requests, desc=f'[Generate {run_args["w_criteria"]["desc"]} Responses {run_args["w_criteria"]["model"].model}]', pbar=False,
+            postprocess_fns=[
+                partial(self.response_postprocess, debug=debug)] * len(prompts)
+        ))
+        judges = await aio.gather(*tasks)
+
+        # 提取分析和得分
+        verify_queue = []
+        for results_index, judge in enumerate(judges[0]):
+            p, r = judge
+            for resp_id in prompt2index[p]:
+                verify_queue.append(VerifyInfo(
+                    index=results_index,  # 对应`results`中的偏移量
+                    tag=resp_id,  # 对应instance index
+                    prompt=answer_map[resp_id][0],  #
+                    response=r,
+                    answer=answer_map[resp_id][1]  #
+                ))
+
+        correctness = await self.verify_batch_results(
+            verify_queue=verify_queue,
+            max_concurrent_requests=32,
+        )
+        # return correctness
+
+    async def verify_batch_results(self, verify_queue, max_concurrent_requests):
+        def validate_result(response):
+            s = response
+            try:
+                conclusion = s.strip()
+
+                score = re.findall(
+                    r'\"大模型评论员打分\": ([\d+\.]+)', conclusion)[0]
+                print("fucking!!!", score)
+                if isinstance(score, str):
+                    score = float(score)
+                assert isinstance(score, float)
+
+                recall = re.findall(
+                    r'\"对人类指出的批评的覆盖度\": (\d+)', conclusion)[0]
+                print("shiting!!!", recall)
+                if isinstance(recall, str):
+                    recall = float(recall)
+                assert isinstance(recall, float)
+                assert recall in (1, 2, 3, 4, 5)
+                return (score, recall)
+
+            except Exception as err:
+                raise PostprocessError(f'{err}')
+
+        verify_fewshots = """
+下面是对于同一用户提问的相同回复的两条不同评论，第一个是人类评论员，第二个是大模型评论员；
+
+任务：现在需要你按照要求帮我分析**大模型评论员**的评论内容
+说明：任务包含两部分
+第一部分：从**大模型评论员**的评论中提取出最终的分数（float格式）如果评论中没有给出具体的分数，赋0分
+第二部分：分析**大模型评论员**的评论中是否覆盖**人类评论员**指出的批评？覆盖度1-5分，5分是最高分，分数仅包含1、2、3、4、5不包含小数点。
+
+#### 输出要求
+{分析内容}
+```json
+{{
+    "大模型评论员打分": ***, # float 
+    "对人类指出的批评的覆盖度": *** # 
+}}
+```
+
+下面是一些例子
+
+#### 用户提问
+```
+Can you provide a comprehensive list of stress management techniques using a bullet-point format in a [Mark down] document? Please include both physical and mental techniques that can be used to manage stress. Additionally, it would be helpful to categorize the techniques as short-term or long-term solutions. Thank you.
+```
+
+#### **人类评论员**
+```
+Your answer was well-organized and comprehensive, covering a variety of short-term and long-term stress management techniques. You also followed the instruction to use bullet-points and categorize the techniques. However, the instruction asked for a Markdown document, which requires specific formatting.
+
+To improve, use proper Markdown formatting, such as adding asterisks or dashes for bullet points and using double asterisks for bold text. Additionally, the note in the instruction asks for a blend of accuracy, positivity, and intrigue, while keeping the user engaged. Your response is accurate and positive, but adding a touch of intrigue or a fun fact could make it more engaging.
+```
+
+#### **大模型评论员**
+```
+
+
+[分析开始]  
+用户的请求明确要求提供一个结构化的压力管理技巧列表，并以Markdown格式呈现。用户还特别指出要将技巧分为短期和长期，并包含物理和心理方法。这意味着我需要确保内容全面且易于理解，同时满足分类要求。
+
+首先，我需要确定哪些技巧属于短期和长期。短期技巧通常是一些快速应用的方法，如深呼吸、冥想或写作，这些方法可以在短时间内缓解压力。长期技巧则涉及更系统的行为，如规律的锻炼、健康的饮食习惯或良好的睡眠，这些需要更持续的努力。
+
+其次，用户强调了物理和心理方法的结合，因此我需要确保每个类别中都涵盖这两种方法。例如，深呼吸和冥想是物理和心理的结合，而写作或绘画则是心理表达的方式。
+
+此外，考虑到用户可能需要个性化的建议，我提醒用户根据自身情况选择最适合的方法，并建议在长期压力情况下寻求专业帮助。这不仅增加了回复的实用性，也体现了对用户需求的尊重。
+
+最后，我组织了内容，确保每个类别下的技巧清晰易读，并使用了Markdown格式的列表结构，以提高可读性和专业性。  
+[分析结束]
+
+[结论开始]  
+9
+[结论结束]
+```
+
+#### 输出
+分析：
+大模型评论员的打分可从其结论中提取，为 9.0。人类评论员指出回复未使用特定 Markdown 格式及缺乏趣味性，而大模型评论员仅提及用了 Markdown 列表结构，未涉及人类指出的批评，覆盖度低。
+
+``` json
+{{
+    "大模型评论员打分": 9.0,
+    "对人类指出的批评的覆盖度": 1
+}}
+```
+
+
+
+
+#### 用户提问
+```
+Can you recommend a car service that offers private day tours to Versailles from Paris?
+```
+
+#### **人类评论员**
+```
+Your answer is well-structured, informative, and it adheres to the instructions given. You provided two options, which gives the user a choice, and you included the important details about each service. Your reminder for the user to conduct further research and compare options is also valuable. However, you could improve by providing more sources for the user to verify the information. For example, you could suggest checking the companies' websites or other reliable platforms for reviews and up-to-date information.
+```
+
+#### **大模型评论员**
+```
+
+
+[分析开始]  
+模型响应中提供了两个具体的车服务公司：Cityrama 和 Versailles Express。这两个公司都详细介绍了其服务亮点，包括行程内容、语言支持和交通安排，这在满足用户需求方面做得很好，属于有用性高的内容。此外，两个公司都是知名且值得信赖的，因此安全性较高。信息真实可靠，没有虚构内容，因此真实性评分也较高。虽然模型没有直接比较两家公司的优劣，但提供了足够的信息供用户参考，因此在有用性和可靠性方面得分高。  
+[分析结束]  
+
+[结论开始]  
+10
+[结论结束]
+```
+
+#### 输出
+分析：
+大模型评论员的打分可从其结论中提取，为 10.0。人类评论员指出回复可通过提供更多信息来源让用户验证信息，而大模型评论员的分析未涉及这一点，未覆盖人类指出的批评，覆盖度低。
+
+``` json
+{{
+    "大模型评论员打分": 10.0,
+    "对人类指出的批评的覆盖度": 1
+}}
+```
+"""
+
+        verify_template = """
+#### 用户提问
+```
+{instruction}
+```
+
+#### **人类评论员**
+```
+{human}
+```
+
+#### **大模型评论员**
+```
+{llm}
+```
+
+#### 输出
+"""
+        verify_mapper = defaultdict(list)
+
+        for info in verify_queue:
+            eval_prompt = verify_fewshots + verify_template.format(
+                instruction=info.prompt,
+                llm=info.response,
+                human=info.answer
+            )
+            verify_mapper[eval_prompt].append(info.tag)
+
+        _results = await self.get_analyze_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Analyze Critics {self.get_analyze_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
+
+        # results_mapper = defaultdict(list)
+        for (k, v) in _results:
+            print(v)
+            print("="*80)
+        #     for meta in verify_mapper[k]:
+        #         index, name = meta
+        #         if v is not None:
+        #             correctness[name][index].append(1.0 if v else 0.0)
+        # return correctness
+
+#     async def calc_classify_acc_reward(
+#         self,
+#         batch_data_sources,
+#         batch_solution_str,
+#         batch_ground_truth,
+#         max_concurrent_requests=32,
+#         diff_threshold=0.1,
+#         return_single_score=True
+#     ):
+#         """
+#             计算Criteria是否可以准确区分出真题/合成题
+#             Score分为两个部分
+#             Score1: 有效区分出真题/合成题的准确率 (真题分数-合成题分数 >= diff_threshold) 分值-1～+1
+#             Score2: 真题通过Criteria判定的得分，越接近1越好。分值正则化到-1～+1
+
+#         """
+#         questions, criteria = [], []
+
+#         indices = []
+#         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+#             criterion = criteria_parse_solution_fn(solution_str)
+#             if criterion is not None:
+#                 questions.append(gt["positive"])
+#                 criteria.append(criterion)
+#                 indices.append((i, "positive"))
+
+#                 for negative in gt["negatives"]:
+#                     questions.append(negative)
+#                     criteria.append(criterion)
+#                     indices.append((i, "negative"))
+
+#         results = await criteria_get_score(
+#             questions, criteria, max_concurrent_requests=max_concurrent_requests)
+
+#         pos = {}
+#         neg = defaultdict(list)
+#         for result, index in zip(results, indices):
+#             index, tag = index
+#             if tag == "positive":
+#                 pos[index] = result
+#             else:
+#                 neg[index].append(result)
+
+#         score1, score2 = [0.0] * \
+#             len(batch_solution_str), [0.0] * len(batch_solution_str)
+
+#         def normalize(value):
+#             return 2 * value - 1.0
+
+#         for i in range(len(batch_solution_str)):
+#             # 解析错误
+#             if i not in pos:
+#                 continue
+#             else:
+#                 if pos[i] == None:
+#                     continue
+#                 else:
+#                     score2[i] = normalize(pos[i])
+
+#                     acc = []
+#                     for val in neg[i]:
+#                         if val is not None:
+#                             _acc = (pos[i] - val) >= diff_threshold
+#                             if _acc:
+#                                 acc.append(normalize(1.0))
+#                             else:
+#                                 acc.append(normalize(0.0))
+#                     if len(acc) > 0:
+#                         score1[i] = np.mean(acc)
+#                     else:
+#                         score1[i] = 0.0
+
+#         if return_single_score:
+#             total_score = []
+#             for x, y in zip(score1, score2):
+#                 total_score.append(x+y)
+#             return total_score
+#         else:
+#             return score1, score2
+
+#     async def calc_compression_ratio_reward(
+#             self,
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth,
+#             max_concurrent_requests=32,
+#             similarity_threshold=4,
+#     ):
+#         """
+#             计算Criteria对应原问题的信息压缩率, score取值区间-1～+1
+#         """
+
+#         indices = []
+#         criteria = []
+#         for i, (_gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+#             criterion = criteria_parse_solution_fn(sol)
+#             if criterion is not None:
+#                 criteria.append(criterion)
+#                 indices.append(i)
+#             else:
+#                 continue
+
+#         results = await decode_to_question(criteria)
+#         new_indices, fabricates, authentics = [], [], []
+
+#         for fabricate, index in zip(results, indices):
+#             if fabricate is None:
+#                 continue
+#             else:
+#                 fabricates.append(fabricate)
+#                 new_indices.append(index)
+#                 authentics.append(batch_ground_truth[index]["positive"])
+
+#         similarity = await question_similarity(
+#             authentic=authentics,
+#             fabricate=fabricates,
+#             max_concurrent_requests=max_concurrent_requests
+#         )
+#         scores = [0.0] * len(batch_solution_str)
+#         for sim, index in zip(similarity, new_indices):
+#             if sim is None:
+#                 pass
+#             else:
+#                 # 相似度过高，泄题 => 负
+#                 if sim >= similarity_threshold:
+#                     scores[index] = -1.0
+#                 else:
+#                     scores[index] = 1.0
+
+#         return scores
+
+#     def compute_score(self,
+#                       batch_data_sources,
+#                       batch_solution_str,
+#                       batch_ground_truth,
+#                       stage,
+#                       ):
+#         async def main():
+#             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, stage=stage)
+#         return aio.run(main())
+
+#     async def _compute_score(self,
+#                              batch_data_sources,
+#                              batch_solution_str,
+#                              batch_ground_truth,
+#                              ):
+#         scores1 = await self.calc_classify_acc_reward(
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth,
+#             self.max_concurrent_requests
+#         )
+#         scores2 = await self.calc_compression_ratio_reward(
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth,
+#             self.max_concurrent_requests
+#         )
+
+#         final_results = []
+#         for gt, solution, score1, score2 in zip(batch_ground_truth, batch_solution_str, scores1, scores2):
+#             criteria = criteria_parse_solution_fn(solution)
+#             if criteria is None:
+#                 final_results.append(self.parse_result_failure_score)
+#             else:
+#                 final_results.append(score1+score2)
+
+#             if self.split == "valid" or (self.split == "train" and random.random() < 0.1):
+#                 log = True
+#                 log_flag = "[VALID]" if self.split == "valid" else "[TRAIN]"
+#             else:
+#                 log = False
+
+#             if log:
+#                 print(
+#                     f"--------------------------------{log_flag}--------------------------------")
+#                 print(
+#                     f"【Question】`{self.log_ground_truth(gt)}`")
+#                 print(
+#                     f"【Criteria】`{self.log_solution(solution)}`")
+#                 print(
+#                     f'[Final Reward]={final_results[-1]:.3f}\n')
+#         return final_results
+
+#     def log_solution(self, solution):
+#         criteria = criteria_parse_solution_fn(solution)
+#         if criteria is None:
+#             return repr(self.clip_string(solution))
+#         return repr(self.clip_string(criteria))
+
+#     def log_ground_truth(self, ground_truth):
+#         return repr(self.clip_string(ground_truth["positive"]))
+
+#     def clip_string(self, s: str):
+#         if len(s) > 1500:
+#             return f'{s[:700]}... [省略] ...{s[-800:]}'
+#         return s
+
+
+# _qwq_longcot_create_criteria_compute_score_train = QwQLongCoTCreateCriteriaComputeScore(
+#     split="train", max_concurrent_requests=MAX_CONCURRENT)
+# _qwq_longcot_create_criteria_compute_score_valid = QwQLongCoTCreateCriteriaComputeScore(
+#     split="valid", max_concurrent_requests=MAX_CONCURRENT)
+# qwq_longcot_create_criteria_compute_score_train = _qwq_longcot_create_criteria_compute_score_train.compute_score
+# qwq_longcot_create_criteria_compute_score_valid = _qwq_longcot_create_criteria_compute_score_valid.compute_score
+
+
+CRITERIA_DEFAULT_PARAMS = {
+    "judge_run_args": {
+        "w_criteria": {
+            "model": CriteriaRMComputeScore.get_judge_agent(),
+            "fn": CriteriaRMComputeScore.judge_with_criteria,
+            "desc": 'judge w criteria'
+        },
+    },
+}
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# Criteria RM
 # ------------------------------------------------------------------------------------------------------------------------------------------------------

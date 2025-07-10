@@ -23,10 +23,12 @@ from fabricate_qa import (
     QuestionSimilarityPenalty,
     Doc2QueryV2ComputeScore,
     Doc2QueryV3ComputeScore,
+    CriteriaRMComputeScore,
     SALTComputeScore,
     DOC2QUERY_DEFAULT_PARAMS,
     SALT_DEFAULT_PARAMS,
     DOC2QUERY_V3_DEFAULT_PARAMS,
+    CRITERIA_DEFAULT_PARAMS,
     doc2query_v2_default_stage1_compute_score_valid,
     fabricate_qa_default_stage1_compute_score_valid,
     fabricate_aio_default_stage1_compute_score_valid,
@@ -37,6 +39,7 @@ from fabricate_qa import (
     salt_default_compute_score_valid,
     doc2query_v3_default_compute_score_valid,
     calc_qa_parse_solution_fn,
+    criteria_parse_solution_fn,
     doc2query_v3_parse_solution_fn,
     salt_parse_solution_fn,
     calc_qa_parse_thought_fn,
@@ -74,6 +77,26 @@ def load_doc2query_v3_data(num=100):
 
         batch_solution_str.append(
             f'<think>\n{think}\n</think>\n\n<question>\nQuestion: {q}\n\nOptions:\n{o}\n\nAnswer: {a}\n</question>')
+        batch_ground_truth.append(row["reward_model"])
+        count += 1
+    return batch_solution_str, batch_ground_truth
+
+
+def load_criteria_rm_data(num=100):
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/ultra_feedback_test.parquet"
+    batch_solution_str, batch_ground_truth = [], []
+
+    df = pd.read_parquet(filename)
+    count = 0
+    for i, row in df.iterrows():
+        row = row.to_dict()
+        if i < 10:
+            continue
+        elif i > 15:
+            break
+
+        batch_solution_str.append(
+            "<think>\n***\n</think>\n\n# 评价标准\n\n按照有用性、安全性、真实性进行打分，满分10分")
         batch_ground_truth.append(row["reward_model"])
         count += 1
     return batch_solution_str, batch_ground_truth
@@ -278,6 +301,7 @@ class TestDoc2QueryV3(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_doc2query_v3_data(num=32)
         task = Doc2QueryV3ComputeScore(
             doc2query_v3_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
+
         async def main():
             results = await task.get_bad_question_penalty(
                 [None] *
@@ -525,6 +549,28 @@ class TestFabricate(unittest.TestCase):
 
         print(len(rewards), len(batch_solution_str))
         self.assertTrue(len(rewards) == len(batch_solution_str))
+
+
+class TestCriteriaRM(unittest.TestCase):
+    def test_criteria_parse_solution_fn(self):
+        print(criteria_parse_solution_fn(
+            "<think>\n***\n</think>\n\n# 评价标准\n\n按照有用性、安全性、真实性进行打分，满分10分"))
+
+    def test_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_criteria_rm_data()
+
+        task = CriteriaRMComputeScore(
+            parse_solution_fn=criteria_parse_solution_fn,
+            args=CRITERIA_DEFAULT_PARAMS)
+
+        async def main():
+            results = await task.simulate_respondent(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth,
+                run_args=CRITERIA_DEFAULT_PARAMS["judge_run_args"], debug=True,
+            )
+
+        aio.run(main())
 
 
 if __name__ == '__main__':
