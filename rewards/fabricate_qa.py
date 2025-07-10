@@ -4775,7 +4775,7 @@ Your answer is well-structured, informative, and it adheres to the instructions 
                     print()
 
         return final_results
-        
+
     def clip_string(self, s: str):
         if len(s) > 1500:
             return f'{s[:700]}... [省略] ...{s[-800:]}'
@@ -4784,8 +4784,9 @@ Your answer is well-structured, informative, and it adheres to the instructions 
     def log_solution(self, solution):
         criteria = criteria_parse_solution_fn(solution)
         if criteria is None:
-            return repr(self.clip_string(solution))
-        return repr(self.clip_string(criteria))
+            return self.clip_string(solution)
+        return self.clip_string(criteria)
+
 
 CRITERIA_DEFAULT_PARAMS = {
     "judge_run_args": {
@@ -4804,8 +4805,6 @@ _default_criteria_rm_compute_score_valid = CriteriaRMComputeScore(
     criteria_parse_solution_fn, split="valid", args=CRITERIA_DEFAULT_PARAMS)
 criteria_rm_default_compute_score_train = _default_criteria_rm_compute_score_train.compute_score
 criteria_rm_default_compute_score_valid = _default_criteria_rm_compute_score_valid.compute_score
-
-
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
