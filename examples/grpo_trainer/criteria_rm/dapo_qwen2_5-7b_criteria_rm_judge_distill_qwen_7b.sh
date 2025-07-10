@@ -52,7 +52,7 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/opencompass/models/hf_hub/models--deepseek-ai--DeepSeek-R1-Distill-Qwen-7B/snapshots/008b8c2e0b59dac9b7619d58a5ad609f43a5b6b1"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/guoxu/hf_hub/models/models--deepseek-ai--DeepSeek-R1-Distill-Qwen-7B/snapshots/6602cadec947dbb53e64f3d8d6425320b2197247"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/ultra_feedback_train.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/ultra_feedback_test.parquet"
 

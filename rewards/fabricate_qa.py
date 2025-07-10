@@ -4782,7 +4782,8 @@ Your answer is well-structured, informative, and it adheres to the instructions 
         for i, (gt, solution) in enumerate(zip(batch_ground_truth, batch_solution_str)):
             criteria = criteria_parse_solution_fn(solution)
             cur_score = rewards[i][0]+rewards[i][1]
-            final_results.append(rewards[i][0]+rewards[i][1])
+
+            final_results.append(cur_score)
 
             if rewards[i][0] > 0 or (self.split == "valid") or (self.split == "train" and random.random() < 0.1):
                 log = True
