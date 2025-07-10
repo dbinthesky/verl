@@ -4421,6 +4421,9 @@ doc2query_v3_default_compute_score_valid = partial(
 
 def criteria_parse_solution_fn(solution_str: str):
     solution_str = postprocess_solution(solution_str)
+    if not solution_str.startswith("<think>"):
+        solution_str = f'<think>\n{solution_str}'
+
     try:
         thought = re.findall(r'think>.*</think>',
                              solution_str, re.DOTALL)[0]
