@@ -564,10 +564,9 @@ class TestCriteriaRM(unittest.TestCase):
             args=CRITERIA_DEFAULT_PARAMS)
 
         async def main():
-            results = await task.simulate_respondent(
+            results = await task._compute_score(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
-                run_args=CRITERIA_DEFAULT_PARAMS["judge_run_args"], debug=True,
             )
 
         aio.run(main())
