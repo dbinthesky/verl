@@ -37,6 +37,7 @@ from fabricate_qa import (
     fabricate_aio_qwen32b_respondent_stage2_compute_score_valid,
     fabricate_aio_qwen3_8b_respondent_compute_score_valid,
     salt_default_compute_score_valid,
+    criteria_rm_default_compute_score_valid,
     doc2query_v3_default_compute_score_valid,
     calc_qa_parse_solution_fn,
     criteria_parse_solution_fn,
@@ -559,17 +560,22 @@ class TestCriteriaRM(unittest.TestCase):
     def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_criteria_rm_data()
 
-        task = CriteriaRMComputeScore(
-            parse_solution_fn=criteria_parse_solution_fn,
-            args=CRITERIA_DEFAULT_PARAMS)
+        criteria_rm_default_compute_score_valid(
+            [None] *
+            len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        )
 
-        async def main():
-            results = await task._compute_score(
-                [None] *
-                len(batch_solution_str), batch_solution_str, batch_ground_truth,
-            )
+        # task = CriteriaRMComputeScore(
+        #     parse_solution_fn=criteria_parse_solution_fn,
+        #     args=CRITERIA_DEFAULT_PARAMS)
 
-        aio.run(main())
+        # async def main():
+        #     results = await task._compute_score(
+        #         [None] *
+        #         len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        #     )
+
+        # aio.run(main())
 
 
 if __name__ == '__main__':

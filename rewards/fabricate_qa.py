@@ -4762,9 +4762,9 @@ Your answer is well-structured, informative, and it adheres to the instructions 
                 print(
                     f"--------------------------------{log_flag}--------------------------------")
                 print(
-                    f'【Solution】({source}) INSTRUCT=`{self.clip_string(batch_ground_truth[i]["instruction"])}`')
+                    f'【Solution】({source}) INSTRUCT=`{repr(self.clip_string(batch_ground_truth[i]["instruction"]))}`')
                 print(
-                    f'【Solution】({source}) CRITERIA=`{self.log_solution(batch_solution_str[i])}`')
+                    f'【Solution】({source}) CRITERIA=\n{self.log_solution(batch_solution_str[i])}')
                 print(
                     f'[Final Reward]={cur_score:.3f}|Consist={rewards[i][0]}|Recall={rewards[i][1]}\n')
 
@@ -4775,20 +4775,17 @@ Your answer is well-structured, informative, and it adheres to the instructions 
                     print()
 
         return final_results
+        
+    def clip_string(self, s: str):
+        if len(s) > 1500:
+            return f'{s[:700]}... [省略] ...{s[-800:]}'
+        return s
 
     def log_solution(self, solution):
         criteria = criteria_parse_solution_fn(solution)
         if criteria is None:
             return repr(self.clip_string(solution))
         return repr(self.clip_string(criteria))
-
-        # _qwq_longcot_create_criteria_compute_score_train = QwQLongCoTCreateCriteriaComputeScore(
-        #     split="train", max_concurrent_requests=MAX_CONCURRENT)
-        # _qwq_longcot_create_criteria_compute_score_valid = QwQLongCoTCreateCriteriaComputeScore(
-        #     split="valid", max_concurrent_requests=MAX_CONCURRENT)
-        # qwq_longcot_create_criteria_compute_score_train = _qwq_longcot_create_criteria_compute_score_train.compute_score
-        # qwq_longcot_create_criteria_compute_score_valid = _qwq_longcot_create_criteria_compute_score_valid.compute_score
-
 
 CRITERIA_DEFAULT_PARAMS = {
     "judge_run_args": {
@@ -4800,6 +4797,16 @@ CRITERIA_DEFAULT_PARAMS = {
         },
     },
 }
+
+_default_criteria_rm_compute_score_train = CriteriaRMComputeScore(
+    criteria_parse_solution_fn, split="train", args=CRITERIA_DEFAULT_PARAMS)
+_default_criteria_rm_compute_score_valid = CriteriaRMComputeScore(
+    criteria_parse_solution_fn, split="valid", args=CRITERIA_DEFAULT_PARAMS)
+criteria_rm_default_compute_score_train = _default_criteria_rm_compute_score_train.compute_score
+criteria_rm_default_compute_score_valid = _default_criteria_rm_compute_score_valid.compute_score
+
+
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Criteria RM
