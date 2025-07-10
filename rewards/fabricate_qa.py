@@ -1364,14 +1364,16 @@ class Doc2QueryV2ComputeScore(object):
         return s
 
     async def get_difficulty_reward(
-            self,
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-            run_args=None,
-            metric_args=None,
-            max_concurrent_requests=MAX_CONCURRENT,
-            debug=False):
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        run_args=None,
+        metric_args=None,
+        max_concurrent_requests=MAX_CONCURRENT,
+        debug=False,
+        skip_run=None
+    ):
         assert metric_args is not None, f'`metric_args` missed'
         assert run_args is not None, f'`run_args` missed'
 
@@ -1381,7 +1383,8 @@ class Doc2QueryV2ComputeScore(object):
             batch_ground_truth,
             run_args=run_args,
             max_concurrent_requests=max_concurrent_requests,
-            debug=debug
+            debug=debug,
+            skip_run=skip_run
         )
 
         full_rewards = []
@@ -1457,7 +1460,9 @@ class Doc2QueryV2ComputeScore(object):
             batch_ground_truth,
             run_args=None,
             max_concurrent_requests=MAX_CONCURRENT,
-            debug=False):
+            debug=False,
+            skip_run=None
+    ):
         assert run_args is not None
 
         prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
@@ -1468,6 +1473,9 @@ class Doc2QueryV2ComputeScore(object):
             if result is not None:
                 question, answer, answer_type = result
                 answer_map[i] = (question, answer, answer_type)
+
+                if skip_run is not None and i in skip_run:
+                    continue
 
                 skip = False
                 if not debug:
@@ -1558,6 +1566,199 @@ class Doc2QueryV2ComputeScore(object):
                     if sim >= threshold:
                         _score = max(_score, set_val)
                 scores[index] = _score * run_args["weight"]
+        return scores
+
+    async def _good_question_checklist(self, agent, fabricate, max_concurrent_requests=32):
+        FEWSHOTS = """
+任务：基于下面的标准对一个学科问题进行判断是否满足条件需要修改
+
+
+学科知识出题评价标准总结
+1. **关键术语的清晰度与具体性**  
+   - **检查点**：题目中的专业术语、缩写、实验阶段、参数等是否明确定义或具体化？  
+   - **问题迹象**：  
+     - 术语模糊（如“验证实验”未指定具体阶段）。  
+     - 缩写未解释（如“CCV”未扩写）。  
+     - 概念笼统（如“稳定性”未说明具体条件）。  
+   - **评价依据**：未定义的术语会导致答案不唯一或理解困难。好题目应避免抽象表述，必要时补充细节。
+
+2. **相关性与教育价值**
+   - **检查点**：题目是否聚焦学科核心知识，避免琐碎或边缘内容？  
+     - 内容琐碎（如考查书籍章节作者等细节，而非核心概念）。  
+     - 与学科知识脱节（如问题不涉及原理、机制或应用）。  
+     - 选项包含“无法确定”等模糊项，但题目未提供判断依据。  
+  - **评价依据**：好题目应强调理解、分析或应用，而非记忆孤立事实。
+
+3. **信息完整性**  
+   - **检查点**：题目是否提供所有必要信息，包括背景、条件、数据来源或参考材料？  
+   - **问题迹象**：  
+     - 关键条件缺失（如未提实验设置）。  
+     - 引用不存在的材料（如“根据材料”但无实际材料）。  
+     - 背景信息不足。  
+   - **评价依据**：避免因信息缺失导致题目不严谨；通过添加背景改善完整性。
+
+4. **无歧义性**  
+   - **检查点**：题目表述是否单一解释，避免歧义或多义？  
+   - **问题迹象**：  
+     - 用词模糊（如“影响”未指定正向/负向）。  
+     - 选项范围过大（如百分比区间过宽）。  
+     - 问题结构易引发误解。  
+   - **评价依据**：好题目应确保语言精准。
+
+5. **简洁性**  
+   - **检查点**：题目表述是否精炼，无冗余信息，同时保留必要内容？  
+   - **问题迹象**：  
+     - 冗余修饰（如重复解释同一概念、添加与问题无关的形容词）。  
+     - 无关背景（如引入与核心问题无关的细节，增加阅读负担）。  
+     - 结构冗长（如使用复杂从句、绕弯表述，导致核心问题被掩盖）。  
+   - **评价依据**：好题目应在“简洁”与“完整”间平衡，剔除无效信息但不牺牲必要条件。
+
+
+
+输出要求：
+满足全部要求输出“无需修改”，否则输出“需要改进”。
+按下面的格式输出结果 （如果无需修改，[违反原则]不用填写）
+```
+[分析] ... 
+[违反原则]
+[结果]
+```
+
+下面是一些例子
+[问题] 在验证实验中，THBS2和CA19-9联合检测用于诊断胰腺导管腺癌的AUC值达到多少？\n\nOptions:\nA) 0.845\nB) 0.867\nC) 0.956\nD) 0.97
+```
+[分析] 问题中的“验证实验”未指定具体阶段，属于术语模糊，违反了关键术语的清晰度与具体性原则。
+[违反原则] 关键术语的清晰度与具体性
+[结果] 需要改进
+```
+
+[问题] According to Epidemiological assessment of cassava mosaic disease in Central African Republic reveals the importance of mixed viral infection and poor health of plant cuttings，in  Fig. 1. B，what was the approximate percentage reduction in yield for cassava plants grown from cuttings of CMD severity class 5 compared to class 1?\n\nOptions:\nA) 20-30%\nB) 50-60%\nC) 60-70%\nD) 80-90%\nE) No significant reduction
+```
+[分析] 问题要求根据特定文献的图1.B回答，属于考查琐碎的图表细节，而非学科核心知识，违反了相关性与教育价值原则；同时，若未提供该文献的图1.B作为参考材料，也违反了信息完整性原则。
+[违反原则] 相关性与教育价值、信息完整性
+[结果] 需要改进
+```
+
+[问题] 根据材料，影响全球山地林线高度分布的首要因素是？\n\nOptions:\nA) 山地海拔\nB) 光照强度\nC) 年平均气温\nD) 最热月平均气温
+```
+[分析] 问题中“根据材料”属于无关背景，与核心问题无关，增加了阅读负担，属于冗余信息，违反了简洁性原则。虽然提到“根据材料”，但该表述对解题无实际意义，并非信息缺失导致的不完整，而是多余的表述。
+[违反原则] 简洁性
+[结果] 需要改进
+```
+
+[问题] question: Which species is inconsistently included in the sections of "The Ecology, Exploitation, and Conservation of River Turtles" by Don Moll and Edward O Moll?\n\nOptions:\nA) Diamondback terrapin\nB) Snapping turtle\nC) Sea turtle\nD) Red-eared slider
+```
+[分析] 问题考查的是特定书籍中某一物种是否被一致纳入章节，属于考查书籍中的琐碎细节，而非学科核心知识，违反了相关性与教育价值原则。
+[违反原则] 相关性与教育价值
+[结果] 需要改进
+```
+
+[问题] 在微机械制造中，哪种技术可以加工出比其他方法更微小的结构？\n\nOptions:\nA) 集成电路制造技术\nB) LIGA技术\nC) SPM技术\nD) 传统机械加工方法
+```
+[分析] 问题中的专业术语如“微机械制造”“集成电路制造技术”“LIGA技术”“SPM技术”等均为该领域明确概念，表述清晰；聚焦于不同技术加工微小结构的能力比较，属于学科核心知识，具有教育价值；信息完整，无关键条件缺失；表述单一明确，无歧义；语言精炼，无冗余信息，在简洁与完整间保持平衡。
+[结果] 无需修改
+```
+
+[问题] Which indicator is defined as the product of the calibration coefficient of compacted materials and the second harmonic component of the effective acoustic wave spectrum?\n\nOptions:\nA) CCV\nB) CV\nC) SCV\nD) AICV\nE) RMV
+```
+[分析] 问题中的缩写“CCV”“CV”“SCV”“AICV”“RMV”均未扩写解释，属于缩写未解释，违反了关键术语的清晰度与具体性原则。
+[违反原则] 关键术语的清晰度与具体性
+[结果] 需要改进
+```
+
+[问题] 在制造反光镜时，哪种设计通常需要额外的金属层来调节热膨胀系数以匹配面板的热膨胀系数？\n\nOptions:\nA) 全复合材料设计\nB) 混杂复合材料设计\nC) 金属反光镜设计\nD) 玻璃反光镜设计
+```
+[分析] 问题表述中“制造反光镜”未明确精度要求，根据提示，添加“高精度”可使表述更严谨，原表述存在一定模糊性，违反了无歧义性原则。
+[违反原则] 无歧义性
+[结果] 需要改进
+```
+
+[问题] 对于一位表现为文氏现象的患者，若同时存在左束支传导阻滞，其房室传导阻滞的阻滞部位最可能位于何处？\n\nOptions:\nA) 房室结\nB) 希氏束以下\nC) 右束支\nD) 窦房结
+```
+[分析] 问题中的专业术语如“文氏现象”“左束支传导阻滞”“房室传导阻滞”等均为医学领域明确的概念，表述清晰具体；聚焦于房室传导阻滞阻滞部位的判断，属于学科核心知识，具有教育价值；提供了患者的症状等必要信息，信息完整；表述单一明确，无歧义；语言精炼，无冗余信息，在简洁与完整间保持了平衡。
+[结果] 无需修改
+```
+
+[问题] 据相变诱发塑性钢的稳定性研究，提高贝氏体等温温度会对残余奥氏体的稳定性产生什么影响？
+```
+[分析] 问题中未明确“稳定性”的具体衡量标准，如未说明是从残余奥氏体的含量、形态还是其他方面来衡量稳定性，属于概念笼统，违反了关键术语的清晰度与具体性原则。
+[违反原则] 关键术语的清晰度与具体性
+[结果] 需要改进
+```
+
+[问题] Who authored the chapter on class number in Volume III of "History of the Theory of Numbers"?\n\nOptions:\nA) L. E. Dickson\nB) G. H. Creese\nC) L. J. Mordell\nD) E. T. Bell\nE) R. D. Carmichael
+```
+[分析] 问题考查的是特定书籍某一卷中某一章节的作者，属于考查书籍中的琐碎细节，而非学科核心知识，违反了相关性与教育价值原则。
+[违反原则] 相关性与教育价值
+[结果] 需要改进
+```
+
+"""
+
+        def postprocess(s):
+            try:
+                conclusion = s[s.index(
+                    "[结果]")+len("[结果]"):].strip()
+                if "无需修改" in conclusion:
+                    return True
+                return False
+            except Exception as err:
+                raise PostprocessError(f'{err}')
+
+        prompts = []
+        prompts = defaultdict(list)
+        for index, b in enumerate(fabricate):
+            prompt = FEWSHOTS + \
+                f'\n\n\n现在需要你对下面的学科问题分析是否需要修改。\n\n[问题]\n{b}\n'
+            prompts[prompt].append(index)
+
+        results = await agent.run(list(prompts.keys()), 64, desc=f"[Good Question Checklist {agent.model}]", postprocess_fns=[postprocess]*len(list(prompts.keys())))
+
+        results_mapper = {}
+        for (k, v) in results:
+            for _ in prompts[k]:
+                results_mapper[_] = v
+
+        outputs = []
+        for i, _ in enumerate(fabricate):
+            if i in results_mapper and results_mapper[i] is not None:
+                outputs.append(results_mapper[i])
+            else:
+                outputs.append(False)
+        return outputs
+
+    async def get_bad_question_penalty(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        max_concurrent_requests=128,
+        run_args=None
+    ):
+        indices = []
+        fabricates = []
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            fabricate = self.parse_solution_fn(sol)
+            if fabricate is not None:
+                fabricates.append(self.format_question(
+                    fabricate[0], fabricate[1], None))
+                indices.append(i)
+            else:
+                continue
+
+        valid = await self._good_question_checklist(
+            agent=self.get_verify_agent(),
+            fabricate=fabricates,
+            max_concurrent_requests=max_concurrent_requests
+        )
+
+        scores = [0.0] * len(batch_solution_str)
+        for _valid, index in zip(valid, indices):
+            if _valid is None:
+                pass
+            else:
+                _score = 0.0 if _valid else -0.5
+                scores[index] = _score
         return scores
 
     def compute_score(self,
@@ -1653,8 +1854,17 @@ class Doc2QueryV2ComputeScore(object):
 
         # 二阶段训练(全量奖励)
         # 一阶段训练(格式奖励)
-
         if stage == "2":
+            # 问题质量检测
+            bad_q_penalties = await self.get_bad_question_penalty(
+                batch_data_sources,
+                batch_solution_str,
+                batch_ground_truth,
+                max_concurrent_requests=32
+            )
+            skip_run = tuple(
+                [i for i, v in enumerate(bad_q_penalties) if v < 0.0])
+
             # 难度奖励
             difficulty_rewards, pass_rates = await self.get_difficulty_reward(
                 batch_data_sources,
@@ -1663,15 +1873,16 @@ class Doc2QueryV2ComputeScore(object):
                 run_args=self.args["difficulty_run_args"],
                 metric_args=self.args["difficulty_metric_args"],
                 max_concurrent_requests=max_concurrent_requests,
+                skip_run=skip_run,
             )
-            # # 相似度奖励
-            # similarity_rewards = await self.get_similarity_reward(
-            #     batch_data_sources,
-            #     batch_solution_str,
-            #     batch_ground_truth,
-            #     max_concurrent_requests=max_concurrent_requests,
-            #     run_args=self.args["similarity_run_args"],
-            # )
+            # 相似度奖励
+            similarity_rewards = await self.get_similarity_reward(
+                batch_data_sources,
+                batch_solution_str,
+                batch_ground_truth,
+                max_concurrent_requests=max_concurrent_requests,
+                run_args=self.args["similarity_run_args"],
+            )
 
         final_results = []
         for i in range(len(batch_solution_str)):
@@ -3717,199 +3928,6 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
     @classmethod
     def get_distractor_option_letters(cls, options):
         return [cls.MULTICHOICE_LETTER[len(options)], cls.MULTICHOICE_LETTER[len(options)+1]]
-
-    async def _good_question_checklist(self, agent, fabricate, max_concurrent_requests=32):
-        FEWSHOTS = """
-任务：基于下面的标准对一个学科问题进行判断是否满足条件需要修改
-
-
-学科知识出题评价标准总结
-1. **关键术语的清晰度与具体性**  
-   - **检查点**：题目中的专业术语、缩写、实验阶段、参数等是否明确定义或具体化？  
-   - **问题迹象**：  
-     - 术语模糊（如“验证实验”未指定具体阶段）。  
-     - 缩写未解释（如“CCV”未扩写）。  
-     - 概念笼统（如“稳定性”未说明具体条件）。  
-   - **评价依据**：未定义的术语会导致答案不唯一或理解困难。好题目应避免抽象表述，必要时补充细节。
-
-2. **相关性与教育价值**
-   - **检查点**：题目是否聚焦学科核心知识，避免琐碎或边缘内容？  
-     - 内容琐碎（如考查书籍章节作者等细节，而非核心概念）。  
-     - 与学科知识脱节（如问题不涉及原理、机制或应用）。  
-     - 选项包含“无法确定”等模糊项，但题目未提供判断依据。  
-  - **评价依据**：好题目应强调理解、分析或应用，而非记忆孤立事实。
-
-3. **信息完整性**  
-   - **检查点**：题目是否提供所有必要信息，包括背景、条件、数据来源或参考材料？  
-   - **问题迹象**：  
-     - 关键条件缺失（如未提实验设置）。  
-     - 引用不存在的材料（如“根据材料”但无实际材料）。  
-     - 背景信息不足。  
-   - **评价依据**：避免因信息缺失导致题目不严谨；通过添加背景改善完整性。
-
-4. **无歧义性**  
-   - **检查点**：题目表述是否单一解释，避免歧义或多义？  
-   - **问题迹象**：  
-     - 用词模糊（如“影响”未指定正向/负向）。  
-     - 选项范围过大（如百分比区间过宽）。  
-     - 问题结构易引发误解。  
-   - **评价依据**：好题目应确保语言精准。
-
-5. **简洁性**  
-   - **检查点**：题目表述是否精炼，无冗余信息，同时保留必要内容？  
-   - **问题迹象**：  
-     - 冗余修饰（如重复解释同一概念、添加与问题无关的形容词）。  
-     - 无关背景（如引入与核心问题无关的细节，增加阅读负担）。  
-     - 结构冗长（如使用复杂从句、绕弯表述，导致核心问题被掩盖）。  
-   - **评价依据**：好题目应在“简洁”与“完整”间平衡，剔除无效信息但不牺牲必要条件。
-
-
-
-输出要求：
-满足全部要求输出“无需修改”，否则输出“需要改进”。
-按下面的格式输出结果 （如果无需修改，[违反原则]不用填写）
-```
-[分析] ... 
-[违反原则]
-[结果]
-```
-
-下面是一些例子
-[问题] 在验证实验中，THBS2和CA19-9联合检测用于诊断胰腺导管腺癌的AUC值达到多少？\n\nOptions:\nA) 0.845\nB) 0.867\nC) 0.956\nD) 0.97
-```
-[分析] 问题中的“验证实验”未指定具体阶段，属于术语模糊，违反了关键术语的清晰度与具体性原则。
-[违反原则] 关键术语的清晰度与具体性
-[结果] 需要改进
-```
-
-[问题] According to Epidemiological assessment of cassava mosaic disease in Central African Republic reveals the importance of mixed viral infection and poor health of plant cuttings，in  Fig. 1. B，what was the approximate percentage reduction in yield for cassava plants grown from cuttings of CMD severity class 5 compared to class 1?\n\nOptions:\nA) 20-30%\nB) 50-60%\nC) 60-70%\nD) 80-90%\nE) No significant reduction
-```
-[分析] 问题要求根据特定文献的图1.B回答，属于考查琐碎的图表细节，而非学科核心知识，违反了相关性与教育价值原则；同时，若未提供该文献的图1.B作为参考材料，也违反了信息完整性原则。
-[违反原则] 相关性与教育价值、信息完整性
-[结果] 需要改进
-```
-
-[问题] 根据材料，影响全球山地林线高度分布的首要因素是？\n\nOptions:\nA) 山地海拔\nB) 光照强度\nC) 年平均气温\nD) 最热月平均气温
-```
-[分析] 问题中“根据材料”属于无关背景，与核心问题无关，增加了阅读负担，属于冗余信息，违反了简洁性原则。虽然提到“根据材料”，但该表述对解题无实际意义，并非信息缺失导致的不完整，而是多余的表述。
-[违反原则] 简洁性
-[结果] 需要改进
-```
-
-[问题] question: Which species is inconsistently included in the sections of "The Ecology, Exploitation, and Conservation of River Turtles" by Don Moll and Edward O Moll?\n\nOptions:\nA) Diamondback terrapin\nB) Snapping turtle\nC) Sea turtle\nD) Red-eared slider
-```
-[分析] 问题考查的是特定书籍中某一物种是否被一致纳入章节，属于考查书籍中的琐碎细节，而非学科核心知识，违反了相关性与教育价值原则。
-[违反原则] 相关性与教育价值
-[结果] 需要改进
-```
-
-[问题] 在微机械制造中，哪种技术可以加工出比其他方法更微小的结构？\n\nOptions:\nA) 集成电路制造技术\nB) LIGA技术\nC) SPM技术\nD) 传统机械加工方法
-```
-[分析] 问题中的专业术语如“微机械制造”“集成电路制造技术”“LIGA技术”“SPM技术”等均为该领域明确概念，表述清晰；聚焦于不同技术加工微小结构的能力比较，属于学科核心知识，具有教育价值；信息完整，无关键条件缺失；表述单一明确，无歧义；语言精炼，无冗余信息，在简洁与完整间保持平衡。
-[结果] 无需修改
-```
-
-[问题] Which indicator is defined as the product of the calibration coefficient of compacted materials and the second harmonic component of the effective acoustic wave spectrum?\n\nOptions:\nA) CCV\nB) CV\nC) SCV\nD) AICV\nE) RMV
-```
-[分析] 问题中的缩写“CCV”“CV”“SCV”“AICV”“RMV”均未扩写解释，属于缩写未解释，违反了关键术语的清晰度与具体性原则。
-[违反原则] 关键术语的清晰度与具体性
-[结果] 需要改进
-```
-
-[问题] 在制造反光镜时，哪种设计通常需要额外的金属层来调节热膨胀系数以匹配面板的热膨胀系数？\n\nOptions:\nA) 全复合材料设计\nB) 混杂复合材料设计\nC) 金属反光镜设计\nD) 玻璃反光镜设计
-```
-[分析] 问题表述中“制造反光镜”未明确精度要求，根据提示，添加“高精度”可使表述更严谨，原表述存在一定模糊性，违反了无歧义性原则。
-[违反原则] 无歧义性
-[结果] 需要改进
-```
-
-[问题] 对于一位表现为文氏现象的患者，若同时存在左束支传导阻滞，其房室传导阻滞的阻滞部位最可能位于何处？\n\nOptions:\nA) 房室结\nB) 希氏束以下\nC) 右束支\nD) 窦房结
-```
-[分析] 问题中的专业术语如“文氏现象”“左束支传导阻滞”“房室传导阻滞”等均为医学领域明确的概念，表述清晰具体；聚焦于房室传导阻滞阻滞部位的判断，属于学科核心知识，具有教育价值；提供了患者的症状等必要信息，信息完整；表述单一明确，无歧义；语言精炼，无冗余信息，在简洁与完整间保持了平衡。
-[结果] 无需修改
-```
-
-[问题] 据相变诱发塑性钢的稳定性研究，提高贝氏体等温温度会对残余奥氏体的稳定性产生什么影响？
-```
-[分析] 问题中未明确“稳定性”的具体衡量标准，如未说明是从残余奥氏体的含量、形态还是其他方面来衡量稳定性，属于概念笼统，违反了关键术语的清晰度与具体性原则。
-[违反原则] 关键术语的清晰度与具体性
-[结果] 需要改进
-```
-
-[问题] Who authored the chapter on class number in Volume III of "History of the Theory of Numbers"?\n\nOptions:\nA) L. E. Dickson\nB) G. H. Creese\nC) L. J. Mordell\nD) E. T. Bell\nE) R. D. Carmichael
-```
-[分析] 问题考查的是特定书籍某一卷中某一章节的作者，属于考查书籍中的琐碎细节，而非学科核心知识，违反了相关性与教育价值原则。
-[违反原则] 相关性与教育价值
-[结果] 需要改进
-```
-
-"""
-
-        def postprocess(s):
-            try:
-                conclusion = s[s.index(
-                    "[结果]")+len("[结果]"):].strip()
-                if "无需修改" in conclusion:
-                    return True
-                return False
-            except Exception as err:
-                raise PostprocessError(f'{err}')
-
-        prompts = []
-        prompts = defaultdict(list)
-        for index, b in enumerate(fabricate):
-            prompt = FEWSHOTS + \
-                f'\n\n\n现在需要你对下面的学科问题分析是否需要修改。\n\n[问题]\n{b}\n'
-            prompts[prompt].append(index)
-
-        results = await agent.run(list(prompts.keys()), 64, desc=f"[Good Question Checklist {agent.model}]", postprocess_fns=[postprocess]*len(list(prompts.keys())))
-
-        results_mapper = {}
-        for (k, v) in results:
-            for _ in prompts[k]:
-                results_mapper[_] = v
-
-        outputs = []
-        for i, _ in enumerate(fabricate):
-            if i in results_mapper and results_mapper[i] is not None:
-                outputs.append(results_mapper[i])
-            else:
-                outputs.append(False)
-        return outputs
-
-    async def get_bad_question_penalty(
-        self,
-        batch_data_sources,
-        batch_solution_str,
-        batch_ground_truth,
-        max_concurrent_requests=128,
-        run_args=None
-    ):
-        indices = []
-        fabricates = []
-        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-            fabricate = self.parse_solution_fn(sol)
-            if fabricate is not None:
-                fabricates.append(self.format_question(
-                    fabricate[0], fabricate[1], None))
-                indices.append(i)
-            else:
-                continue
-
-        valid = await self._good_question_checklist(
-            agent=self.get_verify_agent(),
-            fabricate=fabricates,
-            max_concurrent_requests=max_concurrent_requests
-        )
-
-        scores = [0.0] * len(batch_solution_str)
-        for _valid, index in zip(valid, indices):
-            if _valid is None:
-                pass
-            else:
-                _score = 0.0 if _valid else -0.5
-                scores[index] = _score
-        return scores
 
     @classmethod
     def add_distractor_options(cls, options, gt):
