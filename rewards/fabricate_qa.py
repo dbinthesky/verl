@@ -2112,7 +2112,7 @@ class Doc2QueryV2ComputeScore(object):
                         cur_score += _score
 
             # 保存Rollout信息
-            if cur_score > 0:
+            if cur_score > 0 and self.split == "train": 
                 self.update_rollout_info(
                     solution_str=batch_solution_str[i],
                     ground_truth=batch_ground_truth[i],
@@ -3692,7 +3692,7 @@ Hack=1
             cur_score += hack_penalties[i]
 
             # 保存Rollout信息
-            if cur_score > 0:
+            if cur_score > 0 and self.split == "train":
                 self.update_rollout_info(
                     solution_str=batch_solution_str[i],
                     ground_truth=batch_ground_truth[i],
@@ -3987,9 +3987,19 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         def validate_result(response):
             try:
                 response = response.strip()
-                if "\n\n" in response and len(response.split("\n\n")) > 1:
-                    response = response.split("\n\n")[0].strip()
-                ans_list = eval(response.strip())
+                try:
+                    if "\n\n" in response and len(response.split("\n\n")) > 1:
+                        response = response.split("\n\n")[0].strip()
+                    ans_list = eval(response.strip())
+                except Exception as err:
+                    if "\n\n" in response and len(response.split("\n\n")) > 1:
+                        response = response.split("\n\n")[1].strip()
+                        ans_list = eval(response.strip())
+                    else:
+                        if "**输出：**" in response:
+                            response = response[response.index("**输出：**")+len("**输出：**"):].strip()
+                        ans_list = eval(response.strip())
+
                 if not isinstance(ans_list, list):
                     raise PostprocessError(f'Parse Python List Failed')
                 if not all(_ans in self.MULTICHOICE_LETTER for _ans in ans_list):
@@ -4236,7 +4246,6 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
 
         def postprocess(s):
             try:
-                s = s.split("\n\n")[0]
                 conclusion = s[s.index(
                     "[结果]")+len("[结果]"):].strip()
                 if "无需修改" in conclusion:
@@ -4656,7 +4665,7 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
                     cur_score += _score
 
             # 保存Rollout信息
-            if cur_score > 0:
+            if cur_score > 0 and self.split == "train":
                 self.update_rollout_info(
                     solution_str=batch_solution_str[i],
                     ground_truth=batch_ground_truth[i],
