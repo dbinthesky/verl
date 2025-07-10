@@ -4621,11 +4621,11 @@ class CriteriaRMComputeScore(Doc2QueryV2ComputeScore):
                     answer=answer_map[resp_id][1]  #
                 ))
 
-        correctness = await self.verify_batch_results(
+        evaluations = await self.verify_batch_results(
             verify_queue=verify_queue,
             max_concurrent_requests=32,
         )
-        # return correctness
+        return evaluations
 
     async def verify_batch_results(self, verify_queue, max_concurrent_requests):
         def validate_result(response):
@@ -4635,14 +4635,12 @@ class CriteriaRMComputeScore(Doc2QueryV2ComputeScore):
 
                 score = re.findall(
                     r'\"大模型评论员打分\": ([\d+\.]+)', conclusion)[0]
-                print("fucking!!!", score)
                 if isinstance(score, str):
                     score = float(score)
                 assert isinstance(score, float)
 
                 recall = re.findall(
                     r'\"对人类指出的批评的覆盖度\": (\d+)', conclusion)[0]
-                print("shiting!!!", recall)
                 if isinstance(recall, str):
                     recall = float(recall)
                 assert isinstance(recall, float)
@@ -4783,15 +4781,11 @@ Your answer is well-structured, informative, and it adheres to the instructions 
 
         _results = await self.get_analyze_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Analyze Critics {self.get_analyze_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
 
-        # results_mapper = defaultdict(list)
+        evaluations = {}
         for (k, v) in _results:
-            print(v)
-            print("="*80)
-        #     for meta in verify_mapper[k]:
-        #         index, name = meta
-        #         if v is not None:
-        #             correctness[name][index].append(1.0 if v else 0.0)
-        # return correctness
+            for resp_id in verify_mapper[k]:
+                evaluations[resp_id] = v
+        return correctness
 
 #     async def calc_classify_acc_reward(
 #         self,
