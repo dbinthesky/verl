@@ -4743,11 +4743,13 @@ Your answer is well-structured, informative, and it adheres to the instructions 
                                 _consistency = True
                             else:
                                 _consistency = False
-                        else:
+                        elif pair[0]["overall_score"] < pair[1]["overall_score"]:
                             if evaluation[pair[0]["response_id"]][0] < evaluation[pair[1]["response_id"]][0]:
                                 _consistency = True
                             else:
                                 _consistency = False
+                        else: # 分数一样
+                            pass
 
                         if consistency is None:
                             consistency = _consistency
