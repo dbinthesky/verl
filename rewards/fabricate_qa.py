@@ -4736,25 +4736,26 @@ Your answer is well-structured, informative, and it adheres to the instructions 
 
             for pair in itertools.combinations(judge_candidates, 2):
                 if pair[0]["response_id"] in evaluation and pair[1]["response_id"] in evaluation:
-                    _consistency = False
-                    if pair[0]["overall_score"] > pair[1]["overall_score"]:
-                        if evaluation[pair[0]["response_id"]][0] > evaluation[pair[1]["response_id"]][0]:
-                            _consistency = True
+                    if (evaluation[pair[0]["response_id"]] is not None) and (evaluation[pair[1]["response_id"]] is not None):
+                        _consistency = False
+                        if pair[0]["overall_score"] > pair[1]["overall_score"]:
+                            if evaluation[pair[0]["response_id"]][0] > evaluation[pair[1]["response_id"]][0]:
+                                _consistency = True
+                            else:
+                                _consistency = False
                         else:
-                            _consistency = False
-                    else:
-                        if evaluation[pair[0]["response_id"]][0] < evaluation[pair[1]["response_id"]][0]:
-                            _consistency = True
-                        else:
-                            _consistency = False
+                            if evaluation[pair[0]["response_id"]][0] < evaluation[pair[1]["response_id"]][0]:
+                                _consistency = True
+                            else:
+                                _consistency = False
 
-                    if consistency is None:
-                        consistency = _consistency
-                    else:
-                        consistency = consistency and _consistency
+                        if consistency is None:
+                            consistency = _consistency
+                        else:
+                            consistency = consistency and _consistency
 
             for cand in judge_candidates:
-                if cand["response_id"] in evaluation:
+                if cand["response_id"] in evaluation and evaluation[cand["response_id"]] is not None:
                     recall.append(evaluation[cand["response_id"]][1])
             rewards.append((1.0 if consistency else 0.0, np.mean(
                 recall)/5.0 if len(recall) > 0 else 0.0))
