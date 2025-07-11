@@ -84,7 +84,8 @@ def load_doc2query_v3_data(num=100):
 
 
 def load_criteria_rm_data(num=100):
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/ultra_feedback_test.parquet"
+    # filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/ultra_feedback_test.parquet"
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/aime_2024_2025_bo64.parquet"
     batch_solution_str, batch_ground_truth = [], []
 
     df = pd.read_parquet(filename)

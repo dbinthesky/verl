@@ -4443,7 +4443,8 @@ class CriteriaRMComputeScore(Doc2QueryV2ComputeScore):
     def __init__(self,
                  parse_solution_fn,
                  split="train",
-                 args=None):
+                 args=None, 
+                ):
         super().__init__(
             split=split, parse_solution_fn=parse_solution_fn, args=args
         )
@@ -4521,7 +4522,7 @@ class CriteriaRMComputeScore(Doc2QueryV2ComputeScore):
                     prompt2index[_prompt].append(
                         (gt["extra_info"]["uuid"], cand["response_id"]))
                     answer_map[gt["extra_info"]["uuid"]] = (
-                        gt["instruction"], cand["critique"])
+                        gt["instruction"], cand.get("critique", "[No Critiques Here]"))
 
         prompts = list(prompt2index.keys())
 
@@ -4569,7 +4570,7 @@ class CriteriaRMComputeScore(Doc2QueryV2ComputeScore):
                 if isinstance(recall, str):
                     recall = float(recall)
                 assert isinstance(recall, float)
-                assert recall in (1, 2, 3, 4, 5)
+                assert recall in (0, 1, 2, 3, 4, 5)
                 return (score, recall)
 
             except Exception as err:
@@ -4787,7 +4788,9 @@ Your answer is well-structured, informative, and it adheres to the instructions 
         final_results = []
         for i, (gt, solution) in enumerate(zip(batch_ground_truth, batch_solution_str)):
             criteria = criteria_parse_solution_fn(solution)
-            cur_score = rewards[i][0]+rewards[i][1]
+            cur_score = rewards[i][0]
+            if "critique" in gt:
+                cur_score += rewards[i][1]
 
             final_results.append(cur_score)
 
