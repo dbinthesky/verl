@@ -4443,8 +4443,8 @@ class CriteriaRMComputeScore(Doc2QueryV2ComputeScore):
     def __init__(self,
                  parse_solution_fn,
                  split="train",
-                 args=None, 
-                ):
+                 args=None,
+                 ):
         super().__init__(
             split=split, parse_solution_fn=parse_solution_fn, args=args
         )
@@ -4749,7 +4749,7 @@ Your answer is well-structured, informative, and it adheres to the instructions 
                                 _consistency = True
                             else:
                                 _consistency = False
-                        else: # 分数一样
+                        else:  # 分数一样
                             pass
 
                         if consistency is None:

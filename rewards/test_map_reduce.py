@@ -4,36 +4,38 @@ import json
 import string
 import random
 import unittest
-from tqdm import tqdm
 import pandas as pd
-from dapo import (
-    compute_score,
+import asyncio as aio
+from tqdm import tqdm
+from map_reduce import (
+    MapReduceComputeScore,
     compute_score_valid
 )
 
 
 def load_data(num=100):
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/dapo/filtered_dapo_limo_skywork_test.parquet"
     batch_solution_str, batch_ground_truth = [], []
-
-    df = pd.read_parquet(filename)
-    batch_solution_str, batch_ground_truth = [], []
-
-    for _, row in df.iterrows():
-        row = row.to_dict()
-        batch_ground_truth.append(row["reward_model"])
-        if random.random() < 0.5:
-            batch_solution_str.append(
-                f'Final Answer:{row["reward_model"]["ground_truth"]}+1')
-        else:
-            batch_solution_str.append(
-                f'Final Answer:{row["reward_model"]["ground_truth"]}')
+    with open("/cpfs01/shared/llm_ddd/tongjian/verl/rewards/math_rewards.jsonl", "rt") as f:
+        for line in f:
+            example = json.loads(line)
+            batch_solution_str.append(example["solution_str"])
+            batch_ground_truth.append(
+                {"ground_truth": example["ground_truth"], "prompt": "<skip>"})
     return batch_solution_str, batch_ground_truth
 
 
-class TestDapo(unittest.TestCase):
+class TestMapReduce(unittest.TestCase):
     def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_data()
+        task = MapReduceComputeScore(split="valid")
+
+        # async def main():
+        #     results = await task._compute_score(
+        #         [None] *
+        #         len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        #     )
+        # aio.run(main())
+
         print(compute_score_valid(
             [None] *
             len(batch_solution_str), batch_solution_str, batch_ground_truth

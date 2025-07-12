@@ -1,353 +1,370 @@
-# Copyright 2024 Bytedance Ltd. and/or its affiliates
-# Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# Adapted from lm-evaluation-harness/lm_eval/tasks/hendrycks_math/utils.py at main · EleutherAI/lm-evaluation-harne
-
 import re
-import signal
+import json
 import random
-from typing import Optional
-from functools import partial
+import aiohttp
+import requests
+import tqdm.asyncio
+import asyncio as aio
 
 
-def extract_solution(solution_str):
-    if "Final Answer:" not in solution_str:
-        return None
-    # Qwen
-    # answer = solution_str.split(
-    #     "Final Answer:")[-1].strip("<｜end▁of▁sentence｜>").strip()
-    # InternLM3
-    answer = solution_str.split(
-        "Final Answer:")[-1].strip("<|im_end|>").strip()
-    return answer
+from typing import Any
+from collections import defaultdict
+
+from openai import OpenAI, RateLimitError, AsyncOpenAI, RateLimitError
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 
-def last_boxed_only_string(string: str) -> Optional[str]:
-    """Extract the last LaTeX boxed expression from a string.
-
-    Args:
-        string: Input string containing LaTeX code
-
-    Returns:
-        The last boxed expression or None if not found
-    """
-    idx = string.rfind("\\boxed{")
-    if idx < 0:
-        return None
-
-    i = idx
-    right_brace_idx = None
-    num_left_braces_open = 0
-
-    while i < len(string):
-        if string[i] == "{":
-            num_left_braces_open += 1
-        if string[i] == "}":
-            num_left_braces_open -= 1
-            if num_left_braces_open == 0:
-                right_brace_idx = i
-                break
-        i += 1
-
-    return string[idx:right_brace_idx + 1] if right_brace_idx is not None else None
-
-
-def remove_boxed(s: str) -> str:
-    """Remove the LaTeX boxed command from a string.
-
-    Args:
-        s: String with format "\\boxed{content}"
-
-    Returns:
-        The content inside the boxed command
-    """
-    left = "\\boxed{"
-    assert s[:len(left)] == left, f"box error: {s}"
-    assert s[-1] == "}", f"box error: {s}"
-    return s[len(left):-1]
-
-
-class timeout:
-
-    def __init__(self, seconds=1, error_message="Timeout"):
-        self.seconds = seconds
-        self.error_message = error_message
-
-    def handle_timeout(self, signum, frame):
-        raise TimeoutError(self.error_message)
-
-    def __enter__(self):
-        signal.signal(signal.SIGALRM, self.handle_timeout)
-        signal.alarm(self.seconds)
-
-    def __exit__(self, type, value, traceback):
-        signal.alarm(0)
-
-
-# Constants for normalization
-SUBSTITUTIONS = [
-    ("an ", ""),
-    ("a ", ""),
-    (".$", "$"),
-    ("\\$", ""),
-    (r"\ ", ""),
-    (" ", ""),
-    ("mbox", "text"),
-    (",\\text{and}", ","),
-    ("\\text{and}", ","),
-    ("\\text{m}", "\\text{}"),
-]
-
-REMOVED_EXPRESSIONS = [
-    "square",
-    "ways",
-    "integers",
-    "dollars",
-    "mph",
-    "inches",
-    "hours",
-    "km",
-    "units",
-    "\\ldots",
-    "sue",
-    "points",
-    "feet",
-    "minutes",
-    "digits",
-    "cents",
-    "degrees",
-    "cm",
-    "gm",
-    "pounds",
-    "meters",
-    "meals",
-    "edges",
-    "students",
-    "childrentickets",
-    "multiples",
-    "\\text{s}",
-    "\\text{.}",
-    "\\text{\ns}",
-    "\\text{}^2",
-    "\\text{}^3",
-    "\\text{\n}",
-    "\\text{}",
-    r"\mathrm{th}",
-    r"^\circ",
-    r"^{\circ}",
-    r"\;",
-    r",\!",
-    "{,}",
-    '"',
-    "\\dots",
-]
-
-
-def normalize_final_answer(final_answer: str) -> str:
-    """Normalize a final answer to a quantitative reasoning question.
-
-    Args:
-        final_answer: The answer string to normalize
-
-    Returns:
-        Normalized answer string
-    """
-    final_answer = final_answer.split("=")[-1]
-
-    # Apply substitutions and removals
-    for before, after in SUBSTITUTIONS:
-        final_answer = final_answer.replace(before, after)
-    for expr in REMOVED_EXPRESSIONS:
-        final_answer = final_answer.replace(expr, "")
-
-    # Extract and normalize LaTeX math
-    final_answer = re.sub(r"(.*?)(\$)(.*?)(\$)(.*)", "$\\3$", final_answer)
-    final_answer = re.sub(r"(\\text\{)(.*?)(\})", "\\2", final_answer)
-    final_answer = re.sub(r"(\\textbf\{)(.*?)(\})", "\\2", final_answer)
-    final_answer = re.sub(r"(\\overline\{)(.*?)(\})", "\\2", final_answer)
-    final_answer = re.sub(r"(\\boxed\{)(.*)(\})", "\\2", final_answer)
-
-    # Normalize shorthand TeX:
-    #  \fracab -> \frac{a}{b}
-    #  \frac{abc}{bef} -> \frac{abc}{bef}
-    #  \fracabc -> \frac{a}{b}c
-    #  \sqrta -> \sqrt{a}
-    #  \sqrtab -> sqrt{a}b
-    final_answer = re.sub(r"(frac)([^{])(.)", "frac{\\2}{\\3}", final_answer)
-    final_answer = re.sub(r"(sqrt)([^{])", "sqrt{\\2}", final_answer)
-    final_answer = final_answer.replace("$", "")
-
-    # Normalize numbers
-    if final_answer.replace(",", "").isdigit():
-        final_answer = final_answer.replace(",", "")
-
-    return final_answer.strip()
-
-
-def is_correct_minerva(solution_str: str,
-                       gt: str,
-                       gt_need_extract: bool = False,
-                       answer_pattern: str = r"(?i)Answer\s*:\s*([^\n]+)") -> tuple[bool, str]:
-    """Check if the solution is correct according to Minerva criteria.
-
-    Args:
-        solution_str: The solution string to check
-        gt: The ground truth answer
-        gt_need_extract: Whether the ground truth needs extraction
-        answer_pattern: Regex pattern to extract the answer
-
-    Returns:
-        Tuple of (is_correct, normalized_prediction)
-    """
-    # Extract answer from solution
-    # match = re.findall(answer_pattern, solution_str)
-    # extracted_answer = match[-1] if match else "[INVALID]"
-    # pred = normalize_final_answer(extracted_answer)
-    pred = normalize_final_answer(solution_str)
-
-    # Process ground truth
-    if gt_need_extract:
-        gt = normalize_final_answer(remove_boxed(last_boxed_only_string(gt)))
-    else:
-        gt = normalize_final_answer(gt)
-
-    return (pred == gt), pred
-
-
-def is_correct_strict_box(pred: str,
-                          gt: str,
-                          pause_tokens_index: Optional[list[int]] = None) -> tuple[int, Optional[str]]:
-    """Check if the prediction is correct using strict boxed answer criteria.
-
-    Args:
-        pred: The prediction string
-        gt: The ground truth answer
-        pause_tokens_index: Indices of pause tokens
-
-    Returns:
-        Tuple of (score, extracted_prediction)
-    """
-    # Extract the relevant part of the prediction
-    if pause_tokens_index is not None:
-        assert len(pause_tokens_index) == 4
-        pred = pred[pause_tokens_index[-1] - 100:]
-    else:
-        pred = pred[-100:]
-
-    # Extract and check the boxed answer
-    boxed_pred = last_boxed_only_string(pred)
-    extracted_pred = remove_boxed(
-        boxed_pred) if boxed_pred is not None else None
-
-    return 1 if (extracted_pred == gt) else -1, extracted_pred
-
-
-def verify(solution_str: str,
-           answer: str,
-           strict_box_verify: bool = False,
-           pause_tokens_index: Optional[list[int]] = None) -> bool:
-    """Verify if the solution is correct.
-
-    Args:
-        solution_str: The solution string to verify
-        answer: The ground truth answer
-        strict_box_verify: Whether to use strict box verification
-        pause_tokens_index: Indices of pause tokens
-
-    Returns:
-        True if the solution is correct, False otherwise
-    """
-    if strict_box_verify:
-        correct, pred = is_correct_strict_box(
-            solution_str, answer, pause_tokens_index)
-        return correct == 1, pred
-
-    correct, pred = is_correct_minerva(solution_str, answer)
-    return correct, pred
-
-
-def _compute_score(solution_str: str,
-                   ground_truth: str,
-                   strict_box_verify: bool = False,
-                   pause_tokens_index: Optional[list[int]] = None, do_print=False) -> float:
-    """Compute the reward score for a solution.
-
-    Args:
-        solution_str: The solution string
-        ground_truth: The ground truth answer
-        config: Configuration object containing reward model settings
-        pause_tokens_index: Indices of pause tokens
-
-    Returns:
-        Reward score (1.0 for correct, -1.0 for incorrect)
-    """
-    format_score = 0.1
-    score = 1.
-    gold = ground_truth
-
-    answer = extract_solution(solution_str=solution_str)
-    # do_print = random.randint(1, 16) == 1
-
-    if do_print:
-        print(f"[Gold] {gold}")
-        print(f"[Extracted answer] {answer}")
-        print(f"[Solution string] {solution_str}")
-
-    if answer is None:
-        if do_print:
-            print(f"[No answer found]")
-            print(f"[Score: 0.0]")
-        return 0.
-
-    # Limit solution length for efficiency
-    # solution_str = solution_str[-300:]  # The longest answer in MATH-500 has 159 characters
-
-    # Verify the solution
-    correct, pred = verify(answer, ground_truth,
-                           strict_box_verify, pause_tokens_index)
-    if correct:
-        if do_print:
-            print(f"[Correct answer] {answer}")
-            print(f"[Score: 1.0]")
-        reward = score
-    else:
-        if do_print:
-            print(f"[Wrong answer] {answer} Gold: {gold}")
-            print(f"[Score: 0.1]")
-        reward = format_score
-
-    return reward
-
-
-def compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, split="train"):
-    rewards = []
-    for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-        if split == "valid" or (split == "train" and random.random() < 0.01):
-            log = True
-            log_flag = "[VALID]" if split == "valid" else "[TRAIN]"
+class Agent:
+    def __init__(
+        self,
+        system: str | None = None,
+        model: str = "gpt-3.5-turbo",
+        base_url: str | None = None,
+        api_keys: str | list[str] | None = None,
+        request_kwargs: dict[str, Any] = None,
+    ):
+        self.system = system
+        if self.system is None:
+            self.history = []
         else:
-            log = False
+            self.history = [{"role": "system", "content": self.system}]
+        self.model = model
+        self.base_url = base_url
 
-        if log:
+        if api_keys is not None:
+            pass
+        else:
+            api_keys = [os.getenv("OPENAI_API_KEY", "EMPTY")]
+        self.api_keys = api_keys
+
+        self.request_kwargs = {
+            "max_tokens": 1024,
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "seed": 100745534,
+        }
+        if request_kwargs is not None:
+            self.request_kwargs.update(request_kwargs)
+
+    async def run(self, messages, max_concurrent, desc, postprocess_fns, pbar=False):
+        semaphore = aio.Semaphore(max_concurrent)
+        async with AsyncOpenAI(api_key=self.api_keys, base_url=self.base_url) as client:
+            results = []
+            tasks = [self.process_prompt(client, message, semaphore, postprocess_fn)
+                     for message, postprocess_fn in zip(messages, postprocess_fns)]
+
+            if desc is not None and pbar:
+                for f in tqdm.asyncio.tqdm.as_completed(tasks, dynamic_ncols=True, desc=desc):
+                    results.append(await f)
+            else:
+                try:
+                    print(
+                        f'{desc} (p={max_concurrent}) TOTAL {len(messages)} RUN...')
+                    results = await aio.gather(*tasks)
+                    print(
+                        f'{desc} (p={max_concurrent}) TOTAL {len(messages)} FINISHED...')
+                except Exception as err:
+                    print(f'[ERROR] asyncio.gather failed: {err}')
+                    return None
+            return results
+
+    @retry(stop=stop_after_attempt(4), wait=wait_exponential(multiplier=1, min=5, max=20))
+    async def chat_completion(self, client, messages, postprocess_fn) -> str | None:
+        response = None
+
+        # FIXME
+        if self.model == "QwQ_32B":
+            suffix = "\n<think>\n"
+        else:
+            suffix = ""
+        try:
+            response = await client.chat.completions.create(
+                model=self.model, messages=[
+                    {"role": "system", "content": 'You are a helpful and harmless assistant. You are Qwen developed by Alibaba. You should think step-by-step.'},
+                    {"role": "user", "content": messages + suffix}
+                ], **self.request_kwargs,
+            )
+            return postprocess_fn(response.choices[0].message.content)
+        except PostprocessError as e:
             print(
-                f"--------------------------------{log_flag}--------------------------------")
+                f"[ERROR] failure occurred when parse result: (response={response}), {e}")
+            raise PostprocessError("Failed to generate text")
+        except Exception as e:
+            print(
+                f"[ERROR] failure occurred when call API: {e} (response={response})")
+            raise APIError("Failed to generate text")
 
-        reward = _compute_score(
-            solution_str, ground_truth["ground_truth"], do_print=log)
-        rewards.append(reward)
+    async def process_prompt(self, client, messages, semaphore, postprocess_fn):
+        async with semaphore:
+            try:
+                result = await self.chat_completion(client, messages, postprocess_fn)
+                return messages, result
+            except Exception as err:
+                return messages, None
 
-    return rewards
+
+def postprocess_solution(solution_str):
+    if "<|im_end|>" in solution_str:
+        return solution_str[:solution_str.index("<|im_end|>")].strip()
+    if "<｜end▁of▁sentence｜>" in solution_str:
+        return solution_str[:solution_str.index("<｜end▁of▁sentence｜>")].strip()
+    if "<|endoftext|>" in solution_str:
+        return solution_str[:solution_str.index("<|endoftext|>")].strip()
+    return solution_str
 
 
-compute_score_train = partial(compute_score, split="train")
-compute_score_valid = partial(compute_score, split="valid")
+def parse_solution_fn(solution_str: str):
+    if solution_str.count("</think>") > 1:
+        return None
+
+    solution_str = postprocess_solution(solution_str)
+
+    if not solution_str.startswith("<think>"):
+        solution_str = f'<think>\n{solution_str}'
+
+    try:
+        thought = re.findall(r'<think>.*</think>',
+                             solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+    return solution_str.replace(thought, "").strip()
+
+
+def parse_thought_fn(solution_str: str, remove_option_letter=True):
+    if solution_str.count("</think>") > 1:
+        return None
+
+    solution_str = postprocess_solution(solution_str)
+
+    if not solution_str.startswith("<think>"):
+        solution_str = f'<think>\n{solution_str}'
+
+    try:
+        thought = re.findall(r'<think>.*</think>',
+                             solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+    return thought
+
+
+EVAL_PROMPT = """### **基于标准答案判断回答是否正确**
+任务描述：请根据提供的**题目**、**用户回答**和**标准答案**，判断用户回答是否正确，并按照指定格式输出结果。需严格对比回答和标准答案，若用户回答与标准答案**不一致**，则判定为错误。
+
+
+#### 通用流程与方法
+##### **步骤1：理解题意和标准答案含义
+1. **明确题目类型与考察目标**
+2. **明确标准答案含义**
+
+##### **步骤2：用户回答提取最终结论**：
+1. **去除干扰信息**：
+   - 删除与答案无关的内容。
+2. **标记容错范围**：
+   - 数值题允许合理误差（如标准答案“5.0±0.1”，用户回答“4.9”视为正确）。
+
+##### **步骤3：逐项对比（用户回答 vs 标准答案）**
+1， 直接对比用户回答提取出的结论并与标准答案进行对比，判断是否正确。
+
+#### 输出要求
+- 先按照方法进行详细、准确、仔细地分析
+- 再最后的部分按下面的JSON格式输出最后的结论
+```json
+{
+  "判断结果": "正确/错误",
+}
+```
+
+
+
+下面是一个具体的例子：
+
+
+#### **输入：**
+```json
+{
+  "题目": "In a square region of side length 1, filled with fluid in steady, irrotational flow, the velocity potential function φ satisfies Laplace’s equation ∇²φ = 0. The boundary conditions are φ = 0 on all four sides. What is the value of φ(0.5, 0.5) obtained by the Gauss-Seidel iterative method after 100 iterations, starting with φ = 0 at all points? Express your answer to two decimal places.",
+  "标准答案": "\\boxed{0.00}",
+  "用户回答": "To solve for the value of \\(\\phi(0.5, 0.5)\\) in a square region with side length 1, using the Gauss-Seidel iterative method under the given boundary conditions, we follow these steps:\n\n### 1. **Discretization of the Domain**\n   - Divide the square into a grid with spacing \\(h\\). For simplicity, let's choose \\(h = 0.1\\), resulting in a \\(10 \\times 10\\) grid (including boundary points).\n   - The interior points where \\(\\phi\\) needs to be computed are from \\(i = 1\\) to \\(9\\) and \\(j = 1\\) to \\(9\\) (since \\(\\phi = 0\\) on the boundaries).\n\n### 2. **Laplace’s Equation in Finite Differences**\n   Laplace’s equation \\(\\nabla^2 \\phi = 0\\) in 2D is approximated as:\n   \\[\n   \\phi_{i,j} = \\frac{1}{4} \\left( \\phi_{i+1,j} + \\phi_{i-1,j} + \\phi_{i,j+1} + \\phi_{i,j-1} \\right)\n   \\]\n   This is the Gauss-Seidel update formula for each interior point.\n\n### 3. **Gauss-Seidel Iteration**\n   - Initialize \\(\\phi_{i,j} = 0\\) for all interior points.\n   - Perform 100 iterations, updating each \\(\\phi_{i,j}\\) using the latest available values of its neighbors (Gauss-Seidel method).\n\n### 4. **Focus on \\(\\phi(0.5, 0.5)\\)**\n   - The point \\((0.5, 0.5)\\) corresponds to the grid point \\((5, 5)\\) when \\(h = 0.1\\).\n   - After 100 iterations, the value at this point converges to approximately **0.25**.\n\n### **Final Answer**\n\\[\n\\boxed{0.25}\n\\]\n\n**Note:** The exact value can also be derived analytically for this symmetric problem. The solution to Laplace’s equation with \\(\\phi = 0\\) on all boundaries in a unit square is a series expansion, and at the center \\((0.5, 0.5)\\), the dominant term gives \\(\\phi \\approx 0.25\\). The Gauss-Seidel method approximates this well after sufficient iterations.",
+}
+```
+
+#### **输出：**
+### 分析过程：
+1. **理解题意和标准答案**：题目要求计算在单位正方形区域内，满足拉普拉斯方程且四边φ=0的条件下，经Gauss-Seidel迭代法100次后φ(0.5, 0.5)的值（保留两位小数），标准答案为\boxed{0.00}。
+2. **提取用户回答的最终结论**：用户回答通过分析推导，最终结论为\boxed{0.25}，去除过程性描述后，核心结果为0.25。
+3. **对比结果**：用户回答的最终结论0.25与标准答案0.00不一致，且不存在数值题的合理误差范围，因此判定为错误。
+
+```json
+{
+  "判断结果": "错误"
+}
+```
+
+
+现在你需要按相同的步骤判断下面的回答是否正确：
+
+"""
+
+EVAL_TEMPLATE_TEMPLATE = """
+#### **输入：**
+```json
+{content}
+```
+
+#### **输出：**
+"""
+
+
+class MapReduceComputeScore(object):
+    def __init__(self, split="train"):
+        self.split = split
+        self.task_name = "MapReduce"
+
+    @classmethod
+    def get_verify_agent(cls):
+        return Agent(**{
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.154:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 4096,
+            },
+        })
+
+    async def get_accuracy(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth, max_concurrent_requests=64, majority_vote=3):
+        def postprocess(s):
+            try:
+                conclusion = s.strip()
+                judge = re.findall(
+                    r'\"判断结果\": \"(.*)\"', conclusion)
+                if len(judge) > 0 and judge[0] in ("正确", "错误"):
+                    return judge[0] == "正确"
+
+                conclusion = conclusion[conclusion.index(
+                    "```json")+len("```json"):].strip()
+                conclusion = conclusion[:conclusion.index("```")].strip()
+                try:
+                    conclusion = json.loads(conclusion)
+                    if conclusion["判断结果"] not in ("正确", "错误"):
+                        raise PostprocessError(f'corrupt')
+                    return conclusion["判断结果"] == "正确"
+                except Exception as err:
+                    try:
+                        conclusion = re.findall(
+                            r'\"判断结果\": \"(.*)\"', conclusion)[0]
+                        if not conclusion in ("正确", "错误"):
+                            raise PostprocessError(f'corrupt')
+                        return conclusion == "正确"
+                    except Exception as err:
+                        raise PostprocessError(f'{err}')
+            except Exception as err:
+                raise PostprocessError(f'{err}')
+
+        results_mapper = defaultdict(list)
+
+        for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            solution = parse_solution_fn(solution_str)
+
+            if solution is not None:
+                prompt = EVAL_PROMPT + EVAL_TEMPLATE_TEMPLATE.format(
+                    content=json.dumps({"题目": gt["prompt"], "标准答案": gt["ground_truth"], "用户回答": solution}, ensure_ascii=False, indent="  "))
+
+                results_mapper[prompt].append(i)
+
+        prompts = list(results_mapper.keys()) * majority_vote
+
+        results = await self.get_verify_agent().run(
+            prompts, max_concurrent_requests,
+            desc="[VERIFY]", postprocess_fns=[postprocess]*len(prompts))
+
+        judges = defaultdict(list)
+        for prompt, conclusion in results:
+            for index in results_mapper[prompt]:
+                judges[index].append(conclusion)
+
+        full_rewards = []
+        for i in range(len(batch_solution_str)):
+            if i in judges:
+                scores = [_ for _ in judges[i] if _ is not None]
+                correct_votes = scores.count(True)
+                wrong_votes = scores.count(False)
+                if correct_votes > wrong_votes:
+                    full_rewards.append(1.0)
+                else:
+                    full_rewards.append(0.0)
+            else:
+                full_rewards.append(0.0)
+        return full_rewards
+
+    def clip_string(self, s: str):
+        if len(s) > 1500:
+            return f'{s[:700]}... [省略] ...{s[-800:]}'
+        return s
+
+    def log_solution(self, solution):
+        norm = parse_solution_fn(solution)
+        if norm is None:
+            return repr(self.clip_string(solution))
+        return repr(norm)
+
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      max_concurrent_requests=64,
+                      ):
+        async def main():
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth,  max_concurrent_requests=max_concurrent_requests)
+        return aio.run(main())
+
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             max_concurrent_requests=64,
+                             ):
+        accuracy = await self.get_accuracy(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            _reward = accuracy[i]
+            final_results.append(_reward)
+
+            if _reward > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+                log = True
+                log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+            else:
+                log = False
+
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
+                try:
+                    print(
+                        f'【Ground Truth】`{batch_ground_truth[i]["ground_truth"]}`')
+                except Exception as err:
+                    pass
+                print(
+                    f'[Final Reward]={_reward:.3f}\n')
+
+                thought = parse_thought_fn(batch_solution_str[i])
+
+                if random.random() < 0.5 and thought is not None and _reward > 0:
+                    print(f'[Thought]\n{thought}')
+                    print()
+
+
+compute_score_train = MapReduceComputeScore(split="train").compute_score
+compute_score_valid = MapReduceComputeScore(split="valid").compute_score
