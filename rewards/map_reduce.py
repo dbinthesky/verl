@@ -1,5 +1,7 @@
 import re
+import os
 import json
+import uuid
 import random
 import aiohttp
 import requests
@@ -12,6 +14,8 @@ from collections import defaultdict
 
 from openai import OpenAI, RateLimitError, AsyncOpenAI, RateLimitError
 from tenacity import retry, stop_after_attempt, wait_exponential
+
+ROLLOUT_SAVE_DIR = "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/map_reduce_rollouts"
 
 
 class Agent:
@@ -219,6 +223,16 @@ class MapReduceComputeScore(object):
     def __init__(self, split="train"):
         self.split = split
         self.task_name = "MapReduce"
+        self.initialized = False
+
+    def initialize_record_rollout_samples_module(self):
+        if not self.initialized:
+            self.initialized = True
+            self.save_rollout_samples_path = os.path.join(
+                ROLLOUT_SAVE_DIR, f'{self.task_name}_{uuid.uuid4().hex}.json')
+
+            print(
+                f'[INFO] Save {self.task_name} rollout data into path: {self.save_rollout_samples_path}')
 
     @classmethod
     def get_verify_agent(cls):
@@ -320,7 +334,17 @@ class MapReduceComputeScore(object):
                       max_concurrent_requests=64,
                       ):
         async def main():
-            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth,  max_concurrent_requests=max_concurrent_requests)
+            self.initialize_record_rollout_samples_module()
+            rewards = await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth,  max_concurrent_requests=max_concurrent_requests)
+
+            rollouts = defaultdict(list)
+            for gt, reward in zip(batch_ground_truth, rewards):
+                rollouts[gt["uuid"]].append(reward)
+            with open(self.save_rollout_samples_path, "a+") as f:
+                for k, v in rollouts.items():
+                    f.write(
+                        f'{json.dumps({"uuid": k, "rollouts": v}, ensure_ascii=False)}\n')
+            return rewards
         return aio.run(main())
 
     async def _compute_score(self,
@@ -364,6 +388,7 @@ class MapReduceComputeScore(object):
                 if random.random() < 0.5 and thought is not None and _reward > 0:
                     print(f'[Thought]\n{thought}')
                     print()
+        return final_results
 
 
 compute_score_train = MapReduceComputeScore(split="train").compute_score

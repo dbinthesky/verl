@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import uuid
 import string
 import random
 import unittest
@@ -20,7 +21,7 @@ def load_data(num=100):
             example = json.loads(line)
             batch_solution_str.append(example["solution_str"])
             batch_ground_truth.append(
-                {"ground_truth": example["ground_truth"], "prompt": "<skip>"})
+                {"ground_truth": example["ground_truth"], "prompt": "<skip>", "uuid": uuid.uuid4().hex})
     return batch_solution_str, batch_ground_truth
 
 
@@ -36,6 +37,10 @@ class TestMapReduce(unittest.TestCase):
         #     )
         # aio.run(main())
 
+        print(compute_score_valid(
+            [None] *
+            len(batch_solution_str), batch_solution_str, batch_ground_truth
+        ))
         print(compute_score_valid(
             [None] *
             len(batch_solution_str), batch_solution_str, batch_ground_truth

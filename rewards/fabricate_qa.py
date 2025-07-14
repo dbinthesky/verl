@@ -1597,7 +1597,7 @@ class Doc2QueryV2ComputeScore(object):
      - 背景信息不足。  
    - **评价依据**：避免因信息缺失导致题目不严谨；通过添加背景改善完整性。
 
-4. **无歧义性**  
+4. **无歧义性** 
    - **检查点**：题目表述是否单一解释，避免歧义或多义？  
    - **问题迹象**：  
      - 用词模糊（如“影响”未指定正向/负向）。  
@@ -4473,7 +4473,7 @@ class CriteriaRMComputeScore(Doc2QueryV2ComputeScore):
     def get_judge_agent(cls):
         return Agent(**{
             "model": "distill_qwen25_7B",
-            "base_url": "http://10.130.142.223:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.65,
