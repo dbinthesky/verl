@@ -84,23 +84,23 @@ def load_doc2query_v3_data(num=100):
 
 
 def load_criteria_rm_data(num=100):
-    # filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/ultra_feedback_test.parquet"
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/aime_2024_2025_bo64.parquet"
     batch_solution_str, batch_ground_truth = [], []
+    with open("/cpfs01/shared/llm_ddd/tongjian/sft/self_improvement/xml_cot_if_enhance_0529.jsonl", "rt") as f:
+        for line in f:
+            example = json.loads(line)
 
-    df = pd.read_parquet(filename)
-    count = 0
-    for i, row in df.iterrows():
-        row = row.to_dict()
-        if i < 10:
-            continue
-        elif i > 15:
-            break
+            batch_solution_str.append(
+                example["self_improvement"]["responses"][0]["response"]
+            )
+            batch_ground_truth.append(
+                {
+                    "ground_truth": example["self_improvement"]["reference_meta"]["final_answer"],
+                    "prompt": example["self_improvement"]["prompt"]
+                }
+            )
+            if len(batch_ground_truth) == 128:
+                break
 
-        batch_solution_str.append(
-            "<think>\n***\n</think>\n\n# 评价标准\n\n按照有用性、安全性、真实性进行打分，满分10分")
-        batch_ground_truth.append(row["reward_model"])
-        count += 1
     return batch_solution_str, batch_ground_truth
 
 
@@ -556,28 +556,16 @@ class TestFabricate(unittest.TestCase):
 
 class TestCriteriaRM(unittest.TestCase):
     def test_criteria_parse_solution_fn(self):
-        print(criteria_parse_solution_fn(
-            "<think>\n***\n</think>\n\n# 评价标准\n\n按照有用性、安全性、真实性进行打分，满分10分"))
-
-    def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_criteria_rm_data()
+        print(criteria_parse_solution_fn(batch_solution_str[0]))
 
-        criteria_rm_default_compute_score_valid(
-            [None] *
-            len(batch_solution_str), batch_solution_str, batch_ground_truth,
-        )
+    # def test_compute_score(self):
+    #     batch_solution_str, batch_ground_truth = load_criteria_rm_data()
 
-        # task = CriteriaRMComputeScore(
-        #     parse_solution_fn=criteria_parse_solution_fn,
-        #     args=CRITERIA_DEFAULT_PARAMS)
-
-        # async def main():
-        #     results = await task._compute_score(
-        #         [None] *
-        #         len(batch_solution_str), batch_solution_str, batch_ground_truth,
-        #     )
-
-        # aio.run(main())
+    #     criteria_rm_default_compute_score_valid(
+    #         [None] *
+    #         len(batch_solution_str), batch_solution_str, batch_ground_truth,
+    #     )
 
 
 if __name__ == '__main__':

@@ -17,6 +17,7 @@ import asyncio as aio
 from functools import partial
 from asyncio import Semaphore
 from abc import abstractmethod
+import xml.etree.ElementTree as ET
 from typing import Any, Dict, Callable, List
 from decimal import Decimal, ROUND_HALF_UP
 from tqdm import tqdm as tqdm_nonasync
@@ -4419,23 +4420,58 @@ doc2query_v3_default_compute_score_valid = partial(
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
+def xml_cot_parse_solution_fn(solution_str):
+    def get_thought(solution_str: str):
+        thought = re.findall(r'```xml.*```', solution_str, re.DOTALL)[0]
+        return thought
+
+    def get_conclusion(solution_str: str):
+        thought = get_thought(solution_str)
+        return solution_str[solution_str.index(thought)+len(thought):].strip()
+
+    try:
+        thought = get_thought(solution_str)
+    except Exception as err:
+        return None
+    try:
+        conclusion = get_conclusion(solution_str).strip()
+    except Exception as err:
+        return None
+    if any(_ in conclusion for _ in ("```xml", "<think>", "</think>", "<conclusion>", "</conclusion>")):
+        return None
+    try:
+        thought_content = re.findall(r'```xml(.*)```', thought, re.DOTALL)[0]
+    except Exception as err:
+        return None
+    thought_content = f'<doc> {thought_content} </doc>'
+    try:
+        root = ET.fromstring(thought_content)
+    except Exception as err:
+        print("err", err)
+        return None
+    if not all(tag in [child.tag for child in root]
+               for tag in ("think", "conclusion")):
+        return None
+    return root
+
+
 def criteria_parse_solution_fn(solution_str: str):
     solution_str = postprocess_solution(solution_str)
     if not solution_str.startswith("<think>"):
         solution_str = f'<think>\n{solution_str}'
 
-    try:
-        thought = re.findall(r'think>.*</think>',
-                             solution_str, re.DOTALL)[0]
-    except Exception as err:
+    root = xml_cot_parse_solution_fn(solution_str)
+    if root is not None:
+        try:
+            conclusion = [
+                child for child in root if child.tag == "conclusion"][0]
+
+            conclusion = conclusion.text.strip()
+        except Exception as err:
+            return None
+    else:
         return None
 
-    conclusion = solution_str.replace(thought, "")
-    try:
-        conclusion = conclusion[conclusion.index("# 评价标准"):].strip()
-        return conclusion
-    except Exception as err:
-        return None
     return conclusion
 
 
