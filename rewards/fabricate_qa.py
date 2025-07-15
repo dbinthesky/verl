@@ -4460,7 +4460,11 @@ def criteria_parse_solution_fn(solution_str: str):
     if not solution_str.startswith("<think>"):
         solution_str = f'<think>\n{solution_str}'
 
-    root = xml_cot_parse_solution_fn(solution_str)
+    try:
+        root = xml_cot_parse_solution_fn(solution_str)
+    except Exception as err:
+        return None
+
     if root is not None:
         try:
             conclusion = [
