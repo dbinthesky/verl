@@ -12,42 +12,54 @@ import asyncio as aio
 from tqdm import tqdm
 from collections import defaultdict
 from fabricate_qa import (
-    agent,
-    LRUCache,
-    QuestionSimilarity,
-    ThoughtBonus,
-    CalculationAnswerFormatVerify,
-    LanguageConsistency,
-    BadQuestionDetection,
-    SALTBadQuestionDetection,
-    QuestionSimilarityPenalty,
-    Doc2QueryV2ComputeScore,
-    Doc2QueryV3ComputeScore,
-    CriteriaRMComputeScore,
-    SALTComputeScore,
-    DOC2QUERY_DEFAULT_PARAMS,
-    SALT_DEFAULT_PARAMS,
-    DOC2QUERY_V3_DEFAULT_PARAMS,
-    CRITERIA_DEFAULT_PARAMS,
-    doc2query_v2_default_stage1_compute_score_valid,
-    fabricate_qa_default_stage1_compute_score_valid,
-    fabricate_aio_default_stage1_compute_score_valid,
-    fabricate_aio_default_stage2_compute_score_valid,
-    fabricate_aio_qwq32b_respondent_stage2_compute_score_valid,
-    fabricate_aio_qwen32b_respondent_stage2_compute_score_valid,
-    fabricate_aio_qwen3_8b_respondent_compute_score_valid,
-    salt_default_compute_score_valid,
-    criteria_rm_default_compute_score_valid,
-    doc2query_v3_default_compute_score_valid,
-    calc_qa_parse_solution_fn,
-    criteria_parse_solution_fn,
-    doc2query_v3_parse_solution_fn,
-    salt_parse_solution_fn,
-    calc_qa_parse_thought_fn,
-    batchify,
-    WithUnitSymbol,
-    NumericalAnswer
+    Agent,
+    JudgeTwoQuestionSimilarity
+    #     # LRUCache,
+    #     # QuestionSimilarity,
+    #     # ThoughtBonus,
+    #     # CalculationAnswerFormatVerify,
+    #     # LanguageConsistency,
+    #     # BadQuestionDetection,
+    #     # SALTBadQuestionDetection,
+    #     # QuestionSimilarityPenalty,
+    #     # Doc2QueryV2ComputeScore,
+    #     # Doc2QueryV3ComputeScore,
+    #     # CriteriaRMComputeScore,
+    #     # SALTComputeScore,
+    #     # DOC2QUERY_DEFAULT_PARAMS,
+    #     # SALT_DEFAULT_PARAMS,
+    #     # DOC2QUERY_V3_DEFAULT_PARAMS,
+    #     # CRITERIA_DEFAULT_PARAMS,
+    #     # doc2query_v2_default_stage1_compute_score_valid,
+    #     # fabricate_qa_default_stage1_compute_score_valid,
+    #     # fabricate_aio_default_stage1_compute_score_valid,
+    #     # fabricate_aio_default_stage2_compute_score_valid,
+    #     # fabricate_aio_qwq32b_respondent_stage2_compute_score_valid,
+    #     # fabricate_aio_qwen32b_respondent_stage2_compute_score_valid,
+    #     # fabricate_aio_qwen3_8b_respondent_compute_score_valid,
+    #     # salt_default_compute_score_valid,
+    #     # criteria_rm_default_compute_score_valid,
+    #     # doc2query_v3_default_compute_score_valid,
+    #     # calc_qa_parse_solution_fn,
+    #     # criteria_parse_solution_fn,
+    #     # doc2query_v3_parse_solution_fn,
+    #     # salt_parse_solution_fn,
+    #     # calc_qa_parse_thought_fn,
+    #     # batchify,
+    #     # WithUnitSymbol,
+    #     # NumericalAnswer
 )
+
+UNITTEST_AGENT = Agent(**{
+    "model": "qwen25_32B_instruct",
+    "base_url": "http://10.130.142.223:8000/v1",
+    "api_keys": "EMPTY",
+    "request_kwargs": {
+        "temperature": 0.7,
+        "timeout": 360,
+        "max_tokens": 16384,
+    },
+})
 
 
 def generate_random_string(n):
@@ -224,6 +236,22 @@ def load_fabricate_aio_data(num=100, format="wrong_question"):
         if count > num-1:
             break
     return batch_solution_str, batch_ground_truth
+
+
+class TestUtils(unittest.TestCase):
+    def test_batch_call_open_api(self):
+        task = JudgeTwoQuestionSimilarity()
+
+        async def main():
+            results = await task.do_job(
+                agent=UNITTEST_AGENT,
+                batch_inputs=[(
+                    "During a drama club meeting, a member erroneously attributed the Salem witch trials play \"The Crucible,\" focusing on family conflict in 1692 Massachusetts, to Eugene O'Neill. Name the correct playwright who explored societal pressures through this drama",
+                    "Who is considered the most important American playwright of the 20th century?\nA) Shepard\nB) Albee\nC) Williams\nD) Wilder\nE) Mamet\nF) O'Neal\nG) Miller\nH) Wilson\nI) Hellman\nJ) Simon")],
+                max_concurrent_requests=64,
+            )
+            print(results)
+        aio.run(main())
 
 
 class TestSALT(unittest.TestCase):
