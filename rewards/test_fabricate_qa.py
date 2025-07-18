@@ -13,7 +13,9 @@ from tqdm import tqdm
 from collections import defaultdict
 from fabricate_qa import (
     Agent,
-    JudgeTwoQuestionSimilarity
+    JudgeTwoQuestionSimilarity,
+    MultichoiceKnowledgeQuestionQualityEval,
+    QuestionRefineHack
     #     # LRUCache,
     #     # QuestionSimilarity,
     #     # ThoughtBonus,
@@ -240,7 +242,9 @@ def load_fabricate_aio_data(num=100, format="wrong_question"):
 
 class TestUtils(unittest.TestCase):
     def test_batch_call_open_api(self):
-        task = JudgeTwoQuestionSimilarity()
+        # task = JudgeTwoQuestionSimilarity()
+        # task = MultichoiceKnowledgeQuestionQualityEval()
+        task = QuestionRefineHack()
 
         async def main():
             results = await task.do_job(
@@ -248,6 +252,8 @@ class TestUtils(unittest.TestCase):
                 batch_inputs=[(
                     "During a drama club meeting, a member erroneously attributed the Salem witch trials play \"The Crucible,\" focusing on family conflict in 1692 Massachusetts, to Eugene O'Neill. Name the correct playwright who explored societal pressures through this drama",
                     "Who is considered the most important American playwright of the 20th century?\nA) Shepard\nB) Albee\nC) Williams\nD) Wilder\nE) Mamet\nF) O'Neal\nG) Miller\nH) Wilson\nI) Hellman\nJ) Simon")],
+                # batch_inputs=[
+                #     "在评估抗PD-1治疗反应的分子标志物中，哪一项与临床试验中的客观缓解率（ORR）和无进展生存期（PFS）显著相关？"],
                 max_concurrent_requests=64,
             )
             print(results)
