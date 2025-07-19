@@ -1755,7 +1755,6 @@ class Doc2QueryV2ComputeScore(object):
             batch_inputs=questions,
             max_concurrent_requests=self.args["auxiliary_agent"]["max_concurrent_requests"],
         )
-        print(qualities)
         # True = 质量高
 
         scores = [0.0] * len(batch_solution_str)
@@ -1767,129 +1766,41 @@ class Doc2QueryV2ComputeScore(object):
                 scores[index] = _score
         return scores
 
-        #     def compute_score(self,
-        #                       batch_data_sources,
-        #                       batch_solution_str,
-        #                       batch_ground_truth,
-        #                       stage,
-        #                       max_concurrent_requests=MAX_CONCURRENT,
-        #                       ):
-        #         async def main():
-        #             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, stage=stage, max_concurrent_requests=max_concurrent_requests)
-        #         return aio.run(main())
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+        self.init_save_rollouts()
 
-        #     def log_solution(self, solution):
-        #         norm = self.parse_solution_fn(solution)
-        #         if norm is None:
-        #             return repr(self.clip_string(solution))
-        #         return repr(self.format_question(norm[0], norm[1], norm[2]))
+        penalty = defaultdict(list)
+        for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            parsed = self.parse_solution_fn(solution_str)
+            if parsed is None:
+                penalty[i].append(-2.0)
+            else:
+                penalty[i].append(0.0)
 
-        #     def format_question(self, question, answer, ans_type):
-        #         return f'Question: {question}\nAnswer: {answer}\nAnswer Type: {ans_type}'
+            for p in self._penalties:
+                penalty[i].append(p.get_penalty_or_reward(
+                    solution_str, ground_truth))
 
-        #     def log_ground_truth(self, ground_truth):
-        #         return repr(self.format_question(
-        #             ground_truth["question"],
-        #             "", "")
-        #         )
+        # 快速判断问题质量
+        quick_quality_eval = await self.quick_question_eval(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
+        skip_next_action = tuple(
+            [i for i, v in enumerate(quick_quality_eval) if v < 0.0])
 
-        #     def update_rollout_info(self, solution_str, ground_truth, difficulty):
-        #         parsed = self.parse_solution_fn(solution_str)
-        #         if parsed is None:
-        #             return
-        #         question, answer, answer_type = parsed
-        #         inst_id = ground_truth["extra_info"]["uuid"]
-        #         if inst_id not in self.rollout_database:
-        #             self.rollout_database[inst_id] = LRUCache(
-        #                 capacity=self.record_rollout_max_capacity)
-
-        #         args = copy.deepcopy(self.args)
-        #         for k, v in args["difficulty_run_args"].items():
-        #             del v["fn"]
-        #             for field, value in v.items():
-        #                 if field == "model":
-        #                     args["difficulty_run_args"][k][field] = value.model
-
-        #         self.rollout_database[inst_id][question] = {
-        #             "prompt_generation_process": solution_str,
-        #             "question": question,
-        #             "answer": answer,
-        #             "answer_type": answer_type,
-        #             "difficulty": {
-        #                 "meta": args,
-        #                 "pass_rate": difficulty
-        #             }
-        #         }
-
-        #     def save_rollout_info(self):
-        #         """将缓存保存为JSON文件"""
-        #         data = {k: {"capacity": v.capacity, "items": list(v.get_items()), "access_order": list(
-        #             v._access_order.keys())} for k, v in self.rollout_database.items()}
-
-        #         with open(self.save_rollout_samples_path, "wt") as f:
-        #             json.dump(data, f, ensure_ascii=False, indent="  ")
-
-        #     def penalty_on(self, stage):
-        #         if stage == "1":
-        #             return ("Format", "Lang", "BadQ", "Thought", "QSim")
-        #         else:
-        #             return ("Format", "Lang", "Thought", "QSim")
-
-        #     async def _compute_score(self,
-        #                              batch_data_sources,
-        #                              batch_solution_str,
-        #                              batch_ground_truth,
-        #                              stage,
-        #                              max_concurrent_requests=MAX_CONCURRENT,
-        #                              ):
-        #         self.initialize_record_rollout_samples_module()
-
-        #         assert stage in ("1", "2")
-
-        #         penalty = defaultdict(list)
-        #         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-        #             parsed = self.parse_solution_fn(solution_str)
-        #             if parsed is None:
-        #                 penalty[i].append(-2.0)
-        #             else:
-        #                 penalty[i].append(0.0)
-
-        #             for key in self.penalty_on(stage):
-        #                 penalty[i].append(self.get_penalties()[key]
-        #                                   (solution_str, ground_truth))
-
-        #         # 二阶段训练(全量奖励)
-        #         # 一阶段训练(格式奖励)
-        #         if stage == "2":
-        #             # 问题质量检测
-        #             bad_q_penalties = await self.get_bad_question_penalty(
-        #                 batch_data_sources,
-        #                 batch_solution_str,
-        #                 batch_ground_truth,
-        #                 max_concurrent_requests=32
-        #             )
-        #             skip_run = tuple(
-        #                 [i for i, v in enumerate(bad_q_penalties) if v < 0.0])
-
-        #             # 难度奖励
-        #             difficulty_rewards, pass_rates = await self.get_difficulty_reward(
-        #                 batch_data_sources,
-        #                 batch_solution_str,
-        #                 batch_ground_truth,
-        #                 run_args=self.args["difficulty_run_args"],
-        #                 metric_args=self.args["difficulty_metric_args"],
-        #                 max_concurrent_requests=max_concurrent_requests,
-        #                 skip_run=skip_run,
-        #             )
-        #             # 相似度奖励
-        #             similarity_rewards = await self.get_similarity_reward(
-        #                 batch_data_sources,
-        #                 batch_solution_str,
-        #                 batch_ground_truth,
-        #                 max_concurrent_requests=max_concurrent_requests,
-        #                 run_args=self.args["similarity_run_args"],
-        #             )
-
+        # 难度奖励
+        difficulty_rewards, pass_rates = await self.get_difficulty_reward(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            skip_run=skip_next_action,
+        )
         #         final_results = []
         #         for i in range(len(batch_solution_str)):
         #             scores = copy.deepcopy(penalty[i])
@@ -1977,6 +1888,72 @@ class Doc2QueryV2ComputeScore(object):
 
         #         return final_results
 
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+        async def main():
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, stage=stage, max_concurrent_requests=max_concurrent_requests)
+        return aio.run(main())
+
+        #     def log_solution(self, solution):
+        #         norm = self.parse_solution_fn(solution)
+        #         if norm is None:
+        #             return repr(self.clip_string(solution))
+        #         return repr(self.format_question(norm[0], norm[1], norm[2]))
+
+        #     def format_question(self, question, answer, ans_type):
+        #         return f'Question: {question}\nAnswer: {answer}\nAnswer Type: {ans_type}'
+
+        #     def log_ground_truth(self, ground_truth):
+        #         return repr(self.format_question(
+        #             ground_truth["question"],
+        #             "", "")
+        #         )
+
+        #     def update_rollout_info(self, solution_str, ground_truth, difficulty):
+        #         parsed = self.parse_solution_fn(solution_str)
+        #         if parsed is None:
+        #             return
+        #         question, answer, answer_type = parsed
+        #         inst_id = ground_truth["extra_info"]["uuid"]
+        #         if inst_id not in self.rollout_database:
+        #             self.rollout_database[inst_id] = LRUCache(
+        #                 capacity=self.record_rollout_max_capacity)
+
+        #         args = copy.deepcopy(self.args)
+        #         for k, v in args["difficulty_run_args"].items():
+        #             del v["fn"]
+        #             for field, value in v.items():
+        #                 if field == "model":
+        #                     args["difficulty_run_args"][k][field] = value.model
+
+        #         self.rollout_database[inst_id][question] = {
+        #             "prompt_generation_process": solution_str,
+        #             "question": question,
+        #             "answer": answer,
+        #             "answer_type": answer_type,
+        #             "difficulty": {
+        #                 "meta": args,
+        #                 "pass_rate": difficulty
+        #             }
+        #         }
+
+        #     def save_rollout_info(self):
+        #         """将缓存保存为JSON文件"""
+        #         data = {k: {"capacity": v.capacity, "items": list(v.get_items()), "access_order": list(
+        #             v._access_order.keys())} for k, v in self.rollout_database.items()}
+
+        #         with open(self.save_rollout_samples_path, "wt") as f:
+        #             json.dump(data, f, ensure_ascii=False, indent="  ")
+
+        #     def penalty_on(self, stage):
+        #         if stage == "1":
+        #             return ("Format", "Lang", "BadQ", "Thought", "QSim")
+        #         else:
+        #             return ("Format", "Lang", "Thought", "QSim")
+
 
 DOC2QUERY_V2_DEFAULT_PARAMS = {
     "difficulty_run_args": {
@@ -2060,7 +2037,8 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
         "weight": 0.25,
     },
     "save_rollouts": {
-        "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
+        "default_local_dir": "/tmp/fabricate_aio_rollouts"
+        # "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
     }
 }
 

@@ -491,17 +491,20 @@ class TestDoc2QueryV2(unittest.TestCase):
             print(results)
         aio.run(main())
 
-    def test_doc2query_v2_compute_score(self):
-        batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
-            format="doc2query_v2", num=32)
+    def test_compute_score(self):
+        task = Doc2QueryV2ComputeScore(
+            doc2query_v2_parse_solution_fn, split="valid", args=DOC2QUERY_V2_DEFAULT_PARAMS)
 
-        task = Doc2QueryV2ComputeScore(doc2query_v2_parse_solution_fn,
-                                       split="valid", args=DOC2QUERY_DEFAULT_PARAMS)
-        # print(task.compute_score([None]*len(batch_solution_str),
-        #                          batch_solution_str, batch_ground_truth, stage="1"))
-        print(doc2query_v2_default_stage1_compute_score_valid(
-            [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth,
-        ))
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="doc2query_v2", num=4)
+
+        async def main():
+            results = await task._compute_score(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth,
+            )
+            print(results)
+        aio.run(main())
 
     def test_fabricate_qa_compute_score(self):
         batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
