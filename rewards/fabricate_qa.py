@@ -491,7 +491,216 @@ REASON_QUESTION_QUALITY_VALUE_TEMPLATE = """
 ```
 """
 
-REASON_QUESTION_QUALITY_VALUE_TEMPLATE
+QA_JUDGE_DIFFICULTY_FEWSHOTS = """
+任务：对于一个问题的思考过程，先按思维树分析其思考过程，再基于下面的纬度分析问题的难度。
+
+问题难度来源
+1. 计算复杂度：难度核心在于运算过程的繁琐程度与精度要求，直接关联操作步骤的数量、运算量的大小及数值精确性的把控。
+    - Level 1（低复杂度）：单步骤或少量步骤，运算量极小，精度要求低。
+    - Level 2（中复杂度）：多步骤但结构化，运算量中等，精度要求明确。
+    - Level 3（高复杂度）：步骤繁杂且跨步骤关联强，运算量大，精度要求严苛。
+2. 不确定性的程度与可降低性
+    - Level 1：低初始不确定性，且极易降低。问题的答案或解决线索明确存在于已知知识（如模型内部记忆）或单一、直接的信息源（如一次简单搜索）中，几乎无需额外探索即可消除不确定性。
+    - Level 2：高初始不确定性，但可系统性降低。问题本身复杂（如多跳问答），但不确定性的来源可拆解，且存在清晰的 “降低路径”（如按逻辑链条分步检索、推导），通过结构化步骤可逐步消除不确定性。
+    - Level 3：高初始不确定性，且难以降低。不确定性源于实体间的复杂耦合，缺乏明确的降低逻辑，无法通过常规步骤系统性消除，需要持续探索。
+3. 推理路径的预定义性与清晰度：即问题是否存在 “现成的解决步骤”，或步骤是否可明确规划：
+    - Level 1：无需要推理路径。问题可直接映射到答案（如 “数学公式的定义”“历史事件的时间”），无需逻辑推导，或仅需 “检索 - 匹配” 即可，路径为 “零步骤” 或 “单一步骤”。
+    - Level 2：推理路径明确且固定。即使步骤多（如多跳推理、分步计算），但路径的逻辑链条清晰（如 “先求 A，再用 A 推导 B，最后结合 B 得到 C”），子目标和步骤间的关联可预定义。
+    - Level 3：无预定义推理路径。问题的解决步骤无法提前规划，实体间的关联是非线性、非结构化的（如复杂科学问题、创造性任务），需要动态探索新的推理模式（如跨学科融合、假设 - 验证循环），路径具有随机性和创新性。
+4. 问题结构的明确性：即问题的 “目标、边界、子任务” 是否清晰
+    - Level 1：结构完全明确。问题的目标（如 “计算结果”“回答事实”）和边界（如 “限定条件”）清晰，无需额外解构。
+    - Level 2：结构可拆解的明确性。问题目标清晰，但需拆解为子任务（如 “多跳问答中，每一跳的子问题”），子任务的边界和逻辑关系明确。
+    - Level 3：结构模糊或动态变化。问题的目标可能需要先 “重新定义”（如 “如何提升系统效率” 中的 “效率” 需具体界定），子任务随探索过程动态生成，边界不固定。
+5. 逻辑推理的链条长度与严密性：难度体现在 “从前提到结论” 的推理步骤数量及每一步的逻辑严密性要求，而非计算本身。
+    - Level 1（短链条，低严密性要求）：推理链条极短（2-3 步），逻辑宽松。
+    - Level 2（中长链条，中等严密性要求）：推理链条较长（4-8 步），逻辑规则明确且需严格遵循。
+    - Level 3（长链条，高严密性要求）：推理链条极长（≥10 步），逻辑环环相扣且零容错
+6. 背景知识的依赖性：解题难度源于对特定领域知识体系的 “前置储备” 要求，按知识深度与广度的梯度差异可分为三级：​
+    - Level 1（低壁垒，无专业知识要求）：无需领域特定知识，依赖常识即可理解。
+    - Level 2（中壁垒，需基础领域知识）：依赖某一领域的基础概念与框架，需系统学习但无需深度研究。
+    - Level 3（高壁垒，需深度专业知识）：依赖领域内的前沿理论、复杂术语及研究范式，需长期深耕。
+
+
+下面是一个具体的例子（格式需要参考下面的例子）
+
+[问题]
+```
+During Marina Abramović and Ulay's \"The Lovers\" performance, they walked the Great Wall of China for 90 days. Each walking day, they maintained an average speed of 60 meters per minute for 5 hours. However, every 10th day was a rest day for recovery. The total elevation gain over the journey was 45,000 meters, and each artist carried 20 kilograms of supplies. What is the total distance in kilometers they walked during the performance?
+```
+
+
+[思考过程]
+```
+To determine the total distance Marina Abramović and Ulay walked during "The Lovers" performance, we need to calculate the number of actual walking days and then use their daily distance to find the total.
+
+### Step 1: Calculate the number of walking days  
+They spent 90 days in total, with every 10th day being a rest day.  
+- Total days: 90  
+- Number of rest days: Since rest days occur every 10th day, there are \( \frac{90}{10} = 9 \) rest days.  
+- Walking days = Total days - Rest days = \( 90 - 9 = 81 \) days.  
+
+
+### Step 2: Calculate daily distance walked  
+Each walking day, they maintained an average speed of 60 meters per minute for 5 hours.  
+- Convert 5 hours to minutes: \( 5 \times 60 = 300 \) minutes.  
+- Daily distance = Speed × Time = \( 60 \, \text{meters/minute} \times 300 \, \text{minutes} = 18,000 \, \text{meters/day} \).  
+
+
+### Step 3: Calculate total distance  
+Total distance = Daily distance × Number of walking days  
+- Total distance in meters: \( 18,000 \, \text{meters/day} \times 81 \, \text{days} = 1,458,000 \, \text{meters} \).  
+- Convert to kilometers (1 kilometer = 1,000 meters): \( \frac{1,458,000}{1,000} = 1,458 \, \text{kilometers} \).  
+
+
+**Answer:** 1458 kilometers.
+```
+
+
+[输出]
+[思考过程分析]
+```
+问题：计算总行走距离（公里）
+├─ 已知条件
+│  ├─ 总天数：90天
+│  ├─ 休息规则：每10天休息1天
+│  ├─ 行走速度：60米/分钟
+│  ├─ 每日行走时间：5小时
+│  └─ 干扰信息（忽略）：总海拔45000米、携带20kg物资
+│
+├─ 步骤1：计算行走天数
+│  ├─ 休息天数 = 90 ÷ 10 = 9天
+│  └─ 行走天数 = 90 - 9 = 81天
+│
+├─ 步骤2：计算单日行走距离
+│  ├─ 时间转换：5小时 = 5×60 = 300分钟
+│  └─ 单日距离 = 60米/分钟 × 300分钟 = 18000米
+│
+├─ 步骤3：计算总距离并转换单位
+│  ├─ 总距离（米）= 18000米 × 81天 = 1458000米
+│  └─ 总距离（公里）= 1458000 ÷ 1000 = 1458公里
+│
+└─ 结论：总行走距离为1458公里
+```
+
+[难度分析]
+```json
+{
+  "计算复杂度": {
+    "分析": "问题的计算涉及基础的加减乘除运算：计算休息天数（90÷10）、行走天数（90-9）、时间转换（5×60）、单日距离（60×300）、总距离（18000×81）及单位转换（1458000÷1000）。步骤数量中等（3个主要步骤，含少量子步骤），运算量小，精度要求低，无跨步骤复杂关联。",
+    "难度评价": "Level 2"
+  },
+  "不确定性的程度与可降低性": {
+    "分析": "问题的已知条件（总天数、休息规则、速度、每日行走时间）清晰明确，干扰信息（海拔、携带物资）可直接识别并忽略，答案所需线索完全存在于给定信息中，无需额外探索即可消除不确定性。",
+    "难度评价": "Level 1"
+  },
+  "推理路径的预定义性与清晰度": {
+    "分析": "推理路径固定且逻辑链条清晰：先通过总天数和休息规则计算行走天数，再根据速度和时间计算单日行走距离，最后通过单日距离和行走天数计算总距离并转换单位。每一步的子目标和步骤间关联可预定义。",
+    "难度评价": "Level 2"
+  },
+  "问题结构的明确性": {
+    "分析": "问题目标（计算总行走距离，单位为公里）清晰，边界条件（总天数、休息规则、速度、时间等）明确，无需对问题进行额外解构或拆分，结构完全清晰。",
+    "难度评价": "Level 1"
+  },
+  "逻辑推理的链条长度与严密性": {
+    "分析": "推理链条较短，包含3个主要步骤，每个步骤内部仅1-2个子步骤，总推理步骤约4-5步，逻辑关系简单直接（如“行走天数=总天数-休息天数”“总距离=单日距离×行走天数”），严密性要求低。",
+    "难度评价": "Level 1"
+  },
+  "背景知识的依赖性": {
+    "分析": "解题仅需依赖常识性数学知识，包括基本运算、时间单位转换（小时与分钟）、长度单位转换（米与公里）及速度公式（距离=速度×时间），无需特定领域的专业知识。",
+    "难度评价": "Level 1"
+  }
+}
+```
+
+
+
+
+[问题]
+```
+The following is an open-ended problem from an International Physics competition. The answer of The problem should be an expression. Please calculate the answer according to the given requirements and the information provided. Please use LaTeX format to represent the variables and formulas used in the solution process and results. Please end your solution with \"So the final answer is \\boxed{answer}.\" and give the result explicitly.\ni. As a parcel of air moves upward, it accelerates. Find a rough estimate for the average speed $v_{0}$ during its upward motion.\n\nPlease reason step by step, and put your final answer within \\boxed{}.
+```
+
+[思考过程]
+```
+To estimate the average speed \\( v_0 \\) of a parcel of air moving upward, we can analyze the forces and energy changes involved. Here's a step-by-step solution:\n\n### 1. **Buoyant Force and Acceleration:**\nWhen a parcel of air rises, it experiences a buoyant force due to the density difference between the parcel and the surrounding air. The buoyant force per unit mass is given by:\n\\[\na = g \\left( \\frac{\\rho_{\\text{surrounding}} - \\rho_{\\text{parcel}}}{\\rho_{\\text{parcel}}} \\right)\n\\]\nAssuming the air behaves as an ideal gas, the density is inversely proportional to temperature:\n\\[\n\\rho \\propto \\frac{1}{T}\n\\]\nLet \\( T_0 \\) be the temperature of the surrounding air and \\( T_0 + \\Delta T \\) be the temperature of the parcel (where \\( \\Delta T \\) is small). Then:\n\\[\n\\frac{\\rho_{\\text{surrounding}}}{\\rho_{\\text{parcel}}} = \\frac{T_0 + \\Delta T}{T_0} \\approx 1 + \\frac{\\Delta T}{T_0}\n\\]\nSubstituting back into the acceleration:\n\\[\na \\approx g \\left( \\frac{\\Delta T}{T_0} \\right)\n\\]\n\n### 2. **Kinematic Analysis:**\nThe parcel accelerates upward with this acceleration \\( a \\). If the parcel rises a height \\( h \\), its final speed \\( v \\) can be found using the kinematic equation:\n\\[\nv^2 = 2 a h\n\\]\nSubstituting \\( a \\):\n\\[\nv^2 = 2 g h \\left( \\frac{\\Delta T}{T_0} \\right)\n\\]\nThe average speed \\( v_0 \\) is roughly half the final speed (assuming linear acceleration):\n\\[\nv_0 \\approx \\frac{v}{2}\n\\]\nHowever, a better estimate for the average speed is the root-mean-square speed, which for uniformly accelerated motion is:\n\\[\nv_0 = \\sqrt{\\frac{v^2}{2}} = \\sqrt{g h \\left( \\frac{\\Delta T}{T_0} \\right)}\n\\]\n\n### 3. **Final Expression:**\nThus, the average speed \\( v_0 \\) is:\n\\[\nv_0 = \\sqrt{g h \\frac{\\Delta T}{T_0}}\n\\]\n\nSo the final answer is \\boxed{\\sqrt{g h \\frac{\\Delta T}{T_0}}}.
+```
+
+
+[输出]
+[思考过程分析]
+```
+问题：估算空气团向上运动的平均速度v₀
+├─ 已知条件（隐含）
+│  ├─ 浮力与密度差相关，密度与温度成反比
+│  ├─ 空气团受浮力产生加速度a
+│  ├─ 空气团上升高度为h
+│  ├─ 周围空气温度T₀，空气团温度T₀+ΔT（ΔT较小）
+│  └─ 重力加速度g
+│
+├─ 步骤1：推导加速度a的表达式
+│  ├─ 单位质量浮力公式：a = g×(ρₛᵤᵣᵣₒᵤₙ𝒹ᵢₙ𝑔 - ρₚₐᵣ𝒸ₑₗ)/ρₚₐᵣ𝒸ₑₗ
+│  ├─ 密度与温度关系：ρ ∝ 1/T → ρₛᵤᵣᵣₒᵤₙ𝒹ᵢₙ𝑔/ρₚₐᵣ𝒸ₑₗ = (T₀+ΔT)/T₀ ≈ 1 + ΔT/T₀
+│  └─ 简化得：a ≈ g×(ΔT/T₀)
+│
+├─ 步骤2：通过运动学方程关联速度与加速度
+│  ├─ 末速度v满足：v² = 2ah
+│  ├─ 代入a得：v² = 2gh×(ΔT/T₀)
+│  └─ 平均速度v₀取均方根速度：v₀ = √(v²/2) = √(gh×ΔT/T₀)
+│
+└─ 结论：平均速度v₀的表达式为√(ghΔT/T₀)
+```
+
+[难度分析]
+```json
+{
+  "计算复杂度": {
+    "分析": "计算涉及密度与温度关系的近似推导、运动学公式的代入与化简，主要为代数运算，无复杂数值计算。步骤包含加速度推导、末速度计算、平均速度估算3个主要步骤，运算量中等，精度要求体现在公式推导的逻辑严密性，跨步骤关联为公式传递（将a代入运动学方程）。",
+    "难度评价": "Level 2"
+  },
+  "不确定性的程度与可降低性": {
+    "分析": "问题的物理模型（浮力、加速度、运动学）明确，隐含条件（如密度与温度关系、ΔT较小的近似）可通过基础物理知识补充，不确定性来源可拆解为“加速度如何计算”“平均速度如何估算”，通过物理公式推导可系统性降低，无需额外探索。",
+    "难度评价": "Level 2"
+  },
+  "推理路径的预定义性与清晰度": {
+    "分析": "推理路径遵循物理问题的常规解决逻辑：先分析受力求加速度，再通过运动学关系求速度，最后推导平均速度。路径逻辑链条清晰（力→加速度→速度→平均速度），子目标明确（如先求a，再用a求v），步骤间关联可预定义。",
+    "难度评价": "Level 2"
+  },
+  "问题结构的明确性": {
+    "分析": "问题目标（估算平均速度v₀）清晰，但需拆解为“推导加速度”“关联加速度与末速度”“估算平均速度”三个子任务，子任务边界和逻辑关系明确，属于可拆解的明确结构。",
+    "难度评价": "Level 2"
+  },
+  "逻辑推理的链条长度与严密性": {
+    "分析": "推理链条较长，包含密度与温度关系推导（2步）、加速度公式推导（2步）、运动学公式应用（2步）、平均速度估算（2步），总步骤约8步。逻辑规则严格（需遵循物理定律和数学推导），每一步依赖前一步的结论，严密性要求中等。",
+    "难度评价": "Level 2"
+  },
+  "背景知识的依赖性": {
+    "分析": "解题依赖基础物理知识，包括浮力原理、理想气体密度与温度的关系、运动学公式、加速度与速度的关联等，属于物理学领域的基础概念与框架，需要系统学习过相关知识。",
+    "难度评价": "Level 2"
+  }
+}
+```
+
+
+"""
+
+QA_JUDGE_DIFFICULTY_TEMPLATE = """
+
+现在你需要对下面的出题过程按同样的方式，先按思维树分析其解题的思考过程，再基于难度维度分析问题的难度。
+
+
+[问题]
+```
+{question}
+```
+
+[出题过程]
+```
+{process}
+```
+
+
+[输出]
+"""
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # BASE
@@ -861,10 +1070,13 @@ class NumericalSolutionVerify(BatchCallOpenAPI):
         return "数值解VERIFY"
 
     def prompt_fn(self, example):
+        solver_response, extra = example
+        question, answer, answer_type = extra
+
         prompt = self._FEWSHOTS + self._TEMPLATE.format(
-            question=example[0],
-            conclusion=example[1],
-            answer=example[2]
+            question=question,
+            conclusion=solver_response,
+            answer=answer
         )
         return prompt
 
@@ -1534,14 +1746,10 @@ class Doc2QueryV2ComputeScore(object):
 
         batch_eval_inputs = []
         for queue_index, example in enumerate(verify_queue):
-            solver_response = example.response
-            question, answer, answer_type = example.extra
-
             if solver_response is None:
                 correctness[example.tag][example.index].append(0.0)
             else:
-                prompt = f'{question}'
-                batch_eval_inputs.append((prompt, solver_response, answer))
+                batch_eval_inputs.append((solver_response, example.extra))
 
                 result_index2queue_index[len(
                     batch_eval_inputs)-1] = queue_index
