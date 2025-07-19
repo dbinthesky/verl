@@ -1151,7 +1151,7 @@ class NumericalSolutionVerify(BatchCallOpenAPI):
         return "数值解验证"
 
     def prompt_fn(self, example):
-        solver_response, extra = example
+        solver_response, extra, _ = example
         question, answer, answer_type = extra
 
         prompt = self._FEWSHOTS + self._TEMPLATE.format(
@@ -1920,7 +1920,8 @@ class Doc2QueryV2ComputeScore(object):
             if solver_response is None:
                 correctness[example.tag][example.index].append(0.0)
             else:
-                batch_eval_inputs.append((solver_response, example.extra))
+                batch_eval_inputs.append(
+                    (solver_response, example.extra, example.ground_truth))
 
                 result_index2queue_index[len(
                     batch_eval_inputs)-1] = queue_index
@@ -2119,9 +2120,6 @@ class Doc2QueryV2ComputeScore(object):
             task_names.append(name)
 
         respond_questions = await aio.gather(*tasks)
-
-        print(respond_questions)
-        raise NotImplementedError
 
         # 验证答案正确性
         verify_queue = []
