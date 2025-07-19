@@ -1746,6 +1746,7 @@ class Doc2QueryV2ComputeScore(object):
 
         batch_eval_inputs = []
         for queue_index, example in enumerate(verify_queue):
+            solver_response = example.response
             if solver_response is None:
                 correctness[example.tag][example.index].append(0.0)
             else:
