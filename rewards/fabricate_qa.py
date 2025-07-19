@@ -437,7 +437,7 @@ REASON_QUESTION_QUALITY_VALUE_TEMPLATE = """
 ```
 
 下面是一些例子
-[问题] 
+[问题]
 三个智能体组成的网络需最大化共享子模效用函数f。各智能体策略集与约束：智能体1（策略4个，κ₁=2）、智能体2（策略5个，κ₂=3）、智能体3（策略3个，κ₃=1）。总曲率c=0.6，算法运行T=50步。已知全局最优解价值为16.0，分布式算法最终解价值为14.2。计算算法的理论近似比界（公式：[1/c(1−e^{−c})−1/T]，保留三位小数），并忽略无关的年维护成本$5000。
 ```
 [分析] 从相关性与教育价值看，题目聚焦智能体网络中算法理论近似比计算，涉及核心概念，符合要求；题目质量方面，题干表述准确，目标明确，信息完整，可推导出答案；情境质量上，智能体网络的设定与考查的算法知识相关，无违背常识情况，能激发对应领域学生兴趣；但教学辅助方面，题目主要考察套用公式，无法引发思考或多种解法，不符合教学辅助中引发思考、支持多角度分析等要求。
@@ -548,17 +548,17 @@ QA_JUDGE_DIFFICULTY_FEWSHOTS = """任务：对于一个问题的思考过程，�
 
 5. 逻辑推理的链条长度与严密性：难度体现在“从前提到结论”的推理步骤数量及每一步的逻辑严密性要求，步骤数量、严密性要求逐级递增
   - Level 1（零/单步链条，无严密性要求）
-    - 推理链条长度：零推理（直接映射，如“1+1=2”）或仅1步直接关联（如“因为A是B的子集，所以A包含于B”），无中间环节。  
-    - 严密性要求：无需逻辑验证，无严密性约束，仅凭常识或定义即可直接得出结论，允许任何非原则性“跳跃”（因步骤过短无跳跃空间）。  
+    - 推理链条长度：零推理（直接映射，如“1+1=2”）或仅1步直接关联（如“因为A是B的子集，所以A包含于B”），无中间环节。
+    - 严密性要求：无需逻辑验证，无严密性约束，仅凭常识或定义即可直接得出结论，允许任何非原则性“跳跃”（因步骤过短无跳跃空间）。
   - Level 2（2-3步短链条，低严密性要求）
-    - 推理链条长度：2-3个连续步骤（如“A→B→结论”），步骤间关联直接（如“先算长方形的长=5cm，宽=3cm，再代入面积公式得15cm²”）。    
-    - 严密性要求：逻辑宽松，允许不影响最终结论的轻微疏漏（如步骤顺序颠倒但结果正确），无需严格验证每步的逻辑必然性。    
+    - 推理链条长度：2-3个连续步骤（如“A→B→结论”），步骤间关联直接（如“先算长方形的长=5cm，宽=3cm，再代入面积公式得15cm²”）。
+    - 严密性要求：逻辑宽松，允许不影响最终结论的轻微疏漏（如步骤顺序颠倒但结果正确），无需严格验证每步的逻辑必然性。
   - Level 3（4-6步中短链条，中等严密性要求）
-    - 推理链条长度：4-6个步骤，包含明确子目标（如“A→拆解为A1/A2→A1推导B→A2推导C→B+C整合→结论”）。      
-    - 严密性要求：逻辑宽松，允许不影响最终结论的轻微疏漏（如步骤顺序颠倒但结果正确），无需严格验证每步的逻辑必然性。       
+    - 推理链条长度：4-6个步骤，包含明确子目标（如“A→拆解为A1/A2→A1推导B→A2推导C→B+C整合→结论”）。
+    - 严密性要求：逻辑宽松，允许不影响最终结论的轻微疏漏（如步骤顺序颠倒但结果正确），无需严格验证每步的逻辑必然性。
   - Level 4（7-9步中长链条，较高严密性要求）
     - 推理链条长度：7-9个步骤，含多层子目标嵌套（如“A→子目标1（B1→B2）→子目标2（C1→C2→C3）→B2与C3关联→结论”）。
-    - 严密性要求：关键步骤（如子目标间的关联、核心变量推导）必须绝对严密，不允许任何影响中间结论的逻辑偏差；非关键步骤（如辅助说明、次要变量计算）可容忍极轻微疏漏（但需不改变结果方向），需通过中间结果验证逻辑一致性。     
+    - 严密性要求：关键步骤（如子目标间的关联、核心变量推导）必须绝对严密，不允许任何影响中间结论的逻辑偏差；非关键步骤（如辅助说明、次要变量计算）可容忍极轻微疏漏（但需不改变结果方向），需通过中间结果验证逻辑一致性。
   - Level 5（≥10步长链条+嵌套子链，极高严密性/零容错）
     - 推理链条长度：≥10个步骤，包含多轮嵌套子推理链（如“主链A→子链B（B1→B2→...→B5）→子链C（C1→...→C4）→子链B与C的耦合验证→...→结论”），步骤间环环相扣。
     - 严密性要求：零容错，每一步（包括子链的每个环节）必须满足严格逻辑必然性（如数学证明中的公理引用、定理推导），任何微小疏漏（如前提错误、步骤跳跃、逻辑矛盾）会导致整个链条断裂，需全程验证每一步的逻辑自洽性与关联性。
@@ -566,13 +566,13 @@ QA_JUDGE_DIFFICULTY_FEWSHOTS = """任务：对于一个问题的思考过程，�
 
 6. 背景知识的依赖性：解题难度源于对特定领域知识体系的 “前置储备” 要求：
   - Level 1（零壁垒，纯常识依赖）
-    - 核心特征：完全无需任何领域特定知识，仅依赖人类共有的日常经验与基础认知（如 “水会流动”“白天有太阳”），无专业术语、概念或理论涉及，任何人都可仅凭生活常识理解问题及答案，无需任何专门学习。 
+    - 核心特征：完全无需任何领域特定知识，仅依赖人类共有的日常经验与基础认知（如 “水会流动”“白天有太阳”），无专业术语、概念或理论涉及，任何人都可仅凭生活常识理解问题及答案，无需任何专门学习。
   - Level 2（低壁垒，零散领域概念依赖）
-    - 核心特征：需依赖 1-2 个孤立的领域基础术语或浅表层概念（如 “细胞”“电压”“市场经济”），但无需理解术语背后的原理、体系或关联，这些概念可通过日常信息接触（如科普文章、新闻）自然获取，无需系统学习该领域知识，不涉及逻辑框架或理论推导。    
+    - 核心特征：需依赖 1-2 个孤立的领域基础术语或浅表层概念（如 “细胞”“电压”“市场经济”），但无需理解术语背后的原理、体系或关联，这些概念可通过日常信息接触（如科普文章、新闻）自然获取，无需系统学习该领域知识，不涉及逻辑框架或理论推导。
   - Level 3（中低壁垒，基础领域框架依赖）
-    - 核心特征：需依赖某一领域的基础概念体系与入门级逻辑框架（如中学数学的 “方程”“函数” 体系、基础生物学的 “生态系统” 构成），这些知识需通过短期系统学习（如中小学课程、入门科普教材）才能掌握，涉及少量核心术语的关联（如 “速度 = 路程 / 时间” 的公式逻辑），但不涉及复杂原理或深层机制。       
+    - 核心特征：需依赖某一领域的基础概念体系与入门级逻辑框架（如中学数学的 “方程”“函数” 体系、基础生物学的 “生态系统” 构成），这些知识需通过短期系统学习（如中小学课程、入门科普教材）才能掌握，涉及少量核心术语的关联（如 “速度 = 路程 / 时间” 的公式逻辑），但不涉及复杂原理或深层机制。
   - Level 4（中高壁垒，领域进阶知识依赖）
-    - 核心特征：需依赖某一领域的进阶理论、中等复杂度概念及跨章节关联知识（如大学本科专业基础课内容：物理学的 “电磁感应定律” 应用、经济学的 “供需曲线移动机制”），这些知识需通过系统专业学习（如学期制课程）才能掌握，涉及多个概念的逻辑耦合（如 “力→加速度→动量变化” 的连锁关系），需理解原理推导过程，但不涉及领域前沿或小众分支。     
+    - 核心特征：需依赖某一领域的进阶理论、中等复杂度概念及跨章节关联知识（如大学本科专业基础课内容：物理学的 “电磁感应定律” 应用、经济学的 “供需曲线移动机制”），这些知识需通过系统专业学习（如学期制课程）才能掌握，涉及多个概念的逻辑耦合（如 “力→加速度→动量变化” 的连锁关系），需理解原理推导过程，但不涉及领域前沿或小众分支。
   - Level 5（高壁垒，深度专业知识依赖）
     - 核心特征：核心特征：需依赖领域内的前沿理论、复杂术语体系、细分研究范式及跨分支关联知识，这些知识需通过长期深耕才能掌握，涉及高度抽象的概念、小众术语及未完全定论的研究成果，非该领域从业者或研究者难以理解。
 
@@ -589,23 +589,23 @@ During Marina Abramović and Ulay's \"The Lovers\" performance, they walked the 
 ```
 To determine the total distance Marina Abramović and Ulay walked during "The Lovers" performance, we need to calculate the number of actual walking days and then use their daily distance to find the total.
 
-### Step 1: Calculate the number of walking days  
-They spent 90 days in total, with every 10th day being a rest day.  
-- Total days: 90  
-- Number of rest days: Since rest days occur every 10th day, there are \( \frac{90}{10} = 9 \) rest days.  
-- Walking days = Total days - Rest days = \( 90 - 9 = 81 \) days.  
+### Step 1: Calculate the number of walking days
+They spent 90 days in total, with every 10th day being a rest day.
+- Total days: 90
+- Number of rest days: Since rest days occur every 10th day, there are \( \frac{90}{10} = 9 \) rest days.
+- Walking days = Total days - Rest days = \( 90 - 9 = 81 \) days.
 
 
-### Step 2: Calculate daily distance walked  
-Each walking day, they maintained an average speed of 60 meters per minute for 5 hours.  
-- Convert 5 hours to minutes: \( 5 \times 60 = 300 \) minutes.  
-- Daily distance = Speed × Time = \( 60 \, \text{meters/minute} \times 300 \, \text{minutes} = 18,000 \, \text{meters/day} \).  
+### Step 2: Calculate daily distance walked
+Each walking day, they maintained an average speed of 60 meters per minute for 5 hours.
+- Convert 5 hours to minutes: \( 5 \times 60 = 300 \) minutes.
+- Daily distance = Speed × Time = \( 60 \, \text{meters/minute} \times 300 \, \text{minutes} = 18,000 \, \text{meters/day} \).
 
 
-### Step 3: Calculate total distance  
-Total distance = Daily distance × Number of walking days  
-- Total distance in meters: \( 18,000 \, \text{meters/day} \times 81 \, \text{days} = 1,458,000 \, \text{meters} \).  
-- Convert to kilometers (1 kilometer = 1,000 meters): \( \frac{1,458,000}{1,000} = 1,458 \, \text{kilometers} \).  
+### Step 3: Calculate total distance
+Total distance = Daily distance × Number of walking days
+- Total distance in meters: \( 18,000 \, \text{meters/day} \times 81 \, \text{days} = 1,458,000 \, \text{meters} \).
+- Convert to kilometers (1 kilometer = 1,000 meters): \( \frac{1,458,000}{1,000} = 1,458 \, \text{kilometers} \).
 
 
 **Answer:** 1458 kilometers.
@@ -678,7 +678,8 @@ The following is an open-ended problem from an International Physics competition
 
 [思考过程]
 ```
-To estimate the average speed \\( v_0 \\) of a parcel of air moving upward, we can analyze the forces and energy changes involved. Here's a step-by-step solution:\n\n### 1. **Buoyant Force and Acceleration:**\nWhen a parcel of air rises, it experiences a buoyant force due to the density difference between the parcel and the surrounding air. The buoyant force per unit mass is given by:\n\\[\na = g \\left( \\frac{\\rho_{\\text{surrounding}} - \\rho_{\\text{parcel}}}{\\rho_{\\text{parcel}}} \\right)\n\\]\nAssuming the air behaves as an ideal gas, the density is inversely proportional to temperature:\n\\[\n\\rho \\propto \\frac{1}{T}\n\\]\nLet \\( T_0 \\) be the temperature of the surrounding air and \\( T_0 + \\Delta T \\) be the temperature of the parcel (where \\( \\Delta T \\) is small). Then:\n\\[\n\\frac{\\rho_{\\text{surrounding}}}{\\rho_{\\text{parcel}}} = \\frac{T_0 + \\Delta T}{T_0} \\approx 1 + \\frac{\\Delta T}{T_0}\n\\]\nSubstituting back into the acceleration:\n\\[\na \\approx g \\left( \\frac{\\Delta T}{T_0} \\right)\n\\]\n\n### 2. **Kinematic Analysis:**\nThe parcel accelerates upward with this acceleration \\( a \\). If the parcel rises a height \\( h \\), its final speed \\( v \\) can be found using the kinematic equation:\n\\[\nv^2 = 2 a h\n\\]\nSubstituting \\( a \\):\n\\[\nv^2 = 2 g h \\left( \\frac{\\Delta T}{T_0} \\right)\n\\]\nThe average speed \\( v_0 \\) is roughly half the final speed (assuming linear acceleration):\n\\[\nv_0 \\approx \\frac{v}{2}\n\\]\nHowever, a better estimate for the average speed is the root-mean-square speed, which for uniformly accelerated motion is:\n\\[\nv_0 = \\sqrt{\\frac{v^2}{2}} = \\sqrt{g h \\left( \\frac{\\Delta T}{T_0} \\right)}\n\\]\n\n### 3. **Final Expression:**\nThus, the average speed \\( v_0 \\) is:\n\\[\nv_0 = \\sqrt{g h \\frac{\\Delta T}{T_0}}\n\\]\n\nSo the final answer is \\boxed{\\sqrt{g h \\frac{\\Delta T}{T_0}}}.
+### 1. **Buoyant Force and Acceleration:**\nWhen a parcel of air rises, it experiences a buoyant force due to the density difference between the parcel and the surrounding air. The buoyant force per unit mass is given by:\n\\[\na = g \\left( \\frac{\\rho_{\\text{surrounding}} - \\rho_{\\text{parcel}}}{\\rho_{\\text{parcel}}} \\right)\n\\]\nAssuming the air behaves as an ideal gas, the density is inversely proportional to temperature:\n\\[\n\\rho \\propto \\frac{1}{T}\n\\]\nLet \\( T_0 \\) be the temperature of the surrounding air and \\( T_0 + \\Delta T \\) be the temperature of the parcel (where \\( \\Delta T \\) is small). Then:\n\\[\n\\frac{\\rho_{\\text{surrounding}}}{\\rho_{\\text{parcel}}} = \\frac{T_0 + \\Delta T}{T_0} \\approx 1 + \\frac{\\Delta T}{T_0}\n\\]\nSubstituting back into the acceleration:\n\\[\na \\approx g \\left( \\frac{\\Delta T}{T_0} \\right)\n\\]\n\n### 2. **Kinematic Analysis:**\nThe parcel accelerates upward with this acceleration \\( a \\). If the parcel rises a height \\( h \\), its final speed \\( v \\) can be found using the kinematic equation:\n\\[\nv^2 = 2 a h\n\\]\nSubstituting \\( a \\):\n\\[\nv^2 = 2 g h \\left( \\frac{\\Delta T}{T_0} \\right)\n\\]\nThe average speed \\( v_0 \\) is roughly half the final speed (assuming linear acceleration):\n\\[\nv_0 \\approx \\frac{v}{2}\n\\]\nHowever, a better estimate for the average speed is the root-mean-square speed, which for uniformly accelerated motion is:\n\\[\nv_0 = \\sqrt{\\frac{v^2}{2}} = \\sqrt{g h \\left( \\frac{\\Delta T}{T_0} \\right)}\n\\]\n\n### 3. **Final Expression:**\nThus, the average speed \\( v_0 \\) is:\n\\[\nv_0 = \\sqrt{g h \\frac{\\Delta T}{T_0}}\n\\]\n\nSo the final answer is \\boxed{\\sqrt{g h \\frac{\\Delta T}{T_0}}}.
+To estimate the average speed \\( v_0 \\) of a parcel of air moving upward, we can analyze the forces and energy changes involved. Here's a step-by-step solution:\n\n
 ```
 
 
@@ -1876,10 +1877,10 @@ class Doc2QueryV2ComputeScore(object):
         _if = cls.get_instruct(gt, answer_type)
         return f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n{question}\n\n{_if}'
 
-    #     def clip_string(self, s: str):
-    #         if len(s) > 1500:
-    #             return f'{s[:700]}... [省略] ...{s[-800:]}'
-    #         return s
+    def clip_string(self, s: str):
+        if len(s) > 1500:
+            return f'{s[:700]}... [省略] ...{s[-800:]}'
+        return s
 
     async def get_difficulty_reward(
         self,
@@ -2533,78 +2534,57 @@ class QuestionSimilarityPenalty(PenaltyOrReward):
         except Exception as err:
             return 0.0
 
-# class SALTComputeScore(Doc2QueryV2ComputeScore):
-#     def __init__(self,
-#                  parse_solution_fn,
-#                  split="train",
-#                  args=None,
-#                  record_rollout_samples_path=None,
-#                  record_rollout_max_capacity=100,
-#                  ):
-#         super().__init__(
-#             parse_solution_fn=parse_solution_fn, split=split,
-#             args=args,
-#             record_rollout_samples_path=record_rollout_samples_path,
-#             record_rollout_max_capacity=record_rollout_max_capacity
-#         )
-#         self.task_name = "SALT"
 
-#         self.format = SALTQuestionAnswerFormatVerify(
-#             parse_solution_fn=self.parse_solution_fn)
-#         self.language = SALTLanguageConsistency(
-#             parse_solution_fn=self.parse_solution_fn)
-#         self.bad_question_detection = SALTBadQuestionDetection(
-#             parse_solution_fn=self.parse_solution_fn
-#         )
-#         self.similarity_penalty = QuestionSimilarityPenalty(
-#             parse_solution_fn=self.parse_solution_fn)
+class SALTComputeScore(Doc2QueryV2ComputeScore):
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-2.0
+                 ):
 
-#     @classmethod
-#     def get_weak_agent(cls):
-#         return Agent(**{
-#             "model": "DeepSeek-V3-0324",
-#             "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
-#             "api_keys": "EMPTY",
-#             "request_kwargs": {
-#                 "temperature": 0.8,
-#                 "timeout": 360,
-#                 "max_tokens": 4096,
-#             }
-#         })
+        super().__init__(
+            parse_solution_fn=parse_solution_fn, split=split,
+            args=args,
+            min_reward=min_reward
+        )
+        self.task_name = "SALT"
 
-#     @classmethod
-#     def get_strong_agent(cls):
-#         return Agent(**{
-#             "model": "DeepSeek-V3-0324",
-#             "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
-#             "api_keys": "EMPTY",
-#             "request_kwargs": {
-#                 "temperature": 0.8,
-#                 "timeout": 360,
-#                 "max_tokens": 4096,
-#             }
-#         })
+    def init_weak_agent(self):
+        weak_name = self.args["learnable_metric_args"]["weakness"]
+        self.weak_agent = Agent(
+            **self.args["learnable_run_args"][weak_name]["model"])
+        self.agents[weak_name] = self.weak_agent
 
-#     @classmethod
-#     def get_verify_agent(cls):
-#         return Agent(**{
-#             "model": "qwen25_32B_instruct",
-#             "base_url": "http://10.130.142.154:8000/v1",
-#             "api_keys": "EMPTY",
-#             "request_kwargs": {
-#                 "temperature": 0.8,
-#                 "timeout": 360,
-#                 "max_tokens": 2048,
-#             },
-#         })
+    def init_adv_agent(self):
+        adv_name = self.args["learnable_metric_args"]["advantage"]
+        self.adv_agent = Agent(
+            **self.args["learnable_run_args"][adv_name]["model"])
+        self.agents[adv_name] = self.adv_agent
 
-#     def get_penalties(self) -> Dict[str, Callable]:
-#         return {
-#             "Format": self.format.get_penalty_or_reward,
-#             "Lang": self.language.get_penalty_or_reward,
-#             "BadQ": self.bad_question_detection.get_penalty_or_reward,
-#             "QSimPenalty": self.similarity_penalty.get_penalty_or_reward,
-#         }
+    @classmethod
+    def rule_based_penalties(cls):
+        return [
+            SALTFormatVerify,
+            LanguageConsistency,
+            SALTBadQuestionDetection,
+            QuestionSimilarityPenalty
+        ]
+
+    def init_rule_based_penalties(self):
+        size = len(self.rule_based_penalties())-1
+        interval = (0 - self.min_reward) / 2 / \
+            (size+1)
+        penalty_scopes = [(self.min_reward + (i * 2 + 1) *
+                           interval, self.min_reward + (i * 2 + 2) *
+                           interval) for i in range(size)]
+        self._penalties = []
+        for p, s in zip(self.rule_based_penalties()[:-1], penalty_scopes):
+            self._penalties.append(p(parse_solution_fn=self.parse_solution_fn,
+                                     min_score=s[0], max_score=s[1]))
+        self._penalties.append(self.rule_based_penalties()[-1](
+            parse_solution_fn=self.parse_solution_fn, min_score=0, max_score=0.1
+        ))
 
 #     def do_not_simulate_respondent(self, debug):
 #         if debug:
@@ -2619,7 +2599,7 @@ class QuestionSimilarityPenalty(PenaltyOrReward):
 #         )
 
 #     @classmethod
-#     def self_taught_template(cls, question, answer, gt):
+#     def reject_sample(cls, question, answer, gt):
 #         """ 拒绝采样：合成题不提供答案,需要模型自己rollout对 """
 #         return question
 
@@ -3257,47 +3237,192 @@ class QuestionSimilarityPenalty(PenaltyOrReward):
 
 #         return final_results
 
-# SALT_DEFAULT_PARAMS = {
-#     "learnable_run_args": {
-#         "self_taught": {
-#             "model": SALTComputeScore.get_weak_agent(),
-#             "fn": SALTComputeScore.self_taught_template,
-#             "repeat": 8,
-#         },
+
+# DOC2QUERY_V2_DEFAULT_PARAMS = {
+#     "difficulty_run_args": {
 #         "w/o_content": {
-#             "model": SALTComputeScore.get_weak_agent(),
-#             "repeat": 8,
-#             "fn": SALTComputeScore.respond_wo_context,
-#             "desc": 'w/o ctx'
+#             "model": {
+#                 "model": "qwen3_30b_a3b",
+#                 "base_url": "http://10.130.0.220:21002/v1",
+#                 "api_keys": "EMPTY",
+#                 "request_kwargs": {
+#                     "temperature": 0.65,
+#                     "timeout": 600,
+#                     "max_tokens": 20480,
+#                 },
+#             },
+#             "repeat": 5,
+#             "fn": "respond_wo_context",
+#             "desc": 'w/o ctx',
+#             "max_concurrent_requests": 64
 #         },
 #         "w_content": {
-#             "model": SALTComputeScore.get_strong_agent(),
-#             "repeat": 8,
-#             "fn": SALTComputeScore.respond_w_context,
-#             "desc": 'w ctx'
+#             "model": {
+#                 "model": "qwen3_30b_a3b",
+#                 "base_url": "http://10.130.0.220:21002/v1",
+#                 "api_keys": "EMPTY",
+#                 "request_kwargs": {
+#                     "temperature": 0.65,
+#                     "timeout": 600,
+#                     "max_tokens": 20480,
+#                 },
+#             },
+#             "repeat": 5,
+#             "fn": "respond_w_context",
+#             "desc": 'w ctx',
+#             "max_concurrent_requests": 64
 #         },
 #     },
-#     "learnable_metric_args": {
+#     "difficulty_metric_args": {
 #         "advantage": 'w_content',
 #         "weakness": 'w/o_content',
-#         "advantage_threshold": 2/8,
-#         "difficulty_reduction_bonus_weight": 1.0
+#         "advantage_oversimplified_threshold": 5/5,
+#         "weakness_oversimplified_threshold": 5/5,
+#         "advantage_overcomplex_threshold": 1/5,
+#         "weakness_overcomplex_threshold": 1/5,
+#         "advantage_threshold": 1/5,
+#         "advantage_weight": 0.0,
+#         "weakness_weight": 2.0,
+#         "confidence_bonus_threshold": 2/5,
+#         "confidence_bonus_weight": 0.
+#     },
+#     "verify_agent": {
+#         "model": {
+#             "model": "qwen25_32B_instruct",
+#             "base_url": "http://10.130.142.223:8000/v1",
+#             "api_keys": "EMPTY",
+#             "request_kwargs": {
+#                 "temperature": 0.6,
+#                 "timeout": 360,
+#                 "max_tokens": 1024,
+#             },
+#         },
+#         "max_concurrent_requests": 32
+#     },
+#     "auxiliary_agent": {
+#         "model": {
+#             "model": "qwen25_32B_instruct",
+#             "base_url": "http://10.130.142.223:8000/v1",
+#             "api_keys": "EMPTY",
+#             "request_kwargs": {
+#                 "temperature": 0.6,
+#                 "timeout": 360,
+#                 "max_tokens": 4096,
+#             },
+#         },
+#         "max_concurrent_requests": 32
 #     },
 #     "similarity_run_args":  {
 #         "threshold": {
-#             4: -0.5,
-#             5: -1.0
+#             3: 0.5,
+#             4: 1.0
 #         },
-#         "weight": 1.0,
+#         "weight": 0.25,
 #     },
-#     "hack_detection_run_args":  {
-#         "threshold": {
-#             3: -1.5,
-#             4: -2.0
-#         },
-#         "weight": 1.0,
+#     "save_rollouts": {
+#         "default_local_dir": "/tmp/fabricate_aio_rollouts"
+#         # FIXME
+#         # "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
 #     }
 # }
+
+SALT_DEFAULT_PARAMS = {
+    "learnable_run_args": {
+        "self_taught": {
+            "model": {
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "EMPTY",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "fn": "reject_sample",
+            "repeat": 10,
+            "max_concurrent_requests": 256
+        },
+        "w/o_content": {
+            "model": {
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "EMPTY",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "repeat": 8,
+            "fn": "respond_wo_context",
+            "desc": 'w/o ctx',
+            "max_concurrent_requests": 128
+        },
+        "w_content": {
+            "model": {
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "EMPTY",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "repeat": 8,
+            "fn": "respond_w_context",
+            "desc": 'w ctx',
+            "max_concurrent_requests": 128
+        },
+    },
+    "learnable_metric_args": {
+        "advantage": 'w_content',
+        "weakness": 'w/o_content',
+        "advantage_threshold": 2/8,
+        "difficulty_reduction_bonus_weight": 1.0
+    },
+    "similarity_run_args":  {
+        "threshold": {
+            4: -0.5,
+            5: -1.0
+        },
+        "weight": 1.0,
+    },
+    "hack_detection_run_args":  {
+        "threshold": {
+            3: -1.5,
+            4: -2.0
+        },
+        "weight": 1.0,
+    },
+    "verify_agent": {
+    "model": {
+        "model": "qwen25_32B_instruct",
+        "base_url": "http://10.130.142.223:8000/v1",
+        "api_keys": "EMPTY",
+        "request_kwargs": {
+            "temperature": 0.6,
+            "timeout": 360,
+            "max_tokens": 1024,
+        },
+    },
+    "max_concurrent_requests": 32
+},
+"auxiliary_agent": {
+    "model": {
+        "model": "qwen25_32B_instruct",
+        "base_url": "http://10.130.142.223:8000/v1",
+        "api_keys": "EMPTY",
+        "request_kwargs": {
+            "temperature": 0.6,
+            "timeout": 360,
+            "max_tokens": 4096,
+        },
+    },
+    "max_concurrent_requests": 32
+},
+}
 
 # _default_salt_compute_score_train = SALTComputeScore(
 #     salt_parse_solution_fn, split="train", args=SALT_DEFAULT_PARAMS)

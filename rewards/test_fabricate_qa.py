@@ -31,9 +31,9 @@ from fabricate_qa import (
     QuestionSimilarityPenalty,
     #     # Doc2QueryV3ComputeScore,
     #     # CriteriaRMComputeScore,
-    #     # SALTComputeScore,
+    SALTComputeScore,
     DOC2QUERY_V2_DEFAULT_PARAMS,
-    #     # SALT_DEFAULT_PARAMS,
+    SALT_DEFAULT_PARAMS,
     #     # DOC2QUERY_V3_DEFAULT_PARAMS,
     #     # CRITERIA_DEFAULT_PARAMS,
     #     # doc2query_v2_default_stage1_compute_score_valid,
@@ -293,30 +293,32 @@ class TestSALT(unittest.TestCase):
                                          batch_solution_str, batch_ground_truth)
 
     def test_learnable_reward(self):
-        batch_solution_str, batch_ground_truth = load_salt_data(num=100)
+        # batch_solution_str, batch_ground_truth = load_salt_data(num=100)
 
         task = SALTComputeScore(
             salt_parse_solution_fn, split="valid", args=SALT_DEFAULT_PARAMS)
+        for _ in task._penalties:
+            print(_, _.min_score, _.max_score)
 
         # salt_default_compute_score_valid(
         #     [None] *
         #     len(batch_solution_str), batch_solution_str, batch_ground_truth,
         # )
-        async def main():
-            results = await task.get_learnable_reward(
-                [None] *
-                len(batch_solution_str), batch_solution_str, batch_ground_truth,
-                run_args=SALT_DEFAULT_PARAMS["learnable_run_args"], debug=True,
-                metric_args=SALT_DEFAULT_PARAMS["learnable_metric_args"]
-            )
-            # results = await task.self_taught(
-            #     [None] *
-            #     len(batch_solution_str), batch_solution_str, batch_ground_truth,
-            #     run_args=SALT_DEFAULT_PARAMS["learnable_run_args"], debug=True
-            # )
+        # async def main():
+        #     results = await task.get_learnable_reward(
+        #         [None] *
+        #         len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        #         run_args=SALT_DEFAULT_PARAMS["learnable_run_args"], debug=True,
+        #         metric_args=SALT_DEFAULT_PARAMS["learnable_metric_args"]
+        #     )
+        #     # results = await task.self_taught(
+        #     #     [None] *
+        #     #     len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        #     #     run_args=SALT_DEFAULT_PARAMS["learnable_run_args"], debug=True
+        #     # )
 
-            print(len(results))
-        aio.run(main())
+        #     print(len(results))
+        # aio.run(main())
 
     def test_hack_detect(self):
         batch_solution_str, batch_ground_truth = load_salt_data(num=100)
