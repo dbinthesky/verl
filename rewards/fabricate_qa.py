@@ -2231,12 +2231,12 @@ class Doc2QueryV2ComputeScore(object):
 
                 parsed = parse_question_solution_fn(batch_solution_str[i])
 
-                if parsed is not None:
+                if parsed is not None and random.random() < 0.2:
                     print(f'[Thought]\n{parsed[0]}')
                     print()
 
-                #         self.save_rollout_info()
-                #         return final_results
+            self.save_rollout_info()
+        return final_results
 
     def compute_score(self,
                       batch_data_sources,
@@ -2256,13 +2256,13 @@ class Doc2QueryV2ComputeScore(object):
     def format_question(self, parsed_result):
         return f'Question: {parsed_result[0]}\nAnswer: {parsed_result[1]}\nAnswer Type: {parsed_result[2]}'
 
-        #     def save_rollout_info(self):
-        #         """将缓存保存为JSON文件"""
-        #         data = {k: {"capacity": v.capacity, "items": list(v.get_items()), "access_order": list(
-        #             v._access_order.keys())} for k, v in self.self.rollout_cache.items()}
+    def save_rollout_info(self):
+        """将缓存保存为JSON文件"""
 
-        #         with open(self.save_rollout_samples_path, "wt") as f:
-        #             json.dump(data, f, ensure_ascii=False, indent="  ")
+        with open(self.save_rollouts_path, "a+") as f:
+            for _ in self.rollout_cache:
+                f.write(f'{json.dumps(_, ensure_ascii=False)}\n')
+        self.rollout_cache = []
 
 
 DOC2QUERY_V2_DEFAULT_PARAMS = {
