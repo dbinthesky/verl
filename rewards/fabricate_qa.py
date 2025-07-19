@@ -2274,32 +2274,32 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": {
-                "model": "qwen25_32B_instruct",
-                "base_url": "http://10.130.142.223:8000/v1",
+                "model": "qwen3_30b_a3b",
+                "base_url": "http://10.130.0.220:21002/v1",
                 "api_keys": "EMPTY",
                 "request_kwargs": {
-                    "temperature": 0.8,
-                    "timeout": 360,
-                    "max_tokens": 2048,
+                    "temperature": 0.65,
+                    "timeout": 600,
+                    "max_tokens": 20480,
                 },
             },
-            "repeat": 8,
+            "repeat": 5,
             "fn": "respond_wo_context",
             "desc": 'w/o ctx',
             "max_concurrent_requests": 64
         },
         "w_content": {
             "model": {
-                "model": "service_dv3_for_tongjian",
-                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
-                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "model": "qwen3_30b_a3b",
+                "base_url": "http://10.130.0.220:21002/v1",
+                "api_keys": "EMPTY",
                 "request_kwargs": {
-                    "temperature": 0.8,
-                    "timeout": 360,
-                    "max_tokens": 4096,
-                }
+                    "temperature": 0.65,
+                    "timeout": 600,
+                    "max_tokens": 20480,
+                },
             },
-            "repeat": 3,
+            "repeat": 5,
             "fn": "respond_w_context",
             "desc": 'w ctx',
             "max_concurrent_requests": 64
@@ -2308,14 +2308,14 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
     "difficulty_metric_args": {
         "advantage": 'w_content',
         "weakness": 'w/o_content',
-        "advantage_oversimplified_threshold": 8/8,
-        "weakness_oversimplified_threshold": 7/8,
-        "advantage_overcomplex_threshold": 1/8,
-        "weakness_overcomplex_threshold": 1/8,
-        "advantage_threshold": 2/8,
+        "advantage_oversimplified_threshold": 5/5,
+        "weakness_oversimplified_threshold": 5/5,
+        "advantage_overcomplex_threshold": 1/5,
+        "weakness_overcomplex_threshold": 1/5,
+        "advantage_threshold": 1/5,
         "advantage_weight": 0.0,
         "weakness_weight": 2.0,
-        "confidence_bonus_threshold": 2/8,
+        "confidence_bonus_threshold": 2/5,
         "confidence_bonus_weight": 0.
     },
     "verify_agent": {
