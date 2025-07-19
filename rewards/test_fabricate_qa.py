@@ -63,181 +63,179 @@ UNITTEST_AGENT = Agent(**{
     },
 })
 
-
-def generate_random_string(n):
-    all_characters = string.ascii_letters + string.digits + " "
-    return ''.join(random.choice(all_characters) for _ in range(n))
-
-
-def load_doc2query_v3_data(num=100):
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/seed_discipline_250426_4k_test.parquet"
-    batch_solution_str, batch_ground_truth = [], []
-
-    df = pd.read_parquet(filename)
-    count = 0
-    for i, row in df.iterrows():
-        row = row.to_dict()
-        if i > 3:
-            break
-
-        lang_code = row["reward_model"]["lang_code"]
-        if lang_code == "en":
-            think, q, o, a = "Think", "The reaction product of the o-toluidine method for measuring blood glucose is ( ).", [
-                "Schiff base", "Molybdenum blue", "Tungstophosphoric acid", "Glucuronide", "Quinone compounds"], "A"
-        else:
-            think, q, o, a = "思考", "钢材强度设计值，下列哪一种说法是正确的?", ["同一种牌号不同质量等级的钢材，强度设计值相同", "同一种牌号不同厚度的钢材，强度设计值相同",
-                                                            "同一种牌号的冷弯型钢钢材和普通钢材，强度设计值相同", "同一种牌号的钢材，《门式刚架轻型房屋钢结构技术规程》(CECS 102：2002)和《钢结构设计规范》(GB 50017-2003)采用不同的强度设计值"], "A"
-
-        o = "\n".join([f'{c}) {_o}' for c, _o in zip(["A", "B", "C", "D"], o)])
-
-        batch_solution_str.append(
-            f'<think>\n{think}\n</think>\n\n<question>\nQuestion: {q}\n\nOptions:\n{o}\n\nAnswer: {a}\n</question>')
-        batch_ground_truth.append(row["reward_model"])
-        count += 1
-    return batch_solution_str, batch_ground_truth
-
-
-def load_criteria_rm_data(num=100):
-    batch_solution_str, batch_ground_truth = [], []
-    with open("/cpfs01/shared/llm_ddd/tongjian/sft/self_improvement/xml_cot_if_enhance_0529.jsonl", "rt") as f:
-        for line in f:
-            example = json.loads(line)
-
-            batch_solution_str.append(
-                example["self_improvement"]["responses"][0]["response"]
-            )
-            batch_ground_truth.append(
-                {
-                    "ground_truth": example["self_improvement"]["reference_meta"]["final_answer"],
-                    "prompt": example["self_improvement"]["prompt"]
-                }
-            )
-            if len(batch_ground_truth) == 128:
-                break
-
-    return batch_solution_str, batch_ground_truth
+_doc2query_v2_qas = [
+    ("Consider a triangle with angles \\(\\alpha\\), \\(\\beta\\), and \\(\\gamma\\) such that \\(\\alpha + \\beta + \\gamma = \\pi\\). Given that \\(\\tan \\alpha \\tan \\beta = \\csc \\frac{\\pi}{3}\\), find the value of \\(\\frac{\\cos \\alpha \\cos \\beta}{\\cos \\gamma}\\).", "\\boxed{2\\sqrt{3} + 3}", "NumericalAnswer"),
+    ("Compute the hybridization energy for the given parameters θ = π/2, θ₁ = π/4, θʳ = π/4, κ₂ᵐ = 1, and θᵣ - θₗ = θ. Express your answer in terms of E₀^n.",
+     "\\boxed{0.500}", "NumericalAnswer"),
+    ("An investor receives a series of payments over n years. The payment in the k-th year is given by the formula \\(\\frac{1}{k(k+1)}\\) of the total investment. What is the total amount received after n years?", "\\boxed{0.999}", "NumericalAnswer"),
+    (" A point P is outside a circle with radius 5 cm. A tangent from P touches the circle at point T, and a secant from P intersects the circle at points A and B. The lengths of PA and PB are 10 cm and 15 cm, respectively. Find the length of the tangent PT.",
+     "\\boxed{12.245}", "NumericalAnswer"),
+    ("In a laboratory experiment, 100 grams of starch is converted to sugar through enzyme action, then the sugar is fermented to produce ethanol and carbon dioxide. The ethanol is then distilled to separate it from the mixture. Assuming the fermentation produces 100% yield, what is the concentration of ethanol in the final product after distillation, expressed as a percentage?",
+     "\\boxed{56.764}", "NumericalAnswer"),
+    ("In a system where n=4 simple harmonic motion vectors are superimposed, each with a phase difference of 45° and an amplitude of 5, determine the magnitude R and the phase angle α of the resultant vector.",
+     "\\boxed{13.066}", "NumericalAnswer"),
+    ("A triangle is divided by lines parallel to its sides into smaller triangles. The area of one of the smaller triangles is 0.210 square units. Find the area of the original triangle.",
+     "\\boxed{1.890}", "NumericalAnswer"),
+    ("Let Γλ' be a cell defined by the set of indices Jγ'+ = {1,2} and Jγ'- = {3,4}, with signs + and -, respectively. Find ρ↓λ, the sum of tree diagrams corresponding to Γ↓λ.",
+     " \\boxed{0.500}", "NumericalAnswer"),
+    ("Consider a triangle with angles \\(\\alpha\\), \\(\\beta\\), and \\(\\gamma\\) such that \\(\\alpha + \\beta + \\gamma = \\pi\\). Given that \\(\\tan \\alpha \\tan \\beta = \\csc \\frac{\\pi}{3}\\), find the value of \\(\\frac{\\cos \\alpha \\cos \\beta}{\\cos \\gamma}\\).", "\\boxed{2\\sqrt{3} + 3}", "NumericalAnswer"),
+    ("Question: What is the magnitude of the displacement vector after 0.4 seconds if the ball's motion is observed in 16 strobe photographs, each 0.025 seconds apart, and the velocities are as follows: v1 = (1,2), v2 = (2,3), ..., v16 = (16,17)?",
+     "\\boxed{5.100}", "NumericalAnswer"),
+    ("In a game with two players, each player's type is either A or B. The player with type A can choose action 1 or 2, and the player with type B can choose action 1 or 3. The payoff for player 1 is 10 if they choose action 1 and the other player chooses action 1, and 0 otherwise. The payoff for player 2 is 20 if they choose action 1 and the other player chooses action 1, and 0 otherwise. How should the mechanism designer structure the mechanism to ensure that the players choose their types in a way that maximizes the total payoff?",
+     "\\boxed{30.000}", "NumericalAnswer"),
+    ("A solid sphere with a radius of 0.2 meters and a mass of 5 kg is released from rest at the top of an incline with a height of 2 meters. Assuming the sphere rolls without slipping, what is the final velocity of the sphere at the bottom of the incline? (Take g = 9.8 m/s²)",
+     " \\boxed{5.291}", "NumericalAnswer"),
+    ("What is the mean ionic activity coefficient of a 0.1 M sodium chloride (NaCl) solution in water? Assume the Debye-Hückel constant A = 0.5. Express your answer to three decimal places.\\",
+     "\\boxed{0.700}", "NumericalAnswer"),
+    ("What is the main lobe width (in Hz) of the power spectral density (PSD) of an AMI-coded RZ-modulated signal with a bit rate of 100 kbps?",
+     "\\boxed{100000.000}", "NumericalAnswer"),
+    ("A composite Poisson process has a Poisson parameter λ = 5, and each event is associated with a uniform random variable from 0 to 10. What is the variance of the composite process?\\",
+     " \\boxed{41.667}", "NumericalAnswer"),
+    ("A pipe with a length of 100 meters is carrying water at a flow rate of 0.5 m³/s. The head loss due to friction in the pipe is 20 meters. The roughness of the pipe is 0.001 meters. The fluid's kinematic viscosity is 1.0×10^-6 m²/s. What is the diameter of the pipe in meters?",
+     "\\boxed{0.500}", "NumericalAnswer"),
+    ("A cube of side length 1 meter is submerged in a liquid whose density varies linearly from 1000 kg/m³ at the surface to 1100 kg/m³ at the bottom. What is the buoyant force acting on the cube?",
+     "\\boxed{10295.500}", "NumericalAnswer")
+]
 
 
-def load_salt_data(num=100):
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/salt/runtu_error_collection_0703_test.parquet"
-    batch_solution_str, batch_ground_truth = [], []
-
-    df = pd.read_parquet(filename)
-    count = 0
-    for i, row in df.iterrows():
-        row = row.to_dict()
-        gt = row["reward_model"]["question"]
-        if i > 3:
-            break
-        if gt is not None:
-            batch_solution_str.append(
-                f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: {row["reward_model"]["answer"]}\n</question>')
-            batch_ground_truth.append(row["reward_model"])
-            count += 1
-        else:
-            continue
-    return batch_solution_str, batch_ground_truth
-
-
-def load_fabricate_aio_data(num=100, format="wrong_question"):
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0616.parquet"
+def load_dataset(task_name, num=100):
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0718.parquet"
     batch_solution_str, batch_ground_truth = [], []
 
     df = pd.read_parquet(filename)
     count = 0
     for _, row in df.iterrows():
         row = row.to_dict()
-        if format == "wrong_question":
-            gt = row["reward_model"]["question"]
-            if gt is not None:
-                batch_solution_str.append(
-                    f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
-                batch_ground_truth.append(row["reward_model"])
-                count += 1
-            else:
-                continue
-        if format == "zh_question":
-            if row["reward_model"]["lang_code"] != "zh":
-                continue
-            gt = row["reward_model"]["question"]
-            if gt is not None:
-                batch_solution_str.append(
-                    f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
-                batch_ground_truth.append(row["reward_model"])
-                count += 1
-            else:
-                continue
-        if format == "detect_bad_feature":
-            if row["reward_model"]["lang_code"] != "zh":
-                continue
-            gt = row["reward_model"]["question"]
-            if gt is not None:
-                batch_solution_str.append(
-                    f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}-Synthetic\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
-                batch_ground_truth.append(row["reward_model"])
-                count += 1
-            else:
-                continue
-        if format == "fabricate_qa":
-            if row["data_source"] != "fabricate_qa":
-                continue
-            gt = row["reward_model"]["question"]
-            batch_solution_str.append(
-                f'<think>\nSelf-Validation\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
-            batch_ground_truth.append(row["reward_model"])
-            count += 1
-            if count > num-1:
-                break
+        if row["data_source"] != task_name:
             continue
-        for q, a, _type in [
-            ("Consider a triangle with angles \\(\\alpha\\), \\(\\beta\\), and \\(\\gamma\\) such that \\(\\alpha + \\beta + \\gamma = \\pi\\). Given that \\(\\tan \\alpha \\tan \\beta = \\csc \\frac{\\pi}{3}\\), find the value of \\(\\frac{\\cos \\alpha \\cos \\beta}{\\cos \\gamma}\\).", "\\boxed{2\\sqrt{3} + 3}", "NumericalAnswer"),
-            ("Compute the hybridization energy for the given parameters θ = π/2, θ₁ = π/4, θʳ = π/4, κ₂ᵐ = 1, and θᵣ - θₗ = θ. Express your answer in terms of E₀^n.",
-                "\\boxed{0.500}", "NumericalAnswer"),
-            ("An investor receives a series of payments over n years. The payment in the k-th year is given by the formula \\(\\frac{1}{k(k+1)}\\) of the total investment. What is the total amount received after n years?", "\\boxed{0.999}", "NumericalAnswer"),
-            (" A point P is outside a circle with radius 5 cm. A tangent from P touches the circle at point T, and a secant from P intersects the circle at points A and B. The lengths of PA and PB are 10 cm and 15 cm, respectively. Find the length of the tangent PT.",
-                "\\boxed{12.245}", "NumericalAnswer"),
-            ("In a laboratory experiment, 100 grams of starch is converted to sugar through enzyme action, then the sugar is fermented to produce ethanol and carbon dioxide. The ethanol is then distilled to separate it from the mixture. Assuming the fermentation produces 100% yield, what is the concentration of ethanol in the final product after distillation, expressed as a percentage?",
-                "\\boxed{56.764}", "NumericalAnswer"),
-            ("In a system where n=4 simple harmonic motion vectors are superimposed, each with a phase difference of 45° and an amplitude of 5, determine the magnitude R and the phase angle α of the resultant vector.",
-                "\\boxed{13.066}", "NumericalAnswer"),
-            ("A triangle is divided by lines parallel to its sides into smaller triangles. The area of one of the smaller triangles is 0.210 square units. Find the area of the original triangle.",
-                "\\boxed{1.890}", "NumericalAnswer"),
-            ("Let Γλ' be a cell defined by the set of indices Jγ'+ = {1,2} and Jγ'- = {3,4}, with signs + and -, respectively. Find ρ↓λ, the sum of tree diagrams corresponding to Γ↓λ.",
-                " \\boxed{0.500}", "NumericalAnswer"),
-            ("Consider a triangle with angles \\(\\alpha\\), \\(\\beta\\), and \\(\\gamma\\) such that \\(\\alpha + \\beta + \\gamma = \\pi\\). Given that \\(\\tan \\alpha \\tan \\beta = \\csc \\frac{\\pi}{3}\\), find the value of \\(\\frac{\\cos \\alpha \\cos \\beta}{\\cos \\gamma}\\).", "\\boxed{2\\sqrt{3} + 3}", "NumericalAnswer"),
-            ("Question: What is the magnitude of the displacement vector after 0.4 seconds if the ball's motion is observed in 16 strobe photographs, each 0.025 seconds apart, and the velocities are as follows: v1 = (1,2), v2 = (2,3), ..., v16 = (16,17)?",
-                "\\boxed{5.100}", "NumericalAnswer"),
-            ("In a game with two players, each player's type is either A or B. The player with type A can choose action 1 or 2, and the player with type B can choose action 1 or 3. The payoff for player 1 is 10 if they choose action 1 and the other player chooses action 1, and 0 otherwise. The payoff for player 2 is 20 if they choose action 1 and the other player chooses action 1, and 0 otherwise. How should the mechanism designer structure the mechanism to ensure that the players choose their types in a way that maximizes the total payoff?",
-                "\\boxed{30.000}", "NumericalAnswer"),
-            ("A solid sphere with a radius of 0.2 meters and a mass of 5 kg is released from rest at the top of an incline with a height of 2 meters. Assuming the sphere rolls without slipping, what is the final velocity of the sphere at the bottom of the incline? (Take g = 9.8 m/s²)",
-                " \\boxed{5.291}", "NumericalAnswer"),
-            ("What is the mean ionic activity coefficient of a 0.1 M sodium chloride (NaCl) solution in water? Assume the Debye-Hückel constant A = 0.5. Express your answer to three decimal places.\\",
-                "\\boxed{0.700}", "NumericalAnswer"),
-            ("What is the main lobe width (in Hz) of the power spectral density (PSD) of an AMI-coded RZ-modulated signal with a bit rate of 100 kbps?",
-                "\\boxed{100000.000}", "NumericalAnswer"),
-            ("A composite Poisson process has a Poisson parameter λ = 5, and each event is associated with a uniform random variable from 0 to 10. What is the variance of the composite process?\\",
-                " \\boxed{41.667}", "NumericalAnswer"),
-                ("A pipe with a length of 100 meters is carrying water at a flow rate of 0.5 m³/s. The head loss due to friction in the pipe is 20 meters. The roughness of the pipe is 0.001 meters. The fluid's kinematic viscosity is 1.0×10^-6 m²/s. What is the diameter of the pipe in meters?",
-                 "\\boxed{0.500}", "NumericalAnswer"),
-                ("A cube of side length 1 meter is submerged in a liquid whose density varies linearly from 1000 kg/m³ at the surface to 1100 kg/m³ at the bottom. What is the buoyant force acting on the cube?",
-                 "\\boxed{10295.500}", "NumericalAnswer")
-        ]:
+
+        if task_name == "doc2query_v2":
+            sample = random.choice(_doc2query_v2_qas)
             batch_solution_str.append(
-                f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {q}\n\nAnswer: {a}\n\nAnswer Type: {_type}\n</question>')
-            if format == "doc2query_v2":
-                batch_ground_truth.append({
-                    "document": "<skip_content>",
-                    "question": q,
-                    "lang_code": "en",
-                    "source": "",
-                    "extra_info": {
-                        "uuid": uuid.uuid4().hex
-                    }
-                })
-            count += 1
-        if count > num-1:
+                f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: {sample[0]}\n\nAnswer: {sample[1]}\n\nAnswer Type: {sample[2]}\n</question>'
+            )
+        else:
+            raise NotImplementedError
+        batch_ground_truth.append(row["reward_model"])
+        if len(batch_ground_truth) == num:
             break
     return batch_solution_str, batch_ground_truth
+
+
+# def load_doc2query_v3_data(num=100):
+#     filename = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/seed_discipline_250426_4k_test.parquet"
+#     batch_solution_str, batch_ground_truth = [], []
+
+#     df = pd.read_parquet(filename)
+#     count = 0
+#     for i, row in df.iterrows():
+#         row = row.to_dict()
+#         if i > 3:
+#             break
+
+#         lang_code = row["reward_model"]["lang_code"]
+#         if lang_code == "en":
+#             think, q, o, a = "Think", "The reaction product of the o-toluidine method for measuring blood glucose is ( ).", [
+#                 "Schiff base", "Molybdenum blue", "Tungstophosphoric acid", "Glucuronide", "Quinone compounds"], "A"
+#         else:
+#             think, q, o, a = "思考", "钢材强度设计值，下列哪一种说法是正确的?", ["同一种牌号不同质量等级的钢材，强度设计值相同", "同一种牌号不同厚度的钢材，强度设计值相同",
+#                                                             "同一种牌号的冷弯型钢钢材和普通钢材，强度设计值相同", "同一种牌号的钢材，《门式刚架轻型房屋钢结构技术规程》(CECS 102：2002)和《钢结构设计规范》(GB 50017-2003)采用不同的强度设计值"], "A"
+
+#         o = "\n".join([f'{c}) {_o}' for c, _o in zip(["A", "B", "C", "D"], o)])
+
+#         batch_solution_str.append(
+#             f'<think>\n{think}\n</think>\n\n<question>\nQuestion: {q}\n\nOptions:\n{o}\n\nAnswer: {a}\n</question>')
+#         batch_ground_truth.append(row["reward_model"])
+#         count += 1
+#     return batch_solution_str, batch_ground_truth
+
+
+# def load_criteria_rm_data(num=100):
+#     batch_solution_str, batch_ground_truth = [], []
+#     with open("/cpfs01/shared/llm_ddd/tongjian/sft/self_improvement/xml_cot_if_enhance_0529.jsonl", "rt") as f:
+#         for line in f:
+#             example = json.loads(line)
+
+#             batch_solution_str.append(
+#                 example["self_improvement"]["responses"][0]["response"]
+#             )
+#             batch_ground_truth.append(
+#                 {
+#                     "ground_truth": example["self_improvement"]["reference_meta"]["final_answer"],
+#                     "prompt": example["self_improvement"]["prompt"]
+#                 }
+#             )
+#             if len(batch_ground_truth) == 128:
+#                 break
+
+#     return batch_solution_str, batch_ground_truth
+
+
+# def load_salt_data(num=100):
+#     filename = "/cpfs01/shared/llm_ddd/tongjian/rl/salt/runtu_error_collection_0703_test.parquet"
+#     batch_solution_str, batch_ground_truth = [], []
+
+#     df = pd.read_parquet(filename)
+#     count = 0
+#     for i, row in df.iterrows():
+#         row = row.to_dict()
+#         gt = row["reward_model"]["question"]
+#         if i > 3:
+#             break
+#         if gt is not None:
+#             batch_solution_str.append(
+#                 f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: {row["reward_model"]["answer"]}\n</question>')
+#             batch_ground_truth.append(row["reward_model"])
+#             count += 1
+#         else:
+#             continue
+#     return batch_solution_str, batch_ground_truth
+
+
+# def load_fabricate_aio_data(num=100, format="wrong_question"):
+#     filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0616.parquet"
+#     batch_solution_str, batch_ground_truth = [], []
+
+#     df = pd.read_parquet(filename)
+#     count = 0
+#     for _, row in df.iterrows():
+#         row = row.to_dict()
+#         if format == "wrong_question":
+#             gt = row["reward_model"]["question"]
+#             if gt is not None:
+#                 batch_solution_str.append(
+#                     f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
+#                 batch_ground_truth.append(row["reward_model"])
+#                 count += 1
+#             else:
+#                 continue
+#         if format == "zh_question":
+#             if row["reward_model"]["lang_code"] != "zh":
+#                 continue
+#             gt = row["reward_model"]["question"]
+#             if gt is not None:
+#                 batch_solution_str.append(
+#                     f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
+#                 batch_ground_truth.append(row["reward_model"])
+#                 count += 1
+#             else:
+#                 continue
+#         if format == "detect_bad_feature":
+#             if row["reward_model"]["lang_code"] != "zh":
+#                 continue
+#             gt = row["reward_model"]["question"]
+#             if gt is not None:
+#                 batch_solution_str.append(
+#                     f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}-Synthetic\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
+#                 batch_ground_truth.append(row["reward_model"])
+#                 count += 1
+#             else:
+#                 continue
+
+#             count += 1
+#         if count > num-1:
+#             break
+#     return batch_solution_str, batch_ground_truth
 
 
 class TestUtils(unittest.TestCase):
@@ -467,46 +465,16 @@ class TestDoc2QueryV2(unittest.TestCase):
         task = Doc2QueryV2ComputeScore(
             doc2query_v2_parse_solution_fn, split="valid", args=DOC2QUERY_V2_DEFAULT_PARAMS)
 
-        # batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
-        #     format="doc2query_v2", num=32)
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="doc2query_v2", num=4)
 
-        # async def main():
-        #     results = await task.get_difficulty_reward(
-        #         [None] *
-        #         len(batch_solution_str), batch_solution_str, batch_ground_truth,
-        #         run_args={
-        #             "w/o_content": {
-        #                 "model": task.get_weak_agent(),
-        #                 "repeat": 8,
-        #                 "fn": task.respond_wo_context,
-        #                 "desc": 'w/o ctx'
-        #             },
-        #             "w_content": {
-        #                 "model": task.get_strong_agent(),
-        #                 "repeat": 2,
-        #                 "fn": task.respond_w_context,
-        #                 "desc": 'w ctx'
-        #             }
-        #         }, debug=False,
-        #         metric_args={
-        #             "advantage": 'w_content',
-        #             "weakness": 'w/o_content',
-        #             "advantage_oversimplified_threshold": 1.0,
-        #             "weakness_oversimplified_threshold": 7/8,
-        #             # "advantage_overcomplex_threshold": 1/2,
-        #             "advantage_overcomplex_threshold": 0.0,
-        #             "weakness_overcomplex_threshold": 1/8,
-        #             # "advantage_threshold": 1e-5,
-        #             "advantage_threshold": -9999.,
-        #             "advantage_weight": 0.5,
-        #             "weakness_weight": 0.5,
-        #             "confidence_bonus_threshold": 2/6,
-        #             "confidence_bonus_weight": 0.25
-        #         }
-        #     )
-        #     assert len(results[0]) == len(results[1])
-        #     print(results)
-        # aio.run(main())
+        async def main():
+            results = await task.get_difficulty_reward(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth,
+            )
+            print(results)
+        aio.run(main())
 
     def test_doc2query_v2_get_similarity_reward(self):
         batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
