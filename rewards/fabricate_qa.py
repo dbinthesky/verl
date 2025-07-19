@@ -2366,385 +2366,14 @@ _default_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScore(
 doc2query_v2_compute_score_train = default_doc2query_v2_compute_score_train.compute_score
 doc2query_v2_compute_score_valid = _default_doc2query_v2_compute_score_valid.compute_score
 
-# class Doc2QueryV2ComputeScoreWithQwQ32bRespondent(Doc2QueryV2ComputeScore):
-#     def __init__(self, parse_solution_fn, split="train", args=None):
-#         super().__init__(
-#             split=split, parse_solution_fn=parse_solution_fn, args=args
-#         )
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# Doc2Query V2
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-#     @classmethod
-#     def get_weak_agent(cls):
-#         # return Agent(**{
-#         #     "model": "DeepSeek-V3-0324",
-#         #     "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
-#         #     "api_keys": "EMPTY",
-#         #     "request_kwargs": {
-#         #         "temperature": 0.9,
-#         #         "timeout": 360,
-#         #         "max_tokens": 4096,
-#         #     }
-#         # })
-#         return Agent(**{
-#             "model": "distill_qwen25_7B",
-#             "base_url": "http://10.130.142.154:8000/v1",
-#             "api_keys": "EMPTY",
-#             "request_kwargs": {
-#                 "temperature": 0.65,
-#                 "timeout": 600,
-#                 "max_tokens": 32768,
-#             },
-#         })
 
-#     @classmethod
-#     def get_strong_agent(cls):
-#         return cls.get_weak_agent()
-
-#     @classmethod
-#     def get_verify_agent(cls):
-#         return Agent(**{
-#             "model": "qwen25_32B_instruct",
-#             "base_url": "http://10.130.142.154:8000/v1",
-#             "api_keys": "EMPTY",
-#             "request_kwargs": {
-#                 "temperature": 0.8,
-#                 "timeout": 360,
-#                 "max_tokens": 2048,
-#             },
-#         })
-
-# DOC2QUERY_QWQ32B_RESPONDENT_PARAMS = {
-#     "difficulty_run_args": {
-#         "w/o_content": {
-#             "model": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.get_weak_agent(),
-#             "repeat": 10,
-#             "fn": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.respond_wo_context,
-#             "desc": 'w/o ctx'
-#         },
-#         "w_content": {
-#             "model": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.get_strong_agent(),
-#             "repeat": 8,
-#             "fn": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.respond_w_context,
-#             "desc": 'w ctx'
-#         }
-#     },
-#     "difficulty_metric_args": {
-#         "advantage": 'w_content',
-#         "weakness": 'w/o_content',
-#         "advantage_oversimplified_threshold": 8/8,
-#         "weakness_oversimplified_threshold": 8/10,
-#         "advantage_overcomplex_threshold": 1/8,
-#         "weakness_overcomplex_threshold": 1/10,
-#         "advantage_threshold": 2/8,
-#         "advantage_weight": 0.0,
-#         "weakness_weight": 2.0,
-#         "confidence_bonus_threshold": 2/8,
-#         "confidence_bonus_weight": 0.
-#     },
-#     "similarity_run_args":  {
-#         "threshold": {
-#             3: 0.5,
-#             4: 1.0
-#         },
-#         "weight": 0.25,
-#     }
-# }
-
-# _qwq32b_respondent_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScoreWithQwQ32bRespondent(
-#     calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_QWQ32B_RESPONDENT_PARAMS)
-# _qwq32b_respondent_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScoreWithQwQ32bRespondent(
-#     calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_QWQ32B_RESPONDENT_PARAMS)
-
-# class Doc2QueryV2ComputeScoreWithQwen3_8BRespondent(Doc2QueryV2ComputeScore):
-#     def __init__(self, parse_solution_fn, split="train", args=None):
-#         super().__init__(
-#             split=split, parse_solution_fn=parse_solution_fn, args=args
-#         )
-
-#     @classmethod
-#     def get_weak_agent(cls):
-#         return Agent(**{
-#             "model": "",  # Qwen3-8B
-#             "base_url": "https://sd14mdmqramstnm4j9mk0.apigateway-cn-beijing.volceapi.com/v1",
-#             "api_keys": "2ce8f136-861e-4ea9-8c30-5a57078d2ed8",
-#             "request_kwargs": {
-#                 "temperature": 0.7,
-#                 "timeout": 360,
-#                 "max_tokens": 32768,
-#             },
-#         })
-
-#     @classmethod
-#     def get_strong_agent(cls):
-#         return cls.get_weak_agent()
-
-#     @classmethod
-#     def get_verify_agent(cls):
-#         return Agent(**{
-#             "model": "qwen25_32B_instruct",
-#             "base_url": "http://10.130.142.154:8000/v1",
-#             "api_keys": "EMPTY",
-#             "request_kwargs": {
-#                 "temperature": 0.8,
-#                 "timeout": 360,
-#                 "max_tokens": 2048,
-#             },
-#         })
-
-# DOC2QUERY_QWEN3_8B_RESPONDENT_PARAMS = {
-#     "difficulty_run_args": {
-#         "w/o_content": {
-#             "model": Doc2QueryV2ComputeScoreWithQwen3_8BRespondent.get_weak_agent(),
-#             "repeat": 10,
-#             "fn": Doc2QueryV2ComputeScoreWithQwen3_8BRespondent.respond_wo_context,
-#             "desc": 'w/o ctx'
-#         },
-#         "w_content": {
-#             "model": Doc2QueryV2ComputeScoreWithQwen3_8BRespondent.get_strong_agent(),
-#             "repeat": 8,
-#             "fn": Doc2QueryV2ComputeScoreWithQwen3_8BRespondent.respond_w_context,
-#             "desc": 'w ctx'
-#         }
-#     },
-#     "difficulty_metric_args": {
-#         "advantage": 'w_content',
-#         "weakness": 'w/o_content',
-#         "advantage_oversimplified_threshold": 8/8,
-#         "weakness_oversimplified_threshold": 8/10,
-#         "advantage_overcomplex_threshold": 1/8,
-#         "weakness_overcomplex_threshold": 1/10,
-#         "advantage_threshold": 2/8,
-#         "advantage_weight": 0.0,
-#         "weakness_weight": 2.0,
-#         "confidence_bonus_threshold": 2/8,
-#         "confidence_bonus_weight": 0.
-#     },
-#     "similarity_run_args":  {
-#         "threshold": {
-#             3: 0.5,
-#             4: 1.0
-#         },
-#         "weight": 0.25,
-#     }
-# }
-
-# _qwen3_8b_respondent_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScoreWithQwen3_8BRespondent(
-#     calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_QWEN3_8B_RESPONDENT_PARAMS)
-# _qwen3_8b_respondent_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScoreWithQwen3_8BRespondent(
-#     calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_QWEN3_8B_RESPONDENT_PARAMS)
-# # ------------------------------------------------------------------------------------------------------------------------------------------------------
-# # Doc2Query V2
-# # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-# # ------------------------------------------------------------------------------------------------------------------------------------------------------
-# # 问题合成
-# # ------------------------------------------------------------------------------------------------------------------------------------------------------
-# class FabricateQAComputeScore(Doc2QueryV2ComputeScore):
-#     def __init__(self, parse_solution_fn, split="train", args=None):
-#         super().__init__(
-#             split=split, parse_solution_fn=parse_solution_fn, args=args
-#         )
-#         self.task_name = "FABRICATE_QA"
-
-#     @classmethod
-#     def respond(cls, question, answer_type, gt):
-#         _if = cls.get_instruct(gt, answer_type)
-#         return f'{_if}\n\n{question}'
-
-#     @classmethod
-#     def get_verify_agent(cls):
-#         return cls.get_weak_agent()
-
-#     @classmethod
-#     def get_weak_agent(cls):
-#         return Agent(**{
-#             "model": "qwen25_32B_instruct",
-#             "base_url": "http://10.130.142.154:8000/v1",
-#             "api_keys": "EMPTY",
-#             "request_kwargs": {
-#                 "temperature": 0.9,
-#                 "timeout": 360,
-#                 "max_tokens": 2048,
-#             },
-#         })
-
-#     @classmethod
-#     def get_strong_agent(cls):
-#         return Agent(**{
-#             "model": "DeepSeek-V3-0324",
-#             "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
-#             "api_keys": "EMPTY",
-#             "request_kwargs": {
-#                 "temperature": 0.9,
-#                 "timeout": 360,
-#                 "max_tokens": 4096,
-#             }
-#         })
-
-# FABRICATE_QA_DEFAULT_PARAMS = {
-#     "difficulty_run_args": {
-#         "weak": {
-#             "model": FabricateQAComputeScore.get_weak_agent(),
-#             "repeat": 24,
-#             "fn": FabricateQAComputeScore.respond,
-#             "desc": 'weak'
-#         },
-#         "strong": {
-#             "model": FabricateQAComputeScore.get_strong_agent(),
-#             "repeat": 6,
-#             "fn": FabricateQAComputeScore.respond,
-#             "desc": 'strong'
-#         }
-#     },
-#     "difficulty_metric_args": {
-#         "advantage": 'strong',
-#         "weakness": 'weak',
-#         "advantage_oversimplified_threshold": 1.0,
-#         "weakness_oversimplified_threshold": 21/24,
-#         "advantage_overcomplex_threshold": 1/6,
-#         "weakness_overcomplex_threshold": 1/24,
-#         "advantage_threshold": 1/6,
-#         "advantage_weight": 0.5,
-#         "weakness_weight": 0.5,
-#         "confidence_bonus_threshold": 2/6,
-#         "confidence_bonus_weight": 0.25
-#     },
-#     "similarity_run_args":  {
-#         "threshold": {
-#             3: 0.5,
-#             4: 1.0
-#         },
-#         "weight": 0.25,
-#     }
-# }
-
-# _default_fabricate_qa_compute_score_train = FabricateQAComputeScore(
-#     calc_qa_parse_solution_fn, split="train", args=FABRICATE_QA_DEFAULT_PARAMS)
-# _default_fabricate_qa_compute_score_valid = FabricateQAComputeScore(
-#     calc_qa_parse_solution_fn, split="valid", args=FABRICATE_QA_DEFAULT_PARAMS)
-# fabricate_qa_default_stage1_compute_score_train = partial(
-#     _default_fabricate_qa_compute_score_train.compute_score, stage="1")
-# fabricate_qa_default_stage1_compute_score_valid = partial(
-#     _default_fabricate_qa_compute_score_valid.compute_score, stage="1")
-# # ------------------------------------------------------------------------------------------------------------------------------------------------------
-# # 问题合成
-# # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-# class FabricateAIOComputeScore(object):
-#     def __init__(self, processors=None):
-#         self.processors = processors
-
-#     def compute_score(self,
-#                       batch_data_sources,
-#                       batch_solution_str,
-#                       batch_ground_truth,
-#                       stage,
-#                       max_concurrent_requests=MAX_CONCURRENT,
-#                       ):
-#         source_mapper = {}
-#         splitter = defaultdict(list)
-
-#         for i, (source, sol, gt) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-#             source_mapper[i] = source
-#             splitter[source].append((source, sol, gt))
-#             source_mapper[i] = (source, len(splitter[source])-1)
-
-#         results = {}
-#         for source, flatten_elems in splitter.items():
-#             _batch_data_sources, _batch_solution_str, _batch_ground_truth = [], [], []
-#             for source, sol, gt in flatten_elems:
-#                 _batch_data_sources.append(source)
-#                 _batch_solution_str.append(sol)
-#                 _batch_ground_truth.append(gt)
-
-#             _results = self.processors[source].compute_score(
-#                 batch_data_sources=_batch_data_sources,
-#                 batch_solution_str=_batch_solution_str,
-#                 batch_ground_truth=_batch_ground_truth,
-#                 stage=stage,
-#                 max_concurrent_requests=max_concurrent_requests
-#             )
-#             results[source] = _results
-
-#         final_results = []
-#         for i, _ in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-#             source, group_index = source_mapper[i]
-#             final_results.append(results[source][group_index])
-#         return final_results
-
-# _default_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _default_doc2query_v2_compute_score_train,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
-# })
-# _default_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _default_doc2query_v2_compute_score_valid,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
-# })
-# fabricate_aio_default_stage1_compute_score_train = partial(
-#     _default_fabricate_aio_compute_score_train.compute_score, stage="1")
-# fabricate_aio_default_stage1_compute_score_valid = partial(
-#     _default_fabricate_aio_compute_score_valid.compute_score, stage="1")
-# fabricate_aio_default_stage2_compute_score_train = partial(
-#     _default_fabricate_aio_compute_score_train.compute_score, stage="2",
-#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
-# fabricate_aio_default_stage2_compute_score_valid = partial(
-#     _default_fabricate_aio_compute_score_valid.compute_score, stage="2",
-#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
-
-# # Qwen2.5-32B Respondent
-# _qwen32b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _qwen32b_respondent_doc2query_v2_compute_score_train,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
-# })
-# _qwen32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _qwen32b_respondent_doc2query_v2_compute_score_valid,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
-# })
-# fabricate_aio_qwen32b_respondent_stage2_compute_score_train = partial(
-#     _qwen32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
-# fabricate_aio_qwen32b_respondent_stage2_compute_score_valid = partial(
-#     _qwen32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
-
-# # QwQ-32B Respondent
-# _qwq32b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _qwq32b_respondent_doc2query_v2_compute_score_train,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
-# })
-# _qwq32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _qwq32b_respondent_doc2query_v2_compute_score_valid,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
-# })
-# fabricate_aio_qwq32b_respondent_stage2_compute_score_train = partial(
-#     _qwq32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-#     max_concurrent_requests=128)
-# fabricate_aio_qwq32b_respondent_stage2_compute_score_valid = partial(
-#     _qwq32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-#     max_concurrent_requests=128)
-
-# # Qwen3-8B Respondent
-# _qwen3_8b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _qwen3_8b_respondent_doc2query_v2_compute_score_train,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
-# })
-# _qwen3_8b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _qwen3_8b_respondent_doc2query_v2_compute_score_valid,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
-# })
-# fabricate_aio_qwen3_8b_respondent_compute_score_train = partial(
-#     _qwen3_8b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-#     max_concurrent_requests=256)
-# fabricate_aio_qwen3_8b_respondent_compute_score_valid = partial(
-#     _qwen3_8b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-#     max_concurrent_requests=256)
-
-# # ------------------------------------------------------------------------------------------------------------------------------------------------------
-# # 问题合成
-# # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-# # ------------------------------------------------------------------------------------------------------------------------------------------------------
-# # SALT
-# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# SALT
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 # def salt_parse_solution_fn(solution_str: str, remove_option_letter=True):
 #     if solution_str.count("</question>") > 1:
@@ -3734,7 +3363,122 @@ doc2query_v2_compute_score_valid = _default_doc2query_v2_compute_score_valid.com
 
 # # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # # SALT
+# # ---------------------------------------------------------------
+
+
+# class FabricateAIOComputeScore(object):
+#     def __init__(self, processors=None):
+#         self.processors = processors
+
+#     def compute_score(self,
+#                       batch_data_sources,
+#                       batch_solution_str,
+#                       batch_ground_truth,
+#                       stage,
+#                       max_concurrent_requests=MAX_CONCURRENT,
+#                       ):
+#         source_mapper = {}
+#         splitter = defaultdict(list)
+
+#         for i, (source, sol, gt) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+#             source_mapper[i] = source
+#             splitter[source].append((source, sol, gt))
+#             source_mapper[i] = (source, len(splitter[source])-1)
+
+#         results = {}
+#         for source, flatten_elems in splitter.items():
+#             _batch_data_sources, _batch_solution_str, _batch_ground_truth = [], [], []
+#             for source, sol, gt in flatten_elems:
+#                 _batch_data_sources.append(source)
+#                 _batch_solution_str.append(sol)
+#                 _batch_ground_truth.append(gt)
+
+#             _results = self.processors[source].compute_score(
+#                 batch_data_sources=_batch_data_sources,
+#                 batch_solution_str=_batch_solution_str,
+#                 batch_ground_truth=_batch_ground_truth,
+#                 stage=stage,
+#                 max_concurrent_requests=max_concurrent_requests
+#             )
+#             results[source] = _results
+
+#         final_results = []
+#         for i, _ in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+#             source, group_index = source_mapper[i]
+#             final_results.append(results[source][group_index])
+#         return final_results
+
+# _default_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _default_doc2query_v2_compute_score_train,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
+# })
+# _default_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _default_doc2query_v2_compute_score_valid,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+# })
+# fabricate_aio_default_stage1_compute_score_train = partial(
+#     _default_fabricate_aio_compute_score_train.compute_score, stage="1")
+# fabricate_aio_default_stage1_compute_score_valid = partial(
+#     _default_fabricate_aio_compute_score_valid.compute_score, stage="1")
+# fabricate_aio_default_stage2_compute_score_train = partial(
+#     _default_fabricate_aio_compute_score_train.compute_score, stage="2",
+#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
+# fabricate_aio_default_stage2_compute_score_valid = partial(
+#     _default_fabricate_aio_compute_score_valid.compute_score, stage="2",
+#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
+
+# # Qwen2.5-32B Respondent
+# _qwen32b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwen32b_respondent_doc2query_v2_compute_score_train,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
+# })
+# _qwen32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwen32b_respondent_doc2query_v2_compute_score_valid,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+# })
+# fabricate_aio_qwen32b_respondent_stage2_compute_score_train = partial(
+#     _qwen32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
+#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
+# fabricate_aio_qwen32b_respondent_stage2_compute_score_valid = partial(
+#     _qwen32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
+#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
+
+# # QwQ-32B Respondent
+# _qwq32b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwq32b_respondent_doc2query_v2_compute_score_train,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
+# })
+# _qwq32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwq32b_respondent_doc2query_v2_compute_score_valid,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+# })
+# fabricate_aio_qwq32b_respondent_stage2_compute_score_train = partial(
+#     _qwq32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
+#     max_concurrent_requests=128)
+# fabricate_aio_qwq32b_respondent_stage2_compute_score_valid = partial(
+#     _qwq32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
+#     max_concurrent_requests=128)
+
+# # Qwen3-8B Respondent
+# _qwen3_8b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwen3_8b_respondent_doc2query_v2_compute_score_train,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
+# })
+# _qwen3_8b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwen3_8b_respondent_doc2query_v2_compute_score_valid,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+# })
+# fabricate_aio_qwen3_8b_respondent_compute_score_train = partial(
+#     _qwen3_8b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
+#     max_concurrent_requests=256)
+# fabricate_aio_qwen3_8b_respondent_compute_score_valid = partial(
+#     _qwen3_8b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
+#     max_concurrent_requests=256)
+
 # # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# # 问题合成
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 # # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # # DOC2QUERY V3
