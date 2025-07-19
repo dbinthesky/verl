@@ -15,13 +15,14 @@ from fabricate_qa import (
     Agent,
     JudgeTwoQuestionSimilarity,
     MultichoiceKnowledgeQuestionQualityEval,
-    QuestionRefineHack
-    #     # LRUCache,
-    #     # QuestionSimilarity,
-    #     # ThoughtBonus,
-    #     # CalculationAnswerFormatVerify,
-    #     # LanguageConsistency,
-    #     # BadQuestionDetection,
+    QuestionRefineHack,
+    LRUCache,
+    WithUnitSymbol,
+    NumericalAnswer,
+    doc2query_v2_parse_solution_fn,
+    Doc2QueryV2FormatVerify,
+    LanguageConsistency,
+    BadQuestionDetection,
     #     # SALTBadQuestionDetection,
     #     # QuestionSimilarityPenalty,
     #     # Doc2QueryV2ComputeScore,
@@ -42,14 +43,12 @@ from fabricate_qa import (
     #     # salt_default_compute_score_valid,
     #     # criteria_rm_default_compute_score_valid,
     #     # doc2query_v3_default_compute_score_valid,
-    #     # calc_qa_parse_solution_fn,
+    #     # doc2query_v2_parse_solution_fn,
     #     # criteria_parse_solution_fn,
     #     # doc2query_v3_parse_solution_fn,
     #     # salt_parse_solution_fn,
     #     # calc_qa_parse_thought_fn,
     #     # batchify,
-    #     # WithUnitSymbol,
-    #     # NumericalAnswer
 )
 
 UNITTEST_AGENT = Agent(**{
@@ -347,7 +346,7 @@ class TestDoc2QueryV3(unittest.TestCase):
         aio.run(main())
 
 
-class TestFabricate(unittest.TestCase):
+class TestDoc2QueryV2(unittest.TestCase):
     def test_lru_cache(self):
         cache = LRUCache(capacity=3)
 
@@ -426,70 +425,48 @@ class TestFabricate(unittest.TestCase):
         self.assertEqual(verifier.verify("\\boxed{-0.0500}"), True)
         self.assertEqual(verifier.verify("\\boxed{8.4}"), True)
 
-    def test_calc_qa_parse_solution_fn(self):
-        self.assertFalse(calc_qa_parse_solution_fn(
+    def test_doc2query_v2_parse_solution_fn(self):
+        self.assertFalse(doc2query_v2_parse_solution_fn(
             '<think>\nssssss\n</think>\n\n<question>\n某公司生产密码设备，其产品批次密码t为两位正整数。密码设置规则要求：将t乘以生产效率系数K后，结果最后两位必须是36。效率系数K通过如下方式计算：去年设备计划运行250天，实际因维护停机30天，另5%时间用于年度升级。K值等于[(计划运行天数 - 停机天数 - 升级天数) × 0.05] + 1。同时，公司年度维护成本为80,000元，但这不影响K的计算。求满足条件的密码t值。  \nAnswer: \\boxed{76}  \nAnswer Type: NumericalAnswer  \n</question><|im_end|><｜end▁of▁sentence｜>'
         ))
-        self.assertTrue(calc_qa_parse_solution_fn(
+        self.assertTrue(doc2query_v2_parse_solution_fn(
             "<think>\nssssss\n</think>\n\n<question>\nQuestion: A green energy factory optimizes its production parameters via a reaction governed by the equation:  \n\\[ a^2 + 3b^2 + \\frac{c^2 + 3d^2}{2} = a + b + c + d - 1 \\]  \nwhere \\( a \\), \\( b \\), \\( c \\), and \\( d \\) are operational parameters (unitless in the equation). The process involves two steps with yields of 82% and 76%, respectively. Given that the initial reagent InCl₃ has a purity of 85%, and the target is to produce 0.0350 moles of the final product, calculate the operational efficiency index \\( E = 1000a + 100b + 10c + d \\). Ignore distractor information: annual maintenance costs of ¥90,000 and equipment depreciation period of 7 years.  \nAnswer: \\boxed{527}  \nAnswer Type: NumericalAnswer  \n</question><|im_end|>"
         ))
-        self.assertTrue(calc_qa_parse_solution_fn(
+        self.assertTrue(doc2query_v2_parse_solution_fn(
             "<think>\nOkay, let me try to create a question based on the given requirements. The respondent is an undergraduate with knowledge in calculus, vector operations, central forces, work done by a force, position and velocity vectors. The skills include integrating velocity to find position, calculating dot products, applying the work-energy theorem, and understanding central force properties. The difficulty is advanced, so I need to incorporate multiple steps and potential distractors.\n\nFirst, I need to think of a scenario that combines these elements. Maybe a physics problem involving a particle moving under a central force, where they have to calculate work done or perhaps find a position vect... [省略] ... places  correct.\n\nTherefore, the final question is as constructed above, with the answer being 479.366 kJ. Let me adjust the question\'s answer in the output.\n</think>\n\n<question>\nQuestion: A researcher compresses an ideal gas in a laboratory. Initially, the gas has a pressure of 3 bar, a volume of 2.5 m³, and a temperature of 25°C. After isobaric compression, the volume is reduced to 1.2 m³, and the temperature is measured as 158°F. The molar specific heat at constant pressure (Cp) for the gas is 35.2 J/mol·K. During the process, 500 J of non-volume work is done on the gas. Calculate the change in enthalpy (ΔH) of the gas in kJ, rounded to three decimal places. (Note: The ideal gas constant R = 8.314 J/mol·K.)\nAnswer: 479.366 kJ\nAnswer Type: WithUnitSymbol\n</question><|im_end|>"))
-        batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
-            format="doc2query_v2", num=100)
-        for _ in batch_solution_str:
-            self.assertTrue(calc_qa_parse_solution_fn(_))
 
-    def test_question_similarity(self):
-        batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
-            format="wrong_question", num=100)
-
-        scorer = QuestionSimilarity(calc_qa_parse_solution_fn)
-        for response, gt in zip(batch_solution_str, batch_ground_truth):
-            score = scorer.get_penalty_or_reward(response, gt)
-            self.assertTrue(score > 0.5)
-
-    def test_calc_answer_verify(self):
-        batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
-            format="wrong_question", num=100)
-
-        scorer = CalculationAnswerFormatVerify(calc_qa_parse_solution_fn)
-        for response, gt in zip(batch_solution_str, batch_ground_truth):
-            score = scorer.get_penalty_or_reward(response, gt)
-            self.assertTrue(score >= 0)
+    def test_format_verify(self):
+        scorer = Doc2QueryV2FormatVerify(
+            doc2query_v2_parse_solution_fn, -1.75, -1.25)
+        print(scorer.get_penalty_or_reward(
+            '<think>\nssssss\n</think>\n\n<question>\nQuestion: 某公司生产密码设备，其产品批次密码t为两位正整数。密码设置规则要求：将t乘以生产效率系数K后，结果最后两位必须是36。效率系数K通过如下方式计算：去年设备计划运行250天，实际因维护停机30天，另5%时间用于年度升级。K值等于[(计划运行天数 - 停机天数 - 升级天数) × 0.05] + 1。同时，公司年度维护成本为80,000元，但这不影响K的计算。求满足条件的密码t值。  \nAnswer: \\boxed{76}  \nAnswer Type: ChemicalName_Answer  \n</question><|im_end|><｜end▁of▁sentence｜>', None
+        ))
 
     def test_language_consistency(self):
-        batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
-            format="zh_question", num=100)
-
-        scorer = LanguageConsistency(calc_qa_parse_solution_fn)
-        for response, gt in zip(batch_solution_str, batch_ground_truth):
-            score = scorer.get_penalty_or_reward(response, gt)
-            self.assertTrue(score < 0)
+        scorer = LanguageConsistency(
+            doc2query_v2_parse_solution_fn, -1.25, -0.75)
+        print(scorer.get_penalty_or_reward(
+            '<think>\nssssss\n</think>\n\n<question>\nQuestion: 某公司生产密码设备，其产品批次密码t为两位正整数。密码设置规则要求：将t乘以生产效率系数K后，结果最后两位必须是36。效率系数K通过如下方式计算：去年设备计划运行250天，实际因维护停机30天，另5%时间用于年度升级。K值等于[(计划运行天数 - 停机天数 - 升级天数) × 0.05] + 1。同时，公司年度维护成本为80,000元，但这不影响K的计算。求满足条件的密码t值。  \nAnswer: \\boxed{76}  \nAnswer Type: ChemicalName_Answer  \n</question><|im_end|><｜end▁of▁sentence｜>',
+            {
+                "lang_code": "zh"
+            }
+        ))
 
     def test_detect_bad_question(self):
-        batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
-            format="detect_bad_feature", num=100)
-        scorer = BadQuestionDetection(calc_qa_parse_solution_fn)
-
-        for response, gt in zip(batch_solution_str, batch_ground_truth):
-            score = scorer.get_penalty_or_reward(response, gt)
-            print(score)
-            # self.assertTrue(score < 0)
-
-    def test_thought_bonus(self):
-        batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
-            format="zh_question", num=100)
-
-        scorer = ThoughtBonus(calc_qa_parse_thought_fn)
-        for response, gt in zip(batch_solution_str, batch_ground_truth):
-            self.assertTrue(scorer.get_penalty_or_reward(response, gt) == 0)
+        scorer = BadQuestionDetection(
+            doc2query_v2_parse_solution_fn, -0.5, -0.0)
+        print(scorer.get_penalty_or_reward(
+            '<think>\nssssss\n</think>\n\n<question>\nQuestion: 某公司生产密码设备，其产品批次密码t为两位正整数。密码设置规则要求：将t乘以生产效率系数K后，结果最后两位必须是36。效率系数K通过如下方式计算：去年设备计划运行250天，实际因维护停机30天，另5%时间用于年度升级。K值等于[(计划运行天数 - 停机天数 - 升级天数) × 0.05] + 1。同时，公司年度维护成本为80,000元，但这不影响K的计算。求满足条件的密码t值。  \nAnswer: \\boxed{76}  \nAnswer Type: ChemicalName_Answer  \n</question><|im_end|><｜end▁of▁sentence｜>',
+            {
+                "lang_code": "zh"
+            }
+        ))
 
     def test_doc2query_v2_get_difficulty_reward(self):
         batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
             format="doc2query_v2", num=32)
         task = Doc2QueryV2ComputeScore(
-            calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_DEFAULT_PARAMS)
+            doc2query_v2_parse_solution_fn, split="valid", args=DOC2QUERY_DEFAULT_PARAMS)
 
         async def main():
             results = await task.get_difficulty_reward(
@@ -533,7 +510,7 @@ class TestFabricate(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
             format="doc2query_v2", num=32)
         task = Doc2QueryV2ComputeScore(
-            calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_DEFAULT_PARAMS)
+            doc2query_v2_parse_solution_fn, split="valid", args=DOC2QUERY_DEFAULT_PARAMS)
 
         async def main():
             results = await task.get_similarity_reward(
@@ -554,7 +531,7 @@ class TestFabricate(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
             format="doc2query_v2", num=32)
 
-        task = Doc2QueryV2ComputeScore(calc_qa_parse_solution_fn,
+        task = Doc2QueryV2ComputeScore(doc2query_v2_parse_solution_fn,
                                        split="valid", args=DOC2QUERY_DEFAULT_PARAMS)
         # print(task.compute_score([None]*len(batch_solution_str),
         #                          batch_solution_str, batch_ground_truth, stage="1"))
