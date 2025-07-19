@@ -489,10 +489,11 @@ class Agent:
 
 
 class PenaltyOrReward(object):
-    def __init__(self, parse_solution_fn, min_score, max_score):
+    def __init__(self, parse_solution_fn, min_score, max_score, abbrev=None):
         self.parse_solution_fn = parse_solution_fn
         self.min_score = min_score
         self.max_score = max_score
+        self.abbrev = abbrev
 
     @abstractmethod
     def get_penalty_or_reward(self, solution_str, ground_truth, lang_code=None):
@@ -1003,9 +1004,9 @@ def doc2query_v2_parse_solution_fn(solution_str: str, remove_option_letter=True)
 
 
 class Doc2QueryV2FormatVerify(PenaltyOrReward):
-    def __init__(self, parse_solution_fn, min_score, max_score):
+    def __init__(self, parse_solution_fn, min_score, max_score, abbrev="Format"):
         super().__init__(
-            parse_solution_fn=parse_solution_fn, min_score=min_score, max_score=max_score
+            parse_solution_fn=parse_solution_fn, min_score=min_score, max_score=max_score, abbrev=abbrev
         )
 
     @classmethod
@@ -1039,7 +1040,7 @@ class Doc2QueryV2FormatVerify(PenaltyOrReward):
         elif answer_type == "WithUnitSymbol":
             parser = WithUnitSymbol()
         else:
-            raise NotImplementedError
+            return 0.0
 
         try:
             if parser.verify(answer):
@@ -1047,6 +1048,7 @@ class Doc2QueryV2FormatVerify(PenaltyOrReward):
                     # 特定校验（避免构造0、1、2等常见答案）
                     if not parser.exclude_common_answer_pattern(answer):
                         return self.max_score
+                # 成功
                 return 0.0
             else:
                 return self.min_score + score_interval
@@ -1055,9 +1057,9 @@ class Doc2QueryV2FormatVerify(PenaltyOrReward):
 
 
 class LanguageConsistency(PenaltyOrReward):
-    def __init__(self, parse_solution_fn, min_score, max_score):
+    def __init__(self, parse_solution_fn, min_score, max_score, abbrev="Lang"):
         super().__init__(
-            parse_solution_fn=parse_solution_fn, min_score=min_score, max_score=max_score
+            parse_solution_fn=parse_solution_fn, min_score=min_score, max_score=max_score, abbrev=abbrev
         )
 
     def detect_zh(self, text, threshold=0.05):
@@ -1095,8 +1097,6 @@ class LanguageConsistency(PenaltyOrReward):
         if solution_str is None:
             return 0.0
 
-        score_interval = (self.max_score - self.min_score) / 2
-
         question, answer, answer_type = solution_str
 
         lang_code = ground_truth["lang_code"]
@@ -1108,23 +1108,22 @@ class LanguageConsistency(PenaltyOrReward):
         elif lang_code == "zh" and (not contain_chinese(question)):
             return base_score
 
-        base_score += score_interval
-
         if lang_code == "en":
             if contain_chinese(raw_solution_str):
-                return base_score
+                return self.max_score
         elif lang_code == "zh":
             if not self.detect_zh(raw_solution_str, 0.75):
-                return base_score
+                return self.max_score
         else:
             pass
-        return self.max_score
+        # 成功
+        return 0.0
 
 
 class BadQuestionDetection(PenaltyOrReward):
-    def __init__(self, parse_solution_fn, min_score, max_score):
+    def __init__(self, parse_solution_fn, min_score, max_score, abbrev="BadQ"):
         super().__init__(
-            parse_solution_fn=parse_solution_fn, min_score=min_score, max_score=max_score
+            parse_solution_fn=parse_solution_fn, min_score=min_score, max_score=max_score, abbrev=abbrev
         )
 
     def get_penalty_or_reward(self, solution_str, ground_truth):
@@ -1148,36 +1147,45 @@ class BadQuestionDetection(PenaltyOrReward):
                 return self.min_score
 
         if question.count("美元") >= 2:
-            return self.min_score
+            return self.max_score
         if len(re.findall(r'计算.*总费用', question)) > 0:
-            return self.min_score
+            return self.max_score
         if len(re.findall(r'求.*成本', question)) > 0:
-            return self.min_score
+            return self.max_score
         if len(re.findall(r'ignored for.*calculation', question)) > 0:
-            return self.min_score
+            return self.max_score
         if len(re.findall(r'irrelevant to.*calculation', question)) > 0:
-            return self.min_score
+            return self.max_score
         if "总费用" in question:
-            return self.min_score
+            return self.max_score
         if "方程（" in question:
-            return self.min_score
-        return self.max_score
+            return self.max_score
+        # 成功
+        return 0.0
 
-    # class Doc2QueryV2ComputeScore(object):
-    #     def __init__(self,
-    #                  parse_solution_fn,
-    #                  split="train",
-    #                  args=None,
-    #                  record_rollout_samples_path=None,
-    #                  record_rollout_max_capacity=100,
-    #                  ):
 
-    #         self.split = split
-    #         self.parse_solution_fn = parse_solution_fn
-    #         assert args is not None
-    #         self.args = args
-    #         self.task_name = "DOC2QUERY_V2"
+class Doc2QueryV2ComputeScore(object):
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-2.0
+                 ):
 
+        self.split = split
+        self.parse_solution_fn = parse_solution_fn
+        assert args is not None
+        self.args = args
+        self.task_name = "DOC2QUERY_V2"
+        self.min_reward = min_reward
+
+        # 初始化API Client
+        self.init_agent()
+
+        # 初始化规则奖励/惩罚
+        self.init_rule_based_penalties()
+
+        #
     #         self.format = CalculationAnswerFormatVerify(
     #             parse_solution_fn=self.parse_solution_fn)
     #         self.language = LanguageConsistency(
@@ -1216,44 +1224,43 @@ class BadQuestionDetection(PenaltyOrReward):
     #         self.rollout_database = {}
     #         self.initial_record_rollout_samples_module = True
 
-    #     @classmethod
-    #     def get_weak_agent(cls):
-    #         return Agent(**{
-    #             "model": "DeepSeek-V3-0324",
-    #             "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
-    #             "api_keys": "EMPTY",
-    #             "request_kwargs": {
-    #                 "temperature": 0.9,
-    #                 "timeout": 360,
-    #                 "max_tokens": 4096,
-    #             }
-    #         })
+    @classmethod
+    def rule_based_penalties(cls):
+        return [
+            Doc2QueryV2FormatVerify,
+            LanguageConsistency,
+            BadQuestionDetection
+        ]
 
-    #     @classmethod
-    #     def get_strong_agent(cls):
-    #         return Agent(**{
-    #             "model": "DeepSeek-V3-0324",
-    #             "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
-    #             "api_keys": "EMPTY",
-    #             "request_kwargs": {
-    #                 "temperature": 0.8,
-    #                 "timeout": 360,
-    #                 "max_tokens": 4096,
-    #             }
-    #         })
+    def init_rule_based_penalties(self):
+        interval = (0 - self.min_reward) / 2 / \
+            (len(self.rule_based_penalties())+1)
+        penalty_scopes = [(self.min_reward + (i * 2 + 1) *
+                           interval, self.min_reward + (i * 2 + 2) *
+                           interval) for i in range(len(self.rule_based_penalties()))]
+        self._penalties = []
+        for p, s in zip(self.rule_based_penalties(), penalty_scopes):
+            self._penalties.append(p(parse_solution_fn=self.parse_solution_fn,
+                                     min_score=s[0], max_score=s[1]))
 
-    #     @classmethod
-    #     def get_verify_agent(cls):
-    #         return Agent(**{
-    #             "model": "qwen25_32B_instruct",
-    #             "base_url": "http://10.130.142.154:8000/v1",
-    #             "api_keys": "EMPTY",
-    #             "request_kwargs": {
-    #                 "temperature": 0.8,
-    #                 "timeout": 360,
-    #                 "max_tokens": 4096,
-    #             },
-    #         })
+    def init_agent(self):
+        self.init_weak_agent()
+        self.init_adv_agent()
+        self.init_verify_agent()
+
+    def init_weak_agent(self):
+        weak_name = self.args["difficulty_metric_args"]["weakness"]
+        self.weak_agent = Agent(
+            **self.args["difficulty_run_args"][weak_name]["model"])
+
+    def init_adv_agent(self):
+        adv_name = self.args["difficulty_metric_args"]["advantage"]
+        self.adv_agent = Agent(
+            **self.args["difficulty_run_args"][adv_name]["model"])
+
+    def init_verify_agent(self):
+        self.adv_agent = Agent(
+            **self.args["verify_agent"]["model"])
 
     #     def get_penalties(self) -> Dict[str, Callable]:
     #         return {
@@ -1917,2749 +1924,2780 @@ class BadQuestionDetection(PenaltyOrReward):
 
     #         return final_results
 
-    # DOC2QUERY_DEFAULT_PARAMS = {
-    #     "difficulty_run_args": {
-    #         "w/o_content": {
-    #             "model": Doc2QueryV2ComputeScore.get_weak_agent(),
-    #             "repeat": 8,
-    #             "fn": Doc2QueryV2ComputeScore.respond_wo_context,
-    #             "desc": 'w/o ctx'
-    #         },
-    #         "w_content": {
-    #             "model": Doc2QueryV2ComputeScore.get_strong_agent(),
-    #             "repeat": 8,
-    #             "fn": Doc2QueryV2ComputeScore.respond_w_context,
-    #             "desc": 'w ctx'
-    #         },
-    #     },
-    #     "difficulty_metric_args": {
-    #         "advantage": 'w_content',
-    #         "weakness": 'w/o_content',
-    #         "advantage_oversimplified_threshold": 8/8,
-    #         "weakness_oversimplified_threshold": 7/8,
-    #         "advantage_overcomplex_threshold": 1/8,
-    #         "weakness_overcomplex_threshold": 1/8,
-    #         "advantage_threshold": 2/8,
-    #         "advantage_weight": 0.0,
-    #         "weakness_weight": 2.0,
-    #         "confidence_bonus_threshold": 2/8,
-    #         "confidence_bonus_weight": 0.
-    #     },
-    #     "similarity_run_args":  {
-    #         "threshold": {
-    #             3: 0.5,
-    #             4: 1.0
-    #         },
-    #         "weight": 0.25,
-    #     }
-    # }
-
-    # _default_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScore(
-    #     calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_DEFAULT_PARAMS)
-    # _default_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScore(
-    #     calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_DEFAULT_PARAMS)
-    # doc2query_v2_default_stage1_compute_score_train = partial(
-    #     _default_doc2query_v2_compute_score_train.compute_score, stage="1")
-    # doc2query_v2_default_stage1_compute_score_valid = partial(
-    #     _default_doc2query_v2_compute_score_valid.compute_score, stage="1")
-
-    # class Doc2QueryV2ComputeScoreWithQwen32bRespondent(Doc2QueryV2ComputeScore):
-    #     def __init__(self, parse_solution_fn, split="train", args=None):
-    #         super().__init__(
-    #             split=split, parse_solution_fn=parse_solution_fn, args=args
-    #         )
-
-    #     @classmethod
-    #     def get_weak_agent(cls):
-    #         return Agent(**{
-    #             "model": "qwen25_32B_instruct",
-    #             "base_url": "http://10.130.142.154:8000/v1",
-    #             "api_keys": "EMPTY",
-    #             "request_kwargs": {
-    #                 "temperature": 0.8,
-    #                 "timeout": 360,
-    #                 "max_tokens": 2048,
-    #             },
-    #         })
-
-    #     @classmethod
-    #     def get_strong_agent(cls):
-    #         return cls.get_weak_agent()
-
-    #     @classmethod
-    #     def get_verify_agent(cls):
-    #         return cls.get_weak_agent()
-
-    # DOC2QUERY_QWEN32B_RESPONDENT_PARAMS = {
-    #     "difficulty_run_args": {
-    #         "w/o_content": {
-    #             "model": Doc2QueryV2ComputeScoreWithQwen32bRespondent.get_weak_agent(),
-    #             "repeat": 32,
-    #             "fn": Doc2QueryV2ComputeScoreWithQwen32bRespondent.respond_wo_context,
-    #             "desc": 'w/o ctx'
-    #         },
-    #         "w_content": {
-    #             "model": Doc2QueryV2ComputeScoreWithQwen32bRespondent.get_strong_agent(),
-    #             "repeat": 32,
-    #             "fn": Doc2QueryV2ComputeScoreWithQwen32bRespondent.respond_w_context,
-    #             "desc": 'w ctx'
-    #         }
-    #     },
-    #     "difficulty_metric_args": {
-    #         "advantage": 'w_content',
-    #         "weakness": 'w/o_content',
-    #         "advantage_oversimplified_threshold": 32/32,
-    #         "weakness_oversimplified_threshold": 28/32,
-    #         "advantage_overcomplex_threshold": 1/32,
-    #         "weakness_overcomplex_threshold": 1/32,
-    #         "advantage_threshold": 3/16,
-    #         "advantage_weight": 0.0,
-    #         "weakness_weight": 1.0,
-    #         "confidence_bonus_threshold": 2/8,
-    #         "confidence_bonus_weight": 0.
-    #     },
-    #     "similarity_run_args":  {
-    #         "threshold": {
-    #             3: 0.5,
-    #             4: 1.0
-    #         },
-    #         "weight": 0.25,
-    #     }
-    # }
-
-    # _qwen32b_respondent_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScoreWithQwen32bRespondent(
-    #     calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_QWEN32B_RESPONDENT_PARAMS)
-    # _qwen32b_respondent_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScoreWithQwen32bRespondent(
-    #     calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_QWEN32B_RESPONDENT_PARAMS)
-
-    # class Doc2QueryV2ComputeScoreWithQwQ32bRespondent(Doc2QueryV2ComputeScore):
-    #     def __init__(self, parse_solution_fn, split="train", args=None):
-    #         super().__init__(
-    #             split=split, parse_solution_fn=parse_solution_fn, args=args
-    #         )
-
-    #     @classmethod
-    #     def get_weak_agent(cls):
-    #         # return Agent(**{
-    #         #     "model": "DeepSeek-V3-0324",
-    #         #     "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
-    #         #     "api_keys": "EMPTY",
-    #         #     "request_kwargs": {
-    #         #         "temperature": 0.9,
-    #         #         "timeout": 360,
-    #         #         "max_tokens": 4096,
-    #         #     }
-    #         # })
-    #         return Agent(**{
-    #             "model": "distill_qwen25_7B",
-    #             "base_url": "http://10.130.142.154:8000/v1",
-    #             "api_keys": "EMPTY",
-    #             "request_kwargs": {
-    #                 "temperature": 0.65,
-    #                 "timeout": 600,
-    #                 "max_tokens": 32768,
-    #             },
-    #         })
-
-    #     @classmethod
-    #     def get_strong_agent(cls):
-    #         return cls.get_weak_agent()
-
-    #     @classmethod
-    #     def get_verify_agent(cls):
-    #         return Agent(**{
-    #             "model": "qwen25_32B_instruct",
-    #             "base_url": "http://10.130.142.154:8000/v1",
-    #             "api_keys": "EMPTY",
-    #             "request_kwargs": {
-    #                 "temperature": 0.8,
-    #                 "timeout": 360,
-    #                 "max_tokens": 2048,
-    #             },
-    #         })
-
-    # DOC2QUERY_QWQ32B_RESPONDENT_PARAMS = {
-    #     "difficulty_run_args": {
-    #         "w/o_content": {
-    #             "model": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.get_weak_agent(),
-    #             "repeat": 10,
-    #             "fn": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.respond_wo_context,
-    #             "desc": 'w/o ctx'
-    #         },
-    #         "w_content": {
-    #             "model": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.get_strong_agent(),
-    #             "repeat": 8,
-    #             "fn": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.respond_w_context,
-    #             "desc": 'w ctx'
-    #         }
-    #     },
-    #     "difficulty_metric_args": {
-    #         "advantage": 'w_content',
-    #         "weakness": 'w/o_content',
-    #         "advantage_oversimplified_threshold": 8/8,
-    #         "weakness_oversimplified_threshold": 8/10,
-    #         "advantage_overcomplex_threshold": 1/8,
-    #         "weakness_overcomplex_threshold": 1/10,
-    #         "advantage_threshold": 2/8,
-    #         "advantage_weight": 0.0,
-    #         "weakness_weight": 2.0,
-    #         "confidence_bonus_threshold": 2/8,
-    #         "confidence_bonus_weight": 0.
-    #     },
-    #     "similarity_run_args":  {
-    #         "threshold": {
-    #             3: 0.5,
-    #             4: 1.0
-    #         },
-    #         "weight": 0.25,
-    #     }
-    # }
-
-    # _qwq32b_respondent_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScoreWithQwQ32bRespondent(
-    #     calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_QWQ32B_RESPONDENT_PARAMS)
-    # _qwq32b_respondent_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScoreWithQwQ32bRespondent(
-    #     calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_QWQ32B_RESPONDENT_PARAMS)
-
-    # class Doc2QueryV2ComputeScoreWithQwen3_8BRespondent(Doc2QueryV2ComputeScore):
-    #     def __init__(self, parse_solution_fn, split="train", args=None):
-    #         super().__init__(
-    #             split=split, parse_solution_fn=parse_solution_fn, args=args
-    #         )
-
-    #     @classmethod
-    #     def get_weak_agent(cls):
-    #         return Agent(**{
-    #             "model": "",  # Qwen3-8B
-    #             "base_url": "https://sd14mdmqramstnm4j9mk0.apigateway-cn-beijing.volceapi.com/v1",
-    #             "api_keys": "2ce8f136-861e-4ea9-8c30-5a57078d2ed8",
-    #             "request_kwargs": {
-    #                 "temperature": 0.7,
-    #                 "timeout": 360,
-    #                 "max_tokens": 32768,
-    #             },
-    #         })
-
-    #     @classmethod
-    #     def get_strong_agent(cls):
-    #         return cls.get_weak_agent()
-
-    #     @classmethod
-    #     def get_verify_agent(cls):
-    #         return Agent(**{
-    #             "model": "qwen25_32B_instruct",
-    #             "base_url": "http://10.130.142.154:8000/v1",
-    #             "api_keys": "EMPTY",
-    #             "request_kwargs": {
-    #                 "temperature": 0.8,
-    #                 "timeout": 360,
-    #                 "max_tokens": 2048,
-    #             },
-    #         })
-
-    # DOC2QUERY_QWEN3_8B_RESPONDENT_PARAMS = {
-    #     "difficulty_run_args": {
-    #         "w/o_content": {
-    #             "model": Doc2QueryV2ComputeScoreWithQwen3_8BRespondent.get_weak_agent(),
-    #             "repeat": 10,
-    #             "fn": Doc2QueryV2ComputeScoreWithQwen3_8BRespondent.respond_wo_context,
-    #             "desc": 'w/o ctx'
-    #         },
-    #         "w_content": {
-    #             "model": Doc2QueryV2ComputeScoreWithQwen3_8BRespondent.get_strong_agent(),
-    #             "repeat": 8,
-    #             "fn": Doc2QueryV2ComputeScoreWithQwen3_8BRespondent.respond_w_context,
-    #             "desc": 'w ctx'
-    #         }
-    #     },
-    #     "difficulty_metric_args": {
-    #         "advantage": 'w_content',
-    #         "weakness": 'w/o_content',
-    #         "advantage_oversimplified_threshold": 8/8,
-    #         "weakness_oversimplified_threshold": 8/10,
-    #         "advantage_overcomplex_threshold": 1/8,
-    #         "weakness_overcomplex_threshold": 1/10,
-    #         "advantage_threshold": 2/8,
-    #         "advantage_weight": 0.0,
-    #         "weakness_weight": 2.0,
-    #         "confidence_bonus_threshold": 2/8,
-    #         "confidence_bonus_weight": 0.
-    #     },
-    #     "similarity_run_args":  {
-    #         "threshold": {
-    #             3: 0.5,
-    #             4: 1.0
-    #         },
-    #         "weight": 0.25,
-    #     }
-    # }
-
-    # _qwen3_8b_respondent_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScoreWithQwen3_8BRespondent(
-    #     calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_QWEN3_8B_RESPONDENT_PARAMS)
-    # _qwen3_8b_respondent_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScoreWithQwen3_8BRespondent(
-    #     calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_QWEN3_8B_RESPONDENT_PARAMS)
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-    # # Doc2Query V2
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-    # # 问题合成
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-    # class FabricateQAComputeScore(Doc2QueryV2ComputeScore):
-    #     def __init__(self, parse_solution_fn, split="train", args=None):
-    #         super().__init__(
-    #             split=split, parse_solution_fn=parse_solution_fn, args=args
-    #         )
-    #         self.task_name = "FABRICATE_QA"
-
-    #     @classmethod
-    #     def respond(cls, question, answer_type, gt):
-    #         _if = cls.get_instruct(gt, answer_type)
-    #         return f'{_if}\n\n{question}'
-
-    #     @classmethod
-    #     def get_verify_agent(cls):
-    #         return cls.get_weak_agent()
-
-    #     @classmethod
-    #     def get_weak_agent(cls):
-    #         return Agent(**{
-    #             "model": "qwen25_32B_instruct",
-    #             "base_url": "http://10.130.142.154:8000/v1",
-    #             "api_keys": "EMPTY",
-    #             "request_kwargs": {
-    #                 "temperature": 0.9,
-    #                 "timeout": 360,
-    #                 "max_tokens": 2048,
-    #             },
-    #         })
-
-    #     @classmethod
-    #     def get_strong_agent(cls):
-    #         return Agent(**{
-    #             "model": "DeepSeek-V3-0324",
-    #             "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
-    #             "api_keys": "EMPTY",
-    #             "request_kwargs": {
-    #                 "temperature": 0.9,
-    #                 "timeout": 360,
-    #                 "max_tokens": 4096,
-    #             }
-    #         })
-
-    # FABRICATE_QA_DEFAULT_PARAMS = {
-    #     "difficulty_run_args": {
-    #         "weak": {
-    #             "model": FabricateQAComputeScore.get_weak_agent(),
-    #             "repeat": 24,
-    #             "fn": FabricateQAComputeScore.respond,
-    #             "desc": 'weak'
-    #         },
-    #         "strong": {
-    #             "model": FabricateQAComputeScore.get_strong_agent(),
-    #             "repeat": 6,
-    #             "fn": FabricateQAComputeScore.respond,
-    #             "desc": 'strong'
-    #         }
-    #     },
-    #     "difficulty_metric_args": {
-    #         "advantage": 'strong',
-    #         "weakness": 'weak',
-    #         "advantage_oversimplified_threshold": 1.0,
-    #         "weakness_oversimplified_threshold": 21/24,
-    #         "advantage_overcomplex_threshold": 1/6,
-    #         "weakness_overcomplex_threshold": 1/24,
-    #         "advantage_threshold": 1/6,
-    #         "advantage_weight": 0.5,
-    #         "weakness_weight": 0.5,
-    #         "confidence_bonus_threshold": 2/6,
-    #         "confidence_bonus_weight": 0.25
-    #     },
-    #     "similarity_run_args":  {
-    #         "threshold": {
-    #             3: 0.5,
-    #             4: 1.0
-    #         },
-    #         "weight": 0.25,
-    #     }
-    # }
-
-    # _default_fabricate_qa_compute_score_train = FabricateQAComputeScore(
-    #     calc_qa_parse_solution_fn, split="train", args=FABRICATE_QA_DEFAULT_PARAMS)
-    # _default_fabricate_qa_compute_score_valid = FabricateQAComputeScore(
-    #     calc_qa_parse_solution_fn, split="valid", args=FABRICATE_QA_DEFAULT_PARAMS)
-    # fabricate_qa_default_stage1_compute_score_train = partial(
-    #     _default_fabricate_qa_compute_score_train.compute_score, stage="1")
-    # fabricate_qa_default_stage1_compute_score_valid = partial(
-    #     _default_fabricate_qa_compute_score_valid.compute_score, stage="1")
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-    # # 问题合成
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-    # class FabricateAIOComputeScore(object):
-    #     def __init__(self, processors=None):
-    #         self.processors = processors
-
-    #     def compute_score(self,
-    #                       batch_data_sources,
-    #                       batch_solution_str,
-    #                       batch_ground_truth,
-    #                       stage,
-    #                       max_concurrent_requests=MAX_CONCURRENT,
-    #                       ):
-    #         source_mapper = {}
-    #         splitter = defaultdict(list)
-
-    #         for i, (source, sol, gt) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-    #             source_mapper[i] = source
-    #             splitter[source].append((source, sol, gt))
-    #             source_mapper[i] = (source, len(splitter[source])-1)
-
-    #         results = {}
-    #         for source, flatten_elems in splitter.items():
-    #             _batch_data_sources, _batch_solution_str, _batch_ground_truth = [], [], []
-    #             for source, sol, gt in flatten_elems:
-    #                 _batch_data_sources.append(source)
-    #                 _batch_solution_str.append(sol)
-    #                 _batch_ground_truth.append(gt)
-
-    #             _results = self.processors[source].compute_score(
-    #                 batch_data_sources=_batch_data_sources,
-    #                 batch_solution_str=_batch_solution_str,
-    #                 batch_ground_truth=_batch_ground_truth,
-    #                 stage=stage,
-    #                 max_concurrent_requests=max_concurrent_requests
-    #             )
-    #             results[source] = _results
-
-    #         final_results = []
-    #         for i, _ in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-    #             source, group_index = source_mapper[i]
-    #             final_results.append(results[source][group_index])
-    #         return final_results
-
-    # _default_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
-    #     "doc2query_v2": _default_doc2query_v2_compute_score_train,
-    #     "fabricate_qa": _default_fabricate_qa_compute_score_train,
-    # })
-    # _default_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
-    #     "doc2query_v2": _default_doc2query_v2_compute_score_valid,
-    #     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
-    # })
-    # fabricate_aio_default_stage1_compute_score_train = partial(
-    #     _default_fabricate_aio_compute_score_train.compute_score, stage="1")
-    # fabricate_aio_default_stage1_compute_score_valid = partial(
-    #     _default_fabricate_aio_compute_score_valid.compute_score, stage="1")
-    # fabricate_aio_default_stage2_compute_score_train = partial(
-    #     _default_fabricate_aio_compute_score_train.compute_score, stage="2",
-    #     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
-    # fabricate_aio_default_stage2_compute_score_valid = partial(
-    #     _default_fabricate_aio_compute_score_valid.compute_score, stage="2",
-    #     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
-
-    # # Qwen2.5-32B Respondent
-    # _qwen32b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
-    #     "doc2query_v2": _qwen32b_respondent_doc2query_v2_compute_score_train,
-    #     "fabricate_qa": _default_fabricate_qa_compute_score_train,
-    # })
-    # _qwen32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
-    #     "doc2query_v2": _qwen32b_respondent_doc2query_v2_compute_score_valid,
-    #     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
-    # })
-    # fabricate_aio_qwen32b_respondent_stage2_compute_score_train = partial(
-    #     _qwen32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-    #     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
-    # fabricate_aio_qwen32b_respondent_stage2_compute_score_valid = partial(
-    #     _qwen32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-    #     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
-
-    # # QwQ-32B Respondent
-    # _qwq32b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
-    #     "doc2query_v2": _qwq32b_respondent_doc2query_v2_compute_score_train,
-    #     "fabricate_qa": _default_fabricate_qa_compute_score_train,
-    # })
-    # _qwq32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
-    #     "doc2query_v2": _qwq32b_respondent_doc2query_v2_compute_score_valid,
-    #     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
-    # })
-    # fabricate_aio_qwq32b_respondent_stage2_compute_score_train = partial(
-    #     _qwq32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-    #     max_concurrent_requests=128)
-    # fabricate_aio_qwq32b_respondent_stage2_compute_score_valid = partial(
-    #     _qwq32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-    #     max_concurrent_requests=128)
-
-    # # Qwen3-8B Respondent
-    # _qwen3_8b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
-    #     "doc2query_v2": _qwen3_8b_respondent_doc2query_v2_compute_score_train,
-    #     "fabricate_qa": _default_fabricate_qa_compute_score_train,
-    # })
-    # _qwen3_8b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
-    #     "doc2query_v2": _qwen3_8b_respondent_doc2query_v2_compute_score_valid,
-    #     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
-    # })
-    # fabricate_aio_qwen3_8b_respondent_compute_score_train = partial(
-    #     _qwen3_8b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-    #     max_concurrent_requests=256)
-    # fabricate_aio_qwen3_8b_respondent_compute_score_valid = partial(
-    #     _qwen3_8b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-    #     max_concurrent_requests=256)
-
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-    # # 问题合成
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-    # # SALT
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-    # def salt_parse_solution_fn(solution_str: str, remove_option_letter=True):
-    #     if solution_str.count("</question>") > 1:
-    #         return None
-
-    #     if solution_str.count("</think>") > 1:
-    #         return None
-
-    #     solution_str = postprocess_solution(solution_str)
-    #     if not solution_str.startswith("<think>"):
-    #         solution_str = f'<think>\n{solution_str}'
-
-    #     try:
-    #         thought = re.findall(r'<think>.*</think>',
-    #                              solution_str, re.DOTALL)[0]
-    #     except Exception as err:
-    #         return None
-
-    #     solution_str = solution_str.replace(thought, "")
-
-    #     try:
-    #         conclusion = re.findall(r'<question>(.*)</question>',
-    #                                 solution_str, re.DOTALL)[0]
-    #     except Exception as err:
-    #         return None
-    #     if ("<question>" in conclusion) or ("</question>" in conclusion):
-    #         return None
-
-    #     try:
-    #         question = conclusion[conclusion.index(
-    #             "Question: ")+len("Question: "):conclusion.index("Answer:")].strip()
-
-    #         answer = conclusion[conclusion.index(
-    #             "Answer:")+len("Answer:"):].strip()
-
-    #         return question, answer
-    #     except Exception as err:
-    #         return None
-
-    # class SALTQuestionAnswerFormatVerify(PenaltyOrReward):
-    #     def __init__(self, parse_solution_fn=calc_qa_parse_solution_fn):
-    #         self.parse_solution_fn = parse_solution_fn
-
-    #     def get_penalty_or_reward(self, solution_str, ground_truth):
-    #         solution_str = self.parse_solution_fn(solution_str)
-
-    #         if solution_str is None:
-    #             return 0.0
-
-    #         question, answer = solution_str
-
-    #         # 中文
-    #         if contain_chinese(answer):
-    #             tokens = list(jieba.cut(answer))
-    #         else:
-    #             tokens = list(answer.split(" "))
-
-    #         # 答案长度过长
-    #         if len(tokens) > 10:
-    #             return -1.6
-
-    #         if any(kw in answer for kw in ("A. ", "B. ", "C. ", "D. ", "A) ", "B) ", "C) ", "D)")):
-    #             return -1.6
-
-    #         # 疑似选择题
-    #         if all(kw in question for kw in ("A. ", "B. ", "C. ", "D. ")):
-    #             return -1.6
-
-    #         # 疑似选择题
-    #         if all(kw in question for kw in ("A) ", "B) ", "C) ", "D) ")):
-    #             return -1.6
-
-    #         # 疑似选择题
-    #         if all(kw in question for kw in ("A）", "B）", "C）", "D）")):
-    #             return -1.6
-
-    #         # 疑似选择题
-    #         if any(kw == answer.strip() for kw in ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N")):
-    #             return -1.6
-
-    #         return 0.0
-
-    # class SALTLanguageConsistency(LanguageConsistency):
-    #     def __init__(self, parse_solution_fn=calc_qa_parse_solution_fn):
-    #         super().__init__(
-    #             parse_solution_fn=parse_solution_fn
-    #         )
-
-    #     def get_penalty_or_reward(self, solution_str, ground_truth):
-    #         raw_solution_str = solution_str
-    #         solution_str = self.parse_solution_fn(solution_str)
-
-    #         if solution_str is None:
-    #             return 0.0
-
-    #         result = solution_str
-    #         if len(result) == 2:
-    #             question, answer = result
-    #         elif len(result) == 3:
-    #             question, options, answer = result
-    #         else:
-    #             raise NotImplementedError
-
-    #         lang_code = ground_truth["lang_code"]
-
-    #         base_score = -1.2
-
-    #         if lang_code == "en" and contain_chinese(question):
-    #             return base_score
-    #         elif lang_code == "zh" and (not contain_chinese(question)):
-    #             return base_score
-
-    #         base_score += 0.4
-
-    #         if lang_code == "en":
-    #             if contain_chinese(raw_solution_str):
-    #                 return base_score
-    #         elif lang_code == "zh":
-    #             if not self.detect_zh(raw_solution_str, 0.75):
-    #                 return base_score
-    #         else:
-    #             pass
-
-    #         return 0.0
-
-    # class SALTBadQuestionDetection(BadQuestionDetection):
-    #     def __init__(self, parse_solution_fn=calc_qa_parse_solution_fn, ngram=4):
-    #         super().__init__(
-    #             parse_solution_fn=parse_solution_fn
-    #         )
-    #         self.ngram = ngram
-
-    #     def get_penalty_or_reward(self, solution_str, ground_truth):
-    #         raw_solution_str = solution_str
-    #         solution_str = self.parse_solution_fn(solution_str)
-
-    #         if solution_str is None:
-    #             return 0.0
-
-    #         question, answer = solution_str
-
-    #         # 基于规则的问题检测
-    #         contam, _ = self.valid_ten_gram(
-    #             self.generate_ngrams(question, self.ngram, ground_truth),
-    #             self.generate_ngrams(
-    #                 ground_truth["question"], self.ngram, ground_truth)
-    #         )
-    #         if contam:
-    #             return -0.4
-    #         return 0.0
-
-    #     def replace_spaces(self, text):
-    #         # 这个函数接受一个字符串作为输入，然后返回一个新的字符串，其中所有的三个或更多连续的空格都被替换为两个空格。
-    #         # 这个正则表达式 ' {3,}' 的意思是匹配三个或更多的连续空格。{3,} 是一个数量词，表示匹配前面的字符（在这里是空格）三次或更多次。
-    #         return re.sub(' {4,}', '  ', text)
-
-    #     def generate_ngrams(self, text, n, ground_truth):
-    #         text = self.replace_spaces(text)
-    #         text = self.tokenize(text, ground_truth)
-    #         ngrams = set()
-    #         for i in range(len(text) - n + 1):
-    #             ngram = ' '.join(text[i:i + n])
-    #             if re.search('[a-zA-Z\u4e00-\u9fff]', ngram):
-    #                 if ngram not in ngrams:
-    #                     ngrams.add(ngram)
-    #         return ngrams
-
-    #     def valid_ten_gram(self, set1, set2, verbose=False):
-    #         intersection = set1.intersection(set2)
-    #         # union = set1.union(set2)
-    #         if verbose:
-    #             if len(intersection) > 0:
-    #                 pass
-    #         return len(intersection) > 0, intersection
-
-    #     def tokenize(self, s, ground_truth):
-    #         lang_code = ground_truth["lang_code"]
-    #         tokens = tokenize(s, lang_code)
-    #         return tokens
-
-    # class QuestionSimilarityPenalty(QuestionSimilarity):
-    #     """ 问题相似度惩罚：新问题应当与原问题有比较大的差异
-    #     """
-
-    #     def __init__(self, parse_solution_fn, authentic_key="question"):
-    #         super().__init__(
-    #             parse_solution_fn=parse_solution_fn, authentic_key=authentic_key
-    #         )
-
-    #     def get_penalty_or_reward(self, solution_str, ground_truth):
-    #         if ground_truth.get(self.key, None) is None:
-    #             return 0.0
-    #         try:
-    #             solution_str = self.parse_solution_fn(solution_str)
-
-    #             if solution_str is None:
-    #                 return 0.0
-    #             question, answer = solution_str
-
-    #             if ground_truth.get(self.key, None):
-    #                 gt = ground_truth[self.key]
-    #             else:
-    #                 return 0.0
-
-    #             gt_tokens = " ".join(tokenize(gt.lower(), "en"))
-    #             sl_tokens = " ".join(tokenize(question.lower(), "en"))
-    #             bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
-    #             similarity = bleu / 100
-    #             return -similarity  # 权重0.5
-    #         except Exception as err:
-    #             return 0.0
-
-    # class SALTComputeScore(Doc2QueryV2ComputeScore):
-    #     def __init__(self,
-    #                  parse_solution_fn,
-    #                  split="train",
-    #                  args=None,
-    #                  record_rollout_samples_path=None,
-    #                  record_rollout_max_capacity=100,
-    #                  ):
-    #         super().__init__(
-    #             parse_solution_fn=parse_solution_fn, split=split,
-    #             args=args,
-    #             record_rollout_samples_path=record_rollout_samples_path,
-    #             record_rollout_max_capacity=record_rollout_max_capacity
-    #         )
-    #         self.task_name = "SALT"
-
-    #         self.format = SALTQuestionAnswerFormatVerify(
-    #             parse_solution_fn=self.parse_solution_fn)
-    #         self.language = SALTLanguageConsistency(
-    #             parse_solution_fn=self.parse_solution_fn)
-    #         self.bad_question_detection = SALTBadQuestionDetection(
-    #             parse_solution_fn=self.parse_solution_fn
-    #         )
-    #         self.similarity_penalty = QuestionSimilarityPenalty(
-    #             parse_solution_fn=self.parse_solution_fn)
-
-    #     @classmethod
-    #     def get_weak_agent(cls):
-    #         return Agent(**{
-    #             "model": "DeepSeek-V3-0324",
-    #             "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
-    #             "api_keys": "EMPTY",
-    #             "request_kwargs": {
-    #                 "temperature": 0.8,
-    #                 "timeout": 360,
-    #                 "max_tokens": 4096,
-    #             }
-    #         })
-
-    #     @classmethod
-    #     def get_strong_agent(cls):
-    #         return Agent(**{
-    #             "model": "DeepSeek-V3-0324",
-    #             "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
-    #             "api_keys": "EMPTY",
-    #             "request_kwargs": {
-    #                 "temperature": 0.8,
-    #                 "timeout": 360,
-    #                 "max_tokens": 4096,
-    #             }
-    #         })
-
-    #     @classmethod
-    #     def get_verify_agent(cls):
-    #         return Agent(**{
-    #             "model": "qwen25_32B_instruct",
-    #             "base_url": "http://10.130.142.154:8000/v1",
-    #             "api_keys": "EMPTY",
-    #             "request_kwargs": {
-    #                 "temperature": 0.8,
-    #                 "timeout": 360,
-    #                 "max_tokens": 2048,
-    #             },
-    #         })
-
-    #     def get_penalties(self) -> Dict[str, Callable]:
-    #         return {
-    #             "Format": self.format.get_penalty_or_reward,
-    #             "Lang": self.language.get_penalty_or_reward,
-    #             "BadQ": self.bad_question_detection.get_penalty_or_reward,
-    #             "QSimPenalty": self.similarity_penalty.get_penalty_or_reward,
-    #         }
-
-    #     def do_not_simulate_respondent(self, debug):
-    #         if debug:
-    #             return (
-    #                 self.format,
-    #                 self.language,
-    #             )
-    #         return (
-    #             self.format,
-    #             self.language,
-    #             self.bad_question_detection,
-    #         )
-
-    #     @classmethod
-    #     def self_taught_template(cls, question, answer, gt):
-    #         """ 拒绝采样：合成题不提供答案,需要模型自己rollout对 """
-    #         return question
-
-    #     def self_taught_response_postprocess(self, s, debug=False):
-    #         if "</think>" in s:
-    #             s = s[s.index("</think>")+len("</think>"):]
-    #         return s
-
-    #     async def self_taught(self,
-    #                           batch_data_sources,
-    #                           batch_solution_str,
-    #                           batch_ground_truth,
-    #                           run_args=None,
-    #                           max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"],
-    #                           debug=False):
-    #         assert run_args is not None
-
-    #         prompt2index = defaultdict(list)
-    #         answer_map = {}
-
-    #         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-    #             result = self.parse_solution_fn(solution_str)
-    #             if result is not None:
-    #                 question, answer = result
-    #                 answer_map[i] = (question, answer)
-
-    #                 skip = False
-    #                 if not debug:
-    #                     for module in self.do_not_simulate_respondent(debug=debug):
-    #                         cur_score = module.get_penalty_or_reward(
-    #                             solution_str, gt
-    #                         )
-    #                         if cur_score < 0.0:
-    #                             skip = True
-    #                             break
-    #                 if skip:
-    #                     continue
-
-    #                 lang_code = gt["lang_code"]
-    #                 fn = run_args["self_taught"]["fn"]
-    #                 _prompt = fn(question, answer, gt)
-    #                 prompt2index[_prompt].append(i)
-
-    #         # 拒绝采样
-    #         prompts = list(prompt2index.keys()) * run_args["self_taught"]["repeat"]
-    #         results = await run_args["self_taught"]["model"].run(
-    #             prompts, max_concurrent_requests, desc=f'[Generate Self-Taught Response {run_args["self_taught"]["model"].model}]', pbar=False,
-    #             postprocess_fns=[
-    #                 partial(self.self_taught_response_postprocess, debug=debug)] * len(prompts)
-    #         )
-    #         # 答案验证
-    #         verify_queue = []
-    #         for results_index, (p, r) in enumerate(results):
-    #             for index in prompt2index[p]:
-    #                 # 注：验证的是合成题准确率
-    #                 verify_queue.append(VerifyInfo(
-    #                     index=results_index,  # 对应`results`中的偏移量
-    #                     tag=index,  # 对应instance index
-    #                     prompt=answer_map[index][0],  # 合成题问题
-    #                     response=r,
-    #                     answer=answer_map[index][1]  # 合成题答案
-    #                 ))
-
-    #         correctness = await self.verify_batch_results(
-    #             verify_queue=verify_queue,
-    #             max_concurrent_requests=64,
-    #             group_names=list(range(len(batch_solution_str)))
-    #         )
-
-    #         self_taught_rationale = [None] * len(batch_solution_str)
-
-    #         for results_index, (p, r) in enumerate(results):
-    #             for index in prompt2index[p]:
-    #                 try:
-    #                     # Reject Sample: 回答正确
-    #                     if correctness[index][results_index][0] > 0.0:
-    #                         self_taught_rationale[index] = r
-    #                 except Exception as err:
-    #                     continue
-    #         return self_taught_rationale
-
-    #     @classmethod
-    #     def respond_wo_context(cls, context, gt):
-    #         if gt["lang_code"] == "en":
-    #             extra = "Think Step by Step and give your thinking process"
-    #         else:
-    #             extra = "你需要仔细思考，给出思考过程。"
-    #         return f'{extra}\n\n' + gt["instruct"].format(question=gt["question"])
-
-    #     @classmethod
-    #     def respond_w_context(cls, context, gt):
-    #         if gt["lang_code"] == "en":
-    #             extra = "Think Step by Step and give your thinking process"
-    #         else:
-    #             extra = "你需要仔细思考，给出思考过程。"
-    #         return f'{context}\n\n\n\n\n{extra}\n\n{gt["instruct"].format(question=gt["question"])}'
-
-    #     async def simulate_respondent(
-    #             self,
-    #             batch_data_sources,
-    #             batch_solution_str,
-    #             batch_ground_truth,
-    #             run_args=None,
-    #             max_concurrent_requests=MAX_CONCURRENT,
-    #             debug=False):
-    #         assert run_args is not None
-
-    #         synthetic_qa_rationales = await self.self_taught(
-    #             batch_data_sources,
-    #             batch_solution_str,
-    #             batch_ground_truth,
-    #             run_args=run_args,
-    #             max_concurrent_requests=max_concurrent_requests,
-    #             debug=debug
-    #         )
-    #         prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
-
-    #         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-    #             result = self.parse_solution_fn(solution_str)
-    #             if result is not None:
-    #                 fabricate_question, _ = result
-
-    #                 # 合成题没有rollout出正确答案
-    #                 if synthetic_qa_rationales[i] is None:
-    #                     continue
-
-    #                 skip = False
-    #                 if not debug:
-    #                     for module in self.do_not_simulate_respondent(debug=debug):
-    #                         cur_score = module.get_penalty_or_reward(
-    #                             solution_str, gt
-    #                         )
-    #                         if cur_score < 0.0:
-    #                             skip = True
-    #                             break
-    #                 if skip:
-    #                     continue
-
-    #                 lang_code = gt["lang_code"]
-    #                 for name, v in run_args.items():
-    #                     if name == "self_taught":
-    #                         continue
-    #                     fn = v["fn"]
-    #                     context = f'```\n[Question]\n{fabricate_question}\n\n[Solution]\n{synthetic_qa_rationales[i]}\n```'
-    #                     _prompt = fn(context, gt)
-    #                     prompt2index[name][_prompt].append(i)
-
-    #         tasks = []
-    #         task_names = []
-    #         for name, v in prompt2index.items():
-    #             if name == "self_taught":
-    #                 continue
-
-    #             prompts = list(v.keys()) * run_args[name]["repeat"]
-    #             tasks.append(run_args[name]["model"].run(
-    #                 prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
-    #                 postprocess_fns=[
-    #                     partial(self.response_postprocess, debug=debug)] * len(prompts)
-    #             ))
-    #             task_names.append(name)
-    #         respond_questions = await aio.gather(*tasks)
-
-    #         # 验证答案正确性
-    #         verify_queue = []
-    #         for task_name, results in zip(task_names, respond_questions):
-    #             for (p, r) in results:
-    #                 for index in prompt2index[task_name][p]:
-    #                     # 注：验证时是验证在真题上的准确率
-    #                     verify_queue.append(VerifyInfo(
-    #                         index=index,
-    #                         tag=task_name,
-    #                         prompt=batch_ground_truth[index]["question"],
-    #                         response=r,
-    #                         answer=batch_ground_truth[index]["answer"]))
-
-    #         correctness = await self.verify_batch_results(
-    #             verify_queue=verify_queue,
-    #             max_concurrent_requests=64,
-    #             group_names=task_names
-    #         )
-
-    #         return correctness
-
-    #     def postprocess_authentic_question_response(self, s):
-    #         s = s.strip()
-    #         conclusion = s
-
-    #         last_line = conclusion.split("\n")
-    #         if len(last_line) > 0 and "Answer: " in last_line[-1].strip():
-    #             last_line = last_line[-1].strip()
-    #             last_line = last_line[last_line.index(
-    #                 "Answer: ")+len("Answer: "):].strip()
-    #             return last_line
-
-    #         if len(last_line) > 5:
-    #             return "\n".join(last_line[-5:]).strip()
-
-    #         return conclusion
-
-    #     async def verify_batch_results(self, verify_queue, max_concurrent_requests, group_names):
-    #         def validate_result(response):
-    #             s = response
-    #             try:
-    #                 conclusion = s.strip()
-
-    #                 judge = re.findall(
-    #                     r'\"判断结果\": \"(.*)\"', conclusion)
-    #                 if len(judge) > 0 and judge[0] in ("正确", "错误"):
-    #                     return judge[0] == "正确"
-
-    #                 conclusion = conclusion[conclusion.index(
-    #                     "```json")+len("```json"):].strip()
-    #                 conclusion = conclusion[:conclusion.index("```")].strip()
-    #                 try:
-    #                     conclusion = json.loads(conclusion)
-    #                     if conclusion["判断结果"] not in ("正确", "错误"):
-    #                         raise PostprocessError(f'corrupt')
-    #                     return conclusion["判断结果"] == "正确"
-    #                 except Exception as err:
-    #                     try:
-    #                         conclusion = re.findall(
-    #                             r'\"判断结果\": \"(.*)\"', conclusion)[0]
-    #                         if not conclusion in ("正确", "错误"):
-    #                             raise PostprocessError(f'corrupt')
-    #                         return conclusion == "正确"
-    #                     except Exception as err:
-    #                         raise PostprocessError(f'{err}')
-    #             except Exception as err:
-    #                 raise PostprocessError(f'{err}')
-
-    #         verify_prompt = """### **基于标准答案判断回答是否正确**
-    # 任务描述：请根据提供的**题目**、**用户回答（结论部分）**和**标准答案**，判断用户回答是否正确。
-
-    # #### 输出要求
-    # ```json
-    # {
-    # "判断结果": "正确/错误",
-    # }
-    # ```
-
-    # 现在对下面的回答判断正确性
-    # """
-
-    #         verify_template = """
-    # #### **输入：**
-    # ##### 题目
-    # ```
-    # {question}
-    # ```
-
-    # ##### 用户回答（答案部分）
-    # {conclusion}
-
-    # ##### 标准答案
-    # {answer}
-
-    # #### **输出：**
-    # """
-    #         correctness = {name: defaultdict(list) for name in group_names}
-
-    #         verify_mapper = defaultdict(list)
-
-    #         for info in verify_queue:
-    #             conclusion = info.response
-
-    #             # 基于规则解析答案
-    #             if conclusion is None:
-    #                 correctness[info.tag][info.index].append(0.0)
-    #             else:
-    #                 conclusion = self.postprocess_authentic_question_response(
-    #                     conclusion)
-    #                 eval_prompt = verify_prompt + "\n\n" + verify_template.format(
-    #                     question=info.prompt,
-    #                     answer=info.answer,
-    #                     conclusion=conclusion
-    #                 )
-    #                 verify_mapper[eval_prompt].append((info.index, info.tag))
-
-    #         _results = await self.get_verify_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.get_verify_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
-
-    #         results_mapper = defaultdict(list)
-    #         for (k, v) in _results:
-    #             for meta in verify_mapper[k]:
-    #                 index, name = meta
-    #                 if v is not None:
-    #                     correctness[name][index].append(1.0 if v else 0.0)
-    #         return correctness
-
-    #     async def get_learnable_reward(
-    #             self,
-    #             batch_data_sources,
-    #             batch_solution_str,
-    #             batch_ground_truth,
-    #             run_args=None,
-    #             metric_args=None,
-    #             max_concurrent_requests=MAX_CONCURRENT,
-    #             debug=False):
-
-    #         assert metric_args is not None, f'`metric_args` missed'
-    #         assert run_args is not None, f'`run_args` missed'
-
-    #         correctness = await self.simulate_respondent(
-    #             batch_data_sources,
-    #             batch_solution_str,
-    #             batch_ground_truth,
-    #             run_args=run_args,
-    #             max_concurrent_requests=max_concurrent_requests,
-    #             debug=debug
-    #         )
-
-    #         full_rewards = []
-    #         pass_rates = []
-
-    #         for i in range(len(batch_solution_str)):
-    #             if i in list(correctness.values())[0]:
-    #                 base_score = 0.0
-    #                 pass_rates.append({
-    #                     k: f'{np.sum(v[i])}/{len(v[i])}' for k, v in correctness.items()
-    #                 })
-
-    #                 try:
-    #                     adv_name, weak_name = metric_args["advantage"], metric_args["weakness"]
-    #                     adv, weak = correctness[adv_name][i], correctness[weak_name][i]
-
-    #                     if len(weak) == 0 or len(adv) == 0:
-    #                         full_rewards.append(base_score)
-    #                         continue
-
-    #                     # adv 应该比 weakness 显著好
-    #                     if not np.mean(adv) > np.mean(weak):
-    #                         full_rewards.append(base_score)
-    #                         continue
-
-    #                     if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
-    #                         full_rewards.append(base_score)
-    #                         continue
-
-    #                     # # 固定难度降低奖励
-    #                     # diff_reduct_bonus = 1.2
-
-    #                     # 难度函数
-    #                     def calc_difficulty(scores, total_attempts):
-    #                         return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
-
-    #                     # 难度降低奖励
-    #                     diff_reduct_bonus = 0.5  # 基础分
-
-    #                     # 原问题难度 - 合成题Fewshot难度
-
-    #                     diff_reduct_bonus += (calc_difficulty(weak, run_args[weak_name]["repeat"])-calc_difficulty(
-    #                         adv, run_args[adv_name]["repeat"])) * metric_args["difficulty_reduction_bonus_weight"]
-
-    #                     base_score = [
-    #                         diff_reduct_bonus
-    #                     ]
-
-    #                     full_rewards.append(base_score)
-    #                 except Exception as err:
-    #                     print(f'[ERROR] {err}')
-    #                     full_rewards.append(base_score)
-    #             else:
-    #                 pass_rates.append({})
-    #                 full_rewards.append(0.0)
-    #         return full_rewards, pass_rates
-
-    #     async def get_hack_penalty(
-    #         self,
-    #         batch_data_sources,
-    #         batch_solution_str,
-    #         batch_ground_truth,
-    #         max_concurrent_requests=128,
-    #         run_args=None
-    #     ):
-    #         assert run_args is not None
-
-    #         indices = []
-    #         fabricates, authentics = [], []
-    #         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-    #             fabricate = self.parse_solution_fn(sol)
-    #             if fabricate is not None and gt.get("question", None):
-    #                 fabricates.append(fabricate[0])
-    #                 authentics.append(gt["question"])
-    #                 indices.append(i)
-    #             else:
-    #                 continue
-
-    #         similarity = await self._hack_detect(
-    #             agent=self.get_verify_agent(),
-    #             authentic=authentics,
-    #             fabricate=fabricates,
-    #             max_concurrent_requests=max_concurrent_requests
-    #         )
-
-    #         scores = [0.0] * len(batch_solution_str)
-    #         for sim, index in zip(similarity, indices):
-    #             if sim is None:
-    #                 pass
-    #             else:
-    #                 _score = 0.0
-    #                 for threshold, set_val in run_args["threshold"].items():
-    #                     if sim >= threshold:
-    #                         _score = min(_score, set_val)
-    #                 scores[index] = _score * run_args["weight"]
-    #         return scores
-
-    #     async def get_similarity_penalty(
-    #         self,
-    #         batch_data_sources,
-    #         batch_solution_str,
-    #         batch_ground_truth,
-    #         max_concurrent_requests=128,
-    #         run_args=None
-    #     ):
-    #         assert run_args is not None
-
-    #         indices = []
-    #         fabricates, authentics = [], []
-    #         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-    #             fabricate = self.parse_solution_fn(sol)
-    #             if fabricate is not None and gt.get("question", None):
-    #                 fabricates.append(fabricate[0])
-    #                 authentics.append(gt["question"])
-    #                 indices.append(i)
-    #             else:
-    #                 continue
-
-    #         similarity = await question_similarity(
-    #             agent=self.get_verify_agent(),
-    #             authentic=authentics,
-    #             fabricate=fabricates,
-    #             max_concurrent_requests=max_concurrent_requests
-    #         )
-
-    #         scores = [0.0] * len(batch_solution_str)
-    #         for sim, index in zip(similarity, indices):
-    #             if sim is None:
-    #                 pass
-    #             else:
-    #                 _score = 0.0
-    #                 for threshold, set_val in run_args["threshold"].items():
-    #                     if sim >= threshold:
-    #                         _score = min(_score, set_val)
-    #                 scores[index] = _score * run_args["weight"]
-    #         return scores
-
-    #     def compute_score(self,
-    #                       batch_data_sources,
-    #                       batch_solution_str,
-    #                       batch_ground_truth,
-    #                       max_concurrent_requests=MAX_CONCURRENT,
-    #                       ):
-    #         async def main():
-    #             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, max_concurrent_requests=max_concurrent_requests)
-    #         return aio.run(main())
-
-    #     def log_solution(self, solution):
-    #         norm = self.parse_solution_fn(solution)
-    #         if norm is None:
-    #             return repr(self.clip_string(solution))
-    #         return repr(self.format_question(norm[0], norm[1]))
-
-    #     def format_question(self, question, answer):
-    #         return f'Question: {question}\nAnswer: {answer}'
-
-    #     def log_ground_truth(self, ground_truth):
-    #         return repr(self.format_question(ground_truth["question"], ground_truth["answer"])
-    #                     )
-
-    #     def update_rollout_info(self, solution_str, ground_truth, difficulty):
-    #         parsed = self.parse_solution_fn(solution_str)
-    #         if parsed is None:
-    #             return
-    #         question, answer = parsed
-    #         inst_id = ground_truth["extra_info"]["uuid"]
-    #         if inst_id not in self.rollout_database:
-    #             self.rollout_database[inst_id] = LRUCache(
-    #                 capacity=self.record_rollout_max_capacity)
-
-    #         args = copy.deepcopy(self.args)
-    #         for k, v in args["learnable_run_args"].items():
-    #             del v["fn"]
-    #             for field, value in v.items():
-    #                 if field == "model":
-    #                     args["learnable_run_args"][k][field] = value.model
-
-    #         self.rollout_database[inst_id][question] = {
-    #             "prompt_generation_process": solution_str,
-    #             "question": question,
-    #             "answer": answer,
-    #             "difficulty": {
-    #                 "meta": args,
-    #                 "pass_rate": difficulty
-    #             }
-    #         }
-
-    #     def save_rollout_info(self):
-    #         """将缓存保存为JSON文件"""
-    #         data = {k: {"capacity": v.capacity, "items": list(v.get_items()), "access_order": list(
-    #             v._access_order.keys())} for k, v in self.rollout_database.items()}
-
-    #         with open(self.save_rollout_samples_path, "wt") as f:
-    #             json.dump(data, f, ensure_ascii=False, indent="  ")
-
-    #     def penalty_on(self):
-    #         return ("Format", "Lang", "BadQ", "QSimPenalty")
-
-    #     async def _compute_score(self,
-    #                              batch_data_sources,
-    #                              batch_solution_str,
-    #                              batch_ground_truth,
-    #                              max_concurrent_requests=MAX_CONCURRENT,
-    #                              debug=False
-    #                              ):
-    #         self.initialize_record_rollout_samples_module()
-
-    #         penalty = defaultdict(list)
-    #         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-    #             parsed = self.parse_solution_fn(solution_str)
-    #             if parsed is None:
-    #                 penalty[i].append(-2.0)
-    #             else:
-    #                 penalty[i].append(0.0)
-
-    #             for key in self.penalty_on():
-    #                 penalty[i].append(self.get_penalties()[key]
-    #                                   (solution_str, ground_truth))
-
-    #         # 难度降低奖励
-    #         difficulty_reduction_rewards, pass_rates = await self.get_learnable_reward(
-    #             batch_data_sources,
-    #             batch_solution_str,
-    #             batch_ground_truth,
-    #             run_args=self.args["learnable_run_args"],
-    #             metric_args=self.args["learnable_metric_args"],
-    #             max_concurrent_requests=max_concurrent_requests,
-    #             debug=debug
-    #         )
-    #         # 相似度惩罚
-    #         similarity_penalties = await self.get_similarity_penalty(
-    #             batch_data_sources,
-    #             batch_solution_str,
-    #             batch_ground_truth,
-    #             max_concurrent_requests=max_concurrent_requests,
-    #             run_args=self.args["similarity_run_args"],
-    #         )
-
-    #         hack_penalties = await self.get_hack_penalty(
-    #             batch_data_sources,
-    #             batch_solution_str,
-    #             batch_ground_truth,
-    #             max_concurrent_requests=max_concurrent_requests,
-    #             run_args=self.args["hack_detection_run_args"],
-    #         )
-
-    #         final_results = []
-    #         for i in range(len(batch_solution_str)):
-    #             scores = copy.deepcopy(penalty[i])
-
-    #             penalties = ["Parse"]+list(self.penalty_on())
-    #             penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
-    #                                         s in zip(penalties, scores)])
-    #             _difficulty = difficulty_reduction_rewards[i]
-    #             _difficulty_score = np.sum(_difficulty) if isinstance(
-    #                 _difficulty, list) else _difficulty
-    #             scores.append(_difficulty_score)
-
-    #             cur_score = 0
-
-    #             for j, _score in enumerate(scores):
-    #                 if (j == penalties.index("QSimPenalty")):  # BLEU
-    #                     if _difficulty_score > 0:
-    #                         cur_score += _score
-    #                 else:
-    #                     if _score < 0:
-    #                         cur_score = _score
-    #                         break
-    #                     else:
-    #                         cur_score += _score
-
-    #             if _difficulty_score > 0:
-    #                 cur_score += similarity_penalties[i]
-
-    #             # Hack惩罚
-    #             cur_score += hack_penalties[i]
-
-    #             # 保存Rollout信息
-    #             if cur_score > 0 and self.split == "train":
-    #                 self.update_rollout_info(
-    #                     solution_str=batch_solution_str[i],
-    #                     ground_truth=batch_ground_truth[i],
-    #                     difficulty=pass_rates[i]
-    #                 )
-
-    #             final_results.append(cur_score)
-
-    #             if cur_score > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
-    #                 log = True
-    #                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
-    #             else:
-    #                 log = False
-
-    #             if cur_score == -2.0:
-    #                 log = True
-    #                 log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN CORRUPT RESPONSE]"
-
-    #             source = batch_ground_truth[i]["source"]
-
-    #             if log:
-    #                 print(
-    #                     f"--------------------------------{log_flag}--------------------------------")
-    #                 print(
-    #                     f"【Solution】({source})`{self.log_solution(batch_solution_str[i])}`")
-    #                 try:
-    #                     print(
-    #                         f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
-    #                 except Exception as err:
-    #                     pass
-    #                 print(
-    #                     f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|DiffReduction={str(difficulty_reduction_rewards[i])}|SimPenalty={str(similarity_penalties[i])}|Hack={str(hack_penalties[i])}|{penalty_log_str}\n')
-
-    #                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
-
-    #                 if (random.random() < 0.1 or cur_score > 0.) and thought is not None:
-    #                     print(f'[Thought]\n{thought}')
-    #                     print()
-
-    #                 if cur_score == -2.0:
-    #                     print(f'[Response]\n{batch_solution_str[i]}')
-    #                     print()
-
-    #                 if self.split == "valid":
-    #                     pass
-
-    #                 self.save_rollout_info()
-
-    #         return final_results
-
-    # SALT_DEFAULT_PARAMS = {
-    #     "learnable_run_args": {
-    #         "self_taught": {
-    #             "model": SALTComputeScore.get_weak_agent(),
-    #             "fn": SALTComputeScore.self_taught_template,
-    #             "repeat": 8,
-    #         },
-    #         "w/o_content": {
-    #             "model": SALTComputeScore.get_weak_agent(),
-    #             "repeat": 8,
-    #             "fn": SALTComputeScore.respond_wo_context,
-    #             "desc": 'w/o ctx'
-    #         },
-    #         "w_content": {
-    #             "model": SALTComputeScore.get_strong_agent(),
-    #             "repeat": 8,
-    #             "fn": SALTComputeScore.respond_w_context,
-    #             "desc": 'w ctx'
-    #         },
-    #     },
-    #     "learnable_metric_args": {
-    #         "advantage": 'w_content',
-    #         "weakness": 'w/o_content',
-    #         "advantage_threshold": 2/8,
-    #         "difficulty_reduction_bonus_weight": 1.0
-    #     },
-    #     "similarity_run_args":  {
-    #         "threshold": {
-    #             4: -0.5,
-    #             5: -1.0
-    #         },
-    #         "weight": 1.0,
-    #     },
-    #     "hack_detection_run_args":  {
-    #         "threshold": {
-    #             3: -1.5,
-    #             4: -2.0
-    #         },
-    #         "weight": 1.0,
-    #     }
-    # }
-
-    # _default_salt_compute_score_train = SALTComputeScore(
-    #     salt_parse_solution_fn, split="train", args=SALT_DEFAULT_PARAMS)
-    # _default_salt_compute_score_valid = SALTComputeScore(
-    #     salt_parse_solution_fn, split="valid", args=SALT_DEFAULT_PARAMS)
-    # salt_default_compute_score_train = partial(
-    #     _default_salt_compute_score_train.compute_score, max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
-    # salt_default_compute_score_valid = partial(
-    #     _default_salt_compute_score_valid.compute_score, max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
-
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-    # # SALT
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-    # # DOC2QUERY V3
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-    # def doc2query_v3_parse_solution_fn(solution_str: str, remove_option_letter=True):
-    #     if not solution_str.startswith("<think>"):
-    #         solution_str = f'<think>\n{solution_str}'
-
-    #     if solution_str.count("</question>") > 1:
-    #         return None
-
-    #     if solution_str.count("</think>") > 1:
-    #         return None
-
-    #     solution_str = postprocess_solution(solution_str)
-
-    #     if not solution_str.startswith("<think>"):
-    #         return None
-
-    #     if not solution_str.endswith("</question>"):
-    #         return None
-
-    #     try:
-    #         thought = re.findall(r'<think>.*</think>',
-    #                              solution_str, re.DOTALL)[0]
-    #     except Exception as err:
-    #         return None
-
-    #     solution_str = solution_str.replace(thought, "")
-    #     try:
-    #         conclusion = re.findall(r'<question>(.*)</question>',
-    #                                 solution_str, re.DOTALL)[0]
-    #     except Exception as err:
-    #         return None
-
-    #     if ("<question>" in conclusion) or ("</question>" in conclusion):
-    #         return None
-
-    #     try:
-    #         question = conclusion[conclusion.index(
-    #             "Question: ")+len("Question: "):conclusion.index("Options:")].strip()
-    #         options = conclusion[conclusion.index(
-    #             "Options:")+len("Options:"):conclusion.index("Answer:")].strip()
-    #         if remove_option_letter:
-    #             options = re.findall(r'[A-W]\)\s*(.*)', options)
-    #         else:
-    #             options = re.findall(r'([A-W]\)\s*.*)', options)
-    #         options = [_.strip() for _ in options]
-
-    #         answer = conclusion[conclusion.index("Answer:"):].strip()
-    #         answer = re.findall(r'Answer:\s*([A-W])', answer)[0].strip()
-
-    #         # 选项有重复
-    #         if len(options) != len(set(options)):
-    #             return None
-    #         return question, options, answer
-    #     except Exception as err:
-    #         return None
-
-    # class Doc2QueryV3QuestionAnswerFormatVerify(SALTQuestionAnswerFormatVerify):
-    #     def __init__(self, parse_solution_fn=calc_qa_parse_solution_fn):
-    #         self.parse_solution_fn = parse_solution_fn
-
-    #     def get_penalty_or_reward(self, solution_str, ground_truth):
-    #         def match_decimal(text):
-    #             # 正则表达式模式：匹配整数部分（可选的正负号 + 数字）+ 小数点 + 小数部分（至少一位数字）
-    #             pattern = r'[-+]?\d+\.\d+'
-    #             return re.findall(pattern, text)
-
-    #         solution_str = self.parse_solution_fn(solution_str)
-
-    #         if solution_str is None:
-    #             return 0.0
-
-    #         question, options, _ = solution_str
-
-    #         for option in options:
-    #             if contain_chinese(option):
-    #                 tokens = list(jieba.cut(option))
-    #             else:
-    #                 tokens = list(option.split(" "))
-
-    #             # 答案长度过长
-    #             if len(tokens) > 20:
-    #                 return -1.6
-
-    #             # 疑似判断题
-    #             if option.strip().lower() in ("true", "false", "正确", "错误"):
-    #                 return -1.6
-
-    #         return 0.0
-
-    # class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
-    #     MULTICHOICE_LETTER = ('A', 'B', 'C', 'D', 'E', 'F', 'G',
-    #                           'H', 'I', 'J', 'K', 'L')
-
-    #     def __init__(self,
-    #                  parse_solution_fn,
-    #                  split="train",
-    #                  args=None,
-    #                  record_rollout_samples_path=None,
-    #                  record_rollout_max_capacity=100,
-    #                  ):
-
-    #         super().__init__(
-    #             split=split, parse_solution_fn=parse_solution_fn, args=args,
-    #             record_rollout_samples_path=record_rollout_samples_path, record_rollout_max_capacity=record_rollout_max_capacity
-    #         )
-    #         self.task_name = "DOC2QUERY_V3"
-
-    #         self.format = Doc2QueryV3QuestionAnswerFormatVerify(
-    #             parse_solution_fn=self.parse_solution_fn)
-    #         self.language = SALTLanguageConsistency(
-    #             parse_solution_fn=self.parse_solution_fn)
-
-    #     @classmethod
-    #     def get_weak_agent(cls):
-    #         return Agent(**{
-    #             "model": "DeepSeek-V3-0324",
-    #             "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
-    #             "api_keys": "EMPTY",
-    #             "request_kwargs": {
-    #                 "temperature": 0.9,
-    #                 "timeout": 360,
-    #                 "max_tokens": 4096,
-    #             }
-    #         })
-
-    #     @classmethod
-    #     def get_strong_agent(cls):
-    #         return cls.get_weak_agent()
-
-    #     @classmethod
-    #     def get_anchor_agent(cls):
-    #         return Agent(**{
-    #             "model": "qwen25_32B_instruct",
-    #             "base_url": "http://10.130.142.154:8000/v1",
-    #             "api_keys": "EMPTY",
-    #             "request_kwargs": {
-    #                 "temperature": 0.9,
-    #                 "timeout": 360,
-    #                 "max_tokens": 4096,
-    #             },
-    #         })
-
-    #     def get_penalties(self) -> Dict[str, Callable]:
-    #         return {
-    #             "Format": self.format.get_penalty_or_reward,
-    #             "Lang": self.language.get_penalty_or_reward,
-    #         }
-
-    #     def response_postprocess(self, s, debug=False):
-    #         if "</think>" in s:
-    #             s = s[s.index("</think>")+len("</think>"):]
-
-    #         if "**Final Answer**" in s:
-    #             s = s[s.index("**Final Answer**")+len("**Final Answer**"):]
-    #         if "**Final Solution**" in s:
-    #             s = s[s.index("**Final Solution**")+len("**Final Solution**"):]
-
-    #         if debug:
-    #             return s
-    #         try:
-    #             s = s.strip()
-    #             conclusion = s
-    #             if "最终答案是" in conclusion:
-    #                 conclusion = conclusion[conclusion.rindex(
-    #                     "最终答案是")+len("最终答案是"):].strip()
-    #                 return conclusion
-    #             else:
-    #                 conclusion = conclusion[conclusion.rindex(
-    #                     "final answer is")+len("final answer is"):].strip()
-    #                 return conclusion
-    #         except Exception as err:
-    #             try:
-    #                 s = s.strip()
-    #                 return s
-    #             except Exception as err:
-    #                 raise PostprocessError(f'parse conclusion failure')
-
-    #     async def verify_batch_results(self, verify_queue, max_concurrent_requests, group_names):
-    #         def validate_result(response):
-    #             try:
-    #                 response = response.strip()
-    #                 try:
-    #                     if "\n\n" in response and len(response.split("\n\n")) > 1:
-    #                         response = response.split("\n\n")[0].strip()
-    #                     ans_list = eval(response.strip())
-    #                 except Exception as err:
-    #                     if "\n\n" in response and len(response.split("\n\n")) > 1:
-    #                         response = response.split("\n\n")[1].strip()
-    #                         ans_list = eval(response.strip())
-    #                     else:
-    #                         if "**输出：**" in response:
-    #                             response = response[response.index(
-    #                                 "**输出：**")+len("**输出：**"):].strip()
-    #                         ans_list = eval(response.strip())
-
-    #                 if not isinstance(ans_list, list):
-    #                     raise PostprocessError(f'Parse Python List Failed')
-    #                 if not all(_ans in self.MULTICHOICE_LETTER for _ans in ans_list):
-    #                     raise PostprocessError(f'Parse Python List Failed')
-    #                 return ans_list
-    #             except Exception as err:
-    #                 raise PostprocessError(f'Parse Python List Failed')
-
-    #         verify_prompt = """### 按列表格式把用户回答的答案选项提取出来。
-
-    # 下面是一些例子
-    # #### **输入：**
-    # ##### 题目
-    # ```
-    # If the depositor has died, but the holder of the deposit certificate does not inform the savings institution about the inheritance process, nor presents a judgment from the local court where the deposit is held, and directly goes to the savings institution to withdraw or transfer the deceased depositor's funds, the savings institution will consider it ( ). Any disputes over the inheritance of the deposit that arise later ( ). ( ) (From the \"Savings Management Regulations,\" Order No. 107 of the State Council of the People's Republic of China)\nA. Normal withdrawal or transfer\nB. Abnormal withdrawal or transfer\nC. The savings institution is not responsible\nD. The savings institution is partially responsible
-    # ```
-
-    # ##### 用户回答（答案部分）
-    # According to Article 40 of the \"Savings Management Regulations\" (Order No. 107 of the State Council of the People's Republic of China), if the depositor has died, but the holder of the deposit certificate does not inform the savings institution about the inheritance process nor presents a judgment from the local court where the deposit is held, and directly attempts to withdraw or transfer the funds, the savings institution will consider it a normal withdrawal or transfer. Furthermore, any disputes over the inheritance of the deposit that arise later are not the responsibility of the savings institution.\n\nThus, for the first blank, the correct option is A: \"Normal withdrawal or transfer.\" For the second blank, the correct option is C: \"The savings institution is not responsible.\"\n\n\\boxed{\\text{A, C}}
-
-    # #### **输出：**
-    # ['A', 'C']
-
-    # ##### 题目
-    # ```
-    # Pyogenic meningitis | Tuberculous meningitis | Viral meningitis\nA. Significant increase in IgM\nB. Significant increase in IgA\nC. Significant decrease in IgA\nD. Significant decrease in IgM\nE. No significant changes in IgA and IgM
-    # ```
-
-    # ##### 用户回答（答案部分）
-    # Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOptions C (Significant decrease in IgA) and D (Significant decrease in IgM) are not characteristic of these infections, as decreases in immunoglobulins are more associated with immunodeficiencies rather than meningeal inflammation.\n\n\\boxed{\\text{A for Pyogenic, B for Tuberculous, E for Viral}}
-
-    # #### **输出：**
-    # ['A', 'B', 'E']
-
-    # ##### 题目
-    # ```
-    # 不定项选择题)(每题 2.00 分) 根据《中华人民共和国水污染防治法》在饮用水水源保护区内设置排污口的,()\nA. 由县级以上地方人民政府环境保护主管部门责令限期拆除,处二万元以上十万元以下的罚款\nB. 由县级以上地方人民政府责f限期拆除,处十万元以上五十万元以下的罚款\nC. 逾期不拆除的,强制拆除,所需费用由违法者承担,处十万元以上五十万元以下的罚款情节严重的,可以责令停产整治\nD. 逾期不拆除的,强制拆除,所需费用由违法者承担,处五十万元以上一百万元以下的罚款,并可以责令停产整治
-    # ```
-
-    # ##### 用户回答（答案部分）
-    # 根据《中华人民共和国水污染防治法》的相关规定，我们可以逐步分析题目中的选项：\n\n1. **设置排污口的处罚**：\n   - 在饮用水水源保护区内设置排污口的行为，由**县级以上地方人民政府**（而非环境保护主管部门）责令限期拆除，并处以**十万元以上五十万元以下的罚款**。因此，**选项A错误**，**选项B正确**。\n\n2. **逾期不拆除的处罚**：\n   - 如果逾期不拆除排污口，将**强制拆除**，所需费用由违法者承担，并处以**五十万元以上一百万元以下的罚款**，同时**可以责令停产整治**。因此，**选项C错误**（罚款金额不正确），**选项D正确**。\n\n综上，正确答案是 **B** 和 **D**。\n\n最终答案为：\\boxed{B, D}
-
-    # #### **输出：**
-    # ['B', 'D']
-
-    # 如果用户没有给出最终答案，则返回空列表[]
-    # """
-
-    #         verify_template = """现在对下面的用户回答提按格式提取出答案（参考上面的例子，输出后面直接输出提取出的列表）
-    # #### **输入：**
-    # ##### 题目
-    # ```
-    # {question}
-    # ```
-
-    # ##### 用户回答（答案部分）
-    # {conclusion}
-
-    # #### **输出：**
-    # """
-    #         correctness = {name: defaultdict(list) for name in group_names}
-
-    #         verify_mapper = defaultdict(list)
-
-    #         for example in verify_queue:
-    #             if example.response is None:
-    #                 pass
-    #             else:
-    #                 prompt = f'{example.prompt}'
-    #                 response = example.response
-    #                 if "</think>" in response:
-    #                     response = response[response.index("</think>"):].strip()
-    #                 eval_prompt = verify_prompt + "\n\n" + verify_template.format(
-    #                     question=prompt,
-    #                     conclusion=response
-    #                 )
-    #                 verify_mapper[eval_prompt].append((example.index, example.tag))
-
-    #         _results = await self.get_verify_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.get_verify_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
-
-    #         count = 0
-    #         results_mapper = defaultdict(list)
-    #         for (k, v) in _results:
-    #             for meta in verify_mapper[k]:
-    #                 count += 1
-    #                 index, name = meta
-    #                 if v is not None:
-    #                     correctness[name][index].append(v)
-    #         return correctness
-
-    #     @classmethod
-    #     def respond_wo_context(cls, question, options, gt):
-    #         ans_format = cls.get_answer_format(gt)
-    #         return f'{ans_format}\n\n{cls.format_question(question=question, options=cls.add_distractor_options(options, gt), answer=None)}'
-
-    #     @classmethod
-    #     def respond_w_context(cls, question, options, gt):
-    #         ans_format = cls.get_answer_format(gt)
-    #         return f'[DOC]\n{gt["document"]}\n[/DOC]\n\n{ans_format}\n\n{cls.format_question(question=question, options=cls.add_distractor_options(options, gt), answer=None)}'
-
-    #     @classmethod
-    #     def get_answer_format(cls, gt):
-    #         lang_code = gt["lang_code"]
-    #         if lang_code == "zh":
-    #             return '回答下面的不定项选择题。'
-    #         else:
-    #             return 'Answer the following multiple-choice questions with one or more correct answers.'
-
-    #     @classmethod
-    #     def get_distractor_option_letters(cls, options):
-    #         return [cls.MULTICHOICE_LETTER[len(options)], cls.MULTICHOICE_LETTER[len(options)+1]]
-
-    #     @classmethod
-    #     def add_distractor_options(cls, options, gt):
-    #         lang_code = gt["lang_code"]
-    #         if lang_code == "zh":
-    #             distractors = ["以上都不正确", "无法判断"]
-    #         else:
-    #             distractors = ["None of the above", "Cannot be determined"]
-
-    #         new_options = copy.deepcopy(options)
-    #         new_options.extend(distractors)
-    #         return new_options
-
-    #     def do_not_simulate_respondent(self, debug):
-    #         return (
-    #             self.format,
-    #             self.language,
-    #         )
-
-    #     @classmethod
-    #     def format_question(cls, question, options, answer):
-    #         options_str = "\n".join([f'{x}) {y}' for x, y in zip(
-    #             cls.MULTICHOICE_LETTER, options)])
-    #         if answer is not None:
-    #             return f'Question: {question}\n\nOptions:\n{options_str}\n\nAnswer: {answer}'
-    #         else:
-    #             return f'Question: {question}\n\nOptions:\n{options_str}'
-
-    #     async def simulate_respondent(
-    #             self,
-    #             batch_data_sources,
-    #             batch_solution_str,
-    #             batch_ground_truth,
-    #             run_args=None,
-    #             debug=False):
-    #         assert run_args is not None
-
-    #         prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
-    #         answer_map = {}
-
-    #         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-    #             result = self.parse_solution_fn(solution_str)
-    #             if result is not None:
-    #                 question, options, answer = result
-    #                 # NOTICE
-    #                 answer_map[i] = (self.respond_wo_context(
-    #                     question, options, gt), (options, answer))
-
-    #                 skip = False
-    #                 if not debug:
-    #                     for module in self.do_not_simulate_respondent(debug=debug):
-    #                         cur_score = module.get_penalty_or_reward(
-    #                             solution_str, gt
-    #                         )
-    #                         if cur_score < 0.0:
-    #                             skip = True
-    #                             break
-    #                 if skip:
-    #                     continue
-
-    #                 lang_code = gt["lang_code"]
-    #                 for name, v in run_args.items():
-    #                     fn = v["fn"]
-    #                     _prompt = fn(question, options, gt)
-    #                     prompt2index[name][_prompt].append(i)
-    #         tasks = []
-    #         task_names = []
-
-    #         for name, v in prompt2index.items():
-    #             prompts = list(v.keys()) * run_args[name]["repeat"]
-
-    #             tasks.append(run_args[name]["model"].run(
-    #                 prompts, run_args[name]["max_concurrent_requests"], desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
-    #                 postprocess_fns=[
-    #                     partial(self.response_postprocess, debug=debug)] * len(prompts)
-    #             ))
-    #             task_names.append(name)
-    #         respond_questions = await aio.gather(*tasks)
-
-    #         # 验证答案正确性
-    #         verify_queue = []
-    #         for name, results in zip(task_names, respond_questions):
-    #             for (p, r) in results:
-    #                 for index in prompt2index[name][p]:
-    #                     verify_queue.append(VerifyInfo(
-    #                         index=index, tag=name, prompt=answer_map[index][
-    #                             0], response=r, answer=answer_map[index][1]
-    #                     ))
-
-    #         correctness = await self.verify_batch_results(
-    #             verify_queue=verify_queue,
-    #             max_concurrent_requests=64,
-    #             group_names=task_names
-    #         )
-    #         return correctness
-
-    #     def compute_score(self,
-    #                       batch_data_sources,
-    #                       batch_solution_str,
-    #                       batch_ground_truth,
-    #                       ):
-    #         async def main():
-    #             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
-    #         return aio.run(main())
-
-    #     def penalty_on(self):
-    #         return ("Format", "Lang")
-
-    #     def update_rollout_info(self, solution_str, ground_truth, difficulty):
-    #         parsed = self.parse_solution_fn(solution_str)
-    #         if parsed is None:
-    #             return
-    #         question, options, answer = parsed
-    #         inst_id = ground_truth["extra_info"]["uuid"]
-    #         if inst_id not in self.rollout_database:
-    #             self.rollout_database[inst_id] = LRUCache(
-    #                 capacity=self.record_rollout_max_capacity)
-
-    #         args = copy.deepcopy(self.args)
-    #         for k, v in args["difficulty_run_args"].items():
-    #             del v["fn"]
-    #             for field, value in v.items():
-    #                 if field == "model":
-    #                     args["difficulty_run_args"][k][field] = value.model
-
-    #         self.rollout_database[inst_id][question] = {
-    #             "prompt_generation_process": solution_str,
-    #             "question": question,
-    #             "options": options,
-    #             "answer": answer,
-    #             "difficulty": {
-    #                 "meta": args,
-    #                 "pass_rate": difficulty
-    #             }
-    #         }
-
-    #     async def get_difficulty_reward(
-    #             self,
-    #             batch_data_sources,
-    #             batch_solution_str,
-    #             batch_ground_truth,
-    #             run_args=None,
-    #             metric_args=None,
-    #             debug=False):
-    #         assert metric_args is not None, f'`metric_args` missed'
-    #         assert run_args is not None, f'`run_args` missed'
-
-    #         ans_lists = await self.simulate_respondent(
-    #             batch_data_sources,
-    #             batch_solution_str,
-    #             batch_ground_truth,
-    #             run_args=run_args,
-    #             debug=debug
-    #         )
-
-    #         full_rewards = []
-    #         pass_rates = []
-
-    #         for i in range(len(batch_solution_str)):
-    #             if i in list(ans_lists.values())[0]:
-    #                 base_score = 0.0
-
-    #                 result = self.parse_solution_fn(batch_solution_str[i])
-    #                 if result is None:
-    #                     pass_rates.append({})
-    #                     full_rewards.append(0.0)
-    #                     continue
-
-    #                 question, options, answer = result
-    #                 if len(options)+1 > len(self.MULTICHOICE_LETTER)-1:
-    #                     pass_rates.append({})
-    #                     full_rewards.append(0.0)
-    #                     continue
-
-    #                 distractors = self.get_distractor_option_letters(options)
-
-    #                 adv_name, weak_name = metric_args[
-    #                     "advantage"], metric_args["weakness"]
-    #                 # anchor_name = metric_args["anchor"]
-    #                 # _adv, _weak, _anch = ans_lists[adv_name][i], ans_lists[weak_name][i], ans_lists[anchor_name][i]
-    #                 _adv, _weak = ans_lists[adv_name][i], ans_lists[weak_name][i]
-
-    #                 ill_form_question = False
-    #                 for _ans in _adv+_weak:
-    #                     if not isinstance(_ans, list):
-    #                         ill_form_question = True
-    #                         break
-
-    #                 if not ill_form_question:
-    #                     if any([(not isinstance(_ans, list)) or len(_ans) > 1 for _ans in _adv+_weak]):
-    #                         ill_form_question = True
-
-    #                     if any([any(x in distractors for x in _ans) for _ans in _adv+_weak]):
-    #                         ill_form_question = True
-
-    #                 adv, weak = [], []
-    #                 anchor = []
-
-    #                 for a in _adv:
-    #                     if ill_form_question:
-    #                         adv.append(0.0)
-    #                     else:
-    #                         if len(a) > 0 and a[0] == answer:
-    #                             adv.append(1.0)
-    #                         else:
-    #                             adv.append(0.0)
-
-    #                 for w in _weak:
-    #                     if ill_form_question:
-    #                         weak.append(0.0)
-    #                     else:
-    #                         if len(w) > 0 and w[0] == answer:
-    #                             weak.append(1.0)
-    #                         else:
-    #                             weak.append(0.0)
-
-    #                 # for c in _anch:
-    #                 #     if ill_form_question:
-    #                 #         anchor.append(0.0)
-    #                 #     else:
-    #                 #         if len(c) > 0 and c[0] == answer:
-    #                 #             anchor.append(1.0)
-    #                 #         else:
-    #                 #             anchor.append(0.0)
-
-    #                 _pass_rate = {
-    #                     adv_name: f'{np.sum(adv)}/{len(adv)} ANS={answer} {_adv}',
-    #                     weak_name: f'{np.sum(weak)}/{len(weak)} ANS={answer} {_weak}',
-    #                     # anchor_name: f'{np.sum(anchor)}/{len(anchor)} ANS={answer} {_anch}',
-    #                 }
-    #                 pass_rates.append(_pass_rate)
-
-    #                 if len(weak) == 0 or len(adv) == 0:
-    #                     full_rewards.append(base_score)
-    #                     continue
-
-    #                 # 题目过难
-    #                 if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
-    #                     full_rewards.append(base_score)
-    #                     continue
-
-    #                 # 题目过易
-    #                 if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
-    #                     full_rewards.append(base_score)
-    #                     continue
-
-    #                 # adv 应该比 weakness 显著好
-    #                 if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
-    #                     full_rewards.append(base_score)
-    #                     continue
-
-    #                 # # 但是也不能好的太多
-    #                 # if np.mean(adv) - np.mean(weak) > metric_args["advantage_threshold_limit"]:
-    #                 #     full_rewards.append(base_score)
-    #                 #     continue
-
-    #                 # # adv 应该比 anchor 显著好
-    #                 # if not (np.mean(adv) > np.mean(anchor)):
-    #                 #     full_rewards.append(base_score)
-    #                 #     continue
-
-    #                 # 增加限制：带参考回答Majority Vote必须和答案一致
-    #                 majority_votes = defaultdict(int)
-    #                 for adv_attempt in _adv:
-    #                     if isinstance(adv_attempt, list) and len(adv_attempt) == 1:
-    #                         majority_votes[adv_attempt[0]] += 1
-
-    #                 success = True
-    #                 for k, v in majority_votes.items():
-    #                     if k != answer:
-    #                         if v >= majority_votes[answer]:
-    #                             success = False
-    #                             break
-    #                 if not success:
-    #                     full_rewards.append(base_score)
-    #                     continue
-
-    #                 # 难度奖励
-    #                 def calc_difficulty(scores, total_attempts):
-    #                     return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
-
-    #                 # 两部分构成
-    #                 in_context_difficulty = metric_args["weakness_weight"] * \
-    #                     calc_difficulty(weak, run_args[weak_name]["repeat"])
-    #                 # output_context_difficulty = metric_args["anchor_weight"] * (calc_difficulty(
-    #                 #     anchor, run_args[anchor_name]["repeat"]) - calc_difficulty(adv, run_args[adv_name]["repeat"]))
-
-    #                 base_score = [
-    #                     in_context_difficulty,
-    #                     # output_context_difficulty
-    #                 ]
-    #                 full_rewards.append(base_score)
-    #             else:
-    #                 pass_rates.append({})
-    #                 full_rewards.append(0.0)
-    #         return full_rewards, pass_rates
-
-    #     async def _compute_score(self,
-    #                              batch_data_sources,
-    #                              batch_solution_str,
-    #                              batch_ground_truth,
-    #                              ):
-    #         self.initialize_record_rollout_samples_module()
-
-    #         penalty = defaultdict(list)
-    #         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-    #             parsed = self.parse_solution_fn(solution_str)
-    #             if parsed is None:
-    #                 penalty[i].append(-2.0)
-    #             else:
-    #                 penalty[i].append(0.0)
-
-    #             for key in self.penalty_on():
-    #                 penalty[i].append(self.get_penalties()[key]
-    #                                   (solution_str, ground_truth))
-
-    #         # 难度奖励
-    #         difficulty_rewards, pass_rates = await self.get_difficulty_reward(
-    #             batch_data_sources,
-    #             batch_solution_str,
-    #             batch_ground_truth,
-    #             run_args=self.args["difficulty_run_args"],
-    #             metric_args=self.args["difficulty_metric_args"],
-    #         )
-
-    #         bad_q_penalties = await self.get_bad_question_penalty(
-    #             batch_data_sources,
-    #             batch_solution_str,
-    #             batch_ground_truth,
-    #             max_concurrent_requests=32
-    #         )
-
-    #         final_results = []
-    #         for i in range(len(batch_solution_str)):
-    #             scores = copy.deepcopy(penalty[i])
-    #             penalties = ["Parse"]+list(self.penalty_on())
-    #             penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
-    #                                        s in zip(penalties, scores)])
-
-    #             scores.append(bad_q_penalties[i])
-
-    #             # 难度奖励
-    #             _difficulty = difficulty_rewards[i]
-    #             _difficulty_score = np.sum(_difficulty) if isinstance(
-    #                 _difficulty, list) else _difficulty
-    #             scores.append(_difficulty_score)
-
-    #             cur_score = 0
-
-    #             for j, _score in enumerate(scores):
-    #                 if _score < 0:
-    #                     cur_score = _score
-    #                     break
-    #                 else:
-    #                     cur_score += _score
-
-    #             # 保存Rollout信息
-    #             if cur_score > 0 and self.split == "train":
-    #                 self.update_rollout_info(
-    #                     solution_str=batch_solution_str[i],
-    #                     ground_truth=batch_ground_truth[i],
-    #                     difficulty=pass_rates[i]
-    #                 )
-
-    #             final_results.append(cur_score)
-
-    #             if cur_score > 0 or (self.split == "valid") or (self.split == "train" and random.random() < 0.1):
-    #                 log = True
-    #                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
-    #             else:
-    #                 log = False
-
-    #             source = batch_ground_truth[i]["source"]
-
-    #             if log:
-    #                 print(
-    #                     f"--------------------------------{log_flag}--------------------------------")
-    #                 print(
-    #                     f"【Solution】({source})`{self.log_solution(batch_solution_str[i])}`")
-
-    #                 print(
-    #                     f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|BadQ={bad_q_penalties[i]}|{penalty_log_str}\n')
-
-    #                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
-
-    #                 if random.random() < 0.1 and thought is not None:
-    #                     print(f'[Thought]\n{thought}')
-    #                     print()
-
-    #         if self.split == "valid":
-    #             pass
-    #         self.save_rollout_info()
-
-    #         return final_results
-
-    # # DOC2QUERY_V3_DEFAULT_PARAMS = {
-    # #     "difficulty_run_args": {
-    # #         "w/o_content": {
-    # #             "model": Doc2QueryV3ComputeScore.get_weak_agent(),
-    # #             "repeat": 8,
-    # #             "fn": Doc2QueryV3ComputeScore.respond_wo_context,
-    # #             "desc": 'w/o ctx',
-    # #             "max_concurrent_requests": 256
-    # #         },
-    # #         "w_content": {
-    # #             "model": Doc2QueryV3ComputeScore.get_strong_agent(),
-    # #             "repeat": 8,
-    # #             "fn": Doc2QueryV3ComputeScore.respond_w_context,
-    # #             "desc": 'w ctx',
-    # #             "max_concurrent_requests": 256
-    # #         },
-    # #         "anchor": {
-    # #             "model": Doc2QueryV3ComputeScore.get_anchor_agent(),
-    # #             "repeat": 8,
-    # #             "fn": Doc2QueryV3ComputeScore.respond_w_context,
-    # #             "desc": 'anchor w ctx',
-    # #             "max_concurrent_requests": 64
-    # #         },
-    # #     },
-    # #     "difficulty_metric_args": {
-    # #         "advantage": 'w_content',
-    # #         "weakness": 'w/o_content',
-    # #         "anchor": 'anchor',
-    # #         "advantage_oversimplified_threshold": 8/8,
-    # #         "weakness_oversimplified_threshold": 7/8,
-    # #         "advantage_overcomplex_threshold": 1/8,
-    # #         "weakness_overcomplex_threshold": 1/8,
-    # #         "advantage_threshold": 2/8,
-    # #         "advantage_threshold_limit": 5/8,
-    # #         "advantage_weight": 0.0,
-    # #         "weakness_weight": 1.0,
-    # #         "anchor_weight": 1.5,
-    # #         "confidence_bonus_threshold": 2/8,
-    # #         "confidence_bonus_weight": 0.
-    # #     },
-    # # }
-
-    # DOC2QUERY_V3_DEFAULT_PARAMS = {
-    #     "difficulty_run_args": {
-    #         "w/o_content": {
-    #             "model": Doc2QueryV3ComputeScore.get_anchor_agent(),
-    #             "repeat": 10,
-    #             "fn": Doc2QueryV3ComputeScore.respond_wo_context,
-    #             "desc": 'w/o ctx',
-    #             "max_concurrent_requests": 64
-    #         },
-    #         "w_content": {
-    #             "model": Doc2QueryV3ComputeScore.get_strong_agent(),
-    #             "repeat": 4,
-    #             "fn": Doc2QueryV3ComputeScore.respond_w_context,
-    #             "desc": 'w ctx',
-    #             "max_concurrent_requests": 128
-    #         },
-    #     },
-    #     "difficulty_metric_args": {
-    #         "advantage": 'w_content',
-    #         "weakness": 'w/o_content',
-    #         "advantage_oversimplified_threshold": 4/4,
-    #         "weakness_oversimplified_threshold": 8/10,
-    #         "advantage_overcomplex_threshold": 1/4,
-    #         "weakness_overcomplex_threshold": 1/10,
-    #         "advantage_threshold": 1/4,
-    #         "advantage_weight": 0.0,
-    #         "weakness_weight": 1.0,
-    #         "anchor_weight": 1.5,
-    #         "confidence_bonus_threshold": 2/8,
-    #         "confidence_bonus_weight": 0.
-    #     },
-    # }
-
-    # _default_doc2query_v3_compute_score_train = Doc2QueryV3ComputeScore(
-    #     doc2query_v3_parse_solution_fn, split="train", args=DOC2QUERY_V3_DEFAULT_PARAMS)
-    # _default_doc2query_v3_compute_score_valid = Doc2QueryV3ComputeScore(
-    #     doc2query_v3_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
-    # doc2query_v3_default_compute_score_train = partial(
-    #     _default_doc2query_v3_compute_score_train.compute_score)
-    # doc2query_v3_default_compute_score_valid = partial(
-    #     _default_doc2query_v3_compute_score_valid.compute_score)
-
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-    # # DOC2QUERY V3
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-    # # Criteria RM
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-    # def xml_cot_parse_solution_fn(solution_str):
-    #     def get_thought(solution_str: str):
-    #         thought = re.findall(r'```xml.*```', solution_str, re.DOTALL)[0]
-    #         return thought
-
-    #     def get_conclusion(solution_str: str):
-    #         thought = get_thought(solution_str)
-    #         return solution_str[solution_str.index(thought)+len(thought):].strip()
-
-    #     try:
-    #         thought = get_thought(solution_str)
-    #     except Exception as err:
-    #         return None
-    #     try:
-    #         conclusion = get_conclusion(solution_str).strip()
-    #     except Exception as err:
-    #         return None
-    #     if any(_ in conclusion for _ in ("```xml", "<think>", "</think>", "<conclusion>", "</conclusion>")):
-    #         return None
-    #     try:
-    #         thought_content = re.findall(r'```xml(.*)```', thought, re.DOTALL)[0]
-    #     except Exception as err:
-    #         return None
-    #     thought_content = f'<doc> {thought_content} </doc>'
-    #     try:
-    #         root = ET.fromstring(thought_content)
-    #     except Exception as err:
-    #         print("err", err)
-    #         return None
-    #     if not all(tag in [child.tag for child in root]
-    #                for tag in ("think", "conclusion")):
-    #         return None
-    #     return root
-
-    # def criteria_parse_solution_fn(solution_str: str):
-    #     solution_str = postprocess_solution(solution_str)
-    #     if not solution_str.startswith("<think>"):
-    #         solution_str = f'<think>\n{solution_str}'
-
-    #     try:
-    #         root = xml_cot_parse_solution_fn(solution_str)
-    #     except Exception as err:
-    #         return None
-
-    #     if root is not None:
-    #         try:
-    #             conclusion = [
-    #                 child for child in root if child.tag == "conclusion"][0]
-
-    #             conclusion = conclusion.text.strip()
-    #         except Exception as err:
-    #             return None
-    #     else:
-    #         return None
-
-    #     return conclusion
-
-    # class CriteriaRMComputeScore(Doc2QueryV2ComputeScore):
-    #     def __init__(self,
-    #                  parse_solution_fn,
-    #                  split="train",
-    #                  args=None,
-    #                  ):
-    #         super().__init__(
-    #             split=split, parse_solution_fn=parse_solution_fn, args=args
-    #         )
-
-    #     @classmethod
-    #     def judge_with_criteria(cls, instruction, response, criteria):
-    #         format_template = """
-
-    # 你最终的回答部分需要包含**分析**和**结论**两部分
-    # - 分析：详细的分析过程
-    # - 结论：对于模型响应的打分，一定要给出最终的分数
-
-    # 按照下面的格式
-    # [分析开始]
-    # ... ...
-    # [分析结束]
-
-    # [结论开始]
-    # {得分}
-    # [结论结束]
-    # """
-
-    #         return f'[用户指令]\n{instruction}\n\n[模型响应]\n{response}\n\n[评价标准]\n{criteria}\n\n\n' + format_template
-
-    #     @classmethod
-    #     def get_judge_agent(cls):
-    #         return Agent(**{
-    #             "model": "distill_qwen25_7B",
-    #             "base_url": "http://10.130.142.154:8000/v1",
-    #             "api_keys": "EMPTY",
-    #             "request_kwargs": {
-    #                 "temperature": 0.65,
-    #                 "timeout": 600,
-    #                 "max_tokens": 8192,
-    #             },
-    #         })
-
-    #     def get_analyze_agent(cls):
-    #         return Agent(**{
-    #             "model": "qwen25_32B_instruct",
-    #             "base_url": "http://10.130.142.154:8000/v1",
-    #             "api_keys": "EMPTY",
-    #             "request_kwargs": {
-    #                 "temperature": 0.7,
-    #                 "timeout": 360,
-    #                 "max_tokens": 4096,
-    #             },
-    #         })
-
-    #     def response_postprocess(self, s, debug=False):
-    #         if "</think>" in s:
-    #             s = s[s.index("</think>")+len("</think>"):].strip()
-    #         return s
-
-    #     async def simulate_respondent(
-    #             self,
-    #             batch_data_sources,
-    #             batch_solution_str,
-    #             batch_ground_truth,
-    #             run_args=None):
-    #         assert run_args is not None
-
-    #         prompt2index = defaultdict(list)
-    #         answer_map = {}
-
-    #         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-    #             result = self.parse_solution_fn(solution_str)
-    #             if result is not None:
-    #                 criteria = result
-
-    #                 judge_candidates = gt["completions"]
-    #                 for cand in judge_candidates:
-    #                     fn = run_args["w_criteria"]["fn"]
-    #                     _prompt = fn(gt["instruction"], cand["response"], criteria)
-    #                     prompt2index[_prompt].append(
-    #                         (gt["extra_info"]["uuid"], cand["response_id"]))
-    #                     answer_map[gt["extra_info"]["uuid"]] = (
-    #                         gt["instruction"], cand.get("critique", "[No Critiques Here]"))
-
-    #         prompts = list(prompt2index.keys())
-
-    #         tasks = []
-    #         tasks.append(run_args["w_criteria"]["model"].run(
-    #             prompts, run_args["w_criteria"]["max_concurrent_requests"], desc=f'[Generate {run_args["w_criteria"]["desc"]} Responses {run_args["w_criteria"]["model"].model}]', pbar=False,
-    #             postprocess_fns=[partial(self.response_postprocess)] * len(prompts)
-    #         ))
-    #         judges = await aio.gather(*tasks)
-
-    #         # 提取分析和得分
-    #         verify_queue = []
-    #         for results_index, judge in enumerate(judges[0]):
-    #             p, r = judge
-    #             for (inst_id, resp_id) in prompt2index[p]:
-    #                 verify_queue.append(VerifyInfo(
-    #                     index=results_index,  # 对应`results`中的偏移量
-    #                     tag=resp_id,  # 对应instance index
-    #                     prompt=answer_map[inst_id][0],  #
-    #                     response=r,
-    #                     answer=answer_map[inst_id][1]  #
-    #                 ))
-
-    #         evaluations = await self.verify_batch_results(
-    #             verify_queue=verify_queue,
-    #             max_concurrent_requests=32,
-    #         )
-
-    #         return evaluations
-
-    #     async def verify_batch_results(self, verify_queue, max_concurrent_requests):
-    #         def validate_result(response):
-    #             s = response
-    #             try:
-    #                 conclusion = s.strip()
-
-    #                 score = re.findall(
-    #                     r'\"大模型评论员打分\": ([\d+\.]+)', conclusion)[0]
-    #                 if isinstance(score, str):
-    #                     score = float(score)
-    #                 assert isinstance(score, float)
-
-    #                 recall = re.findall(
-    #                     r'\"对人类指出的批评的覆盖度\": (\d+)', conclusion)[0]
-    #                 if isinstance(recall, str):
-    #                     recall = float(recall)
-    #                 assert isinstance(recall, float)
-    #                 assert recall in (0, 1, 2, 3, 4, 5)
-    #                 return (score, recall)
-
-    #             except Exception as err:
-    #                 raise PostprocessError(f'{err}')
-
-    #         verify_fewshots = """
-    # 下面是对于同一用户提问的相同回复的两条不同评论，第一个是人类评论员，第二个是大模型评论员；
-
-    # 任务：现在需要你按照要求帮我分析**大模型评论员**的评论内容
-    # 说明：任务包含两部分
-    # 第一部分：从**大模型评论员**的评论中提取出最终的分数（float格式）如果评论中没有给出具体的分数，赋0分
-    # 第二部分：分析**大模型评论员**的评论中是否覆盖**人类评论员**指出的批评？覆盖度1-5分，5分是最高分，分数仅包含1、2、3、4、5不包含小数点。
-
-    # #### 输出要求
-    # {分析内容}
-    # ```json
-    # {{
-    #     "大模型评论员打分": ***, # float
-    #     "对人类指出的批评的覆盖度": *** #
-    # }}
-    # ```
-
-    # 下面是一些例子
-
-    # #### 用户提问
-    # ```
-    # Can you provide a comprehensive list of stress management techniques using a bullet-point format in a [Mark down] document? Please include both physical and mental techniques that can be used to manage stress. Additionally, it would be helpful to categorize the techniques as short-term or long-term solutions. Thank you.
-    # ```
-
-    # #### **人类评论员**
-    # ```
-    # Your answer was well-organized and comprehensive, covering a variety of short-term and long-term stress management techniques. You also followed the instruction to use bullet-points and categorize the techniques. However, the instruction asked for a Markdown document, which requires specific formatting.
-
-    # To improve, use proper Markdown formatting, such as adding asterisks or dashes for bullet points and using double asterisks for bold text. Additionally, the note in the instruction asks for a blend of accuracy, positivity, and intrigue, while keeping the user engaged. Your response is accurate and positive, but adding a touch of intrigue or a fun fact could make it more engaging.
-    # ```
-
-    # #### **大模型评论员**
-    # ```
-
-    # [分析开始]
-    # 用户的请求明确要求提供一个结构化的压力管理技巧列表，并以Markdown格式呈现。用户还特别指出要将技巧分为短期和长期，并包含物理和心理方法。这意味着我需要确保内容全面且易于理解，同时满足分类要求。
-
-    # 首先，我需要确定哪些技巧属于短期和长期。短期技巧通常是一些快速应用的方法，如深呼吸、冥想或写作，这些方法可以在短时间内缓解压力。长期技巧则涉及更系统的行为，如规律的锻炼、健康的饮食习惯或良好的睡眠，这些需要更持续的努力。
-
-    # 其次，用户强调了物理和心理方法的结合，因此我需要确保每个类别中都涵盖这两种方法。例如，深呼吸和冥想是物理和心理的结合，而写作或绘画则是心理表达的方式。
-
-    # 此外，考虑到用户可能需要个性化的建议，我提醒用户根据自身情况选择最适合的方法，并建议在长期压力情况下寻求专业帮助。这不仅增加了回复的实用性，也体现了对用户需求的尊重。
-
-    # 最后，我组织了内容，确保每个类别下的技巧清晰易读，并使用了Markdown格式的列表结构，以提高可读性和专业性。
-    # [分析结束]
-
-    # [结论开始]
-    # 9
-    # [结论结束]
-    # ```
-
-    # #### 输出
-    # 分析：
-    # 大模型评论员的打分可从其结论中提取，为 9.0。人类评论员指出回复未使用特定 Markdown 格式及缺乏趣味性，而大模型评论员仅提及用了 Markdown 列表结构，未涉及人类指出的批评，覆盖度低。
-
-    # ``` json
-    # {{
-    #     "大模型评论员打分": 9.0,
-    #     "对人类指出的批评的覆盖度": 1
-    # }}
-    # ```
-
-    # #### 用户提问
-    # ```
-    # Can you recommend a car service that offers private day tours to Versailles from Paris?
-    # ```
-
-    # #### **人类评论员**
-    # ```
-    # Your answer is well-structured, informative, and it adheres to the instructions given. You provided two options, which gives the user a choice, and you included the important details about each service. Your reminder for the user to conduct further research and compare options is also valuable. However, you could improve by providing more sources for the user to verify the information. For example, you could suggest checking the companies' websites or other reliable platforms for reviews and up-to-date information.
-    # ```
-
-    # #### **大模型评论员**
-    # ```
-
-    # [分析开始]
-    # 模型响应中提供了两个具体的车服务公司：Cityrama 和 Versailles Express。这两个公司都详细介绍了其服务亮点，包括行程内容、语言支持和交通安排，这在满足用户需求方面做得很好，属于有用性高的内容。此外，两个公司都是知名且值得信赖的，因此安全性较高。信息真实可靠，没有虚构内容，因此真实性评分也较高。虽然模型没有直接比较两家公司的优劣，但提供了足够的信息供用户参考，因此在有用性和可靠性方面得分高。
-    # [分析结束]
-
-    # [结论开始]
-    # 10
-    # [结论结束]
-    # ```
-
-    # #### 输出
-    # 分析：
-    # 大模型评论员的打分可从其结论中提取，为 10.0。人类评论员指出回复可通过提供更多信息来源让用户验证信息，而大模型评论员的分析未涉及这一点，未覆盖人类指出的批评，覆盖度低。
-
-    # ``` json
-    # {{
-    #     "大模型评论员打分": 10.0,
-    #     "对人类指出的批评的覆盖度": 1
-    # }}
-    # ```
-    # """
-
-    #         verify_template = """
-    # #### 用户提问
-    # ```
-    # {instruction}
-    # ```
-
-    # #### **人类评论员**
-    # ```
-    # {human}
-    # ```
-
-    # #### **大模型评论员**
-    # ```
-    # {llm}
-    # ```
-
-    # #### 输出
-    # """
-    #         verify_mapper = defaultdict(list)
-
-    #         for info in verify_queue:
-    #             eval_prompt = verify_fewshots + verify_template.format(
-    #                 instruction=info.prompt,
-    #                 llm=info.response,
-    #                 human=info.answer
-    #             )
-    #             verify_mapper[eval_prompt].append(info.tag)
-
-    #         _results = await self.get_analyze_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Analyze Critics {self.get_analyze_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
-
-    #         evaluations = {}
-    #         for (k, v) in _results:
-    #             for resp_id in verify_mapper[k]:
-    #                 evaluations[resp_id] = v
-    #         return evaluations
-
-    #     async def rank_consistency(
-    #         self,
-    #         batch_data_sources,
-    #         batch_solution_str,
-    #         batch_ground_truth,
-    #         run_args=None,
-    #     ):
-    #         """
-    #             计算Criteria是否可以和人类偏好偏序一致
-    #         """
-    #         evaluation = await self.simulate_respondent(
-    #             batch_data_sources,
-    #             batch_solution_str,
-    #             batch_ground_truth,
-    #             run_args=run_args,
-    #         )
-    #         rewards = []
-    #         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-    #             judge_candidates = gt["completions"]
-    #             consistency = None
-    #             recall = []
-
-    #             for pair in itertools.combinations(judge_candidates, 2):
-    #                 if pair[0]["response_id"] in evaluation and pair[1]["response_id"] in evaluation:
-    #                     if (evaluation[pair[0]["response_id"]] is not None) and (evaluation[pair[1]["response_id"]] is not None):
-    #                         _consistency = False
-    #                         if pair[0]["overall_score"] > pair[1]["overall_score"]:
-    #                             if evaluation[pair[0]["response_id"]][0] > evaluation[pair[1]["response_id"]][0]:
-    #                                 _consistency = True
-    #                             else:
-    #                                 _consistency = False
-    #                         elif pair[0]["overall_score"] < pair[1]["overall_score"]:
-    #                             if evaluation[pair[0]["response_id"]][0] < evaluation[pair[1]["response_id"]][0]:
-    #                                 _consistency = True
-    #                             else:
-    #                                 _consistency = False
-    #                         else:  # 分数一样
-    #                             pass
-
-    #                         if consistency is None:
-    #                             consistency = _consistency
-    #                         else:
-    #                             consistency = consistency and _consistency
-
-    #             for cand in judge_candidates:
-    #                 if cand["response_id"] in evaluation and evaluation[cand["response_id"]] is not None:
-    #                     recall.append(evaluation[cand["response_id"]][1])
-    #             rewards.append((1.0 if consistency else 0.0, np.mean(
-    #                 recall)/5.0 if len(recall) > 0 else 0.0))
-    #         return rewards
-
-    #     def compute_score(self,
-    #                       batch_data_sources,
-    #                       batch_solution_str,
-    #                       batch_ground_truth,
-    #                       ):
-    #         async def main():
-    #             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
-    #         return aio.run(main())
-
-    #     async def _compute_score(self,
-    #                              batch_data_sources,
-    #                              batch_solution_str,
-    #                              batch_ground_truth,
-    #                              ):
-    #         rewards = await self.rank_consistency(
-    #             batch_data_sources,
-    #             batch_solution_str,
-    #             batch_ground_truth,
-    #             self.args["judge_run_args"],
-    #         )
-
-    #         final_results = []
-    #         for i, (gt, solution) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-    #             criteria = criteria_parse_solution_fn(solution)
-    #             cur_score = rewards[i][0]
-    #             if "critique" in gt:
-    #                 cur_score += rewards[i][1]
-
-    #             final_results.append(cur_score)
-
-    #             if rewards[i][0] > 0 or (self.split == "valid") or (self.split == "train" and random.random() < 0.1):
-    #                 log = True
-    #                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
-    #             else:
-    #                 log = False
-
-    #             source = batch_ground_truth[i]["source"]
-
-    #             if log:
-    #                 print(
-    #                     f"--------------------------------{log_flag}--------------------------------")
-    #                 print(
-    #                     f'【Solution】({source}) INSTRUCT=`{repr(self.clip_string(batch_ground_truth[i]["instruction"]))}`')
-    #                 print(
-    #                     f'【Solution】({source}) CRITERIA=\n{self.log_solution(batch_solution_str[i])}')
-    #                 print(
-    #                     f'[Final Reward]={cur_score:.3f}|Consist={rewards[i][0]}|Recall={rewards[i][1]}\n')
-
-    #                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
-
-    #                 if random.random() < 0.1 and thought is not None:
-    #                     print(f'[Thought]\n{thought}')
-    #                     print()
-
-    #         return final_results
-
-    #     def clip_string(self, s: str):
-    #         if len(s) > 1500:
-    #             return f'{s[:700]}... [省略] ...{s[-800:]}'
-    #         return s
-
-    #     def log_solution(self, solution):
-    #         criteria = criteria_parse_solution_fn(solution)
-    #         if criteria is None:
-    #             return self.clip_string(solution)
-    #         return self.clip_string(criteria)
-
-    # CRITERIA_DEFAULT_PARAMS = {
-    #     "judge_run_args": {
-    #         "w_criteria": {
-    #             "model": CriteriaRMComputeScore.get_judge_agent(),
-    #             "fn": CriteriaRMComputeScore.judge_with_criteria,
-    #             "desc": 'judge w criteria',
-    #             "max_concurrent_requests": 128
-    #         },
-    #     },
-    # }
-
-    # _default_criteria_rm_compute_score_train = CriteriaRMComputeScore(
-    #     criteria_parse_solution_fn, split="train", args=CRITERIA_DEFAULT_PARAMS)
-    # _default_criteria_rm_compute_score_valid = CriteriaRMComputeScore(
-    #     criteria_parse_solution_fn, split="valid", args=CRITERIA_DEFAULT_PARAMS)
-    # criteria_rm_default_compute_score_train = _default_criteria_rm_compute_score_train.compute_score
-    # criteria_rm_default_compute_score_valid = _default_criteria_rm_compute_score_valid.compute_score
-
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-    # # Criteria RM
-    # # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+DOC2QUERY_V2_DEFAULT_PARAMS = {
+    "difficulty_run_args": {
+        "w/o_content": {
+            "model": {
+                "model": "qwen25_32B_instruct",
+                "base_url": "http://10.130.142.223:8000/v1",
+                "api_keys": "EMPTY",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 2048,
+                },
+            },
+            "repeat": 8,
+            "fn": "respond_wo_context",
+            "desc": 'w/o ctx'
+        },
+        "w_content": {
+            "model": {
+                "model": "service_dv3_for_tongjian",
+                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "repeat": 8,
+            "fn": "",
+            "desc": 'w ctx'
+        },
+    },
+    "difficulty_metric_args": {
+        "advantage": 'w_content',
+        "weakness": 'w/o_content',
+        "advantage_oversimplified_threshold": 8/8,
+        "weakness_oversimplified_threshold": 7/8,
+        "advantage_overcomplex_threshold": 1/8,
+        "weakness_overcomplex_threshold": 1/8,
+        "advantage_threshold": 2/8,
+        "advantage_weight": 0.0,
+        "weakness_weight": 2.0,
+        "confidence_bonus_threshold": 2/8,
+        "confidence_bonus_weight": 0.
+    },
+    "verify_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.223:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.8,
+                "timeout": 360,
+                "max_tokens": 2048,
+            },
+        }
+    },
+    "similarity_run_args":  {
+        "threshold": {
+            3: 0.5,
+            4: 1.0
+        },
+        "weight": 0.25,
+    }
+}
+
+# _default_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScore(
+#     calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_DEFAULT_PARAMS)
+# _default_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScore(
+#     calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_DEFAULT_PARAMS)
+# doc2query_v2_default_stage1_compute_score_train = partial(
+#     _default_doc2query_v2_compute_score_train.compute_score, stage="1")
+# doc2query_v2_default_stage1_compute_score_valid = partial(
+#     _default_doc2query_v2_compute_score_valid.compute_score, stage="1")
+
+# class Doc2QueryV2ComputeScoreWithQwen32bRespondent(Doc2QueryV2ComputeScore):
+#     def __init__(self, parse_solution_fn, split="train", args=None):
+#         super().__init__(
+#             split=split, parse_solution_fn=parse_solution_fn, args=args
+#         )
+
+#     @classmethod
+#     def get_weak_agent(cls):
+#         return Agent(**{
+#             "model": "qwen25_32B_instruct",
+#             "base_url": "http://10.130.142.154:8000/v1",
+#             "api_keys": "EMPTY",
+#             "request_kwargs": {
+#                 "temperature": 0.8,
+#                 "timeout": 360,
+#                 "max_tokens": 2048,
+#             },
+#         })
+
+#     @classmethod
+#     def get_strong_agent(cls):
+#         return cls.get_weak_agent()
+
+#     @classmethod
+#     def get_verify_agent(cls):
+#         return cls.get_weak_agent()
+
+# DOC2QUERY_QWEN32B_RESPONDENT_PARAMS = {
+#     "difficulty_run_args": {
+#         "w/o_content": {
+#             "model": Doc2QueryV2ComputeScoreWithQwen32bRespondent.get_weak_agent(),
+#             "repeat": 32,
+#             "fn": Doc2QueryV2ComputeScoreWithQwen32bRespondent.respond_wo_context,
+#             "desc": 'w/o ctx'
+#         },
+#         "w_content": {
+#             "model": Doc2QueryV2ComputeScoreWithQwen32bRespondent.get_strong_agent(),
+#             "repeat": 32,
+#             "fn": Doc2QueryV2ComputeScoreWithQwen32bRespondent.respond_w_context,
+#             "desc": 'w ctx'
+#         }
+#     },
+#     "difficulty_metric_args": {
+#         "advantage": 'w_content',
+#         "weakness": 'w/o_content',
+#         "advantage_oversimplified_threshold": 32/32,
+#         "weakness_oversimplified_threshold": 28/32,
+#         "advantage_overcomplex_threshold": 1/32,
+#         "weakness_overcomplex_threshold": 1/32,
+#         "advantage_threshold": 3/16,
+#         "advantage_weight": 0.0,
+#         "weakness_weight": 1.0,
+#         "confidence_bonus_threshold": 2/8,
+#         "confidence_bonus_weight": 0.
+#     },
+#     "similarity_run_args":  {
+#         "threshold": {
+#             3: 0.5,
+#             4: 1.0
+#         },
+#         "weight": 0.25,
+#     }
+# }
+
+# _qwen32b_respondent_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScoreWithQwen32bRespondent(
+#     calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_QWEN32B_RESPONDENT_PARAMS)
+# _qwen32b_respondent_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScoreWithQwen32bRespondent(
+#     calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_QWEN32B_RESPONDENT_PARAMS)
+
+# class Doc2QueryV2ComputeScoreWithQwQ32bRespondent(Doc2QueryV2ComputeScore):
+#     def __init__(self, parse_solution_fn, split="train", args=None):
+#         super().__init__(
+#             split=split, parse_solution_fn=parse_solution_fn, args=args
+#         )
+
+#     @classmethod
+#     def get_weak_agent(cls):
+#         # return Agent(**{
+#         #     "model": "DeepSeek-V3-0324",
+#         #     "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
+#         #     "api_keys": "EMPTY",
+#         #     "request_kwargs": {
+#         #         "temperature": 0.9,
+#         #         "timeout": 360,
+#         #         "max_tokens": 4096,
+#         #     }
+#         # })
+#         return Agent(**{
+#             "model": "distill_qwen25_7B",
+#             "base_url": "http://10.130.142.154:8000/v1",
+#             "api_keys": "EMPTY",
+#             "request_kwargs": {
+#                 "temperature": 0.65,
+#                 "timeout": 600,
+#                 "max_tokens": 32768,
+#             },
+#         })
+
+#     @classmethod
+#     def get_strong_agent(cls):
+#         return cls.get_weak_agent()
+
+#     @classmethod
+#     def get_verify_agent(cls):
+#         return Agent(**{
+#             "model": "qwen25_32B_instruct",
+#             "base_url": "http://10.130.142.154:8000/v1",
+#             "api_keys": "EMPTY",
+#             "request_kwargs": {
+#                 "temperature": 0.8,
+#                 "timeout": 360,
+#                 "max_tokens": 2048,
+#             },
+#         })
+
+# DOC2QUERY_QWQ32B_RESPONDENT_PARAMS = {
+#     "difficulty_run_args": {
+#         "w/o_content": {
+#             "model": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.get_weak_agent(),
+#             "repeat": 10,
+#             "fn": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.respond_wo_context,
+#             "desc": 'w/o ctx'
+#         },
+#         "w_content": {
+#             "model": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.get_strong_agent(),
+#             "repeat": 8,
+#             "fn": Doc2QueryV2ComputeScoreWithQwQ32bRespondent.respond_w_context,
+#             "desc": 'w ctx'
+#         }
+#     },
+#     "difficulty_metric_args": {
+#         "advantage": 'w_content',
+#         "weakness": 'w/o_content',
+#         "advantage_oversimplified_threshold": 8/8,
+#         "weakness_oversimplified_threshold": 8/10,
+#         "advantage_overcomplex_threshold": 1/8,
+#         "weakness_overcomplex_threshold": 1/10,
+#         "advantage_threshold": 2/8,
+#         "advantage_weight": 0.0,
+#         "weakness_weight": 2.0,
+#         "confidence_bonus_threshold": 2/8,
+#         "confidence_bonus_weight": 0.
+#     },
+#     "similarity_run_args":  {
+#         "threshold": {
+#             3: 0.5,
+#             4: 1.0
+#         },
+#         "weight": 0.25,
+#     }
+# }
+
+# _qwq32b_respondent_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScoreWithQwQ32bRespondent(
+#     calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_QWQ32B_RESPONDENT_PARAMS)
+# _qwq32b_respondent_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScoreWithQwQ32bRespondent(
+#     calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_QWQ32B_RESPONDENT_PARAMS)
+
+# class Doc2QueryV2ComputeScoreWithQwen3_8BRespondent(Doc2QueryV2ComputeScore):
+#     def __init__(self, parse_solution_fn, split="train", args=None):
+#         super().__init__(
+#             split=split, parse_solution_fn=parse_solution_fn, args=args
+#         )
+
+#     @classmethod
+#     def get_weak_agent(cls):
+#         return Agent(**{
+#             "model": "",  # Qwen3-8B
+#             "base_url": "https://sd14mdmqramstnm4j9mk0.apigateway-cn-beijing.volceapi.com/v1",
+#             "api_keys": "2ce8f136-861e-4ea9-8c30-5a57078d2ed8",
+#             "request_kwargs": {
+#                 "temperature": 0.7,
+#                 "timeout": 360,
+#                 "max_tokens": 32768,
+#             },
+#         })
+
+#     @classmethod
+#     def get_strong_agent(cls):
+#         return cls.get_weak_agent()
+
+#     @classmethod
+#     def get_verify_agent(cls):
+#         return Agent(**{
+#             "model": "qwen25_32B_instruct",
+#             "base_url": "http://10.130.142.154:8000/v1",
+#             "api_keys": "EMPTY",
+#             "request_kwargs": {
+#                 "temperature": 0.8,
+#                 "timeout": 360,
+#                 "max_tokens": 2048,
+#             },
+#         })
+
+# DOC2QUERY_QWEN3_8B_RESPONDENT_PARAMS = {
+#     "difficulty_run_args": {
+#         "w/o_content": {
+#             "model": Doc2QueryV2ComputeScoreWithQwen3_8BRespondent.get_weak_agent(),
+#             "repeat": 10,
+#             "fn": Doc2QueryV2ComputeScoreWithQwen3_8BRespondent.respond_wo_context,
+#             "desc": 'w/o ctx'
+#         },
+#         "w_content": {
+#             "model": Doc2QueryV2ComputeScoreWithQwen3_8BRespondent.get_strong_agent(),
+#             "repeat": 8,
+#             "fn": Doc2QueryV2ComputeScoreWithQwen3_8BRespondent.respond_w_context,
+#             "desc": 'w ctx'
+#         }
+#     },
+#     "difficulty_metric_args": {
+#         "advantage": 'w_content',
+#         "weakness": 'w/o_content',
+#         "advantage_oversimplified_threshold": 8/8,
+#         "weakness_oversimplified_threshold": 8/10,
+#         "advantage_overcomplex_threshold": 1/8,
+#         "weakness_overcomplex_threshold": 1/10,
+#         "advantage_threshold": 2/8,
+#         "advantage_weight": 0.0,
+#         "weakness_weight": 2.0,
+#         "confidence_bonus_threshold": 2/8,
+#         "confidence_bonus_weight": 0.
+#     },
+#     "similarity_run_args":  {
+#         "threshold": {
+#             3: 0.5,
+#             4: 1.0
+#         },
+#         "weight": 0.25,
+#     }
+# }
+
+# _qwen3_8b_respondent_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScoreWithQwen3_8BRespondent(
+#     calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_QWEN3_8B_RESPONDENT_PARAMS)
+# _qwen3_8b_respondent_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScoreWithQwen3_8BRespondent(
+#     calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_QWEN3_8B_RESPONDENT_PARAMS)
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# # Doc2Query V2
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# # 问题合成
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# class FabricateQAComputeScore(Doc2QueryV2ComputeScore):
+#     def __init__(self, parse_solution_fn, split="train", args=None):
+#         super().__init__(
+#             split=split, parse_solution_fn=parse_solution_fn, args=args
+#         )
+#         self.task_name = "FABRICATE_QA"
+
+#     @classmethod
+#     def respond(cls, question, answer_type, gt):
+#         _if = cls.get_instruct(gt, answer_type)
+#         return f'{_if}\n\n{question}'
+
+#     @classmethod
+#     def get_verify_agent(cls):
+#         return cls.get_weak_agent()
+
+#     @classmethod
+#     def get_weak_agent(cls):
+#         return Agent(**{
+#             "model": "qwen25_32B_instruct",
+#             "base_url": "http://10.130.142.154:8000/v1",
+#             "api_keys": "EMPTY",
+#             "request_kwargs": {
+#                 "temperature": 0.9,
+#                 "timeout": 360,
+#                 "max_tokens": 2048,
+#             },
+#         })
+
+#     @classmethod
+#     def get_strong_agent(cls):
+#         return Agent(**{
+#             "model": "DeepSeek-V3-0324",
+#             "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
+#             "api_keys": "EMPTY",
+#             "request_kwargs": {
+#                 "temperature": 0.9,
+#                 "timeout": 360,
+#                 "max_tokens": 4096,
+#             }
+#         })
+
+# FABRICATE_QA_DEFAULT_PARAMS = {
+#     "difficulty_run_args": {
+#         "weak": {
+#             "model": FabricateQAComputeScore.get_weak_agent(),
+#             "repeat": 24,
+#             "fn": FabricateQAComputeScore.respond,
+#             "desc": 'weak'
+#         },
+#         "strong": {
+#             "model": FabricateQAComputeScore.get_strong_agent(),
+#             "repeat": 6,
+#             "fn": FabricateQAComputeScore.respond,
+#             "desc": 'strong'
+#         }
+#     },
+#     "difficulty_metric_args": {
+#         "advantage": 'strong',
+#         "weakness": 'weak',
+#         "advantage_oversimplified_threshold": 1.0,
+#         "weakness_oversimplified_threshold": 21/24,
+#         "advantage_overcomplex_threshold": 1/6,
+#         "weakness_overcomplex_threshold": 1/24,
+#         "advantage_threshold": 1/6,
+#         "advantage_weight": 0.5,
+#         "weakness_weight": 0.5,
+#         "confidence_bonus_threshold": 2/6,
+#         "confidence_bonus_weight": 0.25
+#     },
+#     "similarity_run_args":  {
+#         "threshold": {
+#             3: 0.5,
+#             4: 1.0
+#         },
+#         "weight": 0.25,
+#     }
+# }
+
+# _default_fabricate_qa_compute_score_train = FabricateQAComputeScore(
+#     calc_qa_parse_solution_fn, split="train", args=FABRICATE_QA_DEFAULT_PARAMS)
+# _default_fabricate_qa_compute_score_valid = FabricateQAComputeScore(
+#     calc_qa_parse_solution_fn, split="valid", args=FABRICATE_QA_DEFAULT_PARAMS)
+# fabricate_qa_default_stage1_compute_score_train = partial(
+#     _default_fabricate_qa_compute_score_train.compute_score, stage="1")
+# fabricate_qa_default_stage1_compute_score_valid = partial(
+#     _default_fabricate_qa_compute_score_valid.compute_score, stage="1")
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# # 问题合成
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# class FabricateAIOComputeScore(object):
+#     def __init__(self, processors=None):
+#         self.processors = processors
+
+#     def compute_score(self,
+#                       batch_data_sources,
+#                       batch_solution_str,
+#                       batch_ground_truth,
+#                       stage,
+#                       max_concurrent_requests=MAX_CONCURRENT,
+#                       ):
+#         source_mapper = {}
+#         splitter = defaultdict(list)
+
+#         for i, (source, sol, gt) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+#             source_mapper[i] = source
+#             splitter[source].append((source, sol, gt))
+#             source_mapper[i] = (source, len(splitter[source])-1)
+
+#         results = {}
+#         for source, flatten_elems in splitter.items():
+#             _batch_data_sources, _batch_solution_str, _batch_ground_truth = [], [], []
+#             for source, sol, gt in flatten_elems:
+#                 _batch_data_sources.append(source)
+#                 _batch_solution_str.append(sol)
+#                 _batch_ground_truth.append(gt)
+
+#             _results = self.processors[source].compute_score(
+#                 batch_data_sources=_batch_data_sources,
+#                 batch_solution_str=_batch_solution_str,
+#                 batch_ground_truth=_batch_ground_truth,
+#                 stage=stage,
+#                 max_concurrent_requests=max_concurrent_requests
+#             )
+#             results[source] = _results
+
+#         final_results = []
+#         for i, _ in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+#             source, group_index = source_mapper[i]
+#             final_results.append(results[source][group_index])
+#         return final_results
+
+# _default_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _default_doc2query_v2_compute_score_train,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
+# })
+# _default_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _default_doc2query_v2_compute_score_valid,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+# })
+# fabricate_aio_default_stage1_compute_score_train = partial(
+#     _default_fabricate_aio_compute_score_train.compute_score, stage="1")
+# fabricate_aio_default_stage1_compute_score_valid = partial(
+#     _default_fabricate_aio_compute_score_valid.compute_score, stage="1")
+# fabricate_aio_default_stage2_compute_score_train = partial(
+#     _default_fabricate_aio_compute_score_train.compute_score, stage="2",
+#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
+# fabricate_aio_default_stage2_compute_score_valid = partial(
+#     _default_fabricate_aio_compute_score_valid.compute_score, stage="2",
+#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
+
+# # Qwen2.5-32B Respondent
+# _qwen32b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwen32b_respondent_doc2query_v2_compute_score_train,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
+# })
+# _qwen32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwen32b_respondent_doc2query_v2_compute_score_valid,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+# })
+# fabricate_aio_qwen32b_respondent_stage2_compute_score_train = partial(
+#     _qwen32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
+#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
+# fabricate_aio_qwen32b_respondent_stage2_compute_score_valid = partial(
+#     _qwen32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
+#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
+
+# # QwQ-32B Respondent
+# _qwq32b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwq32b_respondent_doc2query_v2_compute_score_train,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
+# })
+# _qwq32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwq32b_respondent_doc2query_v2_compute_score_valid,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+# })
+# fabricate_aio_qwq32b_respondent_stage2_compute_score_train = partial(
+#     _qwq32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
+#     max_concurrent_requests=128)
+# fabricate_aio_qwq32b_respondent_stage2_compute_score_valid = partial(
+#     _qwq32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
+#     max_concurrent_requests=128)
+
+# # Qwen3-8B Respondent
+# _qwen3_8b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwen3_8b_respondent_doc2query_v2_compute_score_train,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
+# })
+# _qwen3_8b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwen3_8b_respondent_doc2query_v2_compute_score_valid,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+# })
+# fabricate_aio_qwen3_8b_respondent_compute_score_train = partial(
+#     _qwen3_8b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
+#     max_concurrent_requests=256)
+# fabricate_aio_qwen3_8b_respondent_compute_score_valid = partial(
+#     _qwen3_8b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
+#     max_concurrent_requests=256)
+
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# # 问题合成
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# # SALT
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# def salt_parse_solution_fn(solution_str: str, remove_option_letter=True):
+#     if solution_str.count("</question>") > 1:
+#         return None
+
+#     if solution_str.count("</think>") > 1:
+#         return None
+
+#     solution_str = postprocess_solution(solution_str)
+#     if not solution_str.startswith("<think>"):
+#         solution_str = f'<think>\n{solution_str}'
+
+#     try:
+#         thought = re.findall(r'<think>.*</think>',
+#                              solution_str, re.DOTALL)[0]
+#     except Exception as err:
+#         return None
+
+#     solution_str = solution_str.replace(thought, "")
+
+#     try:
+#         conclusion = re.findall(r'<question>(.*)</question>',
+#                                 solution_str, re.DOTALL)[0]
+#     except Exception as err:
+#         return None
+#     if ("<question>" in conclusion) or ("</question>" in conclusion):
+#         return None
+
+#     try:
+#         question = conclusion[conclusion.index(
+#             "Question: ")+len("Question: "):conclusion.index("Answer:")].strip()
+
+#         answer = conclusion[conclusion.index(
+#             "Answer:")+len("Answer:"):].strip()
+
+#         return question, answer
+#     except Exception as err:
+#         return None
+
+# class SALTQuestionAnswerFormatVerify(PenaltyOrReward):
+#     def __init__(self, parse_solution_fn=calc_qa_parse_solution_fn):
+#         self.parse_solution_fn = parse_solution_fn
+
+#     def get_penalty_or_reward(self, solution_str, ground_truth):
+#         solution_str = self.parse_solution_fn(solution_str)
+
+#         if solution_str is None:
+#             return 0.0
+
+#         question, answer = solution_str
+
+#         # 中文
+#         if contain_chinese(answer):
+#             tokens = list(jieba.cut(answer))
+#         else:
+#             tokens = list(answer.split(" "))
+
+#         # 答案长度过长
+#         if len(tokens) > 10:
+#             return -1.6
+
+#         if any(kw in answer for kw in ("A. ", "B. ", "C. ", "D. ", "A) ", "B) ", "C) ", "D)")):
+#             return -1.6
+
+#         # 疑似选择题
+#         if all(kw in question for kw in ("A. ", "B. ", "C. ", "D. ")):
+#             return -1.6
+
+#         # 疑似选择题
+#         if all(kw in question for kw in ("A) ", "B) ", "C) ", "D) ")):
+#             return -1.6
+
+#         # 疑似选择题
+#         if all(kw in question for kw in ("A）", "B）", "C）", "D）")):
+#             return -1.6
+
+#         # 疑似选择题
+#         if any(kw == answer.strip() for kw in ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N")):
+#             return -1.6
+
+#         return 0.0
+
+# class SALTLanguageConsistency(LanguageConsistency):
+#     def __init__(self, parse_solution_fn=calc_qa_parse_solution_fn):
+#         super().__init__(
+#             parse_solution_fn=parse_solution_fn
+#         )
+
+#     def get_penalty_or_reward(self, solution_str, ground_truth):
+#         raw_solution_str = solution_str
+#         solution_str = self.parse_solution_fn(solution_str)
+
+#         if solution_str is None:
+#             return 0.0
+
+#         result = solution_str
+#         if len(result) == 2:
+#             question, answer = result
+#         elif len(result) == 3:
+#             question, options, answer = result
+#         else:
+#             raise NotImplementedError
+
+#         lang_code = ground_truth["lang_code"]
+
+#         base_score = -1.2
+
+#         if lang_code == "en" and contain_chinese(question):
+#             return base_score
+#         elif lang_code == "zh" and (not contain_chinese(question)):
+#             return base_score
+
+#         base_score += 0.4
+
+#         if lang_code == "en":
+#             if contain_chinese(raw_solution_str):
+#                 return base_score
+#         elif lang_code == "zh":
+#             if not self.detect_zh(raw_solution_str, 0.75):
+#                 return base_score
+#         else:
+#             pass
+
+#         return 0.0
+
+# class SALTBadQuestionDetection(BadQuestionDetection):
+#     def __init__(self, parse_solution_fn=calc_qa_parse_solution_fn, ngram=4):
+#         super().__init__(
+#             parse_solution_fn=parse_solution_fn
+#         )
+#         self.ngram = ngram
+
+#     def get_penalty_or_reward(self, solution_str, ground_truth):
+#         raw_solution_str = solution_str
+#         solution_str = self.parse_solution_fn(solution_str)
+
+#         if solution_str is None:
+#             return 0.0
+
+#         question, answer = solution_str
+
+#         # 基于规则的问题检测
+#         contam, _ = self.valid_ten_gram(
+#             self.generate_ngrams(question, self.ngram, ground_truth),
+#             self.generate_ngrams(
+#                 ground_truth["question"], self.ngram, ground_truth)
+#         )
+#         if contam:
+#             return -0.4
+#         return 0.0
+
+#     def replace_spaces(self, text):
+#         # 这个函数接受一个字符串作为输入，然后返回一个新的字符串，其中所有的三个或更多连续的空格都被替换为两个空格。
+#         # 这个正则表达式 ' {3,}' 的意思是匹配三个或更多的连续空格。{3,} 是一个数量词，表示匹配前面的字符（在这里是空格）三次或更多次。
+#         return re.sub(' {4,}', '  ', text)
+
+#     def generate_ngrams(self, text, n, ground_truth):
+#         text = self.replace_spaces(text)
+#         text = self.tokenize(text, ground_truth)
+#         ngrams = set()
+#         for i in range(len(text) - n + 1):
+#             ngram = ' '.join(text[i:i + n])
+#             if re.search('[a-zA-Z\u4e00-\u9fff]', ngram):
+#                 if ngram not in ngrams:
+#                     ngrams.add(ngram)
+#         return ngrams
+
+#     def valid_ten_gram(self, set1, set2, verbose=False):
+#         intersection = set1.intersection(set2)
+#         # union = set1.union(set2)
+#         if verbose:
+#             if len(intersection) > 0:
+#                 pass
+#         return len(intersection) > 0, intersection
+
+#     def tokenize(self, s, ground_truth):
+#         lang_code = ground_truth["lang_code"]
+#         tokens = tokenize(s, lang_code)
+#         return tokens
+
+# class QuestionSimilarityPenalty(QuestionSimilarity):
+#     """ 问题相似度惩罚：新问题应当与原问题有比较大的差异
+#     """
+
+#     def __init__(self, parse_solution_fn, authentic_key="question"):
+#         super().__init__(
+#             parse_solution_fn=parse_solution_fn, authentic_key=authentic_key
+#         )
+
+#     def get_penalty_or_reward(self, solution_str, ground_truth):
+#         if ground_truth.get(self.key, None) is None:
+#             return 0.0
+#         try:
+#             solution_str = self.parse_solution_fn(solution_str)
+
+#             if solution_str is None:
+#                 return 0.0
+#             question, answer = solution_str
+
+#             if ground_truth.get(self.key, None):
+#                 gt = ground_truth[self.key]
+#             else:
+#                 return 0.0
+
+#             gt_tokens = " ".join(tokenize(gt.lower(), "en"))
+#             sl_tokens = " ".join(tokenize(question.lower(), "en"))
+#             bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
+#             similarity = bleu / 100
+#             return -similarity  # 权重0.5
+#         except Exception as err:
+#             return 0.0
+
+# class SALTComputeScore(Doc2QueryV2ComputeScore):
+#     def __init__(self,
+#                  parse_solution_fn,
+#                  split="train",
+#                  args=None,
+#                  record_rollout_samples_path=None,
+#                  record_rollout_max_capacity=100,
+#                  ):
+#         super().__init__(
+#             parse_solution_fn=parse_solution_fn, split=split,
+#             args=args,
+#             record_rollout_samples_path=record_rollout_samples_path,
+#             record_rollout_max_capacity=record_rollout_max_capacity
+#         )
+#         self.task_name = "SALT"
+
+#         self.format = SALTQuestionAnswerFormatVerify(
+#             parse_solution_fn=self.parse_solution_fn)
+#         self.language = SALTLanguageConsistency(
+#             parse_solution_fn=self.parse_solution_fn)
+#         self.bad_question_detection = SALTBadQuestionDetection(
+#             parse_solution_fn=self.parse_solution_fn
+#         )
+#         self.similarity_penalty = QuestionSimilarityPenalty(
+#             parse_solution_fn=self.parse_solution_fn)
+
+#     @classmethod
+#     def get_weak_agent(cls):
+#         return Agent(**{
+#             "model": "DeepSeek-V3-0324",
+#             "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
+#             "api_keys": "EMPTY",
+#             "request_kwargs": {
+#                 "temperature": 0.8,
+#                 "timeout": 360,
+#                 "max_tokens": 4096,
+#             }
+#         })
+
+#     @classmethod
+#     def get_strong_agent(cls):
+#         return Agent(**{
+#             "model": "DeepSeek-V3-0324",
+#             "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
+#             "api_keys": "EMPTY",
+#             "request_kwargs": {
+#                 "temperature": 0.8,
+#                 "timeout": 360,
+#                 "max_tokens": 4096,
+#             }
+#         })
+
+#     @classmethod
+#     def get_verify_agent(cls):
+#         return Agent(**{
+#             "model": "qwen25_32B_instruct",
+#             "base_url": "http://10.130.142.154:8000/v1",
+#             "api_keys": "EMPTY",
+#             "request_kwargs": {
+#                 "temperature": 0.8,
+#                 "timeout": 360,
+#                 "max_tokens": 2048,
+#             },
+#         })
+
+#     def get_penalties(self) -> Dict[str, Callable]:
+#         return {
+#             "Format": self.format.get_penalty_or_reward,
+#             "Lang": self.language.get_penalty_or_reward,
+#             "BadQ": self.bad_question_detection.get_penalty_or_reward,
+#             "QSimPenalty": self.similarity_penalty.get_penalty_or_reward,
+#         }
+
+#     def do_not_simulate_respondent(self, debug):
+#         if debug:
+#             return (
+#                 self.format,
+#                 self.language,
+#             )
+#         return (
+#             self.format,
+#             self.language,
+#             self.bad_question_detection,
+#         )
+
+#     @classmethod
+#     def self_taught_template(cls, question, answer, gt):
+#         """ 拒绝采样：合成题不提供答案,需要模型自己rollout对 """
+#         return question
+
+#     def self_taught_response_postprocess(self, s, debug=False):
+#         if "</think>" in s:
+#             s = s[s.index("</think>")+len("</think>"):]
+#         return s
+
+#     async def self_taught(self,
+#                           batch_data_sources,
+#                           batch_solution_str,
+#                           batch_ground_truth,
+#                           run_args=None,
+#                           max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"],
+#                           debug=False):
+#         assert run_args is not None
+
+#         prompt2index = defaultdict(list)
+#         answer_map = {}
+
+#         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+#             result = self.parse_solution_fn(solution_str)
+#             if result is not None:
+#                 question, answer = result
+#                 answer_map[i] = (question, answer)
+
+#                 skip = False
+#                 if not debug:
+#                     for module in self.do_not_simulate_respondent(debug=debug):
+#                         cur_score = module.get_penalty_or_reward(
+#                             solution_str, gt
+#                         )
+#                         if cur_score < 0.0:
+#                             skip = True
+#                             break
+#                 if skip:
+#                     continue
+
+#                 lang_code = gt["lang_code"]
+#                 fn = run_args["self_taught"]["fn"]
+#                 _prompt = fn(question, answer, gt)
+#                 prompt2index[_prompt].append(i)
+
+#         # 拒绝采样
+#         prompts = list(prompt2index.keys()) * run_args["self_taught"]["repeat"]
+#         results = await run_args["self_taught"]["model"].run(
+#             prompts, max_concurrent_requests, desc=f'[Generate Self-Taught Response {run_args["self_taught"]["model"].model}]', pbar=False,
+#             postprocess_fns=[
+#                 partial(self.self_taught_response_postprocess, debug=debug)] * len(prompts)
+#         )
+#         # 答案验证
+#         verify_queue = []
+#         for results_index, (p, r) in enumerate(results):
+#             for index in prompt2index[p]:
+#                 # 注：验证的是合成题准确率
+#                 verify_queue.append(VerifyInfo(
+#                     index=results_index,  # 对应`results`中的偏移量
+#                     tag=index,  # 对应instance index
+#                     prompt=answer_map[index][0],  # 合成题问题
+#                     response=r,
+#                     answer=answer_map[index][1]  # 合成题答案
+#                 ))
+
+#         correctness = await self.verify_batch_results(
+#             verify_queue=verify_queue,
+#             max_concurrent_requests=64,
+#             group_names=list(range(len(batch_solution_str)))
+#         )
+
+#         self_taught_rationale = [None] * len(batch_solution_str)
+
+#         for results_index, (p, r) in enumerate(results):
+#             for index in prompt2index[p]:
+#                 try:
+#                     # Reject Sample: 回答正确
+#                     if correctness[index][results_index][0] > 0.0:
+#                         self_taught_rationale[index] = r
+#                 except Exception as err:
+#                     continue
+#         return self_taught_rationale
+
+#     @classmethod
+#     def respond_wo_context(cls, context, gt):
+#         if gt["lang_code"] == "en":
+#             extra = "Think Step by Step and give your thinking process"
+#         else:
+#             extra = "你需要仔细思考，给出思考过程。"
+#         return f'{extra}\n\n' + gt["instruct"].format(question=gt["question"])
+
+#     @classmethod
+#     def respond_w_context(cls, context, gt):
+#         if gt["lang_code"] == "en":
+#             extra = "Think Step by Step and give your thinking process"
+#         else:
+#             extra = "你需要仔细思考，给出思考过程。"
+#         return f'{context}\n\n\n\n\n{extra}\n\n{gt["instruct"].format(question=gt["question"])}'
+
+#     async def simulate_respondent(
+#             self,
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth,
+#             run_args=None,
+#             max_concurrent_requests=MAX_CONCURRENT,
+#             debug=False):
+#         assert run_args is not None
+
+#         synthetic_qa_rationales = await self.self_taught(
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth,
+#             run_args=run_args,
+#             max_concurrent_requests=max_concurrent_requests,
+#             debug=debug
+#         )
+#         prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
+
+#         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+#             result = self.parse_solution_fn(solution_str)
+#             if result is not None:
+#                 fabricate_question, _ = result
+
+#                 # 合成题没有rollout出正确答案
+#                 if synthetic_qa_rationales[i] is None:
+#                     continue
+
+#                 skip = False
+#                 if not debug:
+#                     for module in self.do_not_simulate_respondent(debug=debug):
+#                         cur_score = module.get_penalty_or_reward(
+#                             solution_str, gt
+#                         )
+#                         if cur_score < 0.0:
+#                             skip = True
+#                             break
+#                 if skip:
+#                     continue
+
+#                 lang_code = gt["lang_code"]
+#                 for name, v in run_args.items():
+#                     if name == "self_taught":
+#                         continue
+#                     fn = v["fn"]
+#                     context = f'```\n[Question]\n{fabricate_question}\n\n[Solution]\n{synthetic_qa_rationales[i]}\n```'
+#                     _prompt = fn(context, gt)
+#                     prompt2index[name][_prompt].append(i)
+
+#         tasks = []
+#         task_names = []
+#         for name, v in prompt2index.items():
+#             if name == "self_taught":
+#                 continue
+
+#             prompts = list(v.keys()) * run_args[name]["repeat"]
+#             tasks.append(run_args[name]["model"].run(
+#                 prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
+#                 postprocess_fns=[
+#                     partial(self.response_postprocess, debug=debug)] * len(prompts)
+#             ))
+#             task_names.append(name)
+#         respond_questions = await aio.gather(*tasks)
+
+#         # 验证答案正确性
+#         verify_queue = []
+#         for task_name, results in zip(task_names, respond_questions):
+#             for (p, r) in results:
+#                 for index in prompt2index[task_name][p]:
+#                     # 注：验证时是验证在真题上的准确率
+#                     verify_queue.append(VerifyInfo(
+#                         index=index,
+#                         tag=task_name,
+#                         prompt=batch_ground_truth[index]["question"],
+#                         response=r,
+#                         answer=batch_ground_truth[index]["answer"]))
+
+#         correctness = await self.verify_batch_results(
+#             verify_queue=verify_queue,
+#             max_concurrent_requests=64,
+#             group_names=task_names
+#         )
+
+#         return correctness
+
+#     def postprocess_authentic_question_response(self, s):
+#         s = s.strip()
+#         conclusion = s
+
+#         last_line = conclusion.split("\n")
+#         if len(last_line) > 0 and "Answer: " in last_line[-1].strip():
+#             last_line = last_line[-1].strip()
+#             last_line = last_line[last_line.index(
+#                 "Answer: ")+len("Answer: "):].strip()
+#             return last_line
+
+#         if len(last_line) > 5:
+#             return "\n".join(last_line[-5:]).strip()
+
+#         return conclusion
+
+#     async def verify_batch_results(self, verify_queue, max_concurrent_requests, group_names):
+#         def validate_result(response):
+#             s = response
+#             try:
+#                 conclusion = s.strip()
+
+#                 judge = re.findall(
+#                     r'\"判断结果\": \"(.*)\"', conclusion)
+#                 if len(judge) > 0 and judge[0] in ("正确", "错误"):
+#                     return judge[0] == "正确"
+
+#                 conclusion = conclusion[conclusion.index(
+#                     "```json")+len("```json"):].strip()
+#                 conclusion = conclusion[:conclusion.index("```")].strip()
+#                 try:
+#                     conclusion = json.loads(conclusion)
+#                     if conclusion["判断结果"] not in ("正确", "错误"):
+#                         raise PostprocessError(f'corrupt')
+#                     return conclusion["判断结果"] == "正确"
+#                 except Exception as err:
+#                     try:
+#                         conclusion = re.findall(
+#                             r'\"判断结果\": \"(.*)\"', conclusion)[0]
+#                         if not conclusion in ("正确", "错误"):
+#                             raise PostprocessError(f'corrupt')
+#                         return conclusion == "正确"
+#                     except Exception as err:
+#                         raise PostprocessError(f'{err}')
+#             except Exception as err:
+#                 raise PostprocessError(f'{err}')
+
+#         verify_prompt = """### **基于标准答案判断回答是否正确**
+# 任务描述：请根据提供的**题目**、**用户回答（结论部分）**和**标准答案**，判断用户回答是否正确。
+
+# #### 输出要求
+# ```json
+# {
+# "判断结果": "正确/错误",
+# }
+# ```
+
+# 现在对下面的回答判断正确性
+# """
+
+#         verify_template = """
+# #### **输入：**
+# ##### 题目
+# ```
+# {question}
+# ```
+
+# ##### 用户回答（答案部分）
+# {conclusion}
+
+# ##### 标准答案
+# {answer}
+
+# #### **输出：**
+# """
+#         correctness = {name: defaultdict(list) for name in group_names}
+
+#         verify_mapper = defaultdict(list)
+
+#         for info in verify_queue:
+#             conclusion = info.response
+
+#             # 基于规则解析答案
+#             if conclusion is None:
+#                 correctness[info.tag][info.index].append(0.0)
+#             else:
+#                 conclusion = self.postprocess_authentic_question_response(
+#                     conclusion)
+#                 eval_prompt = verify_prompt + "\n\n" + verify_template.format(
+#                     question=info.prompt,
+#                     answer=info.answer,
+#                     conclusion=conclusion
+#                 )
+#                 verify_mapper[eval_prompt].append((info.index, info.tag))
+
+#         _results = await self.get_verify_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.get_verify_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
+
+#         results_mapper = defaultdict(list)
+#         for (k, v) in _results:
+#             for meta in verify_mapper[k]:
+#                 index, name = meta
+#                 if v is not None:
+#                     correctness[name][index].append(1.0 if v else 0.0)
+#         return correctness
+
+#     async def get_learnable_reward(
+#             self,
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth,
+#             run_args=None,
+#             metric_args=None,
+#             max_concurrent_requests=MAX_CONCURRENT,
+#             debug=False):
+
+#         assert metric_args is not None, f'`metric_args` missed'
+#         assert run_args is not None, f'`run_args` missed'
+
+#         correctness = await self.simulate_respondent(
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth,
+#             run_args=run_args,
+#             max_concurrent_requests=max_concurrent_requests,
+#             debug=debug
+#         )
+
+#         full_rewards = []
+#         pass_rates = []
+
+#         for i in range(len(batch_solution_str)):
+#             if i in list(correctness.values())[0]:
+#                 base_score = 0.0
+#                 pass_rates.append({
+#                     k: f'{np.sum(v[i])}/{len(v[i])}' for k, v in correctness.items()
+#                 })
+
+#                 try:
+#                     adv_name, weak_name = metric_args["advantage"], metric_args["weakness"]
+#                     adv, weak = correctness[adv_name][i], correctness[weak_name][i]
+
+#                     if len(weak) == 0 or len(adv) == 0:
+#                         full_rewards.append(base_score)
+#                         continue
+
+#                     # adv 应该比 weakness 显著好
+#                     if not np.mean(adv) > np.mean(weak):
+#                         full_rewards.append(base_score)
+#                         continue
+
+#                     if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
+#                         full_rewards.append(base_score)
+#                         continue
+
+#                     # # 固定难度降低奖励
+#                     # diff_reduct_bonus = 1.2
+
+#                     # 难度函数
+#                     def calc_difficulty(scores, total_attempts):
+#                         return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
+
+#                     # 难度降低奖励
+#                     diff_reduct_bonus = 0.5  # 基础分
+
+#                     # 原问题难度 - 合成题Fewshot难度
+
+#                     diff_reduct_bonus += (calc_difficulty(weak, run_args[weak_name]["repeat"])-calc_difficulty(
+#                         adv, run_args[adv_name]["repeat"])) * metric_args["difficulty_reduction_bonus_weight"]
+
+#                     base_score = [
+#                         diff_reduct_bonus
+#                     ]
+
+#                     full_rewards.append(base_score)
+#                 except Exception as err:
+#                     print(f'[ERROR] {err}')
+#                     full_rewards.append(base_score)
+#             else:
+#                 pass_rates.append({})
+#                 full_rewards.append(0.0)
+#         return full_rewards, pass_rates
+
+#     async def get_hack_penalty(
+#         self,
+#         batch_data_sources,
+#         batch_solution_str,
+#         batch_ground_truth,
+#         max_concurrent_requests=128,
+#         run_args=None
+#     ):
+#         assert run_args is not None
+
+#         indices = []
+#         fabricates, authentics = [], []
+#         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+#             fabricate = self.parse_solution_fn(sol)
+#             if fabricate is not None and gt.get("question", None):
+#                 fabricates.append(fabricate[0])
+#                 authentics.append(gt["question"])
+#                 indices.append(i)
+#             else:
+#                 continue
+
+#         similarity = await self._hack_detect(
+#             agent=self.get_verify_agent(),
+#             authentic=authentics,
+#             fabricate=fabricates,
+#             max_concurrent_requests=max_concurrent_requests
+#         )
+
+#         scores = [0.0] * len(batch_solution_str)
+#         for sim, index in zip(similarity, indices):
+#             if sim is None:
+#                 pass
+#             else:
+#                 _score = 0.0
+#                 for threshold, set_val in run_args["threshold"].items():
+#                     if sim >= threshold:
+#                         _score = min(_score, set_val)
+#                 scores[index] = _score * run_args["weight"]
+#         return scores
+
+#     async def get_similarity_penalty(
+#         self,
+#         batch_data_sources,
+#         batch_solution_str,
+#         batch_ground_truth,
+#         max_concurrent_requests=128,
+#         run_args=None
+#     ):
+#         assert run_args is not None
+
+#         indices = []
+#         fabricates, authentics = [], []
+#         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+#             fabricate = self.parse_solution_fn(sol)
+#             if fabricate is not None and gt.get("question", None):
+#                 fabricates.append(fabricate[0])
+#                 authentics.append(gt["question"])
+#                 indices.append(i)
+#             else:
+#                 continue
+
+#         similarity = await question_similarity(
+#             agent=self.get_verify_agent(),
+#             authentic=authentics,
+#             fabricate=fabricates,
+#             max_concurrent_requests=max_concurrent_requests
+#         )
+
+#         scores = [0.0] * len(batch_solution_str)
+#         for sim, index in zip(similarity, indices):
+#             if sim is None:
+#                 pass
+#             else:
+#                 _score = 0.0
+#                 for threshold, set_val in run_args["threshold"].items():
+#                     if sim >= threshold:
+#                         _score = min(_score, set_val)
+#                 scores[index] = _score * run_args["weight"]
+#         return scores
+
+#     def compute_score(self,
+#                       batch_data_sources,
+#                       batch_solution_str,
+#                       batch_ground_truth,
+#                       max_concurrent_requests=MAX_CONCURRENT,
+#                       ):
+#         async def main():
+#             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, max_concurrent_requests=max_concurrent_requests)
+#         return aio.run(main())
+
+#     def log_solution(self, solution):
+#         norm = self.parse_solution_fn(solution)
+#         if norm is None:
+#             return repr(self.clip_string(solution))
+#         return repr(self.format_question(norm[0], norm[1]))
+
+#     def format_question(self, question, answer):
+#         return f'Question: {question}\nAnswer: {answer}'
+
+#     def log_ground_truth(self, ground_truth):
+#         return repr(self.format_question(ground_truth["question"], ground_truth["answer"])
+#                     )
+
+#     def update_rollout_info(self, solution_str, ground_truth, difficulty):
+#         parsed = self.parse_solution_fn(solution_str)
+#         if parsed is None:
+#             return
+#         question, answer = parsed
+#         inst_id = ground_truth["extra_info"]["uuid"]
+#         if inst_id not in self.rollout_database:
+#             self.rollout_database[inst_id] = LRUCache(
+#                 capacity=self.record_rollout_max_capacity)
+
+#         args = copy.deepcopy(self.args)
+#         for k, v in args["learnable_run_args"].items():
+#             del v["fn"]
+#             for field, value in v.items():
+#                 if field == "model":
+#                     args["learnable_run_args"][k][field] = value.model
+
+#         self.rollout_database[inst_id][question] = {
+#             "prompt_generation_process": solution_str,
+#             "question": question,
+#             "answer": answer,
+#             "difficulty": {
+#                 "meta": args,
+#                 "pass_rate": difficulty
+#             }
+#         }
+
+#     def save_rollout_info(self):
+#         """将缓存保存为JSON文件"""
+#         data = {k: {"capacity": v.capacity, "items": list(v.get_items()), "access_order": list(
+#             v._access_order.keys())} for k, v in self.rollout_database.items()}
+
+#         with open(self.save_rollout_samples_path, "wt") as f:
+#             json.dump(data, f, ensure_ascii=False, indent="  ")
+
+#     def penalty_on(self):
+#         return ("Format", "Lang", "BadQ", "QSimPenalty")
+
+#     async def _compute_score(self,
+#                              batch_data_sources,
+#                              batch_solution_str,
+#                              batch_ground_truth,
+#                              max_concurrent_requests=MAX_CONCURRENT,
+#                              debug=False
+#                              ):
+#         self.initialize_record_rollout_samples_module()
+
+#         penalty = defaultdict(list)
+#         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+#             parsed = self.parse_solution_fn(solution_str)
+#             if parsed is None:
+#                 penalty[i].append(-2.0)
+#             else:
+#                 penalty[i].append(0.0)
+
+#             for key in self.penalty_on():
+#                 penalty[i].append(self.get_penalties()[key]
+#                                   (solution_str, ground_truth))
+
+#         # 难度降低奖励
+#         difficulty_reduction_rewards, pass_rates = await self.get_learnable_reward(
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth,
+#             run_args=self.args["learnable_run_args"],
+#             metric_args=self.args["learnable_metric_args"],
+#             max_concurrent_requests=max_concurrent_requests,
+#             debug=debug
+#         )
+#         # 相似度惩罚
+#         similarity_penalties = await self.get_similarity_penalty(
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth,
+#             max_concurrent_requests=max_concurrent_requests,
+#             run_args=self.args["similarity_run_args"],
+#         )
+
+#         hack_penalties = await self.get_hack_penalty(
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth,
+#             max_concurrent_requests=max_concurrent_requests,
+#             run_args=self.args["hack_detection_run_args"],
+#         )
+
+#         final_results = []
+#         for i in range(len(batch_solution_str)):
+#             scores = copy.deepcopy(penalty[i])
+
+#             penalties = ["Parse"]+list(self.penalty_on())
+#             penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
+#                                         s in zip(penalties, scores)])
+#             _difficulty = difficulty_reduction_rewards[i]
+#             _difficulty_score = np.sum(_difficulty) if isinstance(
+#                 _difficulty, list) else _difficulty
+#             scores.append(_difficulty_score)
+
+#             cur_score = 0
+
+#             for j, _score in enumerate(scores):
+#                 if (j == penalties.index("QSimPenalty")):  # BLEU
+#                     if _difficulty_score > 0:
+#                         cur_score += _score
+#                 else:
+#                     if _score < 0:
+#                         cur_score = _score
+#                         break
+#                     else:
+#                         cur_score += _score
+
+#             if _difficulty_score > 0:
+#                 cur_score += similarity_penalties[i]
+
+#             # Hack惩罚
+#             cur_score += hack_penalties[i]
+
+#             # 保存Rollout信息
+#             if cur_score > 0 and self.split == "train":
+#                 self.update_rollout_info(
+#                     solution_str=batch_solution_str[i],
+#                     ground_truth=batch_ground_truth[i],
+#                     difficulty=pass_rates[i]
+#                 )
+
+#             final_results.append(cur_score)
+
+#             if cur_score > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+#                 log = True
+#                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+#             else:
+#                 log = False
+
+#             if cur_score == -2.0:
+#                 log = True
+#                 log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN CORRUPT RESPONSE]"
+
+#             source = batch_ground_truth[i]["source"]
+
+#             if log:
+#                 print(
+#                     f"--------------------------------{log_flag}--------------------------------")
+#                 print(
+#                     f"【Solution】({source})`{self.log_solution(batch_solution_str[i])}`")
+#                 try:
+#                     print(
+#                         f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
+#                 except Exception as err:
+#                     pass
+#                 print(
+#                     f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|DiffReduction={str(difficulty_reduction_rewards[i])}|SimPenalty={str(similarity_penalties[i])}|Hack={str(hack_penalties[i])}|{penalty_log_str}\n')
+
+#                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
+
+#                 if (random.random() < 0.1 or cur_score > 0.) and thought is not None:
+#                     print(f'[Thought]\n{thought}')
+#                     print()
+
+#                 if cur_score == -2.0:
+#                     print(f'[Response]\n{batch_solution_str[i]}')
+#                     print()
+
+#                 if self.split == "valid":
+#                     pass
+
+#                 self.save_rollout_info()
+
+#         return final_results
+
+# SALT_DEFAULT_PARAMS = {
+#     "learnable_run_args": {
+#         "self_taught": {
+#             "model": SALTComputeScore.get_weak_agent(),
+#             "fn": SALTComputeScore.self_taught_template,
+#             "repeat": 8,
+#         },
+#         "w/o_content": {
+#             "model": SALTComputeScore.get_weak_agent(),
+#             "repeat": 8,
+#             "fn": SALTComputeScore.respond_wo_context,
+#             "desc": 'w/o ctx'
+#         },
+#         "w_content": {
+#             "model": SALTComputeScore.get_strong_agent(),
+#             "repeat": 8,
+#             "fn": SALTComputeScore.respond_w_context,
+#             "desc": 'w ctx'
+#         },
+#     },
+#     "learnable_metric_args": {
+#         "advantage": 'w_content',
+#         "weakness": 'w/o_content',
+#         "advantage_threshold": 2/8,
+#         "difficulty_reduction_bonus_weight": 1.0
+#     },
+#     "similarity_run_args":  {
+#         "threshold": {
+#             4: -0.5,
+#             5: -1.0
+#         },
+#         "weight": 1.0,
+#     },
+#     "hack_detection_run_args":  {
+#         "threshold": {
+#             3: -1.5,
+#             4: -2.0
+#         },
+#         "weight": 1.0,
+#     }
+# }
+
+# _default_salt_compute_score_train = SALTComputeScore(
+#     salt_parse_solution_fn, split="train", args=SALT_DEFAULT_PARAMS)
+# _default_salt_compute_score_valid = SALTComputeScore(
+#     salt_parse_solution_fn, split="valid", args=SALT_DEFAULT_PARAMS)
+# salt_default_compute_score_train = partial(
+#     _default_salt_compute_score_train.compute_score, max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
+# salt_default_compute_score_valid = partial(
+#     _default_salt_compute_score_valid.compute_score, max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
+
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# # SALT
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# # DOC2QUERY V3
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# def doc2query_v3_parse_solution_fn(solution_str: str, remove_option_letter=True):
+#     if not solution_str.startswith("<think>"):
+#         solution_str = f'<think>\n{solution_str}'
+
+#     if solution_str.count("</question>") > 1:
+#         return None
+
+#     if solution_str.count("</think>") > 1:
+#         return None
+
+#     solution_str = postprocess_solution(solution_str)
+
+#     if not solution_str.startswith("<think>"):
+#         return None
+
+#     if not solution_str.endswith("</question>"):
+#         return None
+
+#     try:
+#         thought = re.findall(r'<think>.*</think>',
+#                              solution_str, re.DOTALL)[0]
+#     except Exception as err:
+#         return None
+
+#     solution_str = solution_str.replace(thought, "")
+#     try:
+#         conclusion = re.findall(r'<question>(.*)</question>',
+#                                 solution_str, re.DOTALL)[0]
+#     except Exception as err:
+#         return None
+
+#     if ("<question>" in conclusion) or ("</question>" in conclusion):
+#         return None
+
+#     try:
+#         question = conclusion[conclusion.index(
+#             "Question: ")+len("Question: "):conclusion.index("Options:")].strip()
+#         options = conclusion[conclusion.index(
+#             "Options:")+len("Options:"):conclusion.index("Answer:")].strip()
+#         if remove_option_letter:
+#             options = re.findall(r'[A-W]\)\s*(.*)', options)
+#         else:
+#             options = re.findall(r'([A-W]\)\s*.*)', options)
+#         options = [_.strip() for _ in options]
+
+#         answer = conclusion[conclusion.index("Answer:"):].strip()
+#         answer = re.findall(r'Answer:\s*([A-W])', answer)[0].strip()
+
+#         # 选项有重复
+#         if len(options) != len(set(options)):
+#             return None
+#         return question, options, answer
+#     except Exception as err:
+#         return None
+
+# class Doc2QueryV3QuestionAnswerFormatVerify(SALTQuestionAnswerFormatVerify):
+#     def __init__(self, parse_solution_fn=calc_qa_parse_solution_fn):
+#         self.parse_solution_fn = parse_solution_fn
+
+#     def get_penalty_or_reward(self, solution_str, ground_truth):
+#         def match_decimal(text):
+#             # 正则表达式模式：匹配整数部分（可选的正负号 + 数字）+ 小数点 + 小数部分（至少一位数字）
+#             pattern = r'[-+]?\d+\.\d+'
+#             return re.findall(pattern, text)
+
+#         solution_str = self.parse_solution_fn(solution_str)
+
+#         if solution_str is None:
+#             return 0.0
+
+#         question, options, _ = solution_str
+
+#         for option in options:
+#             if contain_chinese(option):
+#                 tokens = list(jieba.cut(option))
+#             else:
+#                 tokens = list(option.split(" "))
+
+#             # 答案长度过长
+#             if len(tokens) > 20:
+#                 return -1.6
+
+#             # 疑似判断题
+#             if option.strip().lower() in ("true", "false", "正确", "错误"):
+#                 return -1.6
+
+#         return 0.0
+
+# class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
+#     MULTICHOICE_LETTER = ('A', 'B', 'C', 'D', 'E', 'F', 'G',
+#                           'H', 'I', 'J', 'K', 'L')
+
+#     def __init__(self,
+#                  parse_solution_fn,
+#                  split="train",
+#                  args=None,
+#                  record_rollout_samples_path=None,
+#                  record_rollout_max_capacity=100,
+#                  ):
+
+#         super().__init__(
+#             split=split, parse_solution_fn=parse_solution_fn, args=args,
+#             record_rollout_samples_path=record_rollout_samples_path, record_rollout_max_capacity=record_rollout_max_capacity
+#         )
+#         self.task_name = "DOC2QUERY_V3"
+
+#         self.format = Doc2QueryV3QuestionAnswerFormatVerify(
+#             parse_solution_fn=self.parse_solution_fn)
+#         self.language = SALTLanguageConsistency(
+#             parse_solution_fn=self.parse_solution_fn)
+
+#     @classmethod
+#     def get_weak_agent(cls):
+#         return Agent(**{
+#             "model": "DeepSeek-V3-0324",
+#             "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
+#             "api_keys": "EMPTY",
+#             "request_kwargs": {
+#                 "temperature": 0.9,
+#                 "timeout": 360,
+#                 "max_tokens": 4096,
+#             }
+#         })
+
+#     @classmethod
+#     def get_strong_agent(cls):
+#         return cls.get_weak_agent()
+
+#     @classmethod
+#     def get_anchor_agent(cls):
+#         return Agent(**{
+#             "model": "qwen25_32B_instruct",
+#             "base_url": "http://10.130.142.154:8000/v1",
+#             "api_keys": "EMPTY",
+#             "request_kwargs": {
+#                 "temperature": 0.9,
+#                 "timeout": 360,
+#                 "max_tokens": 4096,
+#             },
+#         })
+
+#     def get_penalties(self) -> Dict[str, Callable]:
+#         return {
+#             "Format": self.format.get_penalty_or_reward,
+#             "Lang": self.language.get_penalty_or_reward,
+#         }
+
+#     def response_postprocess(self, s, debug=False):
+#         if "</think>" in s:
+#             s = s[s.index("</think>")+len("</think>"):]
+
+#         if "**Final Answer**" in s:
+#             s = s[s.index("**Final Answer**")+len("**Final Answer**"):]
+#         if "**Final Solution**" in s:
+#             s = s[s.index("**Final Solution**")+len("**Final Solution**"):]
+
+#         if debug:
+#             return s
+#         try:
+#             s = s.strip()
+#             conclusion = s
+#             if "最终答案是" in conclusion:
+#                 conclusion = conclusion[conclusion.rindex(
+#                     "最终答案是")+len("最终答案是"):].strip()
+#                 return conclusion
+#             else:
+#                 conclusion = conclusion[conclusion.rindex(
+#                     "final answer is")+len("final answer is"):].strip()
+#                 return conclusion
+#         except Exception as err:
+#             try:
+#                 s = s.strip()
+#                 return s
+#             except Exception as err:
+#                 raise PostprocessError(f'parse conclusion failure')
+
+#     async def verify_batch_results(self, verify_queue, max_concurrent_requests, group_names):
+#         def validate_result(response):
+#             try:
+#                 response = response.strip()
+#                 try:
+#                     if "\n\n" in response and len(response.split("\n\n")) > 1:
+#                         response = response.split("\n\n")[0].strip()
+#                     ans_list = eval(response.strip())
+#                 except Exception as err:
+#                     if "\n\n" in response and len(response.split("\n\n")) > 1:
+#                         response = response.split("\n\n")[1].strip()
+#                         ans_list = eval(response.strip())
+#                     else:
+#                         if "**输出：**" in response:
+#                             response = response[response.index(
+#                                 "**输出：**")+len("**输出：**"):].strip()
+#                         ans_list = eval(response.strip())
+
+#                 if not isinstance(ans_list, list):
+#                     raise PostprocessError(f'Parse Python List Failed')
+#                 if not all(_ans in self.MULTICHOICE_LETTER for _ans in ans_list):
+#                     raise PostprocessError(f'Parse Python List Failed')
+#                 return ans_list
+#             except Exception as err:
+#                 raise PostprocessError(f'Parse Python List Failed')
+
+#         verify_prompt = """### 按列表格式把用户回答的答案选项提取出来。
+
+# 下面是一些例子
+# #### **输入：**
+# ##### 题目
+# ```
+# If the depositor has died, but the holder of the deposit certificate does not inform the savings institution about the inheritance process, nor presents a judgment from the local court where the deposit is held, and directly goes to the savings institution to withdraw or transfer the deceased depositor's funds, the savings institution will consider it ( ). Any disputes over the inheritance of the deposit that arise later ( ). ( ) (From the \"Savings Management Regulations,\" Order No. 107 of the State Council of the People's Republic of China)\nA. Normal withdrawal or transfer\nB. Abnormal withdrawal or transfer\nC. The savings institution is not responsible\nD. The savings institution is partially responsible
+# ```
+
+# ##### 用户回答（答案部分）
+# According to Article 40 of the \"Savings Management Regulations\" (Order No. 107 of the State Council of the People's Republic of China), if the depositor has died, but the holder of the deposit certificate does not inform the savings institution about the inheritance process nor presents a judgment from the local court where the deposit is held, and directly attempts to withdraw or transfer the funds, the savings institution will consider it a normal withdrawal or transfer. Furthermore, any disputes over the inheritance of the deposit that arise later are not the responsibility of the savings institution.\n\nThus, for the first blank, the correct option is A: \"Normal withdrawal or transfer.\" For the second blank, the correct option is C: \"The savings institution is not responsible.\"\n\n\\boxed{\\text{A, C}}
+
+# #### **输出：**
+# ['A', 'C']
+
+# ##### 题目
+# ```
+# Pyogenic meningitis | Tuberculous meningitis | Viral meningitis\nA. Significant increase in IgM\nB. Significant increase in IgA\nC. Significant decrease in IgA\nD. Significant decrease in IgM\nE. No significant changes in IgA and IgM
+# ```
+
+# ##### 用户回答（答案部分）
+# Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOptions C (Significant decrease in IgA) and D (Significant decrease in IgM) are not characteristic of these infections, as decreases in immunoglobulins are more associated with immunodeficiencies rather than meningeal inflammation.\n\n\\boxed{\\text{A for Pyogenic, B for Tuberculous, E for Viral}}
+
+# #### **输出：**
+# ['A', 'B', 'E']
+
+# ##### 题目
+# ```
+# 不定项选择题)(每题 2.00 分) 根据《中华人民共和国水污染防治法》在饮用水水源保护区内设置排污口的,()\nA. 由县级以上地方人民政府环境保护主管部门责令限期拆除,处二万元以上十万元以下的罚款\nB. 由县级以上地方人民政府责f限期拆除,处十万元以上五十万元以下的罚款\nC. 逾期不拆除的,强制拆除,所需费用由违法者承担,处十万元以上五十万元以下的罚款情节严重的,可以责令停产整治\nD. 逾期不拆除的,强制拆除,所需费用由违法者承担,处五十万元以上一百万元以下的罚款,并可以责令停产整治
+# ```
+
+# ##### 用户回答（答案部分）
+# 根据《中华人民共和国水污染防治法》的相关规定，我们可以逐步分析题目中的选项：\n\n1. **设置排污口的处罚**：\n   - 在饮用水水源保护区内设置排污口的行为，由**县级以上地方人民政府**（而非环境保护主管部门）责令限期拆除，并处以**十万元以上五十万元以下的罚款**。因此，**选项A错误**，**选项B正确**。\n\n2. **逾期不拆除的处罚**：\n   - 如果逾期不拆除排污口，将**强制拆除**，所需费用由违法者承担，并处以**五十万元以上一百万元以下的罚款**，同时**可以责令停产整治**。因此，**选项C错误**（罚款金额不正确），**选项D正确**。\n\n综上，正确答案是 **B** 和 **D**。\n\n最终答案为：\\boxed{B, D}
+
+# #### **输出：**
+# ['B', 'D']
+
+# 如果用户没有给出最终答案，则返回空列表[]
+# """
+
+#         verify_template = """现在对下面的用户回答提按格式提取出答案（参考上面的例子，输出后面直接输出提取出的列表）
+# #### **输入：**
+# ##### 题目
+# ```
+# {question}
+# ```
+
+# ##### 用户回答（答案部分）
+# {conclusion}
+
+# #### **输出：**
+# """
+#         correctness = {name: defaultdict(list) for name in group_names}
+
+#         verify_mapper = defaultdict(list)
+
+#         for example in verify_queue:
+#             if example.response is None:
+#                 pass
+#             else:
+#                 prompt = f'{example.prompt}'
+#                 response = example.response
+#                 if "</think>" in response:
+#                     response = response[response.index("</think>"):].strip()
+#                 eval_prompt = verify_prompt + "\n\n" + verify_template.format(
+#                     question=prompt,
+#                     conclusion=response
+#                 )
+#                 verify_mapper[eval_prompt].append((example.index, example.tag))
+
+#         _results = await self.get_verify_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.get_verify_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
+
+#         count = 0
+#         results_mapper = defaultdict(list)
+#         for (k, v) in _results:
+#             for meta in verify_mapper[k]:
+#                 count += 1
+#                 index, name = meta
+#                 if v is not None:
+#                     correctness[name][index].append(v)
+#         return correctness
+
+#     @classmethod
+#     def respond_wo_context(cls, question, options, gt):
+#         ans_format = cls.get_answer_format(gt)
+#         return f'{ans_format}\n\n{cls.format_question(question=question, options=cls.add_distractor_options(options, gt), answer=None)}'
+
+#     @classmethod
+#     def respond_w_context(cls, question, options, gt):
+#         ans_format = cls.get_answer_format(gt)
+#         return f'[DOC]\n{gt["document"]}\n[/DOC]\n\n{ans_format}\n\n{cls.format_question(question=question, options=cls.add_distractor_options(options, gt), answer=None)}'
+
+#     @classmethod
+#     def get_answer_format(cls, gt):
+#         lang_code = gt["lang_code"]
+#         if lang_code == "zh":
+#             return '回答下面的不定项选择题。'
+#         else:
+#             return 'Answer the following multiple-choice questions with one or more correct answers.'
+
+#     @classmethod
+#     def get_distractor_option_letters(cls, options):
+#         return [cls.MULTICHOICE_LETTER[len(options)], cls.MULTICHOICE_LETTER[len(options)+1]]
+
+#     @classmethod
+#     def add_distractor_options(cls, options, gt):
+#         lang_code = gt["lang_code"]
+#         if lang_code == "zh":
+#             distractors = ["以上都不正确", "无法判断"]
+#         else:
+#             distractors = ["None of the above", "Cannot be determined"]
+
+#         new_options = copy.deepcopy(options)
+#         new_options.extend(distractors)
+#         return new_options
+
+#     def do_not_simulate_respondent(self, debug):
+#         return (
+#             self.format,
+#             self.language,
+#         )
+
+#     @classmethod
+#     def format_question(cls, question, options, answer):
+#         options_str = "\n".join([f'{x}) {y}' for x, y in zip(
+#             cls.MULTICHOICE_LETTER, options)])
+#         if answer is not None:
+#             return f'Question: {question}\n\nOptions:\n{options_str}\n\nAnswer: {answer}'
+#         else:
+#             return f'Question: {question}\n\nOptions:\n{options_str}'
+
+#     async def simulate_respondent(
+#             self,
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth,
+#             run_args=None,
+#             debug=False):
+#         assert run_args is not None
+
+#         prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
+#         answer_map = {}
+
+#         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+#             result = self.parse_solution_fn(solution_str)
+#             if result is not None:
+#                 question, options, answer = result
+#                 # NOTICE
+#                 answer_map[i] = (self.respond_wo_context(
+#                     question, options, gt), (options, answer))
+
+#                 skip = False
+#                 if not debug:
+#                     for module in self.do_not_simulate_respondent(debug=debug):
+#                         cur_score = module.get_penalty_or_reward(
+#                             solution_str, gt
+#                         )
+#                         if cur_score < 0.0:
+#                             skip = True
+#                             break
+#                 if skip:
+#                     continue
+
+#                 lang_code = gt["lang_code"]
+#                 for name, v in run_args.items():
+#                     fn = v["fn"]
+#                     _prompt = fn(question, options, gt)
+#                     prompt2index[name][_prompt].append(i)
+#         tasks = []
+#         task_names = []
+
+#         for name, v in prompt2index.items():
+#             prompts = list(v.keys()) * run_args[name]["repeat"]
+
+#             tasks.append(run_args[name]["model"].run(
+#                 prompts, run_args[name]["max_concurrent_requests"], desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
+#                 postprocess_fns=[
+#                     partial(self.response_postprocess, debug=debug)] * len(prompts)
+#             ))
+#             task_names.append(name)
+#         respond_questions = await aio.gather(*tasks)
+
+#         # 验证答案正确性
+#         verify_queue = []
+#         for name, results in zip(task_names, respond_questions):
+#             for (p, r) in results:
+#                 for index in prompt2index[name][p]:
+#                     verify_queue.append(VerifyInfo(
+#                         index=index, tag=name, prompt=answer_map[index][
+#                             0], response=r, answer=answer_map[index][1]
+#                     ))
+
+#         correctness = await self.verify_batch_results(
+#             verify_queue=verify_queue,
+#             max_concurrent_requests=64,
+#             group_names=task_names
+#         )
+#         return correctness
+
+#     def compute_score(self,
+#                       batch_data_sources,
+#                       batch_solution_str,
+#                       batch_ground_truth,
+#                       ):
+#         async def main():
+#             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+#         return aio.run(main())
+
+#     def penalty_on(self):
+#         return ("Format", "Lang")
+
+#     def update_rollout_info(self, solution_str, ground_truth, difficulty):
+#         parsed = self.parse_solution_fn(solution_str)
+#         if parsed is None:
+#             return
+#         question, options, answer = parsed
+#         inst_id = ground_truth["extra_info"]["uuid"]
+#         if inst_id not in self.rollout_database:
+#             self.rollout_database[inst_id] = LRUCache(
+#                 capacity=self.record_rollout_max_capacity)
+
+#         args = copy.deepcopy(self.args)
+#         for k, v in args["difficulty_run_args"].items():
+#             del v["fn"]
+#             for field, value in v.items():
+#                 if field == "model":
+#                     args["difficulty_run_args"][k][field] = value.model
+
+#         self.rollout_database[inst_id][question] = {
+#             "prompt_generation_process": solution_str,
+#             "question": question,
+#             "options": options,
+#             "answer": answer,
+#             "difficulty": {
+#                 "meta": args,
+#                 "pass_rate": difficulty
+#             }
+#         }
+
+#     async def get_difficulty_reward(
+#             self,
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth,
+#             run_args=None,
+#             metric_args=None,
+#             debug=False):
+#         assert metric_args is not None, f'`metric_args` missed'
+#         assert run_args is not None, f'`run_args` missed'
+
+#         ans_lists = await self.simulate_respondent(
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth,
+#             run_args=run_args,
+#             debug=debug
+#         )
+
+#         full_rewards = []
+#         pass_rates = []
+
+#         for i in range(len(batch_solution_str)):
+#             if i in list(ans_lists.values())[0]:
+#                 base_score = 0.0
+
+#                 result = self.parse_solution_fn(batch_solution_str[i])
+#                 if result is None:
+#                     pass_rates.append({})
+#                     full_rewards.append(0.0)
+#                     continue
+
+#                 question, options, answer = result
+#                 if len(options)+1 > len(self.MULTICHOICE_LETTER)-1:
+#                     pass_rates.append({})
+#                     full_rewards.append(0.0)
+#                     continue
+
+#                 distractors = self.get_distractor_option_letters(options)
+
+#                 adv_name, weak_name = metric_args[
+#                     "advantage"], metric_args["weakness"]
+#                 # anchor_name = metric_args["anchor"]
+#                 # _adv, _weak, _anch = ans_lists[adv_name][i], ans_lists[weak_name][i], ans_lists[anchor_name][i]
+#                 _adv, _weak = ans_lists[adv_name][i], ans_lists[weak_name][i]
+
+#                 ill_form_question = False
+#                 for _ans in _adv+_weak:
+#                     if not isinstance(_ans, list):
+#                         ill_form_question = True
+#                         break
+
+#                 if not ill_form_question:
+#                     if any([(not isinstance(_ans, list)) or len(_ans) > 1 for _ans in _adv+_weak]):
+#                         ill_form_question = True
+
+#                     if any([any(x in distractors for x in _ans) for _ans in _adv+_weak]):
+#                         ill_form_question = True
+
+#                 adv, weak = [], []
+#                 anchor = []
+
+#                 for a in _adv:
+#                     if ill_form_question:
+#                         adv.append(0.0)
+#                     else:
+#                         if len(a) > 0 and a[0] == answer:
+#                             adv.append(1.0)
+#                         else:
+#                             adv.append(0.0)
+
+#                 for w in _weak:
+#                     if ill_form_question:
+#                         weak.append(0.0)
+#                     else:
+#                         if len(w) > 0 and w[0] == answer:
+#                             weak.append(1.0)
+#                         else:
+#                             weak.append(0.0)
+
+#                 # for c in _anch:
+#                 #     if ill_form_question:
+#                 #         anchor.append(0.0)
+#                 #     else:
+#                 #         if len(c) > 0 and c[0] == answer:
+#                 #             anchor.append(1.0)
+#                 #         else:
+#                 #             anchor.append(0.0)
+
+#                 _pass_rate = {
+#                     adv_name: f'{np.sum(adv)}/{len(adv)} ANS={answer} {_adv}',
+#                     weak_name: f'{np.sum(weak)}/{len(weak)} ANS={answer} {_weak}',
+#                     # anchor_name: f'{np.sum(anchor)}/{len(anchor)} ANS={answer} {_anch}',
+#                 }
+#                 pass_rates.append(_pass_rate)
+
+#                 if len(weak) == 0 or len(adv) == 0:
+#                     full_rewards.append(base_score)
+#                     continue
+
+#                 # 题目过难
+#                 if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
+#                     full_rewards.append(base_score)
+#                     continue
+
+#                 # 题目过易
+#                 if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
+#                     full_rewards.append(base_score)
+#                     continue
+
+#                 # adv 应该比 weakness 显著好
+#                 if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
+#                     full_rewards.append(base_score)
+#                     continue
+
+#                 # # 但是也不能好的太多
+#                 # if np.mean(adv) - np.mean(weak) > metric_args["advantage_threshold_limit"]:
+#                 #     full_rewards.append(base_score)
+#                 #     continue
+
+#                 # # adv 应该比 anchor 显著好
+#                 # if not (np.mean(adv) > np.mean(anchor)):
+#                 #     full_rewards.append(base_score)
+#                 #     continue
+
+#                 # 增加限制：带参考回答Majority Vote必须和答案一致
+#                 majority_votes = defaultdict(int)
+#                 for adv_attempt in _adv:
+#                     if isinstance(adv_attempt, list) and len(adv_attempt) == 1:
+#                         majority_votes[adv_attempt[0]] += 1
+
+#                 success = True
+#                 for k, v in majority_votes.items():
+#                     if k != answer:
+#                         if v >= majority_votes[answer]:
+#                             success = False
+#                             break
+#                 if not success:
+#                     full_rewards.append(base_score)
+#                     continue
+
+#                 # 难度奖励
+#                 def calc_difficulty(scores, total_attempts):
+#                     return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
+
+#                 # 两部分构成
+#                 in_context_difficulty = metric_args["weakness_weight"] * \
+#                     calc_difficulty(weak, run_args[weak_name]["repeat"])
+#                 # output_context_difficulty = metric_args["anchor_weight"] * (calc_difficulty(
+#                 #     anchor, run_args[anchor_name]["repeat"]) - calc_difficulty(adv, run_args[adv_name]["repeat"]))
+
+#                 base_score = [
+#                     in_context_difficulty,
+#                     # output_context_difficulty
+#                 ]
+#                 full_rewards.append(base_score)
+#             else:
+#                 pass_rates.append({})
+#                 full_rewards.append(0.0)
+#         return full_rewards, pass_rates
+
+#     async def _compute_score(self,
+#                              batch_data_sources,
+#                              batch_solution_str,
+#                              batch_ground_truth,
+#                              ):
+#         self.initialize_record_rollout_samples_module()
+
+#         penalty = defaultdict(list)
+#         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+#             parsed = self.parse_solution_fn(solution_str)
+#             if parsed is None:
+#                 penalty[i].append(-2.0)
+#             else:
+#                 penalty[i].append(0.0)
+
+#             for key in self.penalty_on():
+#                 penalty[i].append(self.get_penalties()[key]
+#                                   (solution_str, ground_truth))
+
+#         # 难度奖励
+#         difficulty_rewards, pass_rates = await self.get_difficulty_reward(
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth,
+#             run_args=self.args["difficulty_run_args"],
+#             metric_args=self.args["difficulty_metric_args"],
+#         )
+
+#         bad_q_penalties = await self.get_bad_question_penalty(
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth,
+#             max_concurrent_requests=32
+#         )
+
+#         final_results = []
+#         for i in range(len(batch_solution_str)):
+#             scores = copy.deepcopy(penalty[i])
+#             penalties = ["Parse"]+list(self.penalty_on())
+#             penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
+#                                        s in zip(penalties, scores)])
+
+#             scores.append(bad_q_penalties[i])
+
+#             # 难度奖励
+#             _difficulty = difficulty_rewards[i]
+#             _difficulty_score = np.sum(_difficulty) if isinstance(
+#                 _difficulty, list) else _difficulty
+#             scores.append(_difficulty_score)
+
+#             cur_score = 0
+
+#             for j, _score in enumerate(scores):
+#                 if _score < 0:
+#                     cur_score = _score
+#                     break
+#                 else:
+#                     cur_score += _score
+
+#             # 保存Rollout信息
+#             if cur_score > 0 and self.split == "train":
+#                 self.update_rollout_info(
+#                     solution_str=batch_solution_str[i],
+#                     ground_truth=batch_ground_truth[i],
+#                     difficulty=pass_rates[i]
+#                 )
+
+#             final_results.append(cur_score)
+
+#             if cur_score > 0 or (self.split == "valid") or (self.split == "train" and random.random() < 0.1):
+#                 log = True
+#                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+#             else:
+#                 log = False
+
+#             source = batch_ground_truth[i]["source"]
+
+#             if log:
+#                 print(
+#                     f"--------------------------------{log_flag}--------------------------------")
+#                 print(
+#                     f"【Solution】({source})`{self.log_solution(batch_solution_str[i])}`")
+
+#                 print(
+#                     f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|BadQ={bad_q_penalties[i]}|{penalty_log_str}\n')
+
+#                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
+
+#                 if random.random() < 0.1 and thought is not None:
+#                     print(f'[Thought]\n{thought}')
+#                     print()
+
+#         if self.split == "valid":
+#             pass
+#         self.save_rollout_info()
+
+#         return final_results
+
+# # DOC2QUERY_V3_DEFAULT_PARAMS = {
+# #     "difficulty_run_args": {
+# #         "w/o_content": {
+# #             "model": Doc2QueryV3ComputeScore.get_weak_agent(),
+# #             "repeat": 8,
+# #             "fn": Doc2QueryV3ComputeScore.respond_wo_context,
+# #             "desc": 'w/o ctx',
+# #             "max_concurrent_requests": 256
+# #         },
+# #         "w_content": {
+# #             "model": Doc2QueryV3ComputeScore.get_strong_agent(),
+# #             "repeat": 8,
+# #             "fn": Doc2QueryV3ComputeScore.respond_w_context,
+# #             "desc": 'w ctx',
+# #             "max_concurrent_requests": 256
+# #         },
+# #         "anchor": {
+# #             "model": Doc2QueryV3ComputeScore.get_anchor_agent(),
+# #             "repeat": 8,
+# #             "fn": Doc2QueryV3ComputeScore.respond_w_context,
+# #             "desc": 'anchor w ctx',
+# #             "max_concurrent_requests": 64
+# #         },
+# #     },
+# #     "difficulty_metric_args": {
+# #         "advantage": 'w_content',
+# #         "weakness": 'w/o_content',
+# #         "anchor": 'anchor',
+# #         "advantage_oversimplified_threshold": 8/8,
+# #         "weakness_oversimplified_threshold": 7/8,
+# #         "advantage_overcomplex_threshold": 1/8,
+# #         "weakness_overcomplex_threshold": 1/8,
+# #         "advantage_threshold": 2/8,
+# #         "advantage_threshold_limit": 5/8,
+# #         "advantage_weight": 0.0,
+# #         "weakness_weight": 1.0,
+# #         "anchor_weight": 1.5,
+# #         "confidence_bonus_threshold": 2/8,
+# #         "confidence_bonus_weight": 0.
+# #     },
+# # }
+
+# DOC2QUERY_V3_DEFAULT_PARAMS = {
+#     "difficulty_run_args": {
+#         "w/o_content": {
+#             "model": Doc2QueryV3ComputeScore.get_anchor_agent(),
+#             "repeat": 10,
+#             "fn": Doc2QueryV3ComputeScore.respond_wo_context,
+#             "desc": 'w/o ctx',
+#             "max_concurrent_requests": 64
+#         },
+#         "w_content": {
+#             "model": Doc2QueryV3ComputeScore.get_strong_agent(),
+#             "repeat": 4,
+#             "fn": Doc2QueryV3ComputeScore.respond_w_context,
+#             "desc": 'w ctx',
+#             "max_concurrent_requests": 128
+#         },
+#     },
+#     "difficulty_metric_args": {
+#         "advantage": 'w_content',
+#         "weakness": 'w/o_content',
+#         "advantage_oversimplified_threshold": 4/4,
+#         "weakness_oversimplified_threshold": 8/10,
+#         "advantage_overcomplex_threshold": 1/4,
+#         "weakness_overcomplex_threshold": 1/10,
+#         "advantage_threshold": 1/4,
+#         "advantage_weight": 0.0,
+#         "weakness_weight": 1.0,
+#         "anchor_weight": 1.5,
+#         "confidence_bonus_threshold": 2/8,
+#         "confidence_bonus_weight": 0.
+#     },
+# }
+
+# _default_doc2query_v3_compute_score_train = Doc2QueryV3ComputeScore(
+#     doc2query_v3_parse_solution_fn, split="train", args=DOC2QUERY_V3_DEFAULT_PARAMS)
+# _default_doc2query_v3_compute_score_valid = Doc2QueryV3ComputeScore(
+#     doc2query_v3_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
+# doc2query_v3_default_compute_score_train = partial(
+#     _default_doc2query_v3_compute_score_train.compute_score)
+# doc2query_v3_default_compute_score_valid = partial(
+#     _default_doc2query_v3_compute_score_valid.compute_score)
+
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# # DOC2QUERY V3
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# # Criteria RM
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# def xml_cot_parse_solution_fn(solution_str):
+#     def get_thought(solution_str: str):
+#         thought = re.findall(r'```xml.*```', solution_str, re.DOTALL)[0]
+#         return thought
+
+#     def get_conclusion(solution_str: str):
+#         thought = get_thought(solution_str)
+#         return solution_str[solution_str.index(thought)+len(thought):].strip()
+
+#     try:
+#         thought = get_thought(solution_str)
+#     except Exception as err:
+#         return None
+#     try:
+#         conclusion = get_conclusion(solution_str).strip()
+#     except Exception as err:
+#         return None
+#     if any(_ in conclusion for _ in ("```xml", "<think>", "</think>", "<conclusion>", "</conclusion>")):
+#         return None
+#     try:
+#         thought_content = re.findall(r'```xml(.*)```', thought, re.DOTALL)[0]
+#     except Exception as err:
+#         return None
+#     thought_content = f'<doc> {thought_content} </doc>'
+#     try:
+#         root = ET.fromstring(thought_content)
+#     except Exception as err:
+#         print("err", err)
+#         return None
+#     if not all(tag in [child.tag for child in root]
+#                for tag in ("think", "conclusion")):
+#         return None
+#     return root
+
+# def criteria_parse_solution_fn(solution_str: str):
+#     solution_str = postprocess_solution(solution_str)
+#     if not solution_str.startswith("<think>"):
+#         solution_str = f'<think>\n{solution_str}'
+
+#     try:
+#         root = xml_cot_parse_solution_fn(solution_str)
+#     except Exception as err:
+#         return None
+
+#     if root is not None:
+#         try:
+#             conclusion = [
+#                 child for child in root if child.tag == "conclusion"][0]
+
+#             conclusion = conclusion.text.strip()
+#         except Exception as err:
+#             return None
+#     else:
+#         return None
+
+#     return conclusion
+
+# class CriteriaRMComputeScore(Doc2QueryV2ComputeScore):
+#     def __init__(self,
+#                  parse_solution_fn,
+#                  split="train",
+#                  args=None,
+#                  ):
+#         super().__init__(
+#             split=split, parse_solution_fn=parse_solution_fn, args=args
+#         )
+
+#     @classmethod
+#     def judge_with_criteria(cls, instruction, response, criteria):
+#         format_template = """
+
+# 你最终的回答部分需要包含**分析**和**结论**两部分
+# - 分析：详细的分析过程
+# - 结论：对于模型响应的打分，一定要给出最终的分数
+
+# 按照下面的格式
+# [分析开始]
+# ... ...
+# [分析结束]
+
+# [结论开始]
+# {得分}
+# [结论结束]
+# """
+
+#         return f'[用户指令]\n{instruction}\n\n[模型响应]\n{response}\n\n[评价标准]\n{criteria}\n\n\n' + format_template
+
+#     @classmethod
+#     def get_judge_agent(cls):
+#         return Agent(**{
+#             "model": "distill_qwen25_7B",
+#             "base_url": "http://10.130.142.154:8000/v1",
+#             "api_keys": "EMPTY",
+#             "request_kwargs": {
+#                 "temperature": 0.65,
+#                 "timeout": 600,
+#                 "max_tokens": 8192,
+#             },
+#         })
+
+#     def get_analyze_agent(cls):
+#         return Agent(**{
+#             "model": "qwen25_32B_instruct",
+#             "base_url": "http://10.130.142.154:8000/v1",
+#             "api_keys": "EMPTY",
+#             "request_kwargs": {
+#                 "temperature": 0.7,
+#                 "timeout": 360,
+#                 "max_tokens": 4096,
+#             },
+#         })
+
+#     def response_postprocess(self, s, debug=False):
+#         if "</think>" in s:
+#             s = s[s.index("</think>")+len("</think>"):].strip()
+#         return s
+
+#     async def simulate_respondent(
+#             self,
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth,
+#             run_args=None):
+#         assert run_args is not None
+
+#         prompt2index = defaultdict(list)
+#         answer_map = {}
+
+#         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+#             result = self.parse_solution_fn(solution_str)
+#             if result is not None:
+#                 criteria = result
+
+#                 judge_candidates = gt["completions"]
+#                 for cand in judge_candidates:
+#                     fn = run_args["w_criteria"]["fn"]
+#                     _prompt = fn(gt["instruction"], cand["response"], criteria)
+#                     prompt2index[_prompt].append(
+#                         (gt["extra_info"]["uuid"], cand["response_id"]))
+#                     answer_map[gt["extra_info"]["uuid"]] = (
+#                         gt["instruction"], cand.get("critique", "[No Critiques Here]"))
+
+#         prompts = list(prompt2index.keys())
+
+#         tasks = []
+#         tasks.append(run_args["w_criteria"]["model"].run(
+#             prompts, run_args["w_criteria"]["max_concurrent_requests"], desc=f'[Generate {run_args["w_criteria"]["desc"]} Responses {run_args["w_criteria"]["model"].model}]', pbar=False,
+#             postprocess_fns=[partial(self.response_postprocess)] * len(prompts)
+#         ))
+#         judges = await aio.gather(*tasks)
+
+#         # 提取分析和得分
+#         verify_queue = []
+#         for results_index, judge in enumerate(judges[0]):
+#             p, r = judge
+#             for (inst_id, resp_id) in prompt2index[p]:
+#                 verify_queue.append(VerifyInfo(
+#                     index=results_index,  # 对应`results`中的偏移量
+#                     tag=resp_id,  # 对应instance index
+#                     prompt=answer_map[inst_id][0],  #
+#                     response=r,
+#                     answer=answer_map[inst_id][1]  #
+#                 ))
+
+#         evaluations = await self.verify_batch_results(
+#             verify_queue=verify_queue,
+#             max_concurrent_requests=32,
+#         )
+
+#         return evaluations
+
+#     async def verify_batch_results(self, verify_queue, max_concurrent_requests):
+#         def validate_result(response):
+#             s = response
+#             try:
+#                 conclusion = s.strip()
+
+#                 score = re.findall(
+#                     r'\"大模型评论员打分\": ([\d+\.]+)', conclusion)[0]
+#                 if isinstance(score, str):
+#                     score = float(score)
+#                 assert isinstance(score, float)
+
+#                 recall = re.findall(
+#                     r'\"对人类指出的批评的覆盖度\": (\d+)', conclusion)[0]
+#                 if isinstance(recall, str):
+#                     recall = float(recall)
+#                 assert isinstance(recall, float)
+#                 assert recall in (0, 1, 2, 3, 4, 5)
+#                 return (score, recall)
+
+#             except Exception as err:
+#                 raise PostprocessError(f'{err}')
+
+#         verify_fewshots = """
+# 下面是对于同一用户提问的相同回复的两条不同评论，第一个是人类评论员，第二个是大模型评论员；
+
+# 任务：现在需要你按照要求帮我分析**大模型评论员**的评论内容
+# 说明：任务包含两部分
+# 第一部分：从**大模型评论员**的评论中提取出最终的分数（float格式）如果评论中没有给出具体的分数，赋0分
+# 第二部分：分析**大模型评论员**的评论中是否覆盖**人类评论员**指出的批评？覆盖度1-5分，5分是最高分，分数仅包含1、2、3、4、5不包含小数点。
+
+# #### 输出要求
+# {分析内容}
+# ```json
+# {{
+#     "大模型评论员打分": ***, # float
+#     "对人类指出的批评的覆盖度": *** #
+# }}
+# ```
+
+# 下面是一些例子
+
+# #### 用户提问
+# ```
+# Can you provide a comprehensive list of stress management techniques using a bullet-point format in a [Mark down] document? Please include both physical and mental techniques that can be used to manage stress. Additionally, it would be helpful to categorize the techniques as short-term or long-term solutions. Thank you.
+# ```
+
+# #### **人类评论员**
+# ```
+# Your answer was well-organized and comprehensive, covering a variety of short-term and long-term stress management techniques. You also followed the instruction to use bullet-points and categorize the techniques. However, the instruction asked for a Markdown document, which requires specific formatting.
+
+# To improve, use proper Markdown formatting, such as adding asterisks or dashes for bullet points and using double asterisks for bold text. Additionally, the note in the instruction asks for a blend of accuracy, positivity, and intrigue, while keeping the user engaged. Your response is accurate and positive, but adding a touch of intrigue or a fun fact could make it more engaging.
+# ```
+
+# #### **大模型评论员**
+# ```
+
+# [分析开始]
+# 用户的请求明确要求提供一个结构化的压力管理技巧列表，并以Markdown格式呈现。用户还特别指出要将技巧分为短期和长期，并包含物理和心理方法。这意味着我需要确保内容全面且易于理解，同时满足分类要求。
+
+# 首先，我需要确定哪些技巧属于短期和长期。短期技巧通常是一些快速应用的方法，如深呼吸、冥想或写作，这些方法可以在短时间内缓解压力。长期技巧则涉及更系统的行为，如规律的锻炼、健康的饮食习惯或良好的睡眠，这些需要更持续的努力。
+
+# 其次，用户强调了物理和心理方法的结合，因此我需要确保每个类别中都涵盖这两种方法。例如，深呼吸和冥想是物理和心理的结合，而写作或绘画则是心理表达的方式。
+
+# 此外，考虑到用户可能需要个性化的建议，我提醒用户根据自身情况选择最适合的方法，并建议在长期压力情况下寻求专业帮助。这不仅增加了回复的实用性，也体现了对用户需求的尊重。
+
+# 最后，我组织了内容，确保每个类别下的技巧清晰易读，并使用了Markdown格式的列表结构，以提高可读性和专业性。
+# [分析结束]
+
+# [结论开始]
+# 9
+# [结论结束]
+# ```
+
+# #### 输出
+# 分析：
+# 大模型评论员的打分可从其结论中提取，为 9.0。人类评论员指出回复未使用特定 Markdown 格式及缺乏趣味性，而大模型评论员仅提及用了 Markdown 列表结构，未涉及人类指出的批评，覆盖度低。
+
+# ``` json
+# {{
+#     "大模型评论员打分": 9.0,
+#     "对人类指出的批评的覆盖度": 1
+# }}
+# ```
+
+# #### 用户提问
+# ```
+# Can you recommend a car service that offers private day tours to Versailles from Paris?
+# ```
+
+# #### **人类评论员**
+# ```
+# Your answer is well-structured, informative, and it adheres to the instructions given. You provided two options, which gives the user a choice, and you included the important details about each service. Your reminder for the user to conduct further research and compare options is also valuable. However, you could improve by providing more sources for the user to verify the information. For example, you could suggest checking the companies' websites or other reliable platforms for reviews and up-to-date information.
+# ```
+
+# #### **大模型评论员**
+# ```
+
+# [分析开始]
+# 模型响应中提供了两个具体的车服务公司：Cityrama 和 Versailles Express。这两个公司都详细介绍了其服务亮点，包括行程内容、语言支持和交通安排，这在满足用户需求方面做得很好，属于有用性高的内容。此外，两个公司都是知名且值得信赖的，因此安全性较高。信息真实可靠，没有虚构内容，因此真实性评分也较高。虽然模型没有直接比较两家公司的优劣，但提供了足够的信息供用户参考，因此在有用性和可靠性方面得分高。
+# [分析结束]
+
+# [结论开始]
+# 10
+# [结论结束]
+# ```
+
+# #### 输出
+# 分析：
+# 大模型评论员的打分可从其结论中提取，为 10.0。人类评论员指出回复可通过提供更多信息来源让用户验证信息，而大模型评论员的分析未涉及这一点，未覆盖人类指出的批评，覆盖度低。
+
+# ``` json
+# {{
+#     "大模型评论员打分": 10.0,
+#     "对人类指出的批评的覆盖度": 1
+# }}
+# ```
+# """
+
+#         verify_template = """
+# #### 用户提问
+# ```
+# {instruction}
+# ```
+
+# #### **人类评论员**
+# ```
+# {human}
+# ```
+
+# #### **大模型评论员**
+# ```
+# {llm}
+# ```
+
+# #### 输出
+# """
+#         verify_mapper = defaultdict(list)
+
+#         for info in verify_queue:
+#             eval_prompt = verify_fewshots + verify_template.format(
+#                 instruction=info.prompt,
+#                 llm=info.response,
+#                 human=info.answer
+#             )
+#             verify_mapper[eval_prompt].append(info.tag)
+
+#         _results = await self.get_analyze_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Analyze Critics {self.get_analyze_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
+
+#         evaluations = {}
+#         for (k, v) in _results:
+#             for resp_id in verify_mapper[k]:
+#                 evaluations[resp_id] = v
+#         return evaluations
+
+#     async def rank_consistency(
+#         self,
+#         batch_data_sources,
+#         batch_solution_str,
+#         batch_ground_truth,
+#         run_args=None,
+#     ):
+#         """
+#             计算Criteria是否可以和人类偏好偏序一致
+#         """
+#         evaluation = await self.simulate_respondent(
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth,
+#             run_args=run_args,
+#         )
+#         rewards = []
+#         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+#             judge_candidates = gt["completions"]
+#             consistency = None
+#             recall = []
+
+#             for pair in itertools.combinations(judge_candidates, 2):
+#                 if pair[0]["response_id"] in evaluation and pair[1]["response_id"] in evaluation:
+#                     if (evaluation[pair[0]["response_id"]] is not None) and (evaluation[pair[1]["response_id"]] is not None):
+#                         _consistency = False
+#                         if pair[0]["overall_score"] > pair[1]["overall_score"]:
+#                             if evaluation[pair[0]["response_id"]][0] > evaluation[pair[1]["response_id"]][0]:
+#                                 _consistency = True
+#                             else:
+#                                 _consistency = False
+#                         elif pair[0]["overall_score"] < pair[1]["overall_score"]:
+#                             if evaluation[pair[0]["response_id"]][0] < evaluation[pair[1]["response_id"]][0]:
+#                                 _consistency = True
+#                             else:
+#                                 _consistency = False
+#                         else:  # 分数一样
+#                             pass
+
+#                         if consistency is None:
+#                             consistency = _consistency
+#                         else:
+#                             consistency = consistency and _consistency
+
+#             for cand in judge_candidates:
+#                 if cand["response_id"] in evaluation and evaluation[cand["response_id"]] is not None:
+#                     recall.append(evaluation[cand["response_id"]][1])
+#             rewards.append((1.0 if consistency else 0.0, np.mean(
+#                 recall)/5.0 if len(recall) > 0 else 0.0))
+#         return rewards
+
+#     def compute_score(self,
+#                       batch_data_sources,
+#                       batch_solution_str,
+#                       batch_ground_truth,
+#                       ):
+#         async def main():
+#             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+#         return aio.run(main())
+
+#     async def _compute_score(self,
+#                              batch_data_sources,
+#                              batch_solution_str,
+#                              batch_ground_truth,
+#                              ):
+#         rewards = await self.rank_consistency(
+#             batch_data_sources,
+#             batch_solution_str,
+#             batch_ground_truth,
+#             self.args["judge_run_args"],
+#         )
+
+#         final_results = []
+#         for i, (gt, solution) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+#             criteria = criteria_parse_solution_fn(solution)
+#             cur_score = rewards[i][0]
+#             if "critique" in gt:
+#                 cur_score += rewards[i][1]
+
+#             final_results.append(cur_score)
+
+#             if rewards[i][0] > 0 or (self.split == "valid") or (self.split == "train" and random.random() < 0.1):
+#                 log = True
+#                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+#             else:
+#                 log = False
+
+#             source = batch_ground_truth[i]["source"]
+
+#             if log:
+#                 print(
+#                     f"--------------------------------{log_flag}--------------------------------")
+#                 print(
+#                     f'【Solution】({source}) INSTRUCT=`{repr(self.clip_string(batch_ground_truth[i]["instruction"]))}`')
+#                 print(
+#                     f'【Solution】({source}) CRITERIA=\n{self.log_solution(batch_solution_str[i])}')
+#                 print(
+#                     f'[Final Reward]={cur_score:.3f}|Consist={rewards[i][0]}|Recall={rewards[i][1]}\n')
+
+#                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
+
+#                 if random.random() < 0.1 and thought is not None:
+#                     print(f'[Thought]\n{thought}')
+#                     print()
+
+#         return final_results
+
+#     def clip_string(self, s: str):
+#         if len(s) > 1500:
+#             return f'{s[:700]}... [省略] ...{s[-800:]}'
+#         return s
+
+#     def log_solution(self, solution):
+#         criteria = criteria_parse_solution_fn(solution)
+#         if criteria is None:
+#             return self.clip_string(solution)
+#         return self.clip_string(criteria)
+
+# CRITERIA_DEFAULT_PARAMS = {
+#     "judge_run_args": {
+#         "w_criteria": {
+#             "model": CriteriaRMComputeScore.get_judge_agent(),
+#             "fn": CriteriaRMComputeScore.judge_with_criteria,
+#             "desc": 'judge w criteria',
+#             "max_concurrent_requests": 128
+#         },
+#     },
+# }
+
+# _default_criteria_rm_compute_score_train = CriteriaRMComputeScore(
+#     criteria_parse_solution_fn, split="train", args=CRITERIA_DEFAULT_PARAMS)
+# _default_criteria_rm_compute_score_valid = CriteriaRMComputeScore(
+#     criteria_parse_solution_fn, split="valid", args=CRITERIA_DEFAULT_PARAMS)
+# criteria_rm_default_compute_score_train = _default_criteria_rm_compute_score_train.compute_score
+# criteria_rm_default_compute_score_valid = _default_criteria_rm_compute_score_valid.compute_score
+
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# # Criteria RM
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
