@@ -1408,6 +1408,9 @@ class BadQuestionDetection(PenaltyOrReward):
         return 0.0
 
 
+Process = namedtuple("Process", "name,function,filter_only")
+
+
 class Doc2QueryV2ComputeScore(object):
     def __init__(self,
                  parse_solution_fn,
@@ -1776,6 +1779,16 @@ class Doc2QueryV2ComputeScore(object):
             "extra": extra,
         })
 
+    def coarse_process(self):
+        return [
+            # 快速判断问题质量
+            Process(name="QuickQuality",
+                    function=self.quick_question_eval, filter_only=True)
+        ]
+
+    def finegrain_process(self):
+        return Process(name="Difficulty", function=self.get_difficulty_reward, filter_only=False)
+
     async def _compute_score(self,
                              batch_data_sources,
                              batch_solution_str,
@@ -1795,21 +1808,31 @@ class Doc2QueryV2ComputeScore(object):
                 penalty[i].append(p.get_penalty_or_reward(
                     solution_str, ground_truth))
 
-        # 快速判断问题质量
-        quick_quality_eval = await self.quick_question_eval(
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-        )
-        skip_next_action = tuple(
-            [i for i, v in enumerate(quick_quality_eval) if v < 0.0])
+        all_skip_next_action = []
+
+        minor_rewards = OrderedDict()
+        for process in self.coarse_process():
+            process_eval = await process.function(
+                batch_data_sources,
+                batch_solution_str,
+                batch_ground_truth,
+            )
+            skip_next_action = [
+                i for i, v in enumerate(process_eval) if v < 0.0]
+            all_skip_next_action.extend(skip_next_action)
+            if not process.filter_only:
+                minor_rewards[process.name] = process_eval
+
+        all_skip_next_action = sorted(list(set(all_skip_next_action)))
+        all_skip_next_action = tuple(all_skip_next_action)
 
         # 难度奖励
-        difficulty_rewards, pass_rates = await self.get_difficulty_reward(
+        main_process = self.finegrain_process()
+        main_rewards, extra = await main_process.function(
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth,
-            skip_run=skip_next_action,
+            skip_run=all_skip_next_action,
         )
         final_results = []
         for i in range(len(batch_solution_str)):
@@ -1818,10 +1841,13 @@ class Doc2QueryV2ComputeScore(object):
             penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
                                         s in zip(penalties, scores)])
 
-            _difficulty = difficulty_rewards[i]
-            _difficulty_score = np.sum(_difficulty) if isinstance(
-                _difficulty, list) else _difficulty
-            scores.append(_difficulty_score)
+            _main_reward = main_rewards[i]
+            _main_reward = np.sum(_main_reward) if isinstance(
+                _main_reward, list) else _main_reward
+            scores.append(_main_reward)
+
+            for name, v in minor_rewards.items():
+                scores.append(v[i])
 
             cur_score = 0
 
@@ -1831,6 +1857,9 @@ class Doc2QueryV2ComputeScore(object):
                     break
                 else:
                     cur_score += _score
+
+            print(cur_score, scores)
+            raise NotImplementedError
 
             # 保存Rollout信息
             if self.split == "train":
