@@ -324,6 +324,19 @@ Hack=1
 
 """
 
+SIMPLE_SOLUTION_VERIFY_FEWSHOTS = """## **基于标准答案判断回答是否正确**
+任务描述：请根据提供的**题目**、**用户回答（结论部分）**和**标准答案**，判断用户回答是否正确。
+
+#### 输出要求
+```json
+{
+"判断结果": "正确/错误",
+}
+```
+
+现在对下面的回答判断正确性
+"""
+
 NUMERICAL_SOLUTION_VERIFY_FEWSHOTS = """### **基于标准答案判断回答是否正确**
 任务描述：请根据提供的**题目**、**用户回答（答案部分）**和**标准答案**，判断用户回答是否正确。
 
@@ -1191,94 +1204,28 @@ class NumericalSolutionVerify(BatchCallOpenAPI):
         except Exception as err:
             raise PostprocessError(f'{err}')
 
-#     async def verify_batch_results(self, verify_queue, max_concurrent_requests, group_names):
-#         def validate_result(response):
-#             s = response
-#             try:
-#                 conclusion = s.strip()
 
-#                 judge = re.findall(
-#                     r'\"判断结果\": \"(.*)\"', conclusion)
-#                 if len(judge) > 0 and judge[0] in ("正确", "错误"):
-#                     return judge[0] == "正确"
+class SALTSelfTaughtSimpleSolutionVerify(NumericalSolutionVerify):
+    _FEWSHOTS = SIMPLE_SOLUTION_VERIFY_FEWSHOTS
 
-#                 conclusion = conclusion[conclusion.index(
-#                     "```json")+len("```json"):].strip()
-#                 conclusion = conclusion[:conclusion.index("```")].strip()
-#                 try:
-#                     conclusion = json.loads(conclusion)
-#                     if conclusion["判断结果"] not in ("正确", "错误"):
-#                         raise PostprocessError(f'corrupt')
-#                     return conclusion["判断结果"] == "正确"
-#                 except Exception as err:
-#                     try:
-#                         conclusion = re.findall(
-#                             r'\"判断结果\": \"(.*)\"', conclusion)[0]
-#                         if not conclusion in ("正确", "错误"):
-#                             raise PostprocessError(f'corrupt')
-#                         return conclusion == "正确"
-#                     except Exception as err:
-#                         raise PostprocessError(f'{err}')
-#             except Exception as err:
-#                 raise PostprocessError(f'{err}')
+    def __init__(self):
+        super().__init__()
 
-#         verify_prompt = """### **基于标准答案判断回答是否正确**
-# 任务描述：请根据提供的**题目**、**用户回答（结论部分）**和**标准答案**，判断用户回答是否正确。
+    @classmethod
+    def task_desc(cls):
+        return "解验证(简单实现)"
 
-# #### 输出要求
-# ```json
-# {
-# "判断结果": "正确/错误",
-# }
-# ```
+    def prompt_fn(self, example):
+        solver_response, extra, gt = example
+        # Self-Taught 用合成问题的Answer作为标准答案
+        question, answer = extra
 
-# 现在对下面的回答判断正确性
-# """
-
-#         verify_template = """
-# #### **输入：**
-# ##### 题目
-# ```
-# {question}
-# ```
-
-# ##### 用户回答（答案部分）
-# {conclusion}
-
-# ##### 标准答案
-# {answer}
-
-# #### **输出：**
-# """
-#         correctness = {name: defaultdict(list) for name in group_names}
-
-#         verify_mapper = defaultdict(list)
-
-#         for info in verify_queue:
-#             conclusion = info.response
-
-#             # 基于规则解析答案
-#             if conclusion is None:
-#                 correctness[info.tag][info.index].append(0.0)
-#             else:
-#                 conclusion = self.postprocess_authentic_question_response(
-#                     conclusion)
-#                 eval_prompt = verify_prompt + "\n\n" + verify_template.format(
-#                     question=info.prompt,
-#                     answer=info.answer,
-#                     conclusion=conclusion
-#                 )
-#                 verify_mapper[eval_prompt].append((info.index, info.tag))
-
-#         _results = await self.get_verify_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.get_verify_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
-
-#         results_mapper = defaultdict(list)
-#         for (k, v) in _results:
-#             for meta in verify_mapper[k]:
-#                 index, name = meta
-#                 if v is not None:
-#                     correctness[name][index].append(1.0 if v else 0.0)
-#         return correctness
+        prompt = self._FEWSHOTS + self._TEMPLATE.format(
+            question=question,
+            conclusion=solver_response,
+            answer=answer
+        )
+        return prompt
 
 
 def parse_question_solution_fn(solution_str: str):
@@ -1934,7 +1881,7 @@ class Doc2QueryV2ComputeScore(object):
         )
 
         for j, eval_result in enumerate(evaluations):
-            queue_index = result_index2queue_index[eval_result]
+            queue_index = result_index2queue_index[j]
             queue_elem = verify_queue[queue_index]
             if eval_result is not None:
                 correctness[queue_elem.tag][queue_elem.index].append(
@@ -2132,6 +2079,8 @@ class Doc2QueryV2ComputeScore(object):
                         response=r,
                         extra=extra[index],
                         ground_truth=batch_ground_truth[index]))
+                    print(
+                        "-waaka", verify_queue[-1].tag, verify_queue[-1].index)
 
         correctness = await batch_verify_fn(
             verify_queue=verify_queue,
@@ -2629,75 +2578,21 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                           batch_solution_str,
                           batch_ground_truth,
                           skip_run=None):
-        # FIXME: verify task
+        verify_task = SALTSelfTaughtSimpleSolutionVerify()
 
-        return await self._simulate_respondent(
+        correctness = await self._simulate_respondent(
             batch_data_sources=batch_data_sources,
             batch_solution_str=batch_solution_str,
             batch_ground_truth=batch_ground_truth,
             skip_run=skip_run,
             run_args={
                 "self_taught": self.args["learnable_run_args"]["self_taught"]},
-            batch_verify_fn=self.batch_verify_results,
+            batch_verify_fn=partial(
+                self.batch_verify_results, verify_task=verify_task),
             resp_postprocess_fn=self.self_taught_response_postprocess
         )
-        # self_taught_response_postprocess
-
-
-#         assert run_args is not None
-
-#         prompt2index = defaultdict(list)
-#         answer_map = {}
-
-#         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-#             result = self.parse_solution_fn(solution_str)
-#             if result is not None:
-#                 question, answer = result
-#                 answer_map[i] = (question, answer)
-
-#                 skip = False
-#                 if not debug:
-#                     for module in self.do_not_simulate_respondent(debug=debug):
-#                         cur_score = module.get_penalty_or_reward(
-#                             solution_str, gt
-#                         )
-#                         if cur_score < 0.0:
-#                             skip = True
-#                             break
-#                 if skip:
-#                     continue
-
-#                 lang_code = gt["lang_code"]
-#                 fn = run_args["self_taught"]["fn"]
-#                 _prompt = fn(question, answer, gt)
-#                 prompt2index[_prompt].append(i)
-
-#         # 拒绝采样
-#         prompts = list(prompt2index.keys()) * run_args["self_taught"]["repeat"]
-#         results = await run_args["self_taught"]["model"].run(
-#             prompts, max_concurrent_requests, desc=f'[Generate Self-Taught Response {run_args["self_taught"]["model"].model}]', pbar=False,
-#             postprocess_fns=[
-#                 partial(self.self_taught_response_postprocess, debug=debug)] * len(prompts)
-#         )
-#         # 答案验证
-#         verify_queue = []
-#         for results_index, (p, r) in enumerate(results):
-#             for index in prompt2index[p]:
-#                 # 注：验证的是合成题准确率
-#                 verify_queue.append(VerifyInfo(
-#                     index=results_index,  # 对应`results`中的偏移量
-#                     tag=index,  # 对应instance index
-#                     prompt=answer_map[index][0],  # 合成题问题
-#                     response=r,
-#                     answer=answer_map[index][1]  # 合成题答案
-#                 ))
-
-#         correctness = await self.verify_batch_results(
-#             verify_queue=verify_queue,
-#             max_concurrent_requests=64,
-#             group_names=list(range(len(batch_solution_str)))
-#         )
-
+        print(len(batch_solution_str))
+        print(correctness)
 #         self_taught_rationale = [None] * len(batch_solution_str)
 
 #         for results_index, (p, r) in enumerate(results):

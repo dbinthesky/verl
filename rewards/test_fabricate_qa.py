@@ -125,7 +125,7 @@ def load_dataset(task_name, num=100):
         else:
             sample = random.choice(_salt_qas)
             batch_solution_str.append(
-                f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: {sample[0]}\n\nAnswer: {sample[1]}\n</question>'
+                f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nAnswer: [SYNTHETIC] {sample[1]}\n</question>'
             )
         batch_ground_truth.append(row["reward_model"])
         if len(batch_ground_truth) == num:
