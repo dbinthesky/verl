@@ -493,6 +493,21 @@ class TestDoc2QueryV2(unittest.TestCase):
             print(results)
         aio.run(main())
 
+    def test_doc2query_v2_llm_judge_difficulty(self):
+        task = Doc2QueryV2ComputeScore(
+            doc2query_v2_parse_solution_fn, split="valid", args=DOC2QUERY_V2_DEFAULT_PARAMS)
+
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="doc2query_v2", num=4)
+
+        async def main():
+            results = await task.llm_judge_difficulty(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth,
+            )
+            print(results)
+        aio.run(main())
+
     def test_compute_score(self):
         task = Doc2QueryV2ComputeScore(
             doc2query_v2_parse_solution_fn, split="valid", args=DOC2QUERY_V2_DEFAULT_PARAMS)

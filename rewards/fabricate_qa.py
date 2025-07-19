@@ -1098,7 +1098,7 @@ class QuestionDifficultyEval(BatchCallOpenAPI):
         s = response
         try:
             scores = re.findall(r'\"难度评价\": \"Level (\d)+\"', s)
-            return [int(_) for _ in scores]
+            return [max(min(int(_), 5), 1) for _ in scores]
         except Exception as err:
             raise PostprocessError(f'{err}')
 
@@ -2026,6 +2026,38 @@ class Doc2QueryV2ComputeScore(object):
             group_names=task_names
         )
         return correctness
+
+    async def llm_judge_difficulty(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+    ):
+        task = QuestionDifficultyEval()
+        indices = []
+        questions = []
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            result = self.parse_solution_fn(sol)
+            if result is not None:
+                questions.append((result[0], sol))
+                indices.append(i)
+            else:
+                continue
+
+        difficulties = await task.do_job(
+            agent=self.auxiliary_agent,
+            batch_inputs=questions,
+            max_concurrent_requests=self.args["auxiliary_agent"]["max_concurrent_requests"],
+        )
+        # 1.5 is the average score
+        scores = [1.5] * len(batch_solution_str)
+        for difficulty, index in zip(difficulties, indices):
+            if difficulty is None or len(difficulty) == 0:
+                pass
+            else:
+                _score = np.mean(difficulty)
+                scores[index] = _score
+        return scores
 
     async def quick_question_eval(
         self,
