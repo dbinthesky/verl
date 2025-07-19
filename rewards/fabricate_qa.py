@@ -2102,6 +2102,7 @@ class Doc2QueryV2ComputeScore(object):
             "prompt_generation_process": solution_str,
             "score": score,
             "extra": extra,
+            "uuid": inst_id,
         })
 
     def coarse_process(self):
@@ -2258,8 +2259,12 @@ class Doc2QueryV2ComputeScore(object):
 
     def save_rollout_info(self):
         """将缓存保存为JSON文件"""
+        if os.path.exists(self.save_rollouts_path):
+            flag = "a+"
+        else:
+            flag = "wt"
 
-        with open(self.save_rollouts_path, "a+") as f:
+        with open(self.save_rollouts_path, flag) as f:
             for _ in self.rollout_cache:
                 f.write(f'{json.dumps(_, ensure_ascii=False)}\n')
         self.rollout_cache = []
@@ -2352,6 +2357,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
     }
 }
 
+
 # _default_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScore(
 #     calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_DEFAULT_PARAMS)
 # _default_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScore(
@@ -2361,74 +2367,6 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
 # doc2query_v2_default_stage1_compute_score_valid = partial(
 #     _default_doc2query_v2_compute_score_valid.compute_score, stage="1")
 
-# class Doc2QueryV2ComputeScoreWithQwen32bRespondent(Doc2QueryV2ComputeScore):
-#     def __init__(self, parse_solution_fn, split="train", args=None):
-#         super().__init__(
-#             split=split, parse_solution_fn=parse_solution_fn, args=args
-#         )
-
-#     @classmethod
-#     def get_weak_agent(cls):
-#         return Agent(**{
-#             "model": "qwen25_32B_instruct",
-#             "base_url": "http://10.130.142.154:8000/v1",
-#             "api_keys": "EMPTY",
-#             "request_kwargs": {
-#                 "temperature": 0.8,
-#                 "timeout": 360,
-#                 "max_tokens": 2048,
-#             },
-#         })
-
-#     @classmethod
-#     def get_strong_agent(cls):
-#         return cls.get_weak_agent()
-
-#     @classmethod
-#     def get_verify_agent(cls):
-#         return cls.get_weak_agent()
-
-# DOC2QUERY_QWEN32B_RESPONDENT_PARAMS = {
-#     "difficulty_run_args": {
-#         "w/o_content": {
-#             "model": Doc2QueryV2ComputeScoreWithQwen32bRespondent.get_weak_agent(),
-#             "repeat": 32,
-#             "fn": Doc2QueryV2ComputeScoreWithQwen32bRespondent.respond_wo_context,
-#             "desc": 'w/o ctx'
-#         },
-#         "w_content": {
-#             "model": Doc2QueryV2ComputeScoreWithQwen32bRespondent.get_strong_agent(),
-#             "repeat": 32,
-#             "fn": Doc2QueryV2ComputeScoreWithQwen32bRespondent.respond_w_context,
-#             "desc": 'w ctx'
-#         }
-#     },
-#     "difficulty_metric_args": {
-#         "advantage": 'w_content',
-#         "weakness": 'w/o_content',
-#         "advantage_oversimplified_threshold": 32/32,
-#         "weakness_oversimplified_threshold": 28/32,
-#         "advantage_overcomplex_threshold": 1/32,
-#         "weakness_overcomplex_threshold": 1/32,
-#         "advantage_threshold": 3/16,
-#         "advantage_weight": 0.0,
-#         "weakness_weight": 1.0,
-#         "confidence_bonus_threshold": 2/8,
-#         "confidence_bonus_weight": 0.
-#     },
-#     "similarity_run_args":  {
-#         "threshold": {
-#             3: 0.5,
-#             4: 1.0
-#         },
-#         "weight": 0.25,
-#     }
-# }
-
-# _qwen32b_respondent_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScoreWithQwen32bRespondent(
-#     calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_QWEN32B_RESPONDENT_PARAMS)
-# _qwen32b_respondent_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScoreWithQwen32bRespondent(
-#     calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_QWEN32B_RESPONDENT_PARAMS)
 
 # class Doc2QueryV2ComputeScoreWithQwQ32bRespondent(Doc2QueryV2ComputeScore):
 #     def __init__(self, parse_solution_fn, split="train", args=None):
