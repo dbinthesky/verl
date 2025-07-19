@@ -1460,64 +1460,67 @@ class Doc2QueryV2ComputeScore(object):
             skip_run=skip_run
         )
 
-        #         full_rewards = []
-        #         pass_rates = []
+        full_rewards = []
+        pass_rates = []
 
-        #         for i in range(len(batch_solution_str)):
-        #             if i in list(correctness.values())[0]:
-        #                 base_score = 0.0
-        #                 pass_rates.append({
-        #                     k: f'{np.sum(v[i])}/{len(v[i])}' for k, v in correctness.items()
-        #                 })
+        run_args = self.run_args
+        metric_args = self.args["difficulty_metric_args"]
 
-        #                 try:
-        #                     adv_name, weak_name = metric_args["advantage"], metric_args["weakness"]
-        #                     adv, weak = correctness[adv_name][i], correctness[weak_name][i]
+        for i in range(len(batch_solution_str)):
+            if i in list(correctness.values())[0]:
+                base_score = 0.0
+                pass_rates.append({
+                    k: f'{np.sum(v[i])}/{len(v[i])}' for k, v in correctness.items()
+                })
 
-        #                     if len(weak) == 0 or len(adv) == 0:
-        #                         full_rewards.append(base_score)
-        #                         continue
+                try:
+                    adv_name, weak_name = metric_args["advantage"], metric_args["weakness"]
+                    adv, weak = correctness[adv_name][i], correctness[weak_name][i]
 
-        #                     # 题目过难
-        #                     if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
-        #                         full_rewards.append(base_score)
-        #                         continue
+                    if len(weak) == 0 or len(adv) == 0:
+                        full_rewards.append(base_score)
+                        continue
 
-        #                     # 题目过易
-        #                     if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
-        #                         full_rewards.append(base_score)
-        #                         continue
+                    # 题目过难
+                    if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
+                        full_rewards.append(base_score)
+                        continue
 
-        #                     # adv 应该比 weakness 显著好
-        #                     if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
-        #                         full_rewards.append(base_score)
-        #                         continue
+                    # 题目过易
+                    if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
+                        full_rewards.append(base_score)
+                        continue
 
-        #                     # 难度奖励
-        #                     def calc_difficulty(scores, total_attempts):
-        #                         return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
+                    # adv 应该比 weakness 显著好
+                    if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
+                        full_rewards.append(base_score)
+                        continue
 
-        #                     # 置信度奖励
-        #                     confidence_bonus = 0.0
-        #                     if np.mean(adv) >= metric_args["confidence_bonus_threshold"]:
-        #                         confidence_bonus = metric_args["confidence_bonus_weight"] * max(
-        #                             (np.mean(adv)-np.mean(weak)), 0.0)
-        #                     base_score = [
-        #                         metric_args["weakness_weight"] *
-        #                         calc_difficulty(weak, run_args[weak_name]["repeat"]),
-        #                         metric_args["advantage_weight"] *
-        #                         calc_difficulty(adv, run_args[adv_name]["repeat"]),
-        #                         confidence_bonus
-        #                     ]
+                    # 难度奖励
+                    def calc_difficulty(scores, total_attempts):
+                        return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
 
-        #                     full_rewards.append(base_score)
-        #                 except Exception as err:
-        #                     print(f'[ERROR] {err}')
-        #                     full_rewards.append(base_score)
-        #             else:
-        #                 pass_rates.append({})
-        #                 full_rewards.append(0.0)
-        #         return full_rewards, pass_rates
+                    # 置信度奖励
+                    confidence_bonus = 0.0
+                    if np.mean(adv) >= metric_args["confidence_bonus_threshold"]:
+                        confidence_bonus = metric_args["confidence_bonus_weight"] * max(
+                            (np.mean(adv)-np.mean(weak)), 0.0)
+                    base_score = [
+                        metric_args["weakness_weight"] *
+                        calc_difficulty(weak, run_args[weak_name]["repeat"]),
+                        metric_args["advantage_weight"] *
+                        calc_difficulty(adv, run_args[adv_name]["repeat"]),
+                        confidence_bonus
+                    ]
+
+                    full_rewards.append(base_score)
+                except Exception as err:
+                    print(f'[ERROR] {err}')
+                    full_rewards.append(base_score)
+            else:
+                pass_rates.append({})
+                full_rewards.append(0.0)
+        return full_rewards, pass_rates
 
         #     def do_not_simulate_respondent(self, debug):
         #         return (
@@ -1595,47 +1598,6 @@ class Doc2QueryV2ComputeScore(object):
             group_names=task_names
         )
         return correctness
-
-        #     async def get_similarity_reward(
-        #         self,
-        #         batch_data_sources,
-        #         batch_solution_str,
-        #         batch_ground_truth,
-        #         max_concurrent_requests=128,
-        #         run_args=None
-        #     ):
-        #         assert run_args is not None
-
-        #         indices = []
-        #         fabricates, authentics = [], []
-        #         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-        #             fabricate = self.parse_solution_fn(sol)
-        #             # FIXME: fabricate = question + answer?
-        #             if fabricate is not None and gt.get("question", None):
-        #                 fabricates.append(fabricate)
-        #                 authentics.append(gt["question"])
-        #                 indices.append(i)
-        #             else:
-        #                 continue
-
-        #         similarity = await question_similarity(
-        #             agent=self.get_verify_agent(),
-        #             authentic=authentics,
-        #             fabricate=fabricates,
-        #             max_concurrent_requests=max_concurrent_requests
-        #         )
-
-        #         scores = [0.0] * len(batch_solution_str)
-        #         for sim, index in zip(similarity, indices):
-        #             if sim is None:
-        #                 pass
-        #             else:
-        #                 _score = 0.0
-        #                 for threshold, set_val in run_args["threshold"].items():
-        #                     if sim >= threshold:
-        #                         _score = max(_score, set_val)
-        #                 scores[index] = _score * run_args["weight"]
-        #         return scores
 
         #     async def get_bad_question_penalty(
         #         self,
