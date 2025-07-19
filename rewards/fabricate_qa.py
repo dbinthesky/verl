@@ -491,6 +491,8 @@ REASON_QUESTION_QUALITY_VALUE_TEMPLATE = """
 ```
 """
 
+REASON_QUESTION_QUALITY_VALUE_TEMPLATE
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1754,9 +1756,9 @@ class Doc2QueryV2ComputeScore(object):
                 continue
 
         qualities = await task.do_job(
-            agent=self.auxiliary_agent,
+            agent=self.verify_agent,
             batch_inputs=questions,
-            max_concurrent_requests=self.args["auxiliary_agent"]["max_concurrent_requests"],
+            max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
         )
         # True = 质量高
 
@@ -2015,7 +2017,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
             "request_kwargs": {
                 "temperature": 0.6,
                 "timeout": 360,
-                "max_tokens": 2048,
+                "max_tokens": 1024,
             },
         },
         "max_concurrent_requests": 32
@@ -2028,7 +2030,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
             "request_kwargs": {
                 "temperature": 0.6,
                 "timeout": 360,
-                "max_tokens": 1024,
+                "max_tokens": 4096,
             },
         },
         "max_concurrent_requests": 32
