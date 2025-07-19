@@ -1185,44 +1185,23 @@ class Doc2QueryV2ComputeScore(object):
         # 初始化规则奖励/惩罚
         self.init_rule_based_penalties()
 
-        #
-    #         self.format = CalculationAnswerFormatVerify(
-    #             parse_solution_fn=self.parse_solution_fn)
-    #         self.language = LanguageConsistency(
-    #             parse_solution_fn=self.parse_solution_fn)
-    #         self.bad_question_detection = BadQuestionDetection(
-    #             parse_solution_fn=self.parse_solution_fn
-    #         )
-    #         self.thought_bonus = ThoughtBonus(
-    #             parse_solution_fn=calc_qa_parse_thought_fn
-    #         )
-    #         self.question_similarity = QuestionSimilarity(
-    #             parse_solution_fn=self.parse_solution_fn)
+        self.initialized_save_rollout = False
 
-    #         self.initial_record_rollout_samples_module = False
-    #         self.record_rollout_max_capacity = record_rollout_max_capacity
-    #         self.record_rollout_samples_path = record_rollout_samples_path
+    def init_save_rollouts(self):
+        if self.initialized_save_rollout:
+            return
 
-    #     def initialize_record_rollout_samples_module(self):
-    #         if self.initial_record_rollout_samples_module:
-    #             return
+        # 保存Rollouts数据
+        default_local_dir = self.args["save_rollouts"]["default_local_dir"]
 
-    #         # 保存rollout高质量数据
-    #         if self.record_rollout_samples_path is None:
-    #             record_rollout_samples_path = os.path.join(
-    #                 ROLLOUT_SAVE_DIR, f'{self.task_name}_{uuid.uuid4().hex}.json')
-    #         else:
-    #             record_rollout_samples_path = os.path.join(
-    #                 ROLLOUT_SAVE_DIR, self.record_rollout_samples_path)
+        save_path = os.path.join(default_local_dir, f'{self.task_name}_{uuid.uuid4().hex}.jsonl')
+        self.save_rollouts_path = save_path
 
-    #         self.save_rollout_samples_path = record_rollout_samples_path
+        print(
+            f'[INFO] SAVE ROLLOUTS {self.task_name}: {self.save_rollouts_path}')
 
-    #         assert self.save_rollout_samples_path
-    #         print(
-    #             f'[INFO] Save {self.task_name} rollout data into path: {self.save_rollout_samples_path}')
-
-    #         self.rollout_database = {}
-    #         self.initial_record_rollout_samples_module = True
+        self.rollout_database = {}
+        self.initialized_save_rollout = True
 
     @classmethod
     def rule_based_penalties(cls):
@@ -1261,15 +1240,6 @@ class Doc2QueryV2ComputeScore(object):
     def init_verify_agent(self):
         self.adv_agent = Agent(
             **self.args["verify_agent"]["model"])
-
-    #     def get_penalties(self) -> Dict[str, Callable]:
-    #         return {
-    #             "Format": self.format.get_penalty_or_reward,
-    #             "Lang": self.language.get_penalty_or_reward,
-    #             "BadQ": self.bad_question_detection.get_penalty_or_reward,
-    #             "Thought": self.thought_bonus.get_penalty_or_reward,
-    #             "QSim": self.question_similarity.get_penalty_or_reward,
-    #         }
 
     #     def response_postprocess(self, s, debug=False):
     #         if "</think>" in s:
@@ -1989,6 +1959,9 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
             4: 1.0
         },
         "weight": 0.25,
+    },
+    "save_rollouts": {
+        "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
     }
 }
 
