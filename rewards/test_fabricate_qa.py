@@ -16,6 +16,7 @@ from fabricate_qa import (
     JudgeTwoQuestionSimilarity,
     MultichoiceKnowledgeQuestionQualityEval,
     QuestionRefineHack,
+    QuestionDifficultyEval,
     LRUCache,
     WithUnitSymbol,
     NumericalAnswer,
@@ -242,7 +243,8 @@ class TestUtils(unittest.TestCase):
     def test_batch_call_open_api(self):
         # task = JudgeTwoQuestionSimilarity()
         # task = MultichoiceKnowledgeQuestionQualityEval()
-        task = QuestionRefineHack()
+        # task = QuestionRefineHack()
+        task = QuestionDifficultyEval()
 
         async def main():
             results = await task.do_job(
