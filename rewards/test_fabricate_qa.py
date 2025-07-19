@@ -99,6 +99,11 @@ _doc2query_v2_qas = [
      "\\boxed{10295.500}", "NumericalAnswer")
 ]
 
+_salt_qas = [
+    ("While reviewing a national IT infrastructure proposal, an analyst mistakenly listed 'maximizing government efficiency' as key. Which three principles (II, III, IV) are actually required by policy? State their codes separated by commas.", "II,III,IV"),
+    ("In a university campus network upgrade, engineers install a fiber cable with a dispersion coefficient of 2000 ps/(nm·km) to connect two buildings. The light source has a spectral width of 0.6 nm. To maintain signal integrity, the pulse broadening must not exceed 1200 ps. What is the maximum allowable cable length between buildings, rounded to the nearest kilometer?", "1"),
+]
+
 
 def load_dataset(task_name, num=100):
     filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0718.parquet"
@@ -117,7 +122,10 @@ def load_dataset(task_name, num=100):
                 f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: {sample[0]}\n\nAnswer: {sample[1]}\n\nAnswer Type: {sample[2]}\n</question>'
             )
         else:
-            raise NotImplementedError
+            sample = random.choice(_salt_qas)
+            batch_solution_str.append(
+                f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: {sample[0]}\n\nAnswer: {sample[1]}\n</question>'
+            )
         batch_ground_truth.append(row["reward_model"])
         if len(batch_ground_truth) == num:
             break
@@ -293,12 +301,21 @@ class TestSALT(unittest.TestCase):
                                          batch_solution_str, batch_ground_truth)
 
     def test_learnable_reward(self):
-        # batch_solution_str, batch_ground_truth = load_salt_data(num=100)
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="salt", num=4)
 
         task = SALTComputeScore(
             salt_parse_solution_fn, split="valid", args=SALT_DEFAULT_PARAMS)
         for _ in task._penalties:
             print(_, _.min_score, _.max_score)
+
+        async def main():
+            results = await task.self_taught(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth,
+            )
+            print(results)
+        aio.run(main())
 
         # salt_default_compute_score_valid(
         #     [None] *
@@ -484,7 +501,8 @@ class TestDoc2QueryV2(unittest.TestCase):
             task_name="doc2query_v2", num=4)
 
         async def main():
-            results = await task.get_difficulty_reward(
+            # simulate_respondent get_difficulty_reward
+            results = await task.simulate_respondent(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
             )

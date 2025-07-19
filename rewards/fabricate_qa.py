@@ -2586,18 +2586,6 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
             parse_solution_fn=self.parse_solution_fn, min_score=0, max_score=0.1
         ))
 
-#     def do_not_simulate_respondent(self, debug):
-#         if debug:
-#             return (
-#                 self.format,
-#                 self.language,
-#             )
-#         return (
-#             self.format,
-#             self.language,
-#             self.bad_question_detection,
-#         )
-
 #     @classmethod
 #     def reject_sample(cls, question, answer, gt):
 #         """ 拒绝采样：合成题不提供答案,需要模型自己rollout对 """
@@ -2608,13 +2596,11 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 #             s = s[s.index("</think>")+len("</think>"):]
 #         return s
 
-#     async def self_taught(self,
-#                           batch_data_sources,
-#                           batch_solution_str,
-#                           batch_ground_truth,
-#                           run_args=None,
-#                           max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"],
-#                           debug=False):
+    async def self_taught(self,
+                          batch_data_sources,
+                          batch_solution_str,
+                          batch_ground_truth):
+        pass
 #         assert run_args is not None
 
 #         prompt2index = defaultdict(list)
