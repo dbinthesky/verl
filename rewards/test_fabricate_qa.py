@@ -21,12 +21,13 @@ from fabricate_qa import (
     WithUnitSymbol,
     NumericalAnswer,
     doc2query_v2_parse_solution_fn,
+    salt_parse_solution_fn,
     Doc2QueryV2FormatVerify,
     LanguageConsistency,
     BadQuestionDetection,
     Doc2QueryV2ComputeScore,
-
-    #     # SALTBadQuestionDetection,
+    SALTFormatVerify,
+    SALTBadQuestionDetection,
     #     # QuestionSimilarityPenalty,
     #     # Doc2QueryV3ComputeScore,
     #     # CriteriaRMComputeScore,
@@ -261,12 +262,21 @@ class TestUtils(unittest.TestCase):
 
 
 class TestSALT(unittest.TestCase):
-    def test_detect_bad_question(self):
-        batch_solution_str, batch_ground_truth = load_salt_data(num=100)
-        scorer = SALTBadQuestionDetection(salt_parse_solution_fn)
+    def test_salt_format_verify(self):
+        scorer = SALTFormatVerify(
+            salt_parse_solution_fn, -1.75, -1.25)
+        print(scorer.get_penalty_or_reward(
+            '<think>\nssssss\n</think>\n\n<question>\nQuestion: 某公司生产密码设备，其产品批次密码t为两位正整数。密码设置规则要求：将t乘以生产效率系数K后，结果最后两位必须是36。效率系数K通过如下方式计算：去年设备计划运行250天，实际因维护停机30天，另5%时间用于年度升级。K值等于[(计划运行天数 - 停机天数 - 升级天数) × 0.05] + 1。同时，公司年度维护成本为80,000元，但这不影响K的计算。求满足条件的密码t值。  \nAnswer: \\boxed{76}xxxxx xxx xxx xxx xxx xxx xxx xxx xxx xxx xxx xx\n</question><|im_end|><｜end▁of▁sentence｜>', None
+        ))
 
-        for response, gt in zip(batch_solution_str, batch_ground_truth):
-            score = scorer.get_penalty_or_reward(response, gt)
+    def test_detect_bad_question(self):
+        scorer = SALTBadQuestionDetection(
+            salt_parse_solution_fn,  -1.75, -1.25)
+
+        print(scorer.get_penalty_or_reward(
+            '<think>\nssssss\n</think>\n\n<question>\nQuestion: During a materials analysis audit, an engineer incorrectly noted white heart malleable iron\'s microstructure matrix as containing graphite. Properly, the matrix consists of two iron phases plus cementite. Identify these two phases separated by \'+\' symbols. \nAnswer: ferrite+cementite\n</question><|im_end|><｜end▁of▁sentence｜>',
+            {"question": "During a materials analysis audit, an engineer incorrectly noted white heart malleable iron's microstructure matrix as containing graphite. Properly, the matrix consists of two iron phases plus cementite. Identify these two phases separated by '+' symbols.", "lang_code": "en"}
+        ))
 
     def test_question_similarity_penalty(self):
         batch_solution_str, batch_ground_truth = load_salt_data(num=100)
@@ -522,31 +532,6 @@ class TestDoc2QueryV2(unittest.TestCase):
             )
             print(results)
         aio.run(main())
-
-    def test_fabricate_qa_compute_score(self):
-        batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
-            format="fabricate_qa", num=32)
-        print(fabricate_qa_default_stage1_compute_score_valid(
-            [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth,
-        ))
-
-    def test_fabricate_aio_compute_score(self):
-        batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
-            format="doc2query_v2", num=32)
-        batch_solution_str, batch_ground_truth = batch_solution_str[:2], batch_ground_truth[:2]
-        sources = []
-        for _ in range(len(batch_solution_str)):
-            sources.append("doc2query_v2")
-
-        rewards = fabricate_aio_qwq32b_respondent_stage2_compute_score_valid(
-            sources, batch_solution_str, batch_ground_truth,
-        )
-        # rewards = fabricate_aio_qwen3_8b_respondent_compute_score_valid(
-        #     sources, batch_solution_str, batch_ground_truth,
-        # )
-
-        print(len(rewards), len(batch_solution_str))
-        self.assertTrue(len(rewards) == len(batch_solution_str))
 
 
 class TestCriteriaRM(unittest.TestCase):

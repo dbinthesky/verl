@@ -1635,7 +1635,7 @@ class LanguageConsistency(PenaltyOrReward):
         if solution_str is None:
             return 0.0
 
-        question, answer, answer_type = solution_str
+        question = solution_str[0]
 
         lang_code = ground_truth["lang_code"]
 
@@ -2360,10 +2360,10 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
 
 
 _default_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScore(
-    calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_V2_DEFAULT_PARAMS)
+    doc2query_v2_parse_solution_fn, split="train", args=DOC2QUERY_V2_DEFAULT_PARAMS)
 _default_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScore(
-    calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_V2_DEFAULT_PARAMS)
-doc2query_v2_compute_score_train = default_doc2query_v2_compute_score_train.compute_score
+    doc2query_v2_parse_solution_fn, split="valid", args=DOC2QUERY_V2_DEFAULT_PARAMS)
+doc2query_v2_compute_score_train = _default_doc2query_v2_compute_score_train.compute_score
 doc2query_v2_compute_score_valid = _default_doc2query_v2_compute_score_valid.compute_score
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2375,184 +2375,129 @@ doc2query_v2_compute_score_valid = _default_doc2query_v2_compute_score_valid.com
 # SALT
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-# def salt_parse_solution_fn(solution_str: str, remove_option_letter=True):
-#     if solution_str.count("</question>") > 1:
-#         return None
+def salt_parse_solution_fn(solution_str: str):
+    parsed = parse_question_solution_fn(solution_str)
 
-#     if solution_str.count("</think>") > 1:
-#         return None
+    if parsed is None:
+        return None
 
-#     solution_str = postprocess_solution(solution_str)
-#     if not solution_str.startswith("<think>"):
-#         solution_str = f'<think>\n{solution_str}'
+    thought, conclusion = parsed
 
-#     try:
-#         thought = re.findall(r'<think>.*</think>',
-#                              solution_str, re.DOTALL)[0]
-#     except Exception as err:
-#         return None
+    try:
+        question = conclusion[conclusion.index(
+            "Question: ")+len("Question: "):conclusion.index("Answer:")].strip()
 
-#     solution_str = solution_str.replace(thought, "")
+        answer = conclusion[conclusion.index(
+            "Answer:")+len("Answer:"):].strip()
 
-#     try:
-#         conclusion = re.findall(r'<question>(.*)</question>',
-#                                 solution_str, re.DOTALL)[0]
-#     except Exception as err:
-#         return None
-#     if ("<question>" in conclusion) or ("</question>" in conclusion):
-#         return None
+        return question, answer
+    except Exception as err:
+        return None
 
-#     try:
-#         question = conclusion[conclusion.index(
-#             "Question: ")+len("Question: "):conclusion.index("Answer:")].strip()
 
-#         answer = conclusion[conclusion.index(
-#             "Answer:")+len("Answer:"):].strip()
+class SALTFormatVerify(PenaltyOrReward):
+    def __init__(self, parse_solution_fn, min_score, max_score, abbrev="Lang"):
+        super().__init__(
+            parse_solution_fn=parse_solution_fn, min_score=min_score, max_score=max_score, abbrev=abbrev
+        )
 
-#         return question, answer
-#     except Exception as err:
-#         return None
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        solution_str = self.parse_solution_fn(solution_str)
 
-# class SALTQuestionAnswerFormatVerify(PenaltyOrReward):
-#     def __init__(self, parse_solution_fn=calc_qa_parse_solution_fn):
-#         self.parse_solution_fn = parse_solution_fn
+        if solution_str is None:
+            return 0.0
 
-#     def get_penalty_or_reward(self, solution_str, ground_truth):
-#         solution_str = self.parse_solution_fn(solution_str)
+        question, answer = solution_str
 
-#         if solution_str is None:
-#             return 0.0
+        # 中文
+        if contain_chinese(answer):
+            tokens = list(jieba.cut(answer))
+        else:
+            tokens = list(answer.split(" "))
 
-#         question, answer = solution_str
+        # 答案长度过长
+        if len(tokens) > 10:
+            return self.min_score
 
-#         # 中文
-#         if contain_chinese(answer):
-#             tokens = list(jieba.cut(answer))
-#         else:
-#             tokens = list(answer.split(" "))
+        if any(kw in answer for kw in ("A. ", "B. ", "C. ", "D. ", "A) ", "B) ", "C) ", "D)")):
+            return self.min_score
 
-#         # 答案长度过长
-#         if len(tokens) > 10:
-#             return -1.6
+        # 疑似选择题
+        if all(kw in question for kw in ("A. ", "B. ", "C. ", "D. ")):
+            return self.min_score
 
-#         if any(kw in answer for kw in ("A. ", "B. ", "C. ", "D. ", "A) ", "B) ", "C) ", "D)")):
-#             return -1.6
+        # 疑似选择题
+        if all(kw in question for kw in ("A) ", "B) ", "C) ", "D) ")):
+            return self.min_score
 
-#         # 疑似选择题
-#         if all(kw in question for kw in ("A. ", "B. ", "C. ", "D. ")):
-#             return -1.6
+        # 疑似选择题
+        if all(kw in question for kw in ("A）", "B）", "C）", "D）")):
+            return self.min_score
 
-#         # 疑似选择题
-#         if all(kw in question for kw in ("A) ", "B) ", "C) ", "D) ")):
-#             return -1.6
+        # 疑似选择题
+        if any(kw == answer.strip() for kw in ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N")):
+            return self.min_score
 
-#         # 疑似选择题
-#         if all(kw in question for kw in ("A）", "B）", "C）", "D）")):
-#             return -1.6
+        # 成功
+        return 0.0
 
-#         # 疑似选择题
-#         if any(kw == answer.strip() for kw in ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N")):
-#             return -1.6
 
-#         return 0.0
+class SALTBadQuestionDetection(BadQuestionDetection):
+    def __init__(self, parse_solution_fn, min_score, max_score, abbrev="BadQ", ngram=4):
+        super().__init__(
+            parse_solution_fn=parse_solution_fn, min_score=min_score, max_score=max_score, abbrev=abbrev
+        )
+        self.ngram = ngram
 
-# class SALTLanguageConsistency(LanguageConsistency):
-#     def __init__(self, parse_solution_fn=calc_qa_parse_solution_fn):
-#         super().__init__(
-#             parse_solution_fn=parse_solution_fn
-#         )
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        raw_solution_str = solution_str
+        solution_str = self.parse_solution_fn(solution_str)
 
-#     def get_penalty_or_reward(self, solution_str, ground_truth):
-#         raw_solution_str = solution_str
-#         solution_str = self.parse_solution_fn(solution_str)
+        if solution_str is None:
+            return 0.0
 
-#         if solution_str is None:
-#             return 0.0
+        question, answer = solution_str
 
-#         result = solution_str
-#         if len(result) == 2:
-#             question, answer = result
-#         elif len(result) == 3:
-#             question, options, answer = result
-#         else:
-#             raise NotImplementedError
+        # 基于规则的问题检测
+        contam, _ = self.valid_ten_gram(
+            self.generate_ngrams(question, self.ngram, ground_truth),
+            self.generate_ngrams(
+                ground_truth["question"], self.ngram, ground_truth)
+        )
+        if contam:
+            return self.min_score
 
-#         lang_code = ground_truth["lang_code"]
+        # 成功
+        return 0.0
 
-#         base_score = -1.2
+    def replace_spaces(self, text):
+        # 这个函数接受一个字符串作为输入，然后返回一个新的字符串，其中所有的三个或更多连续的空格都被替换为两个空格。
+        # 这个正则表达式 ' {3,}' 的意思是匹配三个或更多的连续空格。{3,} 是一个数量词，表示匹配前面的字符（在这里是空格）三次或更多次。
+        return re.sub(' {4,}', '  ', text)
 
-#         if lang_code == "en" and contain_chinese(question):
-#             return base_score
-#         elif lang_code == "zh" and (not contain_chinese(question)):
-#             return base_score
+    def generate_ngrams(self, text, n, ground_truth):
+        text = self.replace_spaces(text)
+        text = self.tokenize(text, ground_truth)
+        ngrams = set()
+        for i in range(len(text) - n + 1):
+            ngram = ' '.join(text[i:i + n])
+            if re.search('[a-zA-Z\u4e00-\u9fff]', ngram):
+                if ngram not in ngrams:
+                    ngrams.add(ngram)
+        return ngrams
 
-#         base_score += 0.4
+    def valid_ten_gram(self, set1, set2, verbose=False):
+        intersection = set1.intersection(set2)
+        # union = set1.union(set2)
+        if verbose:
+            if len(intersection) > 0:
+                pass
+        return len(intersection) > 0, intersection
 
-#         if lang_code == "en":
-#             if contain_chinese(raw_solution_str):
-#                 return base_score
-#         elif lang_code == "zh":
-#             if not self.detect_zh(raw_solution_str, 0.75):
-#                 return base_score
-#         else:
-#             pass
-
-#         return 0.0
-
-# class SALTBadQuestionDetection(BadQuestionDetection):
-#     def __init__(self, parse_solution_fn=calc_qa_parse_solution_fn, ngram=4):
-#         super().__init__(
-#             parse_solution_fn=parse_solution_fn
-#         )
-#         self.ngram = ngram
-
-#     def get_penalty_or_reward(self, solution_str, ground_truth):
-#         raw_solution_str = solution_str
-#         solution_str = self.parse_solution_fn(solution_str)
-
-#         if solution_str is None:
-#             return 0.0
-
-#         question, answer = solution_str
-
-#         # 基于规则的问题检测
-#         contam, _ = self.valid_ten_gram(
-#             self.generate_ngrams(question, self.ngram, ground_truth),
-#             self.generate_ngrams(
-#                 ground_truth["question"], self.ngram, ground_truth)
-#         )
-#         if contam:
-#             return -0.4
-#         return 0.0
-
-#     def replace_spaces(self, text):
-#         # 这个函数接受一个字符串作为输入，然后返回一个新的字符串，其中所有的三个或更多连续的空格都被替换为两个空格。
-#         # 这个正则表达式 ' {3,}' 的意思是匹配三个或更多的连续空格。{3,} 是一个数量词，表示匹配前面的字符（在这里是空格）三次或更多次。
-#         return re.sub(' {4,}', '  ', text)
-
-#     def generate_ngrams(self, text, n, ground_truth):
-#         text = self.replace_spaces(text)
-#         text = self.tokenize(text, ground_truth)
-#         ngrams = set()
-#         for i in range(len(text) - n + 1):
-#             ngram = ' '.join(text[i:i + n])
-#             if re.search('[a-zA-Z\u4e00-\u9fff]', ngram):
-#                 if ngram not in ngrams:
-#                     ngrams.add(ngram)
-#         return ngrams
-
-#     def valid_ten_gram(self, set1, set2, verbose=False):
-#         intersection = set1.intersection(set2)
-#         # union = set1.union(set2)
-#         if verbose:
-#             if len(intersection) > 0:
-#                 pass
-#         return len(intersection) > 0, intersection
-
-#     def tokenize(self, s, ground_truth):
-#         lang_code = ground_truth["lang_code"]
-#         tokens = tokenize(s, lang_code)
-#         return tokens
+    def tokenize(self, s, ground_truth):
+        lang_code = ground_truth["lang_code"]
+        tokens = tokenize(s, lang_code)
+        return tokens
 
 # class QuestionSimilarityPenalty(QuestionSimilarity):
 #     """ 问题相似度惩罚：新问题应当与原问题有比较大的差异
