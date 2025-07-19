@@ -1968,7 +1968,25 @@ class Doc2QueryV2ComputeScore(object):
             batch_ground_truth,
             skip_run=None
     ):
-        prompt2index = {_: defaultdict(list) for _ in self.run_args().keys()}
+        return await self._simulate_respondent(
+            batch_data_sources=batch_data_sources,
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=batch_ground_truth,
+            skip_run=skip_run,
+            run_args=self.run_args(),
+            batch_verify_fn=self.batch_verify_results
+        )
+
+    async def _simulate_respondent(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            run_args,
+            batch_verify_fn,
+            skip_run=None,
+    ):
+        prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
         extra = {}
 
         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
@@ -1990,18 +2008,18 @@ class Doc2QueryV2ComputeScore(object):
                 if skip:
                     continue
 
-                for name, v in self.run_args().items():
+                for name, v in run_args.items():
                     fn = getattr(self, v["fn"])
                     _prompt = fn(result, gt)
                     prompt2index[name][_prompt].append(i)
         tasks = []
         task_names = []
         for name, v in prompt2index.items():
-            prompts = list(v.keys()) * self.run_args()[name]["repeat"]
+            prompts = list(v.keys()) * run_args[name]["repeat"]
             tasks.append(self.agents[name].run(
                 prompts,
-                self.run_args()[name]["max_concurrent_requests"],
-                desc=f'[{self.run_args()[name]["desc"]} {self.run_args()[name]["model"]["model"]} 解题]',
+                run_args[name]["max_concurrent_requests"],
+                desc=f'[{run_args[name]["desc"]} {run_args[name]["model"]["model"]} 解题]',
                 pbar=False,
                 postprocess_fns=[self.response_postprocess] * len(prompts)
             ))
@@ -2021,7 +2039,7 @@ class Doc2QueryV2ComputeScore(object):
                         extra=extra[index],
                         ground_truth=batch_ground_truth[index]))
 
-        correctness = await self.batch_verify_results(
+        correctness = await batch_verify_fn(
             verify_queue=verify_queue,
             max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
             group_names=task_names
