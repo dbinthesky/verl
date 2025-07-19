@@ -3397,31 +3397,31 @@ SALT_DEFAULT_PARAMS = {
         "weight": 1.0,
     },
     "verify_agent": {
-    "model": {
-        "model": "qwen25_32B_instruct",
-        "base_url": "http://10.130.142.223:8000/v1",
-        "api_keys": "EMPTY",
-        "request_kwargs": {
-            "temperature": 0.6,
-            "timeout": 360,
-            "max_tokens": 1024,
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.223:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 1024,
+            },
         },
+        "max_concurrent_requests": 32
     },
-    "max_concurrent_requests": 32
-},
-"auxiliary_agent": {
-    "model": {
-        "model": "qwen25_32B_instruct",
-        "base_url": "http://10.130.142.223:8000/v1",
-        "api_keys": "EMPTY",
-        "request_kwargs": {
-            "temperature": 0.6,
-            "timeout": 360,
-            "max_tokens": 4096,
+    "auxiliary_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.223:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 4096,
+            },
         },
+        "max_concurrent_requests": 32
     },
-    "max_concurrent_requests": 32
-},
 }
 
 # _default_salt_compute_score_train = SALTComputeScore(
