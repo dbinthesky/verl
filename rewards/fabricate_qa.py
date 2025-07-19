@@ -1472,6 +1472,7 @@ class Doc2QueryV2ComputeScore(object):
         self.init_weak_agent()
         self.init_adv_agent()
         self.init_verify_agent()
+        self.init_auxiliary_agent()
 
     def init_weak_agent(self):
         weak_name = self.args["difficulty_metric_args"]["weakness"]
@@ -1488,6 +1489,10 @@ class Doc2QueryV2ComputeScore(object):
     def init_verify_agent(self):
         self.verify_agent = Agent(
             **self.args["verify_agent"]["model"])
+
+    def init_auxiliary_agent(self):
+        self.auxiliary_agent = Agent(
+            **self.args["auxiliary_agent"]["model"])
 
     def response_postprocess(self, response: str):
         s = response
@@ -1728,39 +1733,39 @@ class Doc2QueryV2ComputeScore(object):
         )
         return correctness
 
-        #     async def get_bad_question_penalty(
-        #         self,
-        #         batch_data_sources,
-        #         batch_solution_str,
-        #         batch_ground_truth,
-        #         max_concurrent_requests=128,
-        #         run_args=None
-        #     ):
-        #         indices = []
-        #         fabricates = []
-        #         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-        #             fabricate = self.parse_solution_fn(sol)
-        #             if fabricate is not None:
-        #                 fabricates.append(self.format_question(
-        #                     fabricate[0], fabricate[1], None))
-        #                 indices.append(i)
-        #             else:
-        #                 continue
+    async def quick_question_eval(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+    ):
+        task = ReasonQuestionQualityEval()
+        indices = []
+        questions = []
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            result = self.parse_solution_fn(sol)
+            if result is not None:
+                questions.append(result[0])
+                indices.append(i)
+            else:
+                continue
 
-        #         valid = await self._good_question_checklist(
-        #             agent=self.get_verify_agent(),
-        #             fabricate=fabricates,
-        #             max_concurrent_requests=max_concurrent_requests
-        #         )
+        qualities = await task.do_job(
+            agent=self.auxiliary_agent,
+            batch_inputs=questions,
+            max_concurrent_requests=self.args["auxiliary_agent"]["max_concurrent_requests"],
+        )
+        print(qualities)
+        # True = 质量高
 
-        #         scores = [0.0] * len(batch_solution_str)
-        #         for _valid, index in zip(valid, indices):
-        #             if _valid is None:
-        #                 pass
-        #             else:
-        #                 _score = 0.0 if _valid else -0.5
-        #                 scores[index] = _score
-        #         return scores
+        scores = [0.0] * len(batch_solution_str)
+        for quality, index in zip(qualities, indices):
+            if quality is None:
+                pass
+            else:
+                _score = 0.0 if quality else -0.5
+                scores[index] = _score
+        return scores
 
         #     def compute_score(self,
         #                       batch_data_sources,
@@ -2030,6 +2035,19 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
                 "temperature": 0.6,
                 "timeout": 360,
                 "max_tokens": 2048,
+            },
+        },
+        "max_concurrent_requests": 32
+    },
+    "auxiliary_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.223:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 1024,
             },
         },
         "max_concurrent_requests": 32

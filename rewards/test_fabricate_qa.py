@@ -476,25 +476,19 @@ class TestDoc2QueryV2(unittest.TestCase):
             print(results)
         aio.run(main())
 
-    def test_doc2query_v2_get_similarity_reward(self):
-        batch_solution_str, batch_ground_truth = load_fabricate_aio_data(
-            format="doc2query_v2", num=32)
+    def test_doc2query_v2_quick_question_eval(self):
         task = Doc2QueryV2ComputeScore(
-            doc2query_v2_parse_solution_fn, split="valid", args=DOC2QUERY_DEFAULT_PARAMS)
+            doc2query_v2_parse_solution_fn, split="valid", args=DOC2QUERY_V2_DEFAULT_PARAMS)
+
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="doc2query_v2", num=4)
 
         async def main():
-            results = await task.get_similarity_reward(
+            results = await task.quick_question_eval(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
-                run_args={
-                    "threshold": {
-                        3: 0.5,
-                        4: 1.0
-                    },
-                    "weight": 0.25,
-                },
             )
-            self.assertTrue(all(_ == 1.0 * 0.25 for _ in results))
+            print(results)
         aio.run(main())
 
     def test_doc2query_v2_compute_score(self):
