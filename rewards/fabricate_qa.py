@@ -1445,7 +1445,7 @@ class Doc2QueryV2ComputeScore(object):
         print(
             f'[INFO] SAVE ROLLOUTS {self.task_name}: {self.save_rollouts_path}')
 
-        self.rollout_database = {}
+        self.rollout_cache = []
         self.initialized_save_rollout = True
 
     @classmethod
@@ -1706,7 +1706,7 @@ class Doc2QueryV2ComputeScore(object):
             tasks.append(self.agents[name].run(
                 prompts,
                 self.run_args()[name]["max_concurrent_requests"],
-                desc=f'[Generate {self.run_args()[name]["desc"]} Responses {self.run_args()[name]["model"]["model"]}]',
+                desc=f'[{self.run_args()[name]["desc"]} {self.run_args()[name]["model"]["model"]}解题]',
                 pbar=False,
                 postprocess_fns=[self.response_postprocess] * len(prompts)
             ))
@@ -1766,6 +1766,16 @@ class Doc2QueryV2ComputeScore(object):
                 scores[index] = _score
         return scores
 
+    def update_rollout_info(self, solution_str, ground_truth, score, extra):
+        inst_id = ground_truth["extra_info"]["uuid"]
+        args = copy.deepcopy(self.args)
+
+        self.rollout_cache.append({
+            "prompt_generation_process": solution_str,
+            "score": score,
+            "extra": extra,
+        })
+
     async def _compute_score(self,
                              batch_data_sources,
                              batch_solution_str,
@@ -1807,40 +1817,35 @@ class Doc2QueryV2ComputeScore(object):
             penalties = ["Parse"]+[_.abbrev for _ in self._penalties]
             penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
                                         s in zip(penalties, scores)])
-            print(penalty_log_str)
-        #             if stage == "2":
-        #                 _difficulty = difficulty_rewards[i]
-        #                 _difficulty_score = np.sum(_difficulty) if isinstance(
-        #                     _difficulty, list) else _difficulty
-        #                 scores.append(_difficulty_score)
 
-        #             cur_score = 0
+            _difficulty = difficulty_rewards[i]
+            _difficulty_score = np.sum(_difficulty) if isinstance(
+                _difficulty, list) else _difficulty
+            scores.append(_difficulty_score)
 
-        #             for j, _score in enumerate(scores):
-        #                 if _score < 0:
-        #                     cur_score = _score
-        #                     break
-        #                 else:
-        #                     if (j == penalties.index("QSim")) or (j == penalties.index("Thought")):  # BLEU
-        #                         if stage == "2" and _difficulty_score > 0:
-        #                             cur_score += _score
-        #                         elif stage == "1":
-        #                             pass
-        #                     else:
-        #                         cur_score += _score
+            cur_score = 0
 
-        #             # 保存Rollout信息
-        #             if cur_score > 0 and self.split == "train":
-        #                 self.update_rollout_info(
-        #                     solution_str=batch_solution_str[i],
-        #                     ground_truth=batch_ground_truth[i],
-        #                     difficulty=pass_rates[i]
-        #                 )
+            for j, _score in enumerate(scores):
+                if _score < 0:
+                    cur_score = _score
+                    break
+                else:
+                    cur_score += _score
 
-        #             if stage == "1" and cur_score > 0.0:
-        #                 cur_score = 0.0
+            # 保存Rollout信息
+            if self.split == "train":
+                self.update_rollout_info(
+                    solution_str=batch_solution_str[i],
+                    ground_truth=batch_ground_truth[i],
+                    score=cur_score,
+                    extra=pass_rates[i]
+                )
 
-        #             final_results.append(cur_score)
+                # Validation逻辑 —— 计算数据转化成功率
+                if self.split == "valid":
+                    cur_score = 1.0 if cur_score > 0.0 else 0.0
+
+                final_results.append(cur_score)
 
         #             if cur_score > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
         #                 log = True
@@ -1912,38 +1917,10 @@ class Doc2QueryV2ComputeScore(object):
         #             "", "")
         #         )
 
-        #     def update_rollout_info(self, solution_str, ground_truth, difficulty):
-        #         parsed = self.parse_solution_fn(solution_str)
-        #         if parsed is None:
-        #             return
-        #         question, answer, answer_type = parsed
-        #         inst_id = ground_truth["extra_info"]["uuid"]
-        #         if inst_id not in self.rollout_database:
-        #             self.rollout_database[inst_id] = LRUCache(
-        #                 capacity=self.record_rollout_max_capacity)
-
-        #         args = copy.deepcopy(self.args)
-        #         for k, v in args["difficulty_run_args"].items():
-        #             del v["fn"]
-        #             for field, value in v.items():
-        #                 if field == "model":
-        #                     args["difficulty_run_args"][k][field] = value.model
-
-        #         self.rollout_database[inst_id][question] = {
-        #             "prompt_generation_process": solution_str,
-        #             "question": question,
-        #             "answer": answer,
-        #             "answer_type": answer_type,
-        #             "difficulty": {
-        #                 "meta": args,
-        #                 "pass_rate": difficulty
-        #             }
-        #         }
-
         #     def save_rollout_info(self):
         #         """将缓存保存为JSON文件"""
         #         data = {k: {"capacity": v.capacity, "items": list(v.get_items()), "access_order": list(
-        #             v._access_order.keys())} for k, v in self.rollout_database.items()}
+        #             v._access_order.keys())} for k, v in self.self.rollout_cache.items()}
 
         #         with open(self.save_rollout_samples_path, "wt") as f:
         #             json.dump(data, f, ensure_ascii=False, indent="  ")
@@ -3272,8 +3249,8 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
 #             return
 #         question, answer = parsed
 #         inst_id = ground_truth["extra_info"]["uuid"]
-#         if inst_id not in self.rollout_database:
-#             self.rollout_database[inst_id] = LRUCache(
+#         if inst_id not in self.self.rollout_cache:
+#             self.self.rollout_cache[inst_id] = LRUCache(
 #                 capacity=self.record_rollout_max_capacity)
 
 #         args = copy.deepcopy(self.args)
@@ -3283,7 +3260,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
 #                 if field == "model":
 #                     args["learnable_run_args"][k][field] = value.model
 
-#         self.rollout_database[inst_id][question] = {
+#         self.self.rollout_cache[inst_id][question] = {
 #             "prompt_generation_process": solution_str,
 #             "question": question,
 #             "answer": answer,
@@ -3296,7 +3273,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
 #     def save_rollout_info(self):
 #         """将缓存保存为JSON文件"""
 #         data = {k: {"capacity": v.capacity, "items": list(v.get_items()), "access_order": list(
-#             v._access_order.keys())} for k, v in self.rollout_database.items()}
+#             v._access_order.keys())} for k, v in self.self.rollout_cache.items()}
 
 #         with open(self.save_rollout_samples_path, "wt") as f:
 #             json.dump(data, f, ensure_ascii=False, indent="  ")
@@ -3913,8 +3890,8 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
 #             return
 #         question, options, answer = parsed
 #         inst_id = ground_truth["extra_info"]["uuid"]
-#         if inst_id not in self.rollout_database:
-#             self.rollout_database[inst_id] = LRUCache(
+#         if inst_id not in self.self.rollout_cache:
+#             self.self.rollout_cache[inst_id] = LRUCache(
 #                 capacity=self.record_rollout_max_capacity)
 
 #         args = copy.deepcopy(self.args)
@@ -3924,7 +3901,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
 #                 if field == "model":
 #                     args["difficulty_run_args"][k][field] = value.model
 
-#         self.rollout_database[inst_id][question] = {
+#         self.self.rollout_cache[inst_id][question] = {
 #             "prompt_generation_process": solution_str,
 #             "question": question,
 #             "options": options,
