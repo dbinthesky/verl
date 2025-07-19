@@ -1801,13 +1801,13 @@ class Doc2QueryV2ComputeScore(object):
             batch_ground_truth,
             skip_run=skip_next_action,
         )
-        #         final_results = []
-        #         for i in range(len(batch_solution_str)):
-        #             scores = copy.deepcopy(penalty[i])
-        #             penalties = ["Parse"]+list(self.penalty_on(stage))
-        #             penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
-        #                                        s in zip(penalties, scores)])
-
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            scores = copy.deepcopy(penalty[i])
+            penalties = ["Parse"]+[_.abbrev for _ in self._penalties]
+            penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
+                                        s in zip(penalties, scores)])
+            print(penalty_log_str)
         #             if stage == "2":
         #                 _difficulty = difficulty_rewards[i]
         #                 _difficulty_score = np.sum(_difficulty) if isinstance(
