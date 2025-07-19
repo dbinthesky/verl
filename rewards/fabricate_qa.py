@@ -1974,7 +1974,8 @@ class Doc2QueryV2ComputeScore(object):
             batch_ground_truth=batch_ground_truth,
             skip_run=skip_run,
             run_args=self.run_args(),
-            batch_verify_fn=self.batch_verify_results
+            batch_verify_fn=self.batch_verify_results,
+            resp_postprocess_fn=self.response_postprocess
         )
 
     async def _simulate_respondent(
@@ -1984,6 +1985,7 @@ class Doc2QueryV2ComputeScore(object):
             batch_ground_truth,
             run_args,
             batch_verify_fn,
+            resp_postprocess_fn,
             skip_run=None,
     ):
         prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
@@ -2021,11 +2023,14 @@ class Doc2QueryV2ComputeScore(object):
                 run_args[name]["max_concurrent_requests"],
                 desc=f'[{run_args[name]["desc"]} {run_args[name]["model"]["model"]} 解题]',
                 pbar=False,
-                postprocess_fns=[self.response_postprocess] * len(prompts)
+                postprocess_fns=[resp_postprocess_fn] * len(prompts)
             ))
             task_names.append(name)
 
         respond_questions = await aio.gather(*tasks)
+
+        print(respond_questions)
+        raise NotImplementedError
 
         # 验证答案正确性
         verify_queue = []
@@ -2568,6 +2573,19 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
         )
         self.task_name = "SALT"
 
+    def init_agent(self):
+        self.agents = {}
+        self.init_weak_agent()
+        self.init_adv_agent()
+        self.init_verify_agent()
+        self.init_auxiliary_agent()
+        self.init_self_taught_agent()
+
+    def init_self_taught_agent(self):
+        self.agents["self_taught"] = Agent(
+            **self.args["learnable_run_args"]["self_taught"]["model"])
+        self.self_taught_agent = self.agents["self_taught"]
+
     def init_weak_agent(self):
         weak_name = self.args["learnable_metric_args"]["weakness"]
         self.weak_agent = Agent(
@@ -2604,21 +2622,33 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
             parse_solution_fn=self.parse_solution_fn, min_score=0, max_score=0.1
         ))
 
-#     @classmethod
-#     def reject_sample(cls, question, answer, gt):
-#         """ 拒绝采样：合成题不提供答案,需要模型自己rollout对 """
-#         return question
+    @classmethod
+    def reject_sample(cls, result, gt):
+        return result[0]
 
-#     def self_taught_response_postprocess(self, s, debug=False):
-#         if "</think>" in s:
-#             s = s[s.index("</think>")+len("</think>"):]
-#         return s
+    def self_taught_response_postprocess(self, s, debug=False):
+        if "</think>" in s:
+            s = s[s.index("</think>")+len("</think>"):]
+        return s
 
     async def self_taught(self,
                           batch_data_sources,
                           batch_solution_str,
-                          batch_ground_truth):
-        pass
+                          batch_ground_truth,
+                          skip_run=None):
+        return await self._simulate_respondent(
+            batch_data_sources=batch_data_sources,
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=batch_ground_truth,
+            skip_run=skip_run,
+            run_args={
+                "self_taught": self.args["learnable_run_args"]["self_taught"]},
+            batch_verify_fn=self.batch_verify_results,
+            resp_postprocess_fn=self.self_taught_response_postprocess
+        )
+        # self_taught_response_postprocess
+
+
 #         assert run_args is not None
 
 #         prompt2index = defaultdict(list)
@@ -3334,9 +3364,9 @@ SALT_DEFAULT_PARAMS = {
     "learnable_run_args": {
         "self_taught": {
             "model": {
-                "model": "DeepSeek-V3-0324",
-                "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
-                "api_keys": "EMPTY",
+                "model": "service_dv3_for_tongjian",
+                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
                     "timeout": 360,
@@ -3345,13 +3375,14 @@ SALT_DEFAULT_PARAMS = {
             },
             "fn": "reject_sample",
             "repeat": 10,
+            "desc": '拒绝采样',
             "max_concurrent_requests": 256
         },
         "w/o_content": {
             "model": {
-                "model": "DeepSeek-V3-0324",
-                "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
-                "api_keys": "EMPTY",
+                "model": "service_dv3_for_tongjian",
+                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
                     "timeout": 360,
@@ -3365,9 +3396,9 @@ SALT_DEFAULT_PARAMS = {
         },
         "w_content": {
             "model": {
-                "model": "DeepSeek-V3-0324",
-                "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
-                "api_keys": "EMPTY",
+                "model": "service_dv3_for_tongjian",
+                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
                     "timeout": 360,

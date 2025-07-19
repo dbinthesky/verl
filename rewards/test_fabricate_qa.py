@@ -502,7 +502,7 @@ class TestDoc2QueryV2(unittest.TestCase):
 
         async def main():
             # simulate_respondent get_difficulty_reward
-            results = await task.simulate_respondent(
+            results = await task.self_taught(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
             )
