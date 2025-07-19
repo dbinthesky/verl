@@ -2353,20 +2353,18 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
     },
     "save_rollouts": {
         "default_local_dir": "/tmp/fabricate_aio_rollouts"
+        # FIXME
         # "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
     }
 }
 
 
-# _default_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScore(
-#     calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_DEFAULT_PARAMS)
-# _default_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScore(
-#     calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_DEFAULT_PARAMS)
-# doc2query_v2_default_stage1_compute_score_train = partial(
-#     _default_doc2query_v2_compute_score_train.compute_score, stage="1")
-# doc2query_v2_default_stage1_compute_score_valid = partial(
-#     _default_doc2query_v2_compute_score_valid.compute_score, stage="1")
-
+_default_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScore(
+    calc_qa_parse_solution_fn, split="train", args=DOC2QUERY_V2_DEFAULT_PARAMS)
+_default_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScore(
+    calc_qa_parse_solution_fn, split="valid", args=DOC2QUERY_V2_DEFAULT_PARAMS)
+doc2query_v2_compute_score_train = default_doc2query_v2_compute_score_train.compute_score
+doc2query_v2_compute_score_valid = _default_doc2query_v2_compute_score_valid.compute_score
 
 # class Doc2QueryV2ComputeScoreWithQwQ32bRespondent(Doc2QueryV2ComputeScore):
 #     def __init__(self, parse_solution_fn, split="train", args=None):
