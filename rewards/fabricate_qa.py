@@ -1858,9 +1858,6 @@ class Doc2QueryV2ComputeScore(object):
                 else:
                     cur_score += _score
 
-            print(cur_score, scores)
-            raise NotImplementedError
-
             # 保存Rollout信息
             if self.split == "train":
                 self.update_rollout_info(
@@ -1870,11 +1867,12 @@ class Doc2QueryV2ComputeScore(object):
                     extra=pass_rates[i]
                 )
 
-                # Validation逻辑 —— 计算数据转化成功率
-                if self.split == "valid":
-                    cur_score = 1.0 if cur_score > 0.0 else 0.0
+            # Validation逻辑 —— 计算数据转化成功率
+            if self.split == "valid":
+                cur_score = 1.0 if cur_score > 0.0 else 0.0
 
-                final_results.append(cur_score)
+            final_results.append(cur_score)
+            raise NotImplementedError
 
         #             if cur_score > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
         #                 log = True
