@@ -28,7 +28,7 @@ from fabricate_qa import (
     Doc2QueryV2ComputeScore,
     SALTFormatVerify,
     SALTBadQuestionDetection,
-    #     # QuestionSimilarityPenalty,
+    QuestionSimilarityPenalty,
     #     # Doc2QueryV3ComputeScore,
     #     # CriteriaRMComputeScore,
     #     # SALTComputeScore,
@@ -279,12 +279,13 @@ class TestSALT(unittest.TestCase):
         ))
 
     def test_question_similarity_penalty(self):
-        batch_solution_str, batch_ground_truth = load_salt_data(num=100)
-        scorer = QuestionSimilarityPenalty(salt_parse_solution_fn)
+        scorer = QuestionSimilarityPenalty(
+            salt_parse_solution_fn, 0, 0.1)
 
-        for response, gt in zip(batch_solution_str, batch_ground_truth):
-            score = scorer.get_penalty_or_reward(response, gt)
-            print(score)
+        print(scorer.get_penalty_or_reward(
+            '<think>\nssssss\n</think>\n\n<question>\nQuestion: During a materials analysis audit, an engineer incorrectly noted white heart malleable iron\'s microstructure matrix as containing graphite. Properly, the matrix consists of two iron phases plus cementite. Identify these two phases separated by \'+\' symbols. \nAnswer: ferrite+cementite\n</question><|im_end|><｜end▁of▁sentence｜>',
+            {"question": "In an industrial setting, a quality control technician inspects a sample labeled as malleable iron with a ferrite-pearlite matrix and hard nodules, mistakenly reported as graphite. Identify the three primary microstructural components present.", "lang_code": "en"}
+        ))
 
     def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_salt_data(num=100)
