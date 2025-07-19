@@ -1191,6 +1191,95 @@ class NumericalSolutionVerify(BatchCallOpenAPI):
         except Exception as err:
             raise PostprocessError(f'{err}')
 
+#     async def verify_batch_results(self, verify_queue, max_concurrent_requests, group_names):
+#         def validate_result(response):
+#             s = response
+#             try:
+#                 conclusion = s.strip()
+
+#                 judge = re.findall(
+#                     r'\"判断结果\": \"(.*)\"', conclusion)
+#                 if len(judge) > 0 and judge[0] in ("正确", "错误"):
+#                     return judge[0] == "正确"
+
+#                 conclusion = conclusion[conclusion.index(
+#                     "```json")+len("```json"):].strip()
+#                 conclusion = conclusion[:conclusion.index("```")].strip()
+#                 try:
+#                     conclusion = json.loads(conclusion)
+#                     if conclusion["判断结果"] not in ("正确", "错误"):
+#                         raise PostprocessError(f'corrupt')
+#                     return conclusion["判断结果"] == "正确"
+#                 except Exception as err:
+#                     try:
+#                         conclusion = re.findall(
+#                             r'\"判断结果\": \"(.*)\"', conclusion)[0]
+#                         if not conclusion in ("正确", "错误"):
+#                             raise PostprocessError(f'corrupt')
+#                         return conclusion == "正确"
+#                     except Exception as err:
+#                         raise PostprocessError(f'{err}')
+#             except Exception as err:
+#                 raise PostprocessError(f'{err}')
+
+#         verify_prompt = """### **基于标准答案判断回答是否正确**
+# 任务描述：请根据提供的**题目**、**用户回答（结论部分）**和**标准答案**，判断用户回答是否正确。
+
+# #### 输出要求
+# ```json
+# {
+# "判断结果": "正确/错误",
+# }
+# ```
+
+# 现在对下面的回答判断正确性
+# """
+
+#         verify_template = """
+# #### **输入：**
+# ##### 题目
+# ```
+# {question}
+# ```
+
+# ##### 用户回答（答案部分）
+# {conclusion}
+
+# ##### 标准答案
+# {answer}
+
+# #### **输出：**
+# """
+#         correctness = {name: defaultdict(list) for name in group_names}
+
+#         verify_mapper = defaultdict(list)
+
+#         for info in verify_queue:
+#             conclusion = info.response
+
+#             # 基于规则解析答案
+#             if conclusion is None:
+#                 correctness[info.tag][info.index].append(0.0)
+#             else:
+#                 conclusion = self.postprocess_authentic_question_response(
+#                     conclusion)
+#                 eval_prompt = verify_prompt + "\n\n" + verify_template.format(
+#                     question=info.prompt,
+#                     answer=info.answer,
+#                     conclusion=conclusion
+#                 )
+#                 verify_mapper[eval_prompt].append((info.index, info.tag))
+
+#         _results = await self.get_verify_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.get_verify_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
+
+#         results_mapper = defaultdict(list)
+#         for (k, v) in _results:
+#             for meta in verify_mapper[k]:
+#                 index, name = meta
+#                 if v is not None:
+#                     correctness[name][index].append(1.0 if v else 0.0)
+#         return correctness
+
 
 def parse_question_solution_fn(solution_str: str):
     if solution_str.count("</question>") > 1:
@@ -1820,7 +1909,7 @@ class Doc2QueryV2ComputeScore(object):
             except Exception as err:
                 raise PostprocessError(f'parse conclusion failure')
 
-    async def batch_verify_results(self, verify_queue, max_concurrent_requests, group_names):
+    async def batch_verify_results(self, verify_queue, max_concurrent_requests, group_names, verify_task):
         correctness = {name: defaultdict(list) for name in group_names}
 
         result_index2queue_index = {}
@@ -1836,7 +1925,7 @@ class Doc2QueryV2ComputeScore(object):
                 result_index2queue_index[len(
                     batch_eval_inputs)-1] = queue_index
 
-        task = NumericalSolutionVerify()
+        task = verify_task
         evaluations = await task.do_job(
             agent=self.verify_agent,
             batch_inputs=batch_eval_inputs,
@@ -1968,13 +2057,15 @@ class Doc2QueryV2ComputeScore(object):
             batch_ground_truth,
             skip_run=None
     ):
+        verify_task = NumericalSolutionVerify()
         return await self._simulate_respondent(
             batch_data_sources=batch_data_sources,
             batch_solution_str=batch_solution_str,
             batch_ground_truth=batch_ground_truth,
             skip_run=skip_run,
             run_args=self.run_args(),
-            batch_verify_fn=self.batch_verify_results,
+            batch_verify_fn=partial(
+                self.batch_verify_results, verify_task=verify_task),
             resp_postprocess_fn=self.response_postprocess
         )
 
@@ -2294,102 +2385,6 @@ class Doc2QueryV2ComputeScore(object):
         self.rollout_cache = []
 
 
-DOC2QUERY_V2_DEFAULT_PARAMS = {
-    "difficulty_run_args": {
-        "w/o_content": {
-            "model": {
-                "model": "qwen3_30b_a3b",
-                "base_url": "http://10.130.0.220:21002/v1",
-                "api_keys": "EMPTY",
-                "request_kwargs": {
-                    "temperature": 0.65,
-                    "timeout": 600,
-                    "max_tokens": 20480,
-                },
-            },
-            "repeat": 5,
-            "fn": "respond_wo_context",
-            "desc": 'w/o ctx',
-            "max_concurrent_requests": 64
-        },
-        "w_content": {
-            "model": {
-                "model": "qwen3_30b_a3b",
-                "base_url": "http://10.130.0.220:21002/v1",
-                "api_keys": "EMPTY",
-                "request_kwargs": {
-                    "temperature": 0.65,
-                    "timeout": 600,
-                    "max_tokens": 20480,
-                },
-            },
-            "repeat": 5,
-            "fn": "respond_w_context",
-            "desc": 'w ctx',
-            "max_concurrent_requests": 64
-        },
-    },
-    "difficulty_metric_args": {
-        "advantage": 'w_content',
-        "weakness": 'w/o_content',
-        "advantage_oversimplified_threshold": 5/5,
-        "weakness_oversimplified_threshold": 5/5,
-        "advantage_overcomplex_threshold": 1/5,
-        "weakness_overcomplex_threshold": 1/5,
-        "advantage_threshold": 1/5,
-        "advantage_weight": 0.0,
-        "weakness_weight": 2.0,
-        "confidence_bonus_threshold": 2/5,
-        "confidence_bonus_weight": 0.
-    },
-    "verify_agent": {
-        "model": {
-            "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.223:8000/v1",
-            "api_keys": "EMPTY",
-            "request_kwargs": {
-                "temperature": 0.6,
-                "timeout": 360,
-                "max_tokens": 1024,
-            },
-        },
-        "max_concurrent_requests": 32
-    },
-    "auxiliary_agent": {
-        "model": {
-            "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.223:8000/v1",
-            "api_keys": "EMPTY",
-            "request_kwargs": {
-                "temperature": 0.6,
-                "timeout": 360,
-                "max_tokens": 4096,
-            },
-        },
-        "max_concurrent_requests": 32
-    },
-    "similarity_run_args":  {
-        "threshold": {
-            3: 0.5,
-            4: 1.0
-        },
-        "weight": 0.25,
-    },
-    "save_rollouts": {
-        "default_local_dir": "/tmp/fabricate_aio_rollouts"
-        # FIXME
-        # "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
-    }
-}
-
-
-_default_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScore(
-    doc2query_v2_parse_solution_fn, split="train", args=DOC2QUERY_V2_DEFAULT_PARAMS)
-_default_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScore(
-    doc2query_v2_parse_solution_fn, split="valid", args=DOC2QUERY_V2_DEFAULT_PARAMS)
-doc2query_v2_compute_score_train = _default_doc2query_v2_compute_score_train.compute_score
-doc2query_v2_compute_score_valid = _default_doc2query_v2_compute_score_valid.compute_score
-
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query V2
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2636,6 +2631,8 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                           batch_solution_str,
                           batch_ground_truth,
                           skip_run=None):
+        # FIXME: verify task
+
         return await self._simulate_respondent(
             batch_data_sources=batch_data_sources,
             batch_solution_str=batch_solution_str,
@@ -2833,94 +2830,6 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 
 #         return conclusion
 
-#     async def verify_batch_results(self, verify_queue, max_concurrent_requests, group_names):
-#         def validate_result(response):
-#             s = response
-#             try:
-#                 conclusion = s.strip()
-
-#                 judge = re.findall(
-#                     r'\"判断结果\": \"(.*)\"', conclusion)
-#                 if len(judge) > 0 and judge[0] in ("正确", "错误"):
-#                     return judge[0] == "正确"
-
-#                 conclusion = conclusion[conclusion.index(
-#                     "```json")+len("```json"):].strip()
-#                 conclusion = conclusion[:conclusion.index("```")].strip()
-#                 try:
-#                     conclusion = json.loads(conclusion)
-#                     if conclusion["判断结果"] not in ("正确", "错误"):
-#                         raise PostprocessError(f'corrupt')
-#                     return conclusion["判断结果"] == "正确"
-#                 except Exception as err:
-#                     try:
-#                         conclusion = re.findall(
-#                             r'\"判断结果\": \"(.*)\"', conclusion)[0]
-#                         if not conclusion in ("正确", "错误"):
-#                             raise PostprocessError(f'corrupt')
-#                         return conclusion == "正确"
-#                     except Exception as err:
-#                         raise PostprocessError(f'{err}')
-#             except Exception as err:
-#                 raise PostprocessError(f'{err}')
-
-#         verify_prompt = """### **基于标准答案判断回答是否正确**
-# 任务描述：请根据提供的**题目**、**用户回答（结论部分）**和**标准答案**，判断用户回答是否正确。
-
-# #### 输出要求
-# ```json
-# {
-# "判断结果": "正确/错误",
-# }
-# ```
-
-# 现在对下面的回答判断正确性
-# """
-
-#         verify_template = """
-# #### **输入：**
-# ##### 题目
-# ```
-# {question}
-# ```
-
-# ##### 用户回答（答案部分）
-# {conclusion}
-
-# ##### 标准答案
-# {answer}
-
-# #### **输出：**
-# """
-#         correctness = {name: defaultdict(list) for name in group_names}
-
-#         verify_mapper = defaultdict(list)
-
-#         for info in verify_queue:
-#             conclusion = info.response
-
-#             # 基于规则解析答案
-#             if conclusion is None:
-#                 correctness[info.tag][info.index].append(0.0)
-#             else:
-#                 conclusion = self.postprocess_authentic_question_response(
-#                     conclusion)
-#                 eval_prompt = verify_prompt + "\n\n" + verify_template.format(
-#                     question=info.prompt,
-#                     answer=info.answer,
-#                     conclusion=conclusion
-#                 )
-#                 verify_mapper[eval_prompt].append((info.index, info.tag))
-
-#         _results = await self.get_verify_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.get_verify_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
-
-#         results_mapper = defaultdict(list)
-#         for (k, v) in _results:
-#             for meta in verify_mapper[k]:
-#                 index, name = meta
-#                 if v is not None:
-#                     correctness[name][index].append(1.0 if v else 0.0)
-#         return correctness
 
 #     async def get_learnable_reward(
 #             self,
@@ -4848,3 +4757,190 @@ SALT_DEFAULT_PARAMS = {
 # # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # # Criteria RM
 # # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# HParams
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+DOC2QUERY_V2_DEFAULT_PARAMS = {
+    "difficulty_run_args": {
+        "w/o_content": {
+            "model": {
+                "model": "qwen3_30b_a3b",
+                "base_url": "http://10.130.0.220:21002/v1",
+                "api_keys": "EMPTY",
+                "request_kwargs": {
+                    "temperature": 0.65,
+                    "timeout": 600,
+                    "max_tokens": 20480,
+                },
+            },
+            "repeat": 5,
+            "fn": "respond_wo_context",
+            "desc": 'w/o ctx',
+            "max_concurrent_requests": 64
+        },
+        "w_content": {
+            "model": {
+                "model": "qwen3_30b_a3b",
+                "base_url": "http://10.130.0.220:21002/v1",
+                "api_keys": "EMPTY",
+                "request_kwargs": {
+                    "temperature": 0.65,
+                    "timeout": 600,
+                    "max_tokens": 20480,
+                },
+            },
+            "repeat": 5,
+            "fn": "respond_w_context",
+            "desc": 'w ctx',
+            "max_concurrent_requests": 64
+        },
+    },
+    "difficulty_metric_args": {
+        "advantage": 'w_content',
+        "weakness": 'w/o_content',
+        "advantage_oversimplified_threshold": 5/5,
+        "weakness_oversimplified_threshold": 5/5,
+        "advantage_overcomplex_threshold": 1/5,
+        "weakness_overcomplex_threshold": 1/5,
+        "advantage_threshold": 1/5,
+        "advantage_weight": 0.0,
+        "weakness_weight": 2.0,
+        "confidence_bonus_threshold": 2/5,
+        "confidence_bonus_weight": 0.
+    },
+    "verify_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.223:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 1024,
+            },
+        },
+        "max_concurrent_requests": 32
+    },
+    "auxiliary_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.223:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 4096,
+            },
+        },
+        "max_concurrent_requests": 32
+    },
+    "similarity_run_args":  {
+        "threshold": {
+            3: 0.5,
+            4: 1.0
+        },
+        "weight": 0.25,
+    },
+    "save_rollouts": {
+        "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
+    }
+}
+
+DOC2QUERY_V2_DEV_PARAMS = {
+    "difficulty_run_args": {
+        "w/o_content": {
+            "model": {
+                "model": "service_dv3_for_tongjian",
+                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "repeat": 5,
+            "fn": "respond_wo_context",
+            "desc": 'w/o ctx',
+            "max_concurrent_requests": 64
+        },
+        "w_content": {
+            "model": {
+                "model": "service_dv3_for_tongjian",
+                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "repeat": 5,
+            "fn": "respond_w_context",
+            "desc": 'w ctx',
+            "max_concurrent_requests": 64
+        },
+    },
+    "difficulty_metric_args": {
+        "advantage": 'w_content',
+        "weakness": 'w/o_content',
+        "advantage_oversimplified_threshold": 5/5,
+        "weakness_oversimplified_threshold": 5/5,
+        "advantage_overcomplex_threshold": 1/5,
+        "weakness_overcomplex_threshold": 1/5,
+        "advantage_threshold": 1/5,
+        "advantage_weight": 0.0,
+        "weakness_weight": 2.0,
+        "confidence_bonus_threshold": 2/5,
+        "confidence_bonus_weight": 0.
+    },
+    "verify_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.223:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 1024,
+            },
+        },
+        "max_concurrent_requests": 32
+    },
+    "auxiliary_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.223:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 4096,
+            },
+        },
+        "max_concurrent_requests": 32
+    },
+    "similarity_run_args":  {
+        "threshold": {
+            3: 0.5,
+            4: 1.0
+        },
+        "weight": 0.25,
+    },
+    "save_rollouts": {
+        "default_local_dir": "/tmp/fabricate_aio_rollouts"
+        # FIXME
+        # "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
+    }
+}
+
+
+_default_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScore(
+    doc2query_v2_parse_solution_fn, split="train", args=DOC2QUERY_V2_DEFAULT_PARAMS)
+_default_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScore(
+    doc2query_v2_parse_solution_fn, split="valid", args=DOC2QUERY_V2_DEFAULT_PARAMS)
+doc2query_v2_compute_score_train = _default_doc2query_v2_compute_score_train.compute_score
+doc2query_v2_compute_score_valid = _default_doc2query_v2_compute_score_valid.compute_score

@@ -33,6 +33,7 @@ from fabricate_qa import (
     #     # CriteriaRMComputeScore,
     SALTComputeScore,
     DOC2QUERY_V2_DEFAULT_PARAMS,
+    DOC2QUERY_V2_DEV_PARAMS,
     SALT_DEFAULT_PARAMS,
     #     # DOC2QUERY_V3_DEFAULT_PARAMS,
     #     # CRITERIA_DEFAULT_PARAMS,
@@ -495,14 +496,14 @@ class TestDoc2QueryV2(unittest.TestCase):
 
     def test_doc2query_v2_get_difficulty_reward(self):
         task = Doc2QueryV2ComputeScore(
-            doc2query_v2_parse_solution_fn, split="valid", args=DOC2QUERY_V2_DEFAULT_PARAMS)
+            doc2query_v2_parse_solution_fn, split="valid", args=DOC2QUERY_V2_DEV_PARAMS)
 
         batch_solution_str, batch_ground_truth = load_dataset(
             task_name="doc2query_v2", num=4)
 
         async def main():
             # simulate_respondent get_difficulty_reward
-            results = await task.self_taught(
+            results = await task.simulate_respondent(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
             )
