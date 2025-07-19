@@ -1147,7 +1147,7 @@ class NumericalSolutionVerify(BatchCallOpenAPI):
 
     @classmethod
     def task_desc(cls):
-        return "数值解VERIFY"
+        return "数值解验证"
 
     def prompt_fn(self, example):
         solver_response, extra = example
@@ -2000,7 +2000,7 @@ class Doc2QueryV2ComputeScore(object):
             tasks.append(self.agents[name].run(
                 prompts,
                 self.run_args()[name]["max_concurrent_requests"],
-                desc=f'[{self.run_args()[name]["desc"]} {self.run_args()[name]["model"]["model"]}解题]',
+                desc=f'[{self.run_args()[name]["desc"]} {self.run_args()[name]["model"]["model"]} 解题]',
                 pbar=False,
                 postprocess_fns=[self.response_postprocess] * len(prompts)
             ))
@@ -2057,7 +2057,9 @@ class Doc2QueryV2ComputeScore(object):
             else:
                 _score = np.mean(difficulty)
                 scores[index] = _score
-        return scores
+
+        weight = 0.3
+        return [_ * weight for _ in scores]
 
     async def quick_question_eval(
         self,
@@ -2106,7 +2108,9 @@ class Doc2QueryV2ComputeScore(object):
         return [
             # 快速判断问题质量
             Process(name="QuickQuality",
-                    function=self.quick_question_eval, filter_only=True)
+                    function=self.quick_question_eval, filter_only=True),
+            Process(name="QuickDifficulty",
+                    function=self.llm_judge_difficulty, filter_only=False)
         ]
 
     def finegrain_process(self):
@@ -2134,6 +2138,8 @@ class Doc2QueryV2ComputeScore(object):
         all_skip_next_action = []
 
         minor_rewards = OrderedDict()
+        all_minor_rewards = OrderedDict()
+
         for process in self.coarse_process():
             process_eval = await process.function(
                 batch_data_sources,
@@ -2145,6 +2151,7 @@ class Doc2QueryV2ComputeScore(object):
             all_skip_next_action.extend(skip_next_action)
             if not process.filter_only:
                 minor_rewards[process.name] = process_eval
+            all_minor_rewards[process.name] = process_eval
 
         all_skip_next_action = sorted(list(set(all_skip_next_action)))
         all_skip_next_action = tuple(all_skip_next_action)
@@ -2187,61 +2194,49 @@ class Doc2QueryV2ComputeScore(object):
                     solution_str=batch_solution_str[i],
                     ground_truth=batch_ground_truth[i],
                     score=cur_score,
-                    extra=pass_rates[i]
+                    extra=extra[i]
                 )
 
             # Validation逻辑 —— 计算数据转化成功率
             if self.split == "valid":
-                cur_score = 1.0 if cur_score > 0.0 else 0.0
+                cur_score = 1.0 if _main_reward > 0.0 else 0.0
 
             final_results.append(cur_score)
-            raise NotImplementedError
 
-        #             if cur_score > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
-        #                 log = True
-        #                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
-        #             else:
-        #                 log = False
+            if _main_reward > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+                log = True
+                log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+            else:
+                log = False
 
-        #             if cur_score == -2.0 and stage != "2":
-        #                 log = True
-        #                 log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN CORRUPT RESPONSE]"
+            if cur_score == -2.0:
+                log = True
+                log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN CORRUPT RESPONSE]"
 
-        #             source = batch_ground_truth[i]["source"]
+            source = batch_ground_truth[i]["source"]
 
-        #             if log:
-        #                 print(
-        #                     f"--------------------------------{log_flag}--------------------------------")
-        #                 print(
-        #                     f"【Solution】({source})`{self.log_solution(batch_solution_str[i])}`")
-        #                 try:
-        #                     print(
-        #                         f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
-        #                 except Exception as err:
-        #                     pass
-        #                 if stage == "1":
-        #                     print(
-        #                         f'[Final Reward]={cur_score:.3f}|{penalty_log_str}\n')
-        #                 elif stage == "2":
-        #                     print(
-        #                         f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|{penalty_log_str}\n')
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f"【Solution】({source})`{self.log_solution(batch_solution_str[i])}`")
 
-        #                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
+                _minor_rewards_log = []
+                for process in self.coarse_process():
+                    _minor_rewards_log.append(
+                        f'{process.name}={all_minor_rewards[process.name][i]}')
+                _minor_rewards_log = "|".join(_minor_rewards_log)
+                print(
+                    f'[Final Reward]={cur_score:.3f}({extra[i]})|{main_process.name}={str(_main_reward)}|{_minor_rewards_log}|{penalty_log_str}\n')
 
-        #                 if random.random() < 0.1 and thought is not None:
-        #                     print(f'[Thought]\n{thought}')
-        #                     print()
+                parsed = parse_question_solution_fn(batch_solution_str[i])
 
-        #                 if cur_score == -2.0 and stage != "2":
-        #                     print(f'[Response]\n{batch_solution_str[i]}')
-        #                     print()
+                if parsed is not None:
+                    print(f'[Thought]\n{parsed[0]}')
+                    print()
 
-        #         if self.split == "valid":
-        #             pass
-
-        #         self.save_rollout_info()
-
-        #         return final_results
+                #         self.save_rollout_info()
+                #         return final_results
 
     def compute_score(self,
                       batch_data_sources,
@@ -2252,20 +2247,14 @@ class Doc2QueryV2ComputeScore(object):
             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, stage=stage, max_concurrent_requests=max_concurrent_requests)
         return aio.run(main())
 
-        #     def log_solution(self, solution):
-        #         norm = self.parse_solution_fn(solution)
-        #         if norm is None:
-        #             return repr(self.clip_string(solution))
-        #         return repr(self.format_question(norm[0], norm[1], norm[2]))
+    def log_solution(self, solution):
+        norm = self.parse_solution_fn(solution)
+        if norm is None:
+            return repr(self.clip_string(solution))
+        return repr(self.format_question(norm))
 
-        #     def format_question(self, question, answer, ans_type):
-        #         return f'Question: {question}\nAnswer: {answer}\nAnswer Type: {ans_type}'
-
-        #     def log_ground_truth(self, ground_truth):
-        #         return repr(self.format_question(
-        #             ground_truth["question"],
-        #             "", "")
-        #         )
+    def format_question(self, parsed_result):
+        return f'Question: {parsed_result[0]}\nAnswer: {parsed_result[1]}\nAnswer Type: {parsed_result[2]}'
 
         #     def save_rollout_info(self):
         #         """将缓存保存为JSON文件"""
@@ -2274,12 +2263,6 @@ class Doc2QueryV2ComputeScore(object):
 
         #         with open(self.save_rollout_samples_path, "wt") as f:
         #             json.dump(data, f, ensure_ascii=False, indent="  ")
-
-        #     def penalty_on(self, stage):
-        #         if stage == "1":
-        #             return ("Format", "Lang", "BadQ", "Thought", "QSim")
-        #         else:
-        #             return ("Format", "Lang", "Thought", "QSim")
 
 
 DOC2QUERY_V2_DEFAULT_PARAMS = {
