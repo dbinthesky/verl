@@ -411,7 +411,8 @@ NUMERICAL_SOLUTION_VERIFY_TEMPLATE = """
 #### **输出：**
 """
 
-MULTICHOICE_EXTRACT_ANSWER_FEWSHOTS = """### 按列表格式把用户回答的答案选项提取出来。
+MULTICHOICE_EXTRACT_ANSWER_FEWSHOTS = """### 按列表格式把用户回答的答案选项提取出来。如果用户没有给出最终答案，则返回空列表[]
+
 
 下面是一些例子
 #### **输入：**
@@ -426,6 +427,8 @@ According to Article 40 of the \"Savings Management Regulations\" (Order No. 107
 #### **输出：**
 ['A', 'C']
 
+
+#### **输入：**
 ##### 题目
 ```
 Pyogenic meningitis | Tuberculous meningitis | Viral meningitis\nA. Significant increase in IgM\nB. Significant increase in IgA\nC. Significant decrease in IgA\nD. Significant decrease in IgM\nE. No significant changes in IgA and IgM
@@ -437,6 +440,8 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
 #### **输出：**
 ['A', 'B', 'E']
 
+
+#### **输入：**
 ##### 题目
 ```
 不定项选择题)(每题 2.00 分) 根据《中华人民共和国水污染防治法》在饮用水水源保护区内设置排污口的,()\nA. 由县级以上地方人民政府环境保护主管部门责令限期拆除,处二万元以上十万元以下的罚款\nB. 由县级以上地方人民政府责f限期拆除,处十万元以上五十万元以下的罚款\nC. 逾期不拆除的,强制拆除,所需费用由违法者承担,处十万元以上五十万元以下的罚款情节严重的,可以责令停产整治\nD. 逾期不拆除的,强制拆除,所需费用由违法者承担,处五十万元以上一百万元以下的罚款,并可以责令停产整治
@@ -448,7 +453,7 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
 #### **输出：**
 ['B', 'D']
 
-如果用户没有给出最终答案，则返回空列表[]
+
 """
 
 MULTICHOICE_EXTRACT_ANSWER_TEMPLATE = """现在对下面的用户回答提按格式提取出答案（参考上面的例子，输出后面直接输出提取出的列表）
@@ -1359,12 +1364,15 @@ class MultiChoiceQuestionExtractAnswerOptions(SALTSelfTaughtSimpleSolutionVerify
                     ans_list = eval(response.strip())
 
             if not isinstance(ans_list, list):
-                raise PostprocessError(f'Parse Python List Failed')
+                raise PostprocessError(
+                    f'Parse Python List Failed, resp={response}')
             if not all(_ans in self.MULTICHOICE_LETTER for _ans in ans_list):
-                raise PostprocessError(f'Parse Python List Failed')
+                raise PostprocessError(
+                    f'Parse Python List Failed, resp={response}')
             return ans_list
         except Exception as err:
-            raise PostprocessError(f'Parse Python List Failed')
+            raise PostprocessError(
+                f'Parse Python List Failed, resp={response}')
 
 
 def parse_question_solution_fn(solution_str: str):
