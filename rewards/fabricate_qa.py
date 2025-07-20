@@ -2639,7 +2639,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
         return self_taught_rationale
 
     @classmethod
-    def respond_wo_context(cls, result, gt, context):
+    def respond_wo_context(cls, result, gt, context=None):
         if gt["lang_code"] == "en":
             extra = "Think Step by Step and give your thinking process."
         else:
@@ -2648,7 +2648,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
         return f'{extra}\n\n' + gt["instruct"].format(question=gt["question"])
 
     @classmethod
-    def respond_w_context(cls, result, gt, context):
+    def respond_w_context(cls, result, gt, context=None):
         if context is not None:
             if gt["lang_code"] == "en":
                 extra = "Think Step by Step and give your thinking process."
@@ -2703,83 +2703,76 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 
         return conclusion
 
+    async def get_learnable_reward(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            skip_run=None):
 
-#     async def get_learnable_reward(
-#             self,
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth,
-#             run_args=None,
-#             metric_args=None,
-#             max_concurrent_requests=MAX_CONCURRENT,
-#             debug=False):
+        correctness = await self.simulate_respondent(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            skip_run=skip_run,
+        )
 
-#         assert metric_args is not None, f'`metric_args` missed'
-#         assert run_args is not None, f'`run_args` missed'
+        full_rewards = []
+        pass_rates = []
 
-#         correctness = await self.simulate_respondent(
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth,
-#             run_args=run_args,
-#             max_concurrent_requests=max_concurrent_requests,
-#             debug=debug
-#         )
+        run_args = self.run_args["learnable_run_args"]
+        metric_args = self.args["learnable_metric_args"]
 
-#         full_rewards = []
-#         pass_rates = []
+        for i in range(len(batch_solution_str)):
+            if i in list(correctness.values())[0]:
+                base_score = 0.0
+                pass_rates.append({
+                    k: f'{np.sum(v[i])}/{len(v[i])}' for k, v in correctness.items()
+                })
 
-#         for i in range(len(batch_solution_str)):
-#             if i in list(correctness.values())[0]:
-#                 base_score = 0.0
-#                 pass_rates.append({
-#                     k: f'{np.sum(v[i])}/{len(v[i])}' for k, v in correctness.items()
-#                 })
+                try:
+                    adv_name, weak_name = metric_args["advantage"], metric_args["weakness"]
+                    adv, weak = correctness[adv_name][i], correctness[weak_name][i]
 
-#                 try:
-#                     adv_name, weak_name = metric_args["advantage"], metric_args["weakness"]
-#                     adv, weak = correctness[adv_name][i], correctness[weak_name][i]
+                    if len(weak) == 0 or len(adv) == 0:
+                        full_rewards.append(base_score)
+                        continue
 
-#                     if len(weak) == 0 or len(adv) == 0:
-#                         full_rewards.append(base_score)
-#                         continue
+                    # adv 应该比 weakness 显著好
+                    if not np.mean(adv) > np.mean(weak):
+                        full_rewards.append(base_score)
+                        continue
 
-#                     # adv 应该比 weakness 显著好
-#                     if not np.mean(adv) > np.mean(weak):
-#                         full_rewards.append(base_score)
-#                         continue
+                    if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
+                        full_rewards.append(base_score)
+                        continue
 
-#                     if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
-#                         full_rewards.append(base_score)
-#                         continue
+                    # # 固定难度降低奖励
+                    # diff_reduct_bonus = 1.2
 
-#                     # # 固定难度降低奖励
-#                     # diff_reduct_bonus = 1.2
+                    # 难度函数
+                    def calc_difficulty(scores, total_attempts):
+                        return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
 
-#                     # 难度函数
-#                     def calc_difficulty(scores, total_attempts):
-#                         return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
+                    # 难度降低奖励
+                    diff_reduct_bonus = 0.5  # 基础分
 
-#                     # 难度降低奖励
-#                     diff_reduct_bonus = 0.5  # 基础分
+                    # 原问题难度 - 合成题Fewshot难度
+                    diff_reduct_bonus += (calc_difficulty(weak, run_args[weak_name]["repeat"])-calc_difficulty(
+                        adv, run_args[adv_name]["repeat"])) * metric_args["difficulty_reduction_bonus_weight"]
 
-#                     # 原问题难度 - 合成题Fewshot难度
+                    base_score = [
+                        diff_reduct_bonus
+                    ]
 
-#                     diff_reduct_bonus += (calc_difficulty(weak, run_args[weak_name]["repeat"])-calc_difficulty(
-#                         adv, run_args[adv_name]["repeat"])) * metric_args["difficulty_reduction_bonus_weight"]
-
-#                     base_score = [
-#                         diff_reduct_bonus
-#                     ]
-
-#                     full_rewards.append(base_score)
-#                 except Exception as err:
-#                     print(f'[ERROR] {err}')
-#                     full_rewards.append(base_score)
-#             else:
-#                 pass_rates.append({})
-#                 full_rewards.append(0.0)
-#         return full_rewards, pass_rates
+                    full_rewards.append(base_score)
+                except Exception as err:
+                    print(f'[ERROR] {err}')
+                    full_rewards.append(base_score)
+            else:
+                pass_rates.append({})
+                full_rewards.append(0.0)
+        return full_rewards, pass_rates
 
 #     async def get_hack_penalty(
 #         self,
@@ -3052,6 +3045,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 #                 self.save_rollout_info()
 
 #         return final_results
+
 
 SALT_DEFAULT_PARAMS = {
     "learnable_run_args": {
