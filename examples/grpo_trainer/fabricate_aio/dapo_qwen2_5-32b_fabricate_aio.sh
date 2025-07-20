@@ -52,9 +52,9 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/fabricate_aio_distillv16_s3_roll16_bsz32_dapo_wo_kl_coef_wo_entropy_t08_solver_distill_7b_bo8_grpo_step_130"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0710.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_test_0619.parquet"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/DeepSeek-R1-Distill-Qwen-32B-fabricate_qa_v17"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0718.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_test_0718.parquet"
 
     experiment_name="distill-qwen-32b_fabricate_aio-${YYMMDD}-${HHMMSS}"
     project_name="fabricate_aio"
@@ -90,13 +90,13 @@ run_training() {
 
     python3 -m recipe.dapo.main_dapo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        custom_reward_function.name=fabricate_aio_qwq32b_respondent_stage2_compute_score_train \
+        custom_reward_function.name=fabricate_aio_compute_score_train \
         +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        +custom_valid_reward_function.name=fabricate_aio_qwq32b_respondent_stage2_compute_score_valid \
+        +custom_valid_reward_function.name=fabricate_aio_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=32 \
+        data.train_batch_size=64 \
         data.max_prompt_length=8192 \
         data.max_response_length=12288 \
         data.filter_overlong_prompts=True \
@@ -107,8 +107,8 @@ run_training() {
         actor_rollout_ref.actor.optim.weight_decay=0.1 \
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=32 \
-        actor_rollout_ref.actor.ppo_micro_batch_size=32 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=64 \
+        actor_rollout_ref.actor.ppo_micro_batch_size=64 \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=2 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=20480 \
@@ -145,8 +145,8 @@ run_training() {
         trainer.experiment_name="${experiment_name}" \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
-        trainer.save_freq=10 \
-        trainer.test_freq=10 \
+        trainer.save_freq=5 \
+        trainer.test_freq=25 \
         trainer.total_epochs=10000 \
         "$@"
     local training_status=$?
