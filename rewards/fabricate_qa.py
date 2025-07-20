@@ -2891,9 +2891,9 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
         return Process(name="Learnability", function=self.get_learnable_reward, filter_only=False)
 
 
-# # ------------------------------------------------------------------------------------------------------------------------------------------------------
-# # SALT
-# # ---------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# SALT
+# ---------------------------------------------------------------
 
 
 # class FabricateAIOComputeScore(object):
@@ -4552,7 +4552,7 @@ SALT_DEFAULT_PARAMS = {
     }
 }
 
-SALT_DEFAULT_PARAMS = {
+SALT_DEV_PARAMS = {
     "learnable_run_args": {
         "self_taught": {
             "model": {
