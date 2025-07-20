@@ -311,11 +311,11 @@ class TestSALT(unittest.TestCase):
             print(_, _.min_score, _.max_score)
 
         async def main():
-            results = await task.simulate_respondent(
+            results = await task.get_learnable_reward(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
             )
-            # print(results)
+            print(results)
         aio.run(main())
 
         # salt_default_compute_score_valid(

@@ -2091,8 +2091,6 @@ class Doc2QueryV2ComputeScore(object):
                         _prompt = fn(result, gt)
                     else:
                         _prompt = fn(result, gt, extra_ctx)
-                        print(_prompt)
-                        print("="*80)
                     prompt2index[name][_prompt].append(i)
         tasks = []
         task_names = []
@@ -2685,111 +2683,25 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                 k: v for k, v in self.args["learnable_run_args"].items() if k != "self_taught"},
             batch_verify_fn=partial(
                 self.batch_verify_results, verify_task=verify_task),
-            resp_postprocess_fn=self.self_taught_response_postprocess,
+            resp_postprocess_fn=self.postprocess_authentic_question_response,
             prompt_contexts=self_taught_rationale
         )
 
-#     async def simulate_respondent(
-#             self,
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth,
-#             run_args=None,
-#             max_concurrent_requests=MAX_CONCURRENT,
-#             debug=False):
-#         assert run_args is not None
+    def postprocess_authentic_question_response(self, s):
+        s = s.strip()
+        conclusion = s
 
-#         synthetic_qa_rationales = await self.self_taught(
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth,
-#             run_args=run_args,
-#             max_concurrent_requests=max_concurrent_requests,
-#             debug=debug
-#         )
-#         prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
+        last_line = conclusion.split("\n")
+        if len(last_line) > 0 and "Answer: " in last_line[-1].strip():
+            last_line = last_line[-1].strip()
+            last_line = last_line[last_line.index(
+                "Answer: ")+len("Answer: "):].strip()
+            return last_line
 
-#         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-#             result = self.parse_solution_fn(solution_str)
-#             if result is not None:
-#                 fabricate_question, _ = result
+        if len(last_line) > 5:
+            return "\n".join(last_line[-5:]).strip()
 
-#                 # 合成题没有rollout出正确答案
-#                 if synthetic_qa_rationales[i] is None:
-#                     continue
-
-#                 skip = False
-#                 if not debug:
-#                     for module in self.do_not_simulate_respondent(debug=debug):
-#                         cur_score = module.get_penalty_or_reward(
-#                             solution_str, gt
-#                         )
-#                         if cur_score < 0.0:
-#                             skip = True
-#                             break
-#                 if skip:
-#                     continue
-
-#                 lang_code = gt["lang_code"]
-#                 for name, v in run_args.items():
-#                     if name == "self_taught":
-#                         continue
-#                     fn = v["fn"]
-#                     context = f'```\n[Question]\n{fabricate_question}\n\n[Solution]\n{synthetic_qa_rationales[i]}\n```'
-#                     _prompt = fn(context, gt)
-#                     prompt2index[name][_prompt].append(i)
-
-#         tasks = []
-#         task_names = []
-#         for name, v in prompt2index.items():
-#             if name == "self_taught":
-#                 continue
-
-#             prompts = list(v.keys()) * run_args[name]["repeat"]
-#             tasks.append(run_args[name]["model"].run(
-#                 prompts, max_concurrent_requests, desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
-#                 postprocess_fns=[
-#                     partial(self.response_postprocess, debug=debug)] * len(prompts)
-#             ))
-#             task_names.append(name)
-#         respond_questions = await aio.gather(*tasks)
-
-#         # 验证答案正确性
-#         verify_queue = []
-#         for task_name, results in zip(task_names, respond_questions):
-#             for (p, r) in results:
-#                 for index in prompt2index[task_name][p]:
-#                     # 注：验证时是验证在真题上的准确率
-#                     verify_queue.append(VerifyInfo(
-#                         index=index,
-#                         tag=task_name,
-#                         prompt=batch_ground_truth[index]["question"],
-#                         response=r,
-#                         answer=batch_ground_truth[index]["answer"]))
-
-#         correctness = await self.verify_batch_results(
-#             verify_queue=verify_queue,
-#             max_concurrent_requests=64,
-#             group_names=task_names
-#         )
-
-#         return correctness
-
-#     def postprocess_authentic_question_response(self, s):
-#         s = s.strip()
-#         conclusion = s
-
-#         last_line = conclusion.split("\n")
-#         if len(last_line) > 0 and "Answer: " in last_line[-1].strip():
-#             last_line = last_line[-1].strip()
-#             last_line = last_line[last_line.index(
-#                 "Answer: ")+len("Answer: "):].strip()
-#             return last_line
-
-#         if len(last_line) > 5:
-#             return "\n".join(last_line[-5:]).strip()
-
-#         return conclusion
+        return conclusion
 
 
 #     async def get_learnable_reward(
