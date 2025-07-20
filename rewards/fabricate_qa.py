@@ -1361,12 +1361,9 @@ class MultiChoiceQuestionExtractAnswerOptions(SALTSelfTaughtSimpleSolutionVerify
             question=question,
             conclusion=solver_response,
         )
-        print(prompt)
-        print('-'*80)
         return prompt
 
     def postprocess(self, response: str):
-        print(response)
         try:
             response = response.strip()
             try:
