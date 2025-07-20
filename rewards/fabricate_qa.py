@@ -1242,12 +1242,6 @@ class SALTAuthenticQuestionSolutionVerify(SALTSelfTaughtSimpleSolutionVerify):
         solver_response, extra, gt = example
         # 用真题的Answer作为标准答案
         question, answer = gt["question"], gt["answer"]
-        print(question)
-        print("="*80)
-        print(solver_response)
-        print("="*80)
-        print(answer)
-        raise NotImplementedError
         prompt = self._FEWSHOTS + self._TEMPLATE.format(
             question=question,
             conclusion=solver_response,
