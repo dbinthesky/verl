@@ -36,23 +36,11 @@ from fabricate_qa import (
     DOC2QUERY_V3_DEFAULT_PARAMS,
     SALT_DEFAULT_PARAMS,
     SALT_DEV_PARAMS,
+    RLVR_DEFAULT_PARAMS,
     Doc2QueryV3FormatVerify,
-    Doc2QueryV3ComputeScore
-    #     # doc2query_v2_default_stage1_compute_score_valid,
-    #     # fabricate_qa_default_stage1_compute_score_valid,
-    #     # fabricate_aio_default_stage1_compute_score_valid,
-    #     # fabricate_aio_default_stage2_compute_score_valid,
-    #     # fabricate_aio_qwq32b_respondent_stage2_compute_score_valid,
-    #     # fabricate_aio_qwen32b_respondent_stage2_compute_score_valid,
-    #     # fabricate_aio_qwen3_8b_respondent_compute_score_valid,
-    #     # salt_default_compute_score_valid,
-    #     # criteria_rm_default_compute_score_valid,
-    #     # doc2query_v3_default_compute_score_valid,
-    #     # doc2query_v2_parse_solution_fn,
-    #     # criteria_parse_solution_fn,
-    #     # salt_parse_solution_fn,
-    #     # calc_qa_parse_thought_fn,
-    #     # batchify,
+    Doc2QueryV3ComputeScore,
+    RLVRVerify,
+    RLVRComputeScore
 )
 
 UNITTEST_AGENT = Agent(**{
@@ -151,6 +139,10 @@ def load_dataset(task_name, num=100):
             batch_solution_str.append(
                 f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nOptions: {o}\n\nAnswer: {sample[2]}\n</question>'
             )
+        elif task_name == "rlvr":
+            batch_solution_str.append(
+                f'<think>\nUNITTEST_ONLY\n</think>\n\n答案：{row["reward_model"]["ground_truth"]}'
+            )
         batch_ground_truth.append(row["reward_model"])
         if len(batch_ground_truth) == num:
             break
@@ -241,6 +233,37 @@ class TestSALT(unittest.TestCase):
         async def main():
             # get_similarity_penalty get_hack_penalty
             results = await task.get_similarity_penalty(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth,
+            )
+            print(results)
+        aio.run(main())
+
+
+class TestRLVR(unittest.TestCase):
+    def test_rlvr_verify(self):
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="rlvr", num=6)
+        task = RLVRVerify()
+
+        async def main():
+            results = await task.do_job(
+                agent=UNITTEST_AGENT,
+                batch_inputs=[(x, y, z) for x, y, z in zip(batch_solution_str, [
+                    None]*len(batch_solution_str), batch_ground_truth)],
+                max_concurrent_requests=64,
+            )
+            print(results)
+        aio.run(main())
+
+    def test_get_accuracy(self):
+        task = RLVRComputeScore(split="valid", args=RLVR_DEFAULT_PARAMS)
+
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="rlvr", num=6)
+
+        async def main():
+            results = await task.get_accuracy(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
             )
