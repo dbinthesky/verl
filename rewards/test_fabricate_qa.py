@@ -521,7 +521,7 @@ class TestDoc2QueryV2(unittest.TestCase):
 
     def test_compute_score(self):
         task = Doc2QueryV2ComputeScore(
-            doc2query_v2_parse_solution_fn, split="train", args=DOC2QUERY_V2_DEFAULT_PARAMS)
+            doc2query_v2_parse_solution_fn, split="valid", args=DOC2QUERY_V2_DEV_PARAMS)
 
         batch_solution_str, batch_ground_truth = load_dataset(
             task_name="doc2query_v2", num=4)

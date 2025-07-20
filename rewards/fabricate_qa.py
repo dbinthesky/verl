@@ -2339,6 +2339,8 @@ class Doc2QueryV2ComputeScore(object):
                     f"--------------------------------{log_flag}--------------------------------")
                 print(
                     f"【Solution】({source})`{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f"【Golden】({source})`{self.log_ground_truth(batch_ground_truth[i])}`")
 
                 _minor_rewards_log = []
                 for process in self.coarse_process():
@@ -2371,6 +2373,9 @@ class Doc2QueryV2ComputeScore(object):
         if norm is None:
             return repr(self.clip_string(solution))
         return repr(self.format_question(norm))
+
+    def log_ground_truth(self, ground_truth):
+        return ""
 
     def format_question(self, parsed_result):
         return f'Question: {parsed_result[0]}\nAnswer: {parsed_result[1]}\nAnswer Type: {parsed_result[2]}'
@@ -2869,63 +2874,11 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                 scores[index] = _score * run_args["weight"]
         return scores
 
-        #     def compute_score(self,
-        #                       batch_data_sources,
-        #                       batch_solution_str,
-        #                       batch_ground_truth,
-        #                       max_concurrent_requests=MAX_CONCURRENT,
-        #                       ):
-        #         async def main():
-        #             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, max_concurrent_requests=max_concurrent_requests)
-        #         return aio.run(main())
+    def format_question(self, parsed_result):
+        return f'Question: {parsed_result[0]}\nAnswer: {parsed_result[1]}'
 
-        #     def log_solution(self, solution):
-        #         norm = self.parse_solution_fn(solution)
-        #         if norm is None:
-        #             return repr(self.clip_string(solution))
-        #         return repr(self.format_question(norm[0], norm[1]))
-
-        #     def format_question(self, question, answer):
-        #         return f'Question: {question}\nAnswer: {answer}'
-
-        #     def log_ground_truth(self, ground_truth):
-        #         return repr(self.format_question(ground_truth["question"], ground_truth["answer"])
-        #                     )
-
-        #     def update_rollout_info(self, solution_str, ground_truth, difficulty):
-        #         parsed = self.parse_solution_fn(solution_str)
-        #         if parsed is None:
-        #             return
-        #         question, answer = parsed
-        #         inst_id = ground_truth["extra_info"]["uuid"]
-        #         if inst_id not in self.self.rollout_cache:
-        #             self.self.rollout_cache[inst_id] = LRUCache(
-        #                 capacity=self.record_rollout_max_capacity)
-
-        #         args = copy.deepcopy(self.args)
-        #         for k, v in args["learnable_run_args"].items():
-        #             del v["fn"]
-        #             for field, value in v.items():
-        #                 if field == "model":
-        #                     args["learnable_run_args"][k][field] = value.model
-
-        #         self.self.rollout_cache[inst_id][question] = {
-        #             "prompt_generation_process": solution_str,
-        #             "question": question,
-        #             "answer": answer,
-        #             "difficulty": {
-        #                 "meta": args,
-        #                 "pass_rate": difficulty
-        #             }
-        #         }
-
-        #     def save_rollout_info(self):
-        #         """将缓存保存为JSON文件"""
-        #         data = {k: {"capacity": v.capacity, "items": list(v.get_items()), "access_order": list(
-        #             v._access_order.keys())} for k, v in self.self.rollout_cache.items()}
-
-        #         with open(self.save_rollout_samples_path, "wt") as f:
-        #             json.dump(data, f, ensure_ascii=False, indent="  ")
+    # def log_ground_truth(self, ground_truth):
+    #     return repr(self.format_question(ground_truth["question"], ground_truth["answer"])
 
         #     def penalty_on(self):
         #         return ("Format", "Lang", "BadQ", "QSimPenalty")
@@ -3056,7 +3009,6 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 
         #                 if self.split == "valid":
         #                     pass
-
         #                 self.save_rollout_info()
         #         return final_results
 SALT_DEFAULT_PARAMS = {
