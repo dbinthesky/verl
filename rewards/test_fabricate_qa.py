@@ -30,16 +30,14 @@ from fabricate_qa import (
     SALTFormatVerify,
     SALTBadQuestionDetection,
     QuestionSimilarityPenalty,
-    #     # Doc2QueryV3ComputeScore,
-    #     # CriteriaRMComputeScore,
     SALTComputeScore,
     DOC2QUERY_V2_DEFAULT_PARAMS,
     DOC2QUERY_V2_DEV_PARAMS,
+    DOC2QUERY_V3_DEFAULT_PARAMS,
     SALT_DEFAULT_PARAMS,
     SALT_DEV_PARAMS,
     Doc2QueryV3FormatVerify,
-    #     # DOC2QUERY_V3_DEFAULT_PARAMS,
-    #     # CRITERIA_DEFAULT_PARAMS,
+    Doc2QueryV3ComputeScore
     #     # doc2query_v2_default_stage1_compute_score_valid,
     #     # fabricate_qa_default_stage1_compute_score_valid,
     #     # fabricate_aio_default_stage1_compute_score_valid,
@@ -259,25 +257,26 @@ class TestDoc2QueryV3(unittest.TestCase):
         for x, y in zip(batch_solution_str, batch_ground_truth):
             print(scorer.get_penalty_or_reward(x, y))
 
+    def test_get_bad_question_penalty(self):
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="doc2query_v3", num=6)
+        task = Doc2QueryV3ComputeScore(
+            doc2query_v3_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
+
+        # async def main():
+        #     results = await task.get_bad_question_penalty(
+        #         [None] *
+        #         len(batch_solution_str), batch_solution_str, batch_ground_truth, run_args=None
+        #     )
+        #     print(results)
+        # aio.run(main())
+
     def test_doc2query_v3_compute_score(self):
         batch_solution_str, batch_ground_truth = load_doc2query_v3_data(num=32)
 
         print(doc2query_v3_default_compute_score_valid(
             [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth,
         ))
-
-    def test_get_bad_question_penalty(self):
-        batch_solution_str, batch_ground_truth = load_doc2query_v3_data(num=32)
-        task = Doc2QueryV3ComputeScore(
-            doc2query_v3_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
-
-        async def main():
-            results = await task.get_bad_question_penalty(
-                [None] *
-                len(batch_solution_str), batch_solution_str, batch_ground_truth, run_args=None
-            )
-            print(results)
-        aio.run(main())
 
 
 class TestDoc2QueryV2(unittest.TestCase):

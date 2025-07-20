@@ -2966,93 +2966,58 @@ class Doc2QueryV3FormatVerify(PenaltyOrReward):
         # 成功
         return 0.0
 
-# class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
-#     MULTICHOICE_LETTER = ('A', 'B', 'C', 'D', 'E', 'F', 'G',
-#                           'H', 'I', 'J', 'K', 'L')
 
-#     def __init__(self,
-#                  parse_solution_fn,
-#                  split="train",
-#                  args=None,
-#                  record_rollout_samples_path=None,
-#                  record_rollout_max_capacity=100,
-#                  ):
+class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
+    MULTICHOICE_LETTER = ('A', 'B', 'C', 'D', 'E', 'F', 'G',
+                          'H', 'I', 'J', 'K', 'L')
 
-#         super().__init__(
-#             split=split, parse_solution_fn=parse_solution_fn, args=args,
-#             record_rollout_samples_path=record_rollout_samples_path, record_rollout_max_capacity=record_rollout_max_capacity
-#         )
-#         self.task_name = "DOC2QUERY_V3"
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-2.0
+                 ):
 
-#         self.format = Doc2QueryV3QuestionAnswerFormatVerify(
-#             parse_solution_fn=self.parse_solution_fn)
-#         self.language = SALTLanguageConsistency(
-#             parse_solution_fn=self.parse_solution_fn)
+        super().__init__(
+            parse_solution_fn=parse_solution_fn, split=split,
+            args=args,
+            min_reward=min_reward
+        )
+        self.task_name = "DOC2QUERY_V3"
 
-#     @classmethod
-#     def get_weak_agent(cls):
-#         return Agent(**{
-#             "model": "DeepSeek-V3-0324",
-#             "base_url": "https://sd1j6et29optek6oord40.apigateway-cn-beijing.volceapi.com/v1",
-#             "api_keys": "EMPTY",
-#             "request_kwargs": {
-#                 "temperature": 0.9,
-#                 "timeout": 360,
-#                 "max_tokens": 4096,
-#             }
-#         })
+    @classmethod
+    def rule_based_penalties(cls):
+        return [
+            Doc2QueryV3FormatVerify,
+            LanguageConsistency,
+        ]
 
-#     @classmethod
-#     def get_strong_agent(cls):
-#         return cls.get_weak_agent()
+    def response_postprocess(self, s):
+        if "</think>" in s:
+            s = s[s.index("</think>")+len("</think>"):]
 
-#     @classmethod
-#     def get_anchor_agent(cls):
-#         return Agent(**{
-#             "model": "qwen25_32B_instruct",
-#             "base_url": "http://10.130.142.154:8000/v1",
-#             "api_keys": "EMPTY",
-#             "request_kwargs": {
-#                 "temperature": 0.9,
-#                 "timeout": 360,
-#                 "max_tokens": 4096,
-#             },
-#         })
+        if "**Final Answer**" in s:
+            s = s[s.index("**Final Answer**")+len("**Final Answer**"):]
+        if "**Final Solution**" in s:
+            s = s[s.index("**Final Solution**")+len("**Final Solution**"):]
 
-#     def get_penalties(self) -> Dict[str, Callable]:
-#         return {
-#             "Format": self.format.get_penalty_or_reward,
-#             "Lang": self.language.get_penalty_or_reward,
-#         }
-
-#     def response_postprocess(self, s, debug=False):
-#         if "</think>" in s:
-#             s = s[s.index("</think>")+len("</think>"):]
-
-#         if "**Final Answer**" in s:
-#             s = s[s.index("**Final Answer**")+len("**Final Answer**"):]
-#         if "**Final Solution**" in s:
-#             s = s[s.index("**Final Solution**")+len("**Final Solution**"):]
-
-#         if debug:
-#             return s
-#         try:
-#             s = s.strip()
-#             conclusion = s
-#             if "最终答案是" in conclusion:
-#                 conclusion = conclusion[conclusion.rindex(
-#                     "最终答案是")+len("最终答案是"):].strip()
-#                 return conclusion
-#             else:
-#                 conclusion = conclusion[conclusion.rindex(
-#                     "final answer is")+len("final answer is"):].strip()
-#                 return conclusion
-#         except Exception as err:
-#             try:
-#                 s = s.strip()
-#                 return s
-#             except Exception as err:
-#                 raise PostprocessError(f'parse conclusion failure')
+        try:
+            s = s.strip()
+            conclusion = s
+            if "最终答案是" in conclusion:
+                conclusion = conclusion[conclusion.rindex(
+                    "最终答案是")+len("最终答案是"):].strip()
+                return conclusion
+            else:
+                conclusion = conclusion[conclusion.rindex(
+                    "final answer is")+len("final answer is"):].strip()
+                return conclusion
+        except Exception as err:
+            try:
+                s = s.strip()
+                return s
+            except Exception as err:
+                raise PostprocessError(f'parse conclusion failure')
 
 #     async def verify_batch_results(self, verify_queue, max_concurrent_requests, group_names):
 #         def validate_result(response):
@@ -3578,89 +3543,6 @@ class Doc2QueryV3FormatVerify(PenaltyOrReward):
 
 #         return final_results
 
-# # DOC2QUERY_V3_DEFAULT_PARAMS = {
-# #     "difficulty_run_args": {
-# #         "w/o_content": {
-# #             "model": Doc2QueryV3ComputeScore.get_weak_agent(),
-# #             "repeat": 8,
-# #             "fn": Doc2QueryV3ComputeScore.respond_wo_context,
-# #             "desc": 'w/o ctx',
-# #             "max_concurrent_requests": 256
-# #         },
-# #         "w_content": {
-# #             "model": Doc2QueryV3ComputeScore.get_strong_agent(),
-# #             "repeat": 8,
-# #             "fn": Doc2QueryV3ComputeScore.respond_w_context,
-# #             "desc": 'w ctx',
-# #             "max_concurrent_requests": 256
-# #         },
-# #         "anchor": {
-# #             "model": Doc2QueryV3ComputeScore.get_anchor_agent(),
-# #             "repeat": 8,
-# #             "fn": Doc2QueryV3ComputeScore.respond_w_context,
-# #             "desc": 'anchor w ctx',
-# #             "max_concurrent_requests": 64
-# #         },
-# #     },
-# #     "difficulty_metric_args": {
-# #         "advantage": 'w_content',
-# #         "weakness": 'w/o_content',
-# #         "anchor": 'anchor',
-# #         "advantage_oversimplified_threshold": 8/8,
-# #         "weakness_oversimplified_threshold": 7/8,
-# #         "advantage_overcomplex_threshold": 1/8,
-# #         "weakness_overcomplex_threshold": 1/8,
-# #         "advantage_threshold": 2/8,
-# #         "advantage_threshold_limit": 5/8,
-# #         "advantage_weight": 0.0,
-# #         "weakness_weight": 1.0,
-# #         "anchor_weight": 1.5,
-# #         "confidence_bonus_threshold": 2/8,
-# #         "confidence_bonus_weight": 0.
-# #     },
-# # }
-
-# DOC2QUERY_V3_DEFAULT_PARAMS = {
-#     "difficulty_run_args": {
-#         "w/o_content": {
-#             "model": Doc2QueryV3ComputeScore.get_anchor_agent(),
-#             "repeat": 10,
-#             "fn": Doc2QueryV3ComputeScore.respond_wo_context,
-#             "desc": 'w/o ctx',
-#             "max_concurrent_requests": 64
-#         },
-#         "w_content": {
-#             "model": Doc2QueryV3ComputeScore.get_strong_agent(),
-#             "repeat": 4,
-#             "fn": Doc2QueryV3ComputeScore.respond_w_context,
-#             "desc": 'w ctx',
-#             "max_concurrent_requests": 128
-#         },
-#     },
-#     "difficulty_metric_args": {
-#         "advantage": 'w_content',
-#         "weakness": 'w/o_content',
-#         "advantage_oversimplified_threshold": 4/4,
-#         "weakness_oversimplified_threshold": 8/10,
-#         "advantage_overcomplex_threshold": 1/4,
-#         "weakness_overcomplex_threshold": 1/10,
-#         "advantage_threshold": 1/4,
-#         "advantage_weight": 0.0,
-#         "weakness_weight": 1.0,
-#         "anchor_weight": 1.5,
-#         "confidence_bonus_threshold": 2/8,
-#         "confidence_bonus_weight": 0.
-#     },
-# }
-
-# _default_doc2query_v3_compute_score_train = Doc2QueryV3ComputeScore(
-#     doc2query_v3_parse_solution_fn, split="train", args=DOC2QUERY_V3_DEFAULT_PARAMS)
-# _default_doc2query_v3_compute_score_valid = Doc2QueryV3ComputeScore(
-#     doc2query_v3_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
-# doc2query_v3_default_compute_score_train = partial(
-#     _default_doc2query_v3_compute_score_train.compute_score)
-# doc2query_v3_default_compute_score_valid = partial(
-#     _default_doc2query_v3_compute_score_valid.compute_score)
 
 # # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # # DOC2QUERY V3
@@ -4230,7 +4112,6 @@ class Doc2QueryV3FormatVerify(PenaltyOrReward):
 #         if criteria is None:
 #             return self.clip_string(solution)
 #         return self.clip_string(criteria)
-
 # CRITERIA_DEFAULT_PARAMS = {
 #     "judge_run_args": {
 #         "w_criteria": {
@@ -4241,19 +4122,15 @@ class Doc2QueryV3FormatVerify(PenaltyOrReward):
 #         },
 #     },
 # }
-
 # _default_criteria_rm_compute_score_train = CriteriaRMComputeScore(
 #     criteria_parse_solution_fn, split="train", args=CRITERIA_DEFAULT_PARAMS)
 # _default_criteria_rm_compute_score_valid = CriteriaRMComputeScore(
 #     criteria_parse_solution_fn, split="valid", args=CRITERIA_DEFAULT_PARAMS)
 # criteria_rm_default_compute_score_train = _default_criteria_rm_compute_score_train.compute_score
 # criteria_rm_default_compute_score_valid = _default_criteria_rm_compute_score_valid.compute_score
-
 # # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # # Criteria RM
 # # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # HParams
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -4634,6 +4511,95 @@ SALT_DEV_PARAMS = {
     }
 }
 
+DOC2QUERY_V3_DEFAULT_PARAMS = {
+    "difficulty_run_args": {
+        "w/o_content": {
+            "model": {
+                "model": "service_dv3_for_tongjian",
+                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "repeat": 10,
+            "fn": "respond_wo_context",
+            "desc": 'w/o ctx',
+            "max_concurrent_requests": 64
+        },
+        "w_content": {
+            "model": {
+                "model": "service_dv3_for_tongjian",
+                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "repeat": 4,
+            "fn": "respond_w_context",
+            "desc": 'w ctx',
+            "max_concurrent_requests": 64
+        },
+    },
+    "difficulty_metric_args": {
+        "advantage": 'w_content',
+        "weakness": 'w/o_content',
+        "advantage_oversimplified_threshold": 4/4,
+        "weakness_oversimplified_threshold": 8/10,
+        "advantage_overcomplex_threshold": 1/4,
+        "weakness_overcomplex_threshold": 1/10,
+        "advantage_threshold": 1/4,
+        "advantage_weight": 0.0,
+        "weakness_weight": 1.0,
+        "anchor_weight": 1.5,
+        "confidence_bonus_threshold": 2/8,
+        "confidence_bonus_weight": 0.
+    },
+    "verify_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.223:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 1024,
+            },
+        },
+        "max_concurrent_requests": 32
+    },
+    "auxiliary_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.223:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 4096,
+            },
+        },
+        "max_concurrent_requests": 32
+    },
+    "save_rollouts": {
+        "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
+    }
+}
+
+
+_default_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScore(
+    doc2query_v2_parse_solution_fn, split="train", args=DOC2QUERY_V2_DEFAULT_PARAMS)
+_default_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScore(
+    doc2query_v2_parse_solution_fn, split="valid", args=DOC2QUERY_V2_DEFAULT_PARAMS)
+doc2query_v2_compute_score_train = _default_doc2query_v2_compute_score_train.compute_score
+doc2query_v2_compute_score_valid = _default_doc2query_v2_compute_score_valid.compute_score
+
+
 # _default_salt_compute_score_train = SALTComputeScore(
 #     salt_parse_solution_fn, split="train", args=SALT_DEFAULT_PARAMS)
 # _default_salt_compute_score_valid = SALTComputeScore(
@@ -4644,9 +4610,11 @@ SALT_DEV_PARAMS = {
 #     _default_salt_compute_score_valid.compute_score, max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
 
 
-_default_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScore(
-    doc2query_v2_parse_solution_fn, split="train", args=DOC2QUERY_V2_DEFAULT_PARAMS)
-_default_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScore(
-    doc2query_v2_parse_solution_fn, split="valid", args=DOC2QUERY_V2_DEFAULT_PARAMS)
-doc2query_v2_compute_score_train = _default_doc2query_v2_compute_score_train.compute_score
-doc2query_v2_compute_score_valid = _default_doc2query_v2_compute_score_valid.compute_score
+# _default_doc2query_v3_compute_score_train = Doc2QueryV3ComputeScore(
+#     doc2query_v3_parse_solution_fn, split="train", args=DOC2QUERY_V3_DEFAULT_PARAMS)
+# _default_doc2query_v3_compute_score_valid = Doc2QueryV3ComputeScore(
+#     doc2query_v3_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
+# doc2query_v3_default_compute_score_train = partial(
+#     _default_doc2query_v3_compute_score_train.compute_score)
+# doc2query_v3_default_compute_score_valid = partial(
+#     _default_doc2query_v3_compute_score_valid.compute_score)
