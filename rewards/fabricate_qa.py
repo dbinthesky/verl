@@ -2178,8 +2178,15 @@ class Doc2QueryV2ComputeScore(object):
 
     @classmethod
     def get_answer_format(cls, answer_type, gt):
-        index = gt["ans_format_keys"].tolist().index(answer_type)
-        return gt["ans_format_values"].tolist()[index]
+        if isinstance(gt["ans_format_keys"], list):
+            index = gt["ans_format_keys"].index(answer_type)
+        else:
+            index = gt["ans_format_keys"].tolist().index(answer_type)
+
+        if isinstance(gt["ans_format_values"], list):
+            return gt["ans_format_values"][index]
+        else:
+            return gt["ans_format_values"].tolist()[index]
 
     @classmethod
     def get_instruct(cls, gt, answer_type):
@@ -2606,6 +2613,15 @@ class Doc2QueryV2ComputeScore(object):
         async def main():
             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
         return aio.run(main())
+
+    async def compute_score_with_sources(self,
+                                         batch_data_sources,
+                                         batch_solution_str,
+                                         batch_ground_truth):
+        return (batch_data_sources[0], await self._compute_score(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth))
 
     def log_solution(self, solution):
         norm = self.parse_solution_fn(solution)
@@ -3566,75 +3582,6 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 # RLVR
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-#   async def get_accuracy(
-#             self,
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth, max_concurrent_requests=64, majority_vote=3):
-#         def postprocess(s):
-#             try:
-#                 conclusion = s.strip()
-#                 judge = re.findall(
-#                     r'\"判断结果\": \"(.*)\"', conclusion)
-#                 if len(judge) > 0 and judge[0] in ("正确", "错误"):
-#                     return judge[0] == "正确"
-
-#                 conclusion = conclusion[conclusion.index(
-#                     "```json")+len("```json"):].strip()
-#                 conclusion = conclusion[:conclusion.index("```")].strip()
-#                 try:
-#                     conclusion = json.loads(conclusion)
-#                     if conclusion["判断结果"] not in ("正确", "错误"):
-#                         raise PostprocessError(f'corrupt')
-#                     return conclusion["判断结果"] == "正确"
-#                 except Exception as err:
-#                     try:
-#                         conclusion = re.findall(
-#                             r'\"判断结果\": \"(.*)\"', conclusion)[0]
-#                         if not conclusion in ("正确", "错误"):
-#                             raise PostprocessError(f'corrupt')
-#                         return conclusion == "正确"
-#                     except Exception as err:
-#                         raise PostprocessError(f'{err}')
-#             except Exception as err:
-#                 raise PostprocessError(f'{err}')
-
-#         results_mapper = defaultdict(list)
-
-#         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-#             solution = parse_solution_fn(solution_str)
-
-#             if solution is not None:
-#                 prompt = EVAL_PROMPT + EVAL_TEMPLATE_TEMPLATE.format(
-#                     content=json.dumps({"题目": gt["prompt"], "标准答案": gt["ground_truth"], "用户回答": solution}, ensure_ascii=False, indent="  "))
-
-#                 results_mapper[prompt].append(i)
-
-#         prompts = list(results_mapper.keys()) * majority_vote
-
-#         results = await self.get_verify_agent().run(
-#             prompts, max_concurrent_requests,
-#             desc="[VERIFY]", postprocess_fns=[postprocess]*len(prompts))
-
-#         judges = defaultdict(list)
-#         for prompt, conclusion in results:
-#             for index in results_mapper[prompt]:
-#                 judges[index].append(conclusion)
-
-#         full_rewards = []
-#         for i in range(len(batch_solution_str)):
-#             if i in judges:
-#                 scores = [_ for _ in judges[i] if _ is not None]
-#                 correct_votes = scores.count(True)
-#                 wrong_votes = scores.count(False)
-#                 if correct_votes > wrong_votes:
-#                     full_rewards.append(1.0)
-#                 else:
-#                     full_rewards.append(0.0)
-#             else:
-#                 full_rewards.append(0.0)
-#         return full_rewards
-
 
 def rlvr_parse_solution_fn(solution_str: str, remove_option_letter=True):
     solution_str = postprocess_solution(solution_str)
@@ -3692,26 +3639,28 @@ class RLVRComputeScore(Doc2QueryV2ComputeScore):
 
         indices = []
         eval_inputs = []
+        result_index2queue_index = {}
         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
             result = self.parse_solution_fn(sol)
             if result is not None:
                 eval_inputs.append((result, gt))
                 indices.append(i)
+                result_index2queue_index[len(
+                    eval_inputs)-1] = i
             else:
                 continue
 
-        evalutions = await task.do_job(
+        evaluations = await task.do_job(
             agent=self.verify_agent,
             batch_inputs=eval_inputs,
             max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
         )
 
-        full_rewards = []
-        for i in range(len(batch_solution_str)):
-            if evalutions[i]:
-                full_rewards.append(1.0)
-            else:
-                full_rewards.append(0.0)
+        full_rewards = [0.0] * len(batch_solution_str)
+        for j, (eval_result, eval_input) in enumerate(zip(evaluations, eval_inputs)):
+            queue_index = result_index2queue_index[j]
+            if eval_result:
+                full_rewards[queue_index] = 1.0
         return full_rewards
 
     def clip_string(self, s: str):
@@ -3741,7 +3690,7 @@ class RLVRComputeScore(Doc2QueryV2ComputeScore):
             _reward = accuracy[i]
             final_results.append(_reward)
 
-            if _reward > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+            if (_reward > 0 and random.random() < 0.1) or (self.split == "valid" and random.random() < 0.05) or (self.split == "train" and random.random() < 0.05):
                 log = True
                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
             else:
@@ -3782,6 +3731,15 @@ class FabricateAIOComputeScore(object):
                       batch_solution_str,
                       batch_ground_truth,
                       ):
+        async def main():
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+        return aio.run(main())
+
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
         source_mapper = {}
         splitter = defaultdict(list)
 
@@ -3791,19 +3749,24 @@ class FabricateAIOComputeScore(object):
             source_mapper[i] = (source, len(splitter[source])-1)
 
         results = {}
+        tasks = []
         for source, flatten_elems in splitter.items():
             _batch_data_sources, _batch_solution_str, _batch_ground_truth = [], [], []
             for source, sol, gt in flatten_elems:
                 _batch_data_sources.append(source)
                 _batch_solution_str.append(sol)
                 _batch_ground_truth.append(gt)
-
-            _results = self.processors[source].compute_score(
-                batch_data_sources=_batch_data_sources,
-                batch_solution_str=_batch_solution_str,
-                batch_ground_truth=_batch_ground_truth,
+            tasks.append(
+                self.processors[source].compute_score_with_sources(
+                    batch_data_sources=_batch_data_sources,
+                    batch_solution_str=_batch_solution_str,
+                    batch_ground_truth=_batch_ground_truth,
+                )
             )
-            results[source] = _results
+
+        mor_work_done = await aio.gather(*tasks)
+        for (s, rewards) in mor_work_done:
+            results[s] = rewards
 
         final_results = []
         for i, _ in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
@@ -3878,7 +3841,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
                 "max_tokens": 1024,
             },
         },
-        "max_concurrent_requests": 128
+        "max_concurrent_requests": 32
     },
     "auxiliary_agent": {
         "model": {
@@ -3891,7 +3854,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
                 "max_tokens": 4096,
             },
         },
-        "max_concurrent_requests": 128
+        "max_concurrent_requests": 32
     },
     "similarity_run_args":  {
         "threshold": {
@@ -4009,7 +3972,7 @@ SALT_DEFAULT_PARAMS = {
             "fn": "reject_sample",
             "repeat": 10,
             "desc": '拒绝采样',
-            "max_concurrent_requests": 256
+            "max_concurrent_requests": 92
         },
         "w/o_content": {
             "model": {
@@ -4025,7 +3988,7 @@ SALT_DEFAULT_PARAMS = {
             "repeat": 8,
             "fn": "respond_wo_context",
             "desc": 'w/o ctx',
-            "max_concurrent_requests": 256
+            "max_concurrent_requests": 92
         },
         "w_content": {
             "model": {
@@ -4041,7 +4004,7 @@ SALT_DEFAULT_PARAMS = {
             "repeat": 8,
             "fn": "respond_w_context",
             "desc": 'w ctx',
-            "max_concurrent_requests": 256
+            "max_concurrent_requests": 92
         },
     },
     "learnable_metric_args": {
@@ -4075,7 +4038,7 @@ SALT_DEFAULT_PARAMS = {
                 "max_tokens": 1024,
             },
         },
-        "max_concurrent_requests": 128
+        "max_concurrent_requests": 32
     },
     "auxiliary_agent": {
         "model": {
@@ -4212,7 +4175,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             "repeat": 10,
             "fn": "respond_wo_context",
             "desc": 'w/o ctx',
-            "max_concurrent_requests": 256
+            "max_concurrent_requests": 92
         },
         "w_content": {
             "model": {
@@ -4225,18 +4188,18 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                     "max_tokens": 4096,
                 }
             },
-            "repeat": 4,
+            "repeat": 8,
             "fn": "respond_w_context",
             "desc": 'w ctx',
-            "max_concurrent_requests": 256
+            "max_concurrent_requests": 92
         },
     },
     "difficulty_metric_args": {
         "advantage": 'w_content',
         "weakness": 'w/o_content',
-        "advantage_oversimplified_threshold": 4/4,
+        "advantage_oversimplified_threshold": 8/8,
         "weakness_oversimplified_threshold": 8/10,
-        "advantage_overcomplex_threshold": 1/4,
+        "advantage_overcomplex_threshold": 1/8,
         "weakness_overcomplex_threshold": 1/10,
         "advantage_threshold": 1/4,
         "advantage_weight": 0.0,
@@ -4256,7 +4219,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 "max_tokens": 1024,
             },
         },
-        "max_concurrent_requests": 128
+        "max_concurrent_requests": 32
     },
     "auxiliary_agent": {
         "model": {
@@ -4288,7 +4251,7 @@ RLVR_DEFAULT_PARAMS = {
                 "max_tokens": 1024,
             },
         },
-        "max_concurrent_requests": 128,
+        "max_concurrent_requests": 32,
         "desc": 'RLVR',
     },
     "save_rollouts": {
