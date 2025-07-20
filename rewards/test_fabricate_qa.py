@@ -40,7 +40,8 @@ from fabricate_qa import (
     Doc2QueryV3FormatVerify,
     Doc2QueryV3ComputeScore,
     RLVRVerify,
-    RLVRComputeScore
+    RLVRComputeScore,
+    fabricate_aio_compute_score_valid
 )
 
 UNITTEST_AGENT = Agent(**{
@@ -113,25 +114,28 @@ _doc2query_v3_qas = [
 def load_dataset(task_name, num=100):
     filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0718.parquet"
     batch_solution_str, batch_ground_truth = [], []
+    batch_data_sources = []
 
     df = pd.read_parquet(filename)
     count = 0
     for _, row in df.iterrows():
         row = row.to_dict()
-        if row["data_source"] != task_name:
-            continue
+        if task_name is not None:
+            if row["data_source"] != task_name:
+                continue
+        batch_data_sources.append(row["data_source"])
 
-        if task_name == "doc2query_v2":
+        if row["data_source"] == "doc2query_v2":
             sample = random.choice(_doc2query_v2_qas)
             batch_solution_str.append(
                 f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: {sample[0]}\n\nAnswer: {sample[1]}\n\nAnswer Type: {sample[2]}\n</question>'
             )
-        elif task_name == "salt":
+        elif row["data_source"] == "salt":
             sample = random.choice(_salt_qas)
             batch_solution_str.append(
                 f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nAnswer: [SYNTHETIC] {sample[1]}\n</question>'
             )
-        elif task_name == "doc2query_v3":
+        elif row["data_source"] == "doc2query_v3":
             sample = random.choice(_doc2query_v3_qas)
             o = "\n".join([f'{c}) {_o}' for c, _o in zip(
                 ["A", "B", "C", "D"], sample[1])])
@@ -139,14 +143,17 @@ def load_dataset(task_name, num=100):
             batch_solution_str.append(
                 f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nOptions: {o}\n\nAnswer: {sample[2]}\n</question>'
             )
-        elif task_name == "rlvr":
+        elif row["data_source"] == "rlvr":
             batch_solution_str.append(
                 f'<think>\nUNITTEST_ONLY\n</think>\n\n答案：{row["reward_model"]["ground_truth"]}'
             )
         batch_ground_truth.append(row["reward_model"])
         if len(batch_ground_truth) == num:
             break
-    return batch_solution_str, batch_ground_truth
+    if task_name is not None:
+        return batch_solution_str, batch_ground_truth
+    else:
+        return batch_data_sources, batch_solution_str, batch_ground_truth
 
 
 class TestUtils(unittest.TestCase):
@@ -238,6 +245,15 @@ class TestSALT(unittest.TestCase):
             )
             print(results)
         aio.run(main())
+
+
+class TestFabricateAIO(unittest.TestCase):
+    def test_compute_score(self):
+        batch_data_sources, batch_solution_str, batch_ground_truth = load_dataset(
+            task_name=None, num=100)
+        fabricate_aio_compute_score_valid(
+            batch_data_sources, batch_solution_str, batch_ground_truth
+        )
 
 
 class TestRLVR(unittest.TestCase):

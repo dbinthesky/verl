@@ -2469,7 +2469,7 @@ class Doc2QueryV2ComputeScore(object):
         ]
 
     def finegrain_process(self):
-        return Process(name="Difficulty", function=self.get_difficulty_reward, filter_only=False)
+        return Process(name="Difficulty", function=self.get_difficulty_reward, filter_only=False, non_skip=False)
 
     async def _compute_score(self,
                              batch_data_sources,
@@ -4322,9 +4322,9 @@ salt_compute_score_valid = _default_salt_compute_score_valid.compute_score
 
 
 _default_rlvr_compute_score_train = RLVRComputeScore(
-    rlvr_parse_solution_fn, split="train", args=RLVR_DEFAULT_PARAMS)
+    split="train", args=RLVR_DEFAULT_PARAMS)
 _default_rlvr_compute_score_valid = RLVRComputeScore(
-    rlvr_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
+    split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
 rlvr_compute_score_train = _default_rlvr_compute_score_train.compute_score
 rlvr_compute_score_valid = _default_rlvr_compute_score_valid.compute_score
 
