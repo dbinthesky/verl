@@ -1228,6 +1228,34 @@ class SALTSelfTaughtSimpleSolutionVerify(NumericalSolutionVerify):
         return prompt
 
 
+class SALTAuthenticQuestionSolutionVerify(SALTSelfTaughtSimpleSolutionVerify):
+    _FEWSHOTS = SIMPLE_SOLUTION_VERIFY_FEWSHOTS
+
+    def __init__(self):
+        super().__init__()
+
+    @classmethod
+    def task_desc(cls):
+        return "解验证(简单实现)"
+
+    def prompt_fn(self, example):
+        solver_response, extra, gt = example
+        # 用真题的Answer作为标准答案
+        question, answer = gt["question"], gt["answer"]
+        print(question)
+        print("="*80)
+        print(solver_response)
+        print("="*80)
+        print(answer)
+        raise NotImplementedError
+        prompt = self._FEWSHOTS + self._TEMPLATE.format(
+            question=question,
+            conclusion=solver_response,
+            answer=answer
+        )
+        return prompt
+
+
 def parse_question_solution_fn(solution_str: str):
     if solution_str.count("</question>") > 1:
         return None
@@ -2620,8 +2648,6 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 
     @classmethod
     def respond_wo_context(cls, result, gt, context):
-        print("sdfsdfsfsfsdfdsf", result)
-
         if gt["lang_code"] == "en":
             extra = "Think Step by Step and give your thinking process."
         else:
@@ -2654,9 +2680,9 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
             skip_run=skip_run
         )
 
-        verify_task = SALTSelfTaughtSimpleSolutionVerify()
+        verify_task = SALTAuthenticQuestionSolutionVerify()
 
-        await self._simulate_respondent(
+        return await self._simulate_respondent(
             batch_data_sources=batch_data_sources,
             batch_solution_str=batch_solution_str,
             batch_ground_truth=batch_ground_truth,
@@ -2668,17 +2694,6 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
             resp_postprocess_fn=self.self_taught_response_postprocess,
             prompt_contexts=self_taught_rationale
         )
-
-        # return await self._simulate_respondent(
-        #     batch_data_sources=batch_data_sources,
-        #     batch_solution_str=batch_solution_str,
-        #     batch_ground_truth=batch_ground_truth,
-        #     skip_run=skip_run,
-        #     run_args=self.run_args(),
-        #     batch_verify_fn=partial(
-        #         self.batch_verify_results, verify_task=verify_task),
-        #     resp_postprocess_fn=self.response_postprocess
-        # )
 
 #     async def simulate_respondent(
 #             self,
