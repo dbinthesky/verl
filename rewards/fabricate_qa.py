@@ -3765,12 +3765,56 @@ class RLVRComputeScore(Doc2QueryV2ComputeScore):
         return final_results
 
 
-# compute_score_train = MapReduceComputeScore(split="train").compute_score
-# compute_score_valid = MapReduceComputeScore(split="valid").compute_score
-
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # RLVR
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# AIO
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+class FabricateAIOComputeScore(object):
+    def __init__(self, processors=None):
+        self.processors = processors
+
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+        source_mapper = {}
+        splitter = defaultdict(list)
+
+        for i, (source, sol, gt) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            source_mapper[i] = source
+            splitter[source].append((source, sol, gt))
+            source_mapper[i] = (source, len(splitter[source])-1)
+
+        results = {}
+        for source, flatten_elems in splitter.items():
+            _batch_data_sources, _batch_solution_str, _batch_ground_truth = [], [], []
+            for source, sol, gt in flatten_elems:
+                _batch_data_sources.append(source)
+                _batch_solution_str.append(sol)
+                _batch_ground_truth.append(gt)
+
+            _results = self.processors[source].compute_score(
+                batch_data_sources=_batch_data_sources,
+                batch_solution_str=_batch_solution_str,
+                batch_ground_truth=_batch_ground_truth,
+            )
+            results[source] = _results
+
+        final_results = []
+        for i, _ in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            source, group_index = source_mapper[i]
+            final_results.append(results[source][group_index])
+        return final_results
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# AIO
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # HParams
@@ -3791,7 +3835,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
             "repeat": 5,
             "fn": "respond_wo_context",
             "desc": 'w/o ctx',
-            "max_concurrent_requests": 64
+            "max_concurrent_requests": 128
         },
         "w_content": {
             "model": {
@@ -3807,7 +3851,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
             "repeat": 5,
             "fn": "respond_w_context",
             "desc": 'w ctx',
-            "max_concurrent_requests": 64
+            "max_concurrent_requests": 128
         },
     },
     "difficulty_metric_args": {
@@ -3834,7 +3878,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
                 "max_tokens": 1024,
             },
         },
-        "max_concurrent_requests": 32
+        "max_concurrent_requests": 128
     },
     "auxiliary_agent": {
         "model": {
@@ -3847,7 +3891,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
                 "max_tokens": 4096,
             },
         },
-        "max_concurrent_requests": 32
+        "max_concurrent_requests": 128
     },
     "similarity_run_args":  {
         "threshold": {
@@ -3981,7 +4025,7 @@ SALT_DEFAULT_PARAMS = {
             "repeat": 8,
             "fn": "respond_wo_context",
             "desc": 'w/o ctx',
-            "max_concurrent_requests": 128
+            "max_concurrent_requests": 256
         },
         "w_content": {
             "model": {
@@ -3997,7 +4041,7 @@ SALT_DEFAULT_PARAMS = {
             "repeat": 8,
             "fn": "respond_w_context",
             "desc": 'w ctx',
-            "max_concurrent_requests": 128
+            "max_concurrent_requests": 256
         },
     },
     "learnable_metric_args": {
@@ -4031,7 +4075,7 @@ SALT_DEFAULT_PARAMS = {
                 "max_tokens": 1024,
             },
         },
-        "max_concurrent_requests": 32
+        "max_concurrent_requests": 128
     },
     "auxiliary_agent": {
         "model": {
@@ -4168,7 +4212,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             "repeat": 10,
             "fn": "respond_wo_context",
             "desc": 'w/o ctx',
-            "max_concurrent_requests": 64
+            "max_concurrent_requests": 256
         },
         "w_content": {
             "model": {
@@ -4184,7 +4228,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             "repeat": 4,
             "fn": "respond_w_context",
             "desc": 'w ctx',
-            "max_concurrent_requests": 64
+            "max_concurrent_requests": 256
         },
     },
     "difficulty_metric_args": {
@@ -4212,7 +4256,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 "max_tokens": 1024,
             },
         },
-        "max_concurrent_requests": 32
+        "max_concurrent_requests": 128
     },
     "auxiliary_agent": {
         "model": {
@@ -4225,7 +4269,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 "max_tokens": 4096,
             },
         },
-        "max_concurrent_requests": 32
+        "max_concurrent_requests": 128
     },
     "save_rollouts": {
         "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
@@ -4244,8 +4288,7 @@ RLVR_DEFAULT_PARAMS = {
                 "max_tokens": 1024,
             },
         },
-        "repeat": 3,
-        "max_concurrent_requests": 32,
+        "max_concurrent_requests": 128,
         "desc": 'RLVR',
     },
     "save_rollouts": {
@@ -4281,48 +4324,6 @@ doc2query_v2_compute_score_valid = _default_doc2query_v2_compute_score_valid.com
 # doc2query_v3_default_compute_score_valid = partial(
 #     _default_doc2query_v3_compute_score_valid.compute_score)
 
-
-# class FabricateAIOComputeScore(object):
-#     def __init__(self, processors=None):
-#         self.processors = processors
-
-#     def compute_score(self,
-#                       batch_data_sources,
-#                       batch_solution_str,
-#                       batch_ground_truth,
-#                       stage,
-#                       max_concurrent_requests=MAX_CONCURRENT,
-#                       ):
-#         source_mapper = {}
-#         splitter = defaultdict(list)
-
-#         for i, (source, sol, gt) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-#             source_mapper[i] = source
-#             splitter[source].append((source, sol, gt))
-#             source_mapper[i] = (source, len(splitter[source])-1)
-
-#         results = {}
-#         for source, flatten_elems in splitter.items():
-#             _batch_data_sources, _batch_solution_str, _batch_ground_truth = [], [], []
-#             for source, sol, gt in flatten_elems:
-#                 _batch_data_sources.append(source)
-#                 _batch_solution_str.append(sol)
-#                 _batch_ground_truth.append(gt)
-
-#             _results = self.processors[source].compute_score(
-#                 batch_data_sources=_batch_data_sources,
-#                 batch_solution_str=_batch_solution_str,
-#                 batch_ground_truth=_batch_ground_truth,
-#                 stage=stage,
-#                 max_concurrent_requests=max_concurrent_requests
-#             )
-#             results[source] = _results
-
-#         final_results = []
-#         for i, _ in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-#             source, group_index = source_mapper[i]
-#             final_results.append(results[source][group_index])
-#         return final_results
 
 # _default_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
 #     "doc2query_v2": _default_doc2query_v2_compute_score_train,
