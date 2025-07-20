@@ -257,19 +257,35 @@ class TestDoc2QueryV3(unittest.TestCase):
         for x, y in zip(batch_solution_str, batch_ground_truth):
             print(scorer.get_penalty_or_reward(x, y))
 
-    def test_get_bad_question_penalty(self):
+    def test_doc2query_v3_get_difficulty_reward(self):
+        task = Doc2QueryV3ComputeScore(
+            doc2query_v3_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
+
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="doc2query_v3", num=6)
+
+        async def main():
+            # simulate_respondent get_difficulty_reward
+            results = await task.simulate_respondent(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth,
+            )
+            print(results)
+        aio.run(main())
+
+    def test_quick_question_eval(self):
         batch_solution_str, batch_ground_truth = load_dataset(
             task_name="doc2query_v3", num=6)
         task = Doc2QueryV3ComputeScore(
             doc2query_v3_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
 
-        # async def main():
-        #     results = await task.get_bad_question_penalty(
-        #         [None] *
-        #         len(batch_solution_str), batch_solution_str, batch_ground_truth, run_args=None
-        #     )
-        #     print(results)
-        # aio.run(main())
+        async def main():
+            results = await task.quick_question_eval(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth
+            )
+            print(results)
+        aio.run(main())
 
     def test_doc2query_v3_compute_score(self):
         batch_solution_str, batch_ground_truth = load_doc2query_v3_data(num=32)

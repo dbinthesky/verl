@@ -411,6 +411,59 @@ NUMERICAL_SOLUTION_VERIFY_TEMPLATE = """
 #### **输出：**
 """
 
+MULTICHOICE_EXTRACT_ANSWER_FEWSHOTS = """### 按列表格式把用户回答的答案选项提取出来。
+
+下面是一些例子
+#### **输入：**
+##### 题目
+```
+If the depositor has died, but the holder of the deposit certificate does not inform the savings institution about the inheritance process, nor presents a judgment from the local court where the deposit is held, and directly goes to the savings institution to withdraw or transfer the deceased depositor's funds, the savings institution will consider it ( ). Any disputes over the inheritance of the deposit that arise later ( ). ( ) (From the \"Savings Management Regulations,\" Order No. 107 of the State Council of the People's Republic of China)\nA. Normal withdrawal or transfer\nB. Abnormal withdrawal or transfer\nC. The savings institution is not responsible\nD. The savings institution is partially responsible
+```
+
+##### 用户回答（答案部分）
+According to Article 40 of the \"Savings Management Regulations\" (Order No. 107 of the State Council of the People's Republic of China), if the depositor has died, but the holder of the deposit certificate does not inform the savings institution about the inheritance process nor presents a judgment from the local court where the deposit is held, and directly attempts to withdraw or transfer the funds, the savings institution will consider it a normal withdrawal or transfer. Furthermore, any disputes over the inheritance of the deposit that arise later are not the responsibility of the savings institution.\n\nThus, for the first blank, the correct option is A: \"Normal withdrawal or transfer.\" For the second blank, the correct option is C: \"The savings institution is not responsible.\"\n\n\\boxed{\\text{A, C}}
+
+#### **输出：**
+['A', 'C']
+
+##### 题目
+```
+Pyogenic meningitis | Tuberculous meningitis | Viral meningitis\nA. Significant increase in IgM\nB. Significant increase in IgA\nC. Significant decrease in IgA\nD. Significant decrease in IgM\nE. No significant changes in IgA and IgM
+```
+
+##### 用户回答（答案部分）
+Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOptions C (Significant decrease in IgA) and D (Significant decrease in IgM) are not characteristic of these infections, as decreases in immunoglobulins are more associated with immunodeficiencies rather than meningeal inflammation.\n\n\\boxed{\\text{A for Pyogenic, B for Tuberculous, E for Viral}}
+
+#### **输出：**
+['A', 'B', 'E']
+
+##### 题目
+```
+不定项选择题)(每题 2.00 分) 根据《中华人民共和国水污染防治法》在饮用水水源保护区内设置排污口的,()\nA. 由县级以上地方人民政府环境保护主管部门责令限期拆除,处二万元以上十万元以下的罚款\nB. 由县级以上地方人民政府责f限期拆除,处十万元以上五十万元以下的罚款\nC. 逾期不拆除的,强制拆除,所需费用由违法者承担,处十万元以上五十万元以下的罚款情节严重的,可以责令停产整治\nD. 逾期不拆除的,强制拆除,所需费用由违法者承担,处五十万元以上一百万元以下的罚款,并可以责令停产整治
+```
+
+##### 用户回答（答案部分）
+根据《中华人民共和国水污染防治法》的相关规定，我们可以逐步分析题目中的选项：\n\n1. **设置排污口的处罚**：\n   - 在饮用水水源保护区内设置排污口的行为，由**县级以上地方人民政府**（而非环境保护主管部门）责令限期拆除，并处以**十万元以上五十万元以下的罚款**。因此，**选项A错误**，**选项B正确**。\n\n2. **逾期不拆除的处罚**：\n   - 如果逾期不拆除排污口，将**强制拆除**，所需费用由违法者承担，并处以**五十万元以上一百万元以下的罚款**，同时**可以责令停产整治**。因此，**选项C错误**（罚款金额不正确），**选项D正确**。\n\n综上，正确答案是 **B** 和 **D**。\n\n最终答案为：\\boxed{B, D}
+
+#### **输出：**
+['B', 'D']
+
+如果用户没有给出最终答案，则返回空列表[]
+"""
+
+MULTICHOICE_EXTRACT_ANSWER_TEMPLATE = """现在对下面的用户回答提按格式提取出答案（参考上面的例子，输出后面直接输出提取出的列表）
+#### **输入：**
+##### 题目
+```
+{question}
+```
+
+##### 用户回答（答案部分）
+{conclusion}
+
+#### **输出：**
+"""
+
 
 REASON_QUESTION_QUALITY_VALUE_TEMPLATE = """
 任务：基于下面的标准对一个学科高难度推理问题进行判断是否满足条件需要修改
@@ -1265,6 +1318,53 @@ class SALTAuthenticQuestionSolutionVerify(SALTSelfTaughtSimpleSolutionVerify):
             answer=answer
         )
         return prompt
+
+
+class MultiChoiceQuestionExtractAnswerOptions(SALTSelfTaughtSimpleSolutionVerify):
+    MULTICHOICE_LETTER = ('A', 'B', 'C', 'D', 'E', 'F',
+                          'G', 'H', 'I', 'J', 'K', 'L')
+
+    def __init__(self):
+        super().__init__()
+
+    @classmethod
+    def task_desc(cls):
+        return "选择题提取答案"
+
+    def prompt_fn(self, example):
+        solver_response, extra, _ = example
+        question = extra[0
+                         ]
+        prompt = MULTICHOICE_EXTRACT_ANSWER_FEWSHOTS + "\n\n\n" + MULTICHOICE_EXTRACT_ANSWER_TEMPLATE.format(
+            question=question,
+            conclusion=solver_response,
+        )
+        return prompt
+
+    def postprocess(self, response: str):
+        try:
+            response = response.strip()
+            try:
+                if "\n\n" in response and len(response.split("\n\n")) > 1:
+                    response = response.split("\n\n")[0].strip()
+                ans_list = eval(response.strip())
+            except Exception as err:
+                if "\n\n" in response and len(response.split("\n\n")) > 1:
+                    response = response.split("\n\n")[1].strip()
+                    ans_list = eval(response.strip())
+                else:
+                    if "**输出：**" in response:
+                        response = response[response.index(
+                            "**输出：**")+len("**输出：**"):].strip()
+                    ans_list = eval(response.strip())
+
+            if not isinstance(ans_list, list):
+                raise PostprocessError(f'Parse Python List Failed')
+            if not all(_ans in self.MULTICHOICE_LETTER for _ans in ans_list):
+                raise PostprocessError(f'Parse Python List Failed')
+            return ans_list
+        except Exception as err:
+            raise PostprocessError(f'Parse Python List Failed')
 
 
 def parse_question_solution_fn(solution_str: str):
@@ -2914,13 +3014,13 @@ def doc2query_v3_parse_solution_fn(solution_str: str, remove_option_letter=True)
         options = conclusion[conclusion.index(
             "Options:")+len("Options:"):conclusion.index("Answer:")].strip()
         if remove_option_letter:
-            options = re.findall(r'[A-W]\)\s*(.*)', options)
+            options = re.findall(r'[A-K]\)\s*(.*)', options)
         else:
-            options = re.findall(r'([A-W]\)\s*.*)', options)
+            options = re.findall(r'([A-K]\)\s*.*)', options)
         options = [_.strip() for _ in options]
 
         answer = conclusion[conclusion.index("Answer:"):].strip()
-        answer = re.findall(r'Answer:\s*([A-W])', answer)[0].strip()
+        answer = re.findall(r'Answer:\s*([A-K])', answer)[0].strip()
 
         # 选项有重复
         if len(options) != len(set(options)):
@@ -3019,230 +3119,149 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             except Exception as err:
                 raise PostprocessError(f'parse conclusion failure')
 
-#     async def verify_batch_results(self, verify_queue, max_concurrent_requests, group_names):
-#         def validate_result(response):
-#             try:
-#                 response = response.strip()
-#                 try:
-#                     if "\n\n" in response and len(response.split("\n\n")) > 1:
-#                         response = response.split("\n\n")[0].strip()
-#                     ans_list = eval(response.strip())
-#                 except Exception as err:
-#                     if "\n\n" in response and len(response.split("\n\n")) > 1:
-#                         response = response.split("\n\n")[1].strip()
-#                         ans_list = eval(response.strip())
-#                     else:
-#                         if "**输出：**" in response:
-#                             response = response[response.index(
-#                                 "**输出：**")+len("**输出：**"):].strip()
-#                         ans_list = eval(response.strip())
+    @classmethod
+    def respond_wo_context(cls, result, gt):
+        ans_format = cls.get_answer_format(gt)
+        question, options = result[:2]
+        prompt = f'{ans_format}\n\n{cls._format_question(question=question, options=cls.add_distractor_options(options, gt), answer=None)}'
+        return prompt
 
-#                 if not isinstance(ans_list, list):
-#                     raise PostprocessError(f'Parse Python List Failed')
-#                 if not all(_ans in self.MULTICHOICE_LETTER for _ans in ans_list):
-#                     raise PostprocessError(f'Parse Python List Failed')
-#                 return ans_list
-#             except Exception as err:
-#                 raise PostprocessError(f'Parse Python List Failed')
+    @classmethod
+    def respond_w_context(cls, result, gt):
+        ans_format = cls.get_answer_format(gt)
+        question, options = result[:2]
+        prompt = f'[DOC]\n{gt["document"]}\n[/DOC]\n\n{ans_format}\n\n{cls._format_question(question=question, options=cls.add_distractor_options(options, gt), answer=None)}'
+        return prompt
 
-#         verify_prompt = """### 按列表格式把用户回答的答案选项提取出来。
+    @classmethod
+    def get_answer_format(cls, gt):
+        lang_code = gt["lang_code"]
+        if lang_code == "zh":
+            return '回答下面的不定项选择题。'
+        else:
+            return 'Answer the following multiple-choice questions with one or more correct answers.'
 
-# 下面是一些例子
-# #### **输入：**
-# ##### 题目
-# ```
-# If the depositor has died, but the holder of the deposit certificate does not inform the savings institution about the inheritance process, nor presents a judgment from the local court where the deposit is held, and directly goes to the savings institution to withdraw or transfer the deceased depositor's funds, the savings institution will consider it ( ). Any disputes over the inheritance of the deposit that arise later ( ). ( ) (From the \"Savings Management Regulations,\" Order No. 107 of the State Council of the People's Republic of China)\nA. Normal withdrawal or transfer\nB. Abnormal withdrawal or transfer\nC. The savings institution is not responsible\nD. The savings institution is partially responsible
-# ```
+    @classmethod
+    def get_distractor_option_letters(cls, options):
+        return [cls.MULTICHOICE_LETTER[len(options)], cls.MULTICHOICE_LETTER[len(options)+1]]
 
-# ##### 用户回答（答案部分）
-# According to Article 40 of the \"Savings Management Regulations\" (Order No. 107 of the State Council of the People's Republic of China), if the depositor has died, but the holder of the deposit certificate does not inform the savings institution about the inheritance process nor presents a judgment from the local court where the deposit is held, and directly attempts to withdraw or transfer the funds, the savings institution will consider it a normal withdrawal or transfer. Furthermore, any disputes over the inheritance of the deposit that arise later are not the responsibility of the savings institution.\n\nThus, for the first blank, the correct option is A: \"Normal withdrawal or transfer.\" For the second blank, the correct option is C: \"The savings institution is not responsible.\"\n\n\\boxed{\\text{A, C}}
+    @classmethod
+    def add_distractor_options(cls, options, gt):
+        lang_code = gt["lang_code"]
+        if lang_code == "zh":
+            distractors = ["以上都不正确", "无法判断"]
+        else:
+            distractors = ["None of the above", "Cannot be determined"]
 
-# #### **输出：**
-# ['A', 'C']
+        new_options = copy.deepcopy(options)
+        new_options.extend(distractors)
+        return new_options
 
-# ##### 题目
-# ```
-# Pyogenic meningitis | Tuberculous meningitis | Viral meningitis\nA. Significant increase in IgM\nB. Significant increase in IgA\nC. Significant decrease in IgA\nD. Significant decrease in IgM\nE. No significant changes in IgA and IgM
-# ```
+    @classmethod
+    def _format_question(cls, question, options, answer):
+        options_str = "\n".join([f'{x}) {y}' for x, y in zip(
+            cls.MULTICHOICE_LETTER, options)])
+        if answer is not None:
+            return f'Question: {question}\n\nOptions:\n{options_str}\n\nAnswer: {answer}'
+        else:
+            return f'Question: {question}\n\nOptions:\n{options_str}'
 
-# ##### 用户回答（答案部分）
-# Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOptions C (Significant decrease in IgA) and D (Significant decrease in IgM) are not characteristic of these infections, as decreases in immunoglobulins are more associated with immunodeficiencies rather than meningeal inflammation.\n\n\\boxed{\\text{A for Pyogenic, B for Tuberculous, E for Viral}}
+    async def batch_verify_results(self,
+                                   verify_queue,
+                                   max_concurrent_requests,
+                                   group_names,
+                                   verify_task,
+                                   return_input_response=False,
+                                   ):
+        correctness = {name: defaultdict(list) for name in group_names}
 
-# #### **输出：**
-# ['A', 'B', 'E']
+        result_index2queue_index = {}
 
-# ##### 题目
-# ```
-# 不定项选择题)(每题 2.00 分) 根据《中华人民共和国水污染防治法》在饮用水水源保护区内设置排污口的,()\nA. 由县级以上地方人民政府环境保护主管部门责令限期拆除,处二万元以上十万元以下的罚款\nB. 由县级以上地方人民政府责f限期拆除,处十万元以上五十万元以下的罚款\nC. 逾期不拆除的,强制拆除,所需费用由违法者承担,处十万元以上五十万元以下的罚款情节严重的,可以责令停产整治\nD. 逾期不拆除的,强制拆除,所需费用由违法者承担,处五十万元以上一百万元以下的罚款,并可以责令停产整治
-# ```
+        batch_eval_inputs = []
+        for queue_index, example in enumerate(verify_queue):
+            solver_response = example.response
+            if solver_response is None:
+                correctness[example.tag][example.index].append(0.0)
+            else:
+                batch_eval_inputs.append(
+                    (solver_response, example.extra, example.ground_truth))
 
-# ##### 用户回答（答案部分）
-# 根据《中华人民共和国水污染防治法》的相关规定，我们可以逐步分析题目中的选项：\n\n1. **设置排污口的处罚**：\n   - 在饮用水水源保护区内设置排污口的行为，由**县级以上地方人民政府**（而非环境保护主管部门）责令限期拆除，并处以**十万元以上五十万元以下的罚款**。因此，**选项A错误**，**选项B正确**。\n\n2. **逾期不拆除的处罚**：\n   - 如果逾期不拆除排污口，将**强制拆除**，所需费用由违法者承担，并处以**五十万元以上一百万元以下的罚款**，同时**可以责令停产整治**。因此，**选项C错误**（罚款金额不正确），**选项D正确**。\n\n综上，正确答案是 **B** 和 **D**。\n\n最终答案为：\\boxed{B, D}
+                result_index2queue_index[len(
+                    batch_eval_inputs)-1] = queue_index
 
-# #### **输出：**
-# ['B', 'D']
+        task = verify_task
+        evaluations = await task.do_job(
+            agent=self.verify_agent,
+            batch_inputs=batch_eval_inputs,
+            max_concurrent_requests=max_concurrent_requests,
+        )
 
-# 如果用户没有给出最终答案，则返回空列表[]
-# """
+        for j, (eval_result, eval_input) in enumerate(zip(evaluations, batch_eval_inputs)):
+            queue_index = result_index2queue_index[j]
+            queue_elem = verify_queue[queue_index]
+            if eval_result is not None:
+                if return_input_response:
+                    correctness[queue_elem.tag][queue_elem.index].append(
+                        (eval_result, eval_input[0]))
+                else:
+                    correctness[queue_elem.tag][queue_elem.index].append(
+                        eval_result)
+        return correctness
 
-#         verify_template = """现在对下面的用户回答提按格式提取出答案（参考上面的例子，输出后面直接输出提取出的列表）
-# #### **输入：**
-# ##### 题目
-# ```
-# {question}
-# ```
+    async def simulate_respondent(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            skip_run=None
+    ):
+        verify_task = MultiChoiceQuestionExtractAnswerOptions()
+        return await self._simulate_respondent(
+            batch_data_sources=batch_data_sources,
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=batch_ground_truth,
+            skip_run=skip_run,
+            run_args=self.run_args(),
+            batch_verify_fn=partial(
+                self.batch_verify_results, verify_task=verify_task),
+            resp_postprocess_fn=self.response_postprocess
+        )
 
-# ##### 用户回答（答案部分）
-# {conclusion}
+    async def quick_question_eval(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+    ):
+        task = MultichoiceKnowledgeQuestionQualityEval()
+        indices = []
+        questions = []
 
-# #### **输出：**
-# """
-#         correctness = {name: defaultdict(list) for name in group_names}
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            result = self.parse_solution_fn(sol)
+            if result is not None:
+                questions.append(self._format_question(
+                    result[0], result[1], None
+                ))
+                indices.append(i)
+            else:
+                continue
 
-#         verify_mapper = defaultdict(list)
+        qualities = await task.do_job(
+            agent=self.verify_agent,
+            batch_inputs=questions,
+            max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
+        )
 
-#         for example in verify_queue:
-#             if example.response is None:
-#                 pass
-#             else:
-#                 prompt = f'{example.prompt}'
-#                 response = example.response
-#                 if "</think>" in response:
-#                     response = response[response.index("</think>"):].strip()
-#                 eval_prompt = verify_prompt + "\n\n" + verify_template.format(
-#                     question=prompt,
-#                     conclusion=response
-#                 )
-#                 verify_mapper[eval_prompt].append((example.index, example.tag))
+        scores = [0.0] * len(batch_solution_str)
+        for valid, index in zip(qualities, indices):
+            if valid is None:
+                pass
+            else:
+                _score = 0.0 if valid else -0.5
+                scores[index] = _score
+        return scores
 
-#         _results = await self.get_verify_agent().run(list(verify_mapper.keys()), max_concurrent_requests, desc=f"[Eval Responses {self.get_verify_agent().model}]", postprocess_fns=[validate_result] * len(list(verify_mapper.keys()),), pbar=False)
-
-#         count = 0
-#         results_mapper = defaultdict(list)
-#         for (k, v) in _results:
-#             for meta in verify_mapper[k]:
-#                 count += 1
-#                 index, name = meta
-#                 if v is not None:
-#                     correctness[name][index].append(v)
-#         return correctness
-
-#     @classmethod
-#     def respond_wo_context(cls, question, options, gt):
-#         ans_format = cls.get_answer_format(gt)
-#         return f'{ans_format}\n\n{cls.format_question(question=question, options=cls.add_distractor_options(options, gt), answer=None)}'
-
-#     @classmethod
-#     def respond_w_context(cls, question, options, gt):
-#         ans_format = cls.get_answer_format(gt)
-#         return f'[DOC]\n{gt["document"]}\n[/DOC]\n\n{ans_format}\n\n{cls.format_question(question=question, options=cls.add_distractor_options(options, gt), answer=None)}'
-
-#     @classmethod
-#     def get_answer_format(cls, gt):
-#         lang_code = gt["lang_code"]
-#         if lang_code == "zh":
-#             return '回答下面的不定项选择题。'
-#         else:
-#             return 'Answer the following multiple-choice questions with one or more correct answers.'
-
-#     @classmethod
-#     def get_distractor_option_letters(cls, options):
-#         return [cls.MULTICHOICE_LETTER[len(options)], cls.MULTICHOICE_LETTER[len(options)+1]]
-
-#     @classmethod
-#     def add_distractor_options(cls, options, gt):
-#         lang_code = gt["lang_code"]
-#         if lang_code == "zh":
-#             distractors = ["以上都不正确", "无法判断"]
-#         else:
-#             distractors = ["None of the above", "Cannot be determined"]
-
-#         new_options = copy.deepcopy(options)
-#         new_options.extend(distractors)
-#         return new_options
-
-#     def do_not_simulate_respondent(self, debug):
-#         return (
-#             self.format,
-#             self.language,
-#         )
-
-#     @classmethod
-#     def format_question(cls, question, options, answer):
-#         options_str = "\n".join([f'{x}) {y}' for x, y in zip(
-#             cls.MULTICHOICE_LETTER, options)])
-#         if answer is not None:
-#             return f'Question: {question}\n\nOptions:\n{options_str}\n\nAnswer: {answer}'
-#         else:
-#             return f'Question: {question}\n\nOptions:\n{options_str}'
-
-#     async def simulate_respondent(
-#             self,
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth,
-#             run_args=None,
-#             debug=False):
-#         assert run_args is not None
-
-#         prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
-#         answer_map = {}
-
-#         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-#             result = self.parse_solution_fn(solution_str)
-#             if result is not None:
-#                 question, options, answer = result
-#                 # NOTICE
-#                 answer_map[i] = (self.respond_wo_context(
-#                     question, options, gt), (options, answer))
-
-#                 skip = False
-#                 if not debug:
-#                     for module in self.do_not_simulate_respondent(debug=debug):
-#                         cur_score = module.get_penalty_or_reward(
-#                             solution_str, gt
-#                         )
-#                         if cur_score < 0.0:
-#                             skip = True
-#                             break
-#                 if skip:
-#                     continue
-
-#                 lang_code = gt["lang_code"]
-#                 for name, v in run_args.items():
-#                     fn = v["fn"]
-#                     _prompt = fn(question, options, gt)
-#                     prompt2index[name][_prompt].append(i)
-#         tasks = []
-#         task_names = []
-
-#         for name, v in prompt2index.items():
-#             prompts = list(v.keys()) * run_args[name]["repeat"]
-
-#             tasks.append(run_args[name]["model"].run(
-#                 prompts, run_args[name]["max_concurrent_requests"], desc=f'[Generate {run_args[name]["desc"]} Responses {run_args[name]["model"].model}]', pbar=False,
-#                 postprocess_fns=[
-#                     partial(self.response_postprocess, debug=debug)] * len(prompts)
-#             ))
-#             task_names.append(name)
-#         respond_questions = await aio.gather(*tasks)
-
-#         # 验证答案正确性
-#         verify_queue = []
-#         for name, results in zip(task_names, respond_questions):
-#             for (p, r) in results:
-#                 for index in prompt2index[name][p]:
-#                     verify_queue.append(VerifyInfo(
-#                         index=index, tag=name, prompt=answer_map[index][
-#                             0], response=r, answer=answer_map[index][1]
-#                     ))
-
-#         correctness = await self.verify_batch_results(
-#             verify_queue=verify_queue,
-#             max_concurrent_requests=64,
-#             group_names=task_names
-#         )
-#         return correctness
 
 #     def compute_score(self,
 #                       batch_data_sources,
@@ -3253,36 +3272,6 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 #             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
 #         return aio.run(main())
 
-#     def penalty_on(self):
-#         return ("Format", "Lang")
-
-#     def update_rollout_info(self, solution_str, ground_truth, difficulty):
-#         parsed = self.parse_solution_fn(solution_str)
-#         if parsed is None:
-#             return
-#         question, options, answer = parsed
-#         inst_id = ground_truth["extra_info"]["uuid"]
-#         if inst_id not in self.self.rollout_cache:
-#             self.self.rollout_cache[inst_id] = LRUCache(
-#                 capacity=self.record_rollout_max_capacity)
-
-#         args = copy.deepcopy(self.args)
-#         for k, v in args["difficulty_run_args"].items():
-#             del v["fn"]
-#             for field, value in v.items():
-#                 if field == "model":
-#                     args["difficulty_run_args"][k][field] = value.model
-
-#         self.self.rollout_cache[inst_id][question] = {
-#             "prompt_generation_process": solution_str,
-#             "question": question,
-#             "options": options,
-#             "answer": answer,
-#             "difficulty": {
-#                 "meta": args,
-#                 "pass_rate": difficulty
-#             }
-#         }
 
 #     async def get_difficulty_reward(
 #             self,
@@ -4106,7 +4095,6 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 #         if len(s) > 1500:
 #             return f'{s[:700]}... [省略] ...{s[-800:]}'
 #         return s
-
 #     def log_solution(self, solution):
 #         criteria = criteria_parse_solution_fn(solution)
 #         if criteria is None:
