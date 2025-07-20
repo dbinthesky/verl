@@ -326,11 +326,11 @@ class TestSALT(unittest.TestCase):
             salt_parse_solution_fn, split="valid", args=SALT_DEFAULT_PARAMS)
 
         async def main():
+            # get_similarity_penalty get_hack_penalty
             results = await task.get_hack_penalty(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
             )
-
             print(results)
         aio.run(main())
 
