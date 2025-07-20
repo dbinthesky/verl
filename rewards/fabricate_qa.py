@@ -1856,7 +1856,13 @@ class Doc2QueryV2ComputeScore(object):
             except Exception as err:
                 raise PostprocessError(f'parse conclusion failure')
 
-    async def batch_verify_results(self, verify_queue, max_concurrent_requests, group_names, verify_task):
+    async def batch_verify_results(self,
+                                   verify_queue,
+                                   max_concurrent_requests,
+                                   group_names,
+                                   verify_task,
+                                   return_input_response=False,
+                                   ):
         correctness = {name: defaultdict(list) for name in group_names}
 
         result_index2queue_index = {}
@@ -1880,12 +1886,16 @@ class Doc2QueryV2ComputeScore(object):
             max_concurrent_requests=max_concurrent_requests,
         )
 
-        for j, eval_result in enumerate(evaluations):
+        for j, (eval_result, eval_input) in enumerate(zip(evaluations, batch_eval_inputs)):
             queue_index = result_index2queue_index[j]
             queue_elem = verify_queue[queue_index]
             if eval_result is not None:
-                correctness[queue_elem.tag][queue_elem.index].append(
-                    1.0 if eval_result else 0.0)
+                if return_input_response:
+                    correctness[queue_elem.tag][queue_elem.index].append(
+                        (1.0 if eval_result else 0.0, eval_input[0]))
+                else:
+                    correctness[queue_elem.tag][queue_elem.index].append(
+                        1.0 if eval_result else 0.0)
         return correctness
 
     @classmethod
@@ -2026,11 +2036,15 @@ class Doc2QueryV2ComputeScore(object):
             batch_verify_fn,
             resp_postprocess_fn,
             skip_run=None,
+            prompt_contexts=None
     ):
         prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
         extra = {}
 
-        for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+        if prompt_contexts is None:
+            prompt_contexts = [None] * len(batch_ground_truth)
+
+        for i, (solution_str, gt, extra_ctx) in enumerate(zip(batch_solution_str, batch_ground_truth, prompt_contexts)):
             result = self.parse_solution_fn(solution_str)
             if result is not None:
                 extra[i] = result
@@ -2051,7 +2065,12 @@ class Doc2QueryV2ComputeScore(object):
 
                 for name, v in run_args.items():
                     fn = getattr(self, v["fn"])
-                    _prompt = fn(result, gt)
+                    if extra_ctx is None:
+                        _prompt = fn(result, gt)
+                    else:
+                        _prompt = fn(result, gt, extra_ctx)
+                        print(_prompt)
+                        print("="*80)
                     prompt2index[name][_prompt].append(i)
         tasks = []
         task_names = []
@@ -2079,8 +2098,6 @@ class Doc2QueryV2ComputeScore(object):
                         response=r,
                         extra=extra[index],
                         ground_truth=batch_ground_truth[index]))
-                    print(
-                        "-waaka", verify_queue[-1].tag, verify_queue[-1].index)
 
         correctness = await batch_verify_fn(
             verify_queue=verify_queue,
@@ -2588,38 +2605,80 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
             run_args={
                 "self_taught": self.args["learnable_run_args"]["self_taught"]},
             batch_verify_fn=partial(
-                self.batch_verify_results, verify_task=verify_task),
+                self.batch_verify_results, verify_task=verify_task, return_input_response=True),
             resp_postprocess_fn=self.self_taught_response_postprocess
         )
-        print(len(batch_solution_str))
-        print(correctness)
-#         self_taught_rationale = [None] * len(batch_solution_str)
 
-#         for results_index, (p, r) in enumerate(results):
-#             for index in prompt2index[p]:
-#                 try:
-#                     # Reject Sample: 回答正确
-#                     if correctness[index][results_index][0] > 0.0:
-#                         self_taught_rationale[index] = r
-#                 except Exception as err:
-#                     continue
-#         return self_taught_rationale
+        self_taught_rationale = [None] * len(batch_solution_str)
+        correctness = correctness["self_taught"]
+        for i in range(len(batch_solution_str)):
+            if i in correctness.keys():
+                for rationale in correctness[i]:
+                    if rationale[0] == 1.0:
+                        self_taught_rationale[i] = rationale[1]
+        return self_taught_rationale
 
-#     @classmethod
-#     def respond_wo_context(cls, context, gt):
-#         if gt["lang_code"] == "en":
-#             extra = "Think Step by Step and give your thinking process"
-#         else:
-#             extra = "你需要仔细思考，给出思考过程。"
-#         return f'{extra}\n\n' + gt["instruct"].format(question=gt["question"])
+    @classmethod
+    def respond_wo_context(cls, result, gt, context):
+        print("sdfsdfsfsfsdfdsf", result)
 
-#     @classmethod
-#     def respond_w_context(cls, context, gt):
-#         if gt["lang_code"] == "en":
-#             extra = "Think Step by Step and give your thinking process"
-#         else:
-#             extra = "你需要仔细思考，给出思考过程。"
-#         return f'{context}\n\n\n\n\n{extra}\n\n{gt["instruct"].format(question=gt["question"])}'
+        if gt["lang_code"] == "en":
+            extra = "Think Step by Step and give your thinking process."
+        else:
+            extra = "你需要仔细思考，给出思考过程。"
+
+        return f'{extra}\n\n' + gt["instruct"].format(question=gt["question"])
+
+    @classmethod
+    def respond_w_context(cls, result, gt, context):
+        if context is not None:
+            if gt["lang_code"] == "en":
+                extra = "Think Step by Step and give your thinking process."
+            else:
+                extra = "你需要仔细思考，给出思考过程。"
+            return f'## Question\n{result[0]}\n\n## Solution\n{context}\n\n\n\n\n{extra}\n\n{gt["instruct"].format(question=gt["question"])}'
+        else:
+            return cls.respond_wo_context(result, gt, context)
+
+    async def simulate_respondent(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            skip_run=None
+    ):
+        self_taught_rationale = await self.self_taught(
+            batch_data_sources=batch_data_sources,
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=batch_ground_truth,
+            skip_run=skip_run
+        )
+
+        verify_task = SALTSelfTaughtSimpleSolutionVerify()
+
+        await self._simulate_respondent(
+            batch_data_sources=batch_data_sources,
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=batch_ground_truth,
+            skip_run=skip_run,
+            run_args={
+                k: v for k, v in self.args["learnable_run_args"].items() if k != "self_taught"},
+            batch_verify_fn=partial(
+                self.batch_verify_results, verify_task=verify_task),
+            resp_postprocess_fn=self.self_taught_response_postprocess,
+            prompt_contexts=self_taught_rationale
+        )
+
+        # return await self._simulate_respondent(
+        #     batch_data_sources=batch_data_sources,
+        #     batch_solution_str=batch_solution_str,
+        #     batch_ground_truth=batch_ground_truth,
+        #     skip_run=skip_run,
+        #     run_args=self.run_args(),
+        #     batch_verify_fn=partial(
+        #         self.batch_verify_results, verify_task=verify_task),
+        #     resp_postprocess_fn=self.response_postprocess
+        # )
 
 #     async def simulate_respondent(
 #             self,
@@ -3072,95 +3131,6 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 #                 self.save_rollout_info()
 
 #         return final_results
-
-
-# DOC2QUERY_V2_DEFAULT_PARAMS = {
-#     "difficulty_run_args": {
-#         "w/o_content": {
-#             "model": {
-#                 "model": "qwen3_30b_a3b",
-#                 "base_url": "http://10.130.0.220:21002/v1",
-#                 "api_keys": "EMPTY",
-#                 "request_kwargs": {
-#                     "temperature": 0.65,
-#                     "timeout": 600,
-#                     "max_tokens": 20480,
-#                 },
-#             },
-#             "repeat": 5,
-#             "fn": "respond_wo_context",
-#             "desc": 'w/o ctx',
-#             "max_concurrent_requests": 64
-#         },
-#         "w_content": {
-#             "model": {
-#                 "model": "qwen3_30b_a3b",
-#                 "base_url": "http://10.130.0.220:21002/v1",
-#                 "api_keys": "EMPTY",
-#                 "request_kwargs": {
-#                     "temperature": 0.65,
-#                     "timeout": 600,
-#                     "max_tokens": 20480,
-#                 },
-#             },
-#             "repeat": 5,
-#             "fn": "respond_w_context",
-#             "desc": 'w ctx',
-#             "max_concurrent_requests": 64
-#         },
-#     },
-#     "difficulty_metric_args": {
-#         "advantage": 'w_content',
-#         "weakness": 'w/o_content',
-#         "advantage_oversimplified_threshold": 5/5,
-#         "weakness_oversimplified_threshold": 5/5,
-#         "advantage_overcomplex_threshold": 1/5,
-#         "weakness_overcomplex_threshold": 1/5,
-#         "advantage_threshold": 1/5,
-#         "advantage_weight": 0.0,
-#         "weakness_weight": 2.0,
-#         "confidence_bonus_threshold": 2/5,
-#         "confidence_bonus_weight": 0.
-#     },
-#     "verify_agent": {
-#         "model": {
-#             "model": "qwen25_32B_instruct",
-#             "base_url": "http://10.130.142.223:8000/v1",
-#             "api_keys": "EMPTY",
-#             "request_kwargs": {
-#                 "temperature": 0.6,
-#                 "timeout": 360,
-#                 "max_tokens": 1024,
-#             },
-#         },
-#         "max_concurrent_requests": 32
-#     },
-#     "auxiliary_agent": {
-#         "model": {
-#             "model": "qwen25_32B_instruct",
-#             "base_url": "http://10.130.142.223:8000/v1",
-#             "api_keys": "EMPTY",
-#             "request_kwargs": {
-#                 "temperature": 0.6,
-#                 "timeout": 360,
-#                 "max_tokens": 4096,
-#             },
-#         },
-#         "max_concurrent_requests": 32
-#     },
-#     "similarity_run_args":  {
-#         "threshold": {
-#             3: 0.5,
-#             4: 1.0
-#         },
-#         "weight": 0.25,
-#     },
-#     "save_rollouts": {
-#         "default_local_dir": "/tmp/fabricate_aio_rollouts"
-#         # FIXME
-#         # "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
-#     }
-# }
 
 SALT_DEFAULT_PARAMS = {
     "learnable_run_args": {

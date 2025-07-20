@@ -101,8 +101,8 @@ _doc2query_v2_qas = [
 ]
 
 _salt_qas = [
-    ("While reviewing a national IT infrastructure proposal, an analyst mistakenly listed 'maximizing government efficiency' as key. Which three principles (II, III, IV) are actually required by policy? State their codes separated by commas.", "II,III,IV"),
-    ("In a university campus network upgrade, engineers install a fiber cable with a dispersion coefficient of 2000 ps/(nm·km) to connect two buildings. The light source has a spectral width of 0.6 nm. To maintain signal integrity, the pulse broadening must not exceed 1200 ps. What is the maximum allowable cable length between buildings, rounded to the nearest kilometer?", "1"),
+    ("In synthesizing a fragrance compound, a limonene derivative undergoes catalytic hydrogenation, epoxidation, base-induced ring-opening, and esterification with propanoic acid. If the final propionate has an (S) configuration at the carbon where the initial hydrogenation site's methyl is adjacent, what must be the configuration of that methyl group post-hydrogenation?", "R"),
+    ("During genetic counseling, a 28-year-old woman reveals her brother had an X-linked recessive muscular condition, while her recent blood tests show normal levels of a muscle enzyme often elevated in affected individuals. What is the most accurate assessment of her carrier status without genetic analysis?", "Carrier status is uncertain")
 ]
 
 
@@ -311,11 +311,11 @@ class TestSALT(unittest.TestCase):
             print(_, _.min_score, _.max_score)
 
         async def main():
-            results = await task.self_taught(
+            results = await task.simulate_respondent(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
             )
-            print(results)
+            # print(results)
         aio.run(main())
 
         # salt_default_compute_score_valid(
