@@ -263,7 +263,7 @@ class TestRLVR(unittest.TestCase):
             task_name="rlvr", num=6)
 
         async def main():
-            results = await task.get_accuracy(
+            results = await task._compute_score(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
             )

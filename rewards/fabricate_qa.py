@@ -3714,79 +3714,55 @@ class RLVRComputeScore(Doc2QueryV2ComputeScore):
                 full_rewards.append(0.0)
         return full_rewards
 
-#     def clip_string(self, s: str):
-#         if len(s) > 1500:
-#             return f'{s[:700]}... [省略] ...{s[-800:]}'
-#         return s
+    def clip_string(self, s: str):
+        if len(s) > 1500:
+            return f'{s[:700]}... [省略] ...{s[-800:]}'
+        return s
 
-#     def log_solution(self, solution):
-#         norm = parse_solution_fn(solution)
-#         if norm is None:
-#             return repr(self.clip_string(solution))
-#         return repr(norm)
+    def log_solution(self, solution):
+        norm = self.parse_solution_fn(solution)
+        if norm is None:
+            return repr(self.clip_string(solution.strip()))
+        return repr(norm)
 
-#     def compute_score(self,
-#                       batch_data_sources,
-#                       batch_solution_str,
-#                       batch_ground_truth,
-#                       max_concurrent_requests=64,
-#                       ):
-#         async def main():
-#             self.initialize_record_rollout_samples_module()
-#             rewards = await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth,  max_concurrent_requests=max_concurrent_requests)
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+        accuracy = await self.get_accuracy(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
 
-#             rollouts = defaultdict(list)
-#             for gt, reward in zip(batch_ground_truth, rewards):
-#                 rollouts[gt["uuid"]].append(reward)
-#             with open(self.save_rollout_samples_path, "a+") as f:
-#                 for k, v in rollouts.items():
-#                     f.write(
-#                         f'{json.dumps({"uuid": k, "rollouts": v}, ensure_ascii=False)}\n')
-#             return rewards
-#         return aio.run(main())
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            _reward = accuracy[i]
+            final_results.append(_reward)
 
-#     async def _compute_score(self,
-#                              batch_data_sources,
-#                              batch_solution_str,
-#                              batch_ground_truth,
-#                              max_concurrent_requests=64,
-#                              ):
-#         accuracy = await self.get_accuracy(
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth,
-#         )
+            if _reward > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+                log = True
+                log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+            else:
+                log = False
 
-#         final_results = []
-#         for i in range(len(batch_solution_str)):
-#             _reward = accuracy[i]
-#             final_results.append(_reward)
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f'【Question】`{repr(batch_ground_truth[i]["prompt"])}`')
+                print(
+                    f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
+                try:
+                    print(
+                        f'【Ground Truth】`{batch_ground_truth[i]["ground_truth"]}`')
+                except Exception as err:
+                    pass
+                print(
+                    f'[Final Reward]={_reward:.3f}\n')
 
-#             if _reward > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
-#                 log = True
-#                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
-#             else:
-#                 log = False
-
-#             if log:
-#                 print(
-#                     f"--------------------------------{log_flag}--------------------------------")
-#                 print(
-#                     f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
-#                 try:
-#                     print(
-#                         f'【Ground Truth】`{batch_ground_truth[i]["ground_truth"]}`')
-#                 except Exception as err:
-#                     pass
-#                 print(
-#                     f'[Final Reward]={_reward:.3f}\n')
-
-#                 thought = parse_thought_fn(batch_solution_str[i])
-
-#                 if random.random() < 0.5 and thought is not None and _reward > 0:
-#                     print(f'[Thought]\n{thought}')
-#                     print()
-#         return final_results
+        return final_results
 
 
 # compute_score_train = MapReduceComputeScore(split="train").compute_score
