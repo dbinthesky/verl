@@ -21,6 +21,7 @@ from fabricate_qa import (
     WithUnitSymbol,
     NumericalAnswer,
     doc2query_v2_parse_solution_fn,
+    doc2query_v3_parse_solution_fn,
     salt_parse_solution_fn,
     Doc2QueryV2FormatVerify,
     LanguageConsistency,
@@ -36,6 +37,7 @@ from fabricate_qa import (
     DOC2QUERY_V2_DEV_PARAMS,
     SALT_DEFAULT_PARAMS,
     SALT_DEV_PARAMS,
+    Doc2QueryV3FormatVerify,
     #     # DOC2QUERY_V3_DEFAULT_PARAMS,
     #     # CRITERIA_DEFAULT_PARAMS,
     #     # doc2query_v2_default_stage1_compute_score_valid,
@@ -50,7 +52,6 @@ from fabricate_qa import (
     #     # doc2query_v3_default_compute_score_valid,
     #     # doc2query_v2_parse_solution_fn,
     #     # criteria_parse_solution_fn,
-    #     # doc2query_v3_parse_solution_fn,
     #     # salt_parse_solution_fn,
     #     # calc_qa_parse_thought_fn,
     #     # batchify,
@@ -106,6 +107,22 @@ _salt_qas = [
     ("During genetic counseling, a 28-year-old woman reveals her brother had an X-linked recessive muscular condition, while her recent blood tests show normal levels of a muscle enzyme often elevated in affected individuals. What is the most accurate assessment of her carrier status without genetic analysis?", "Carrier status is uncertain")
 ]
 
+_doc2query_v3_qas = [
+    ("The reaction product of the o-toluidine method for measuring blood glucose is ( ).",
+     ["Schiff base", "Molybdenum blue", "Tungstophosphoric acid", "Glucuronide", "Quinone compounds"], "A"),
+    ("钢材强度设计值，下列哪一种说法是正确的?", ["同一种牌号不同质量等级的钢材，强度设计值相同", "同一种牌号不同厚度的钢材，强度设计值相同",
+                              "同一种牌号的冷弯型钢钢材和普通钢材，强度设计值相同", "同一种牌号的钢材，《门式刚架轻型房屋钢结构技术规程》(CECS 102：2002)和《钢结构设计规范》(GB 50017-2003)采用不同的强度设计值"], "A"),
+    ("为了确保双卷扬系统的稳定性，以下哪个措施最为关键？", [
+     "增加液压系统的泄漏", "减小负载重量", "提高液压油的刚性模量", "调整PI控制器的积分系数"], "A"),
+    ("Which laboratory's neutral beam system has successfully generated a 75 A positive ion beam?", [
+     "Another laboratory", "LBL/LLL", "ORNL", "BNL"], "C"),
+    ("EN AW 2014铝合金在高温变形过程中，相对软化现象的主要原因是什么？", [
+     "粒子粗化", "温度升高", "动态回复和再结晶", "应变速率降低"], "C"),
+    ("自组织系统的一个特征是什么？", ["负反馈饱和", "多稳定性", "正反馈放大", "随机游走放大"], "B"),
+    ("When both the magnetic parameter \\( M \\) and the second order slip parameter \\( \\lambda_2 \\) are increased, what is the effect on the Bejan number for the nanofluid flow?", [
+     "Decreases", "Increases", "Remains unchanged", "First increases then decreases"], "A")
+]
+
 
 def load_dataset(task_name, num=100):
     filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0718.parquet"
@@ -123,131 +140,23 @@ def load_dataset(task_name, num=100):
             batch_solution_str.append(
                 f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: {sample[0]}\n\nAnswer: {sample[1]}\n\nAnswer Type: {sample[2]}\n</question>'
             )
-        else:
+        elif task_name == "salt":
             sample = random.choice(_salt_qas)
             batch_solution_str.append(
                 f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nAnswer: [SYNTHETIC] {sample[1]}\n</question>'
+            )
+        elif task_name == "doc2query_v3":
+            sample = random.choice(_doc2query_v3_qas)
+            o = "\n".join([f'{c}) {_o}' for c, _o in zip(
+                ["A", "B", "C", "D"], sample[1])])
+
+            batch_solution_str.append(
+                f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nOptions: {o}\n\nAnswer: {sample[2]}\n</question>'
             )
         batch_ground_truth.append(row["reward_model"])
         if len(batch_ground_truth) == num:
             break
     return batch_solution_str, batch_ground_truth
-
-
-# def load_doc2query_v3_data(num=100):
-#     filename = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/seed_discipline_250426_4k_test.parquet"
-#     batch_solution_str, batch_ground_truth = [], []
-
-#     df = pd.read_parquet(filename)
-#     count = 0
-#     for i, row in df.iterrows():
-#         row = row.to_dict()
-#         if i > 3:
-#             break
-
-#         lang_code = row["reward_model"]["lang_code"]
-#         if lang_code == "en":
-#             think, q, o, a = "Think", "The reaction product of the o-toluidine method for measuring blood glucose is ( ).", [
-#                 "Schiff base", "Molybdenum blue", "Tungstophosphoric acid", "Glucuronide", "Quinone compounds"], "A"
-#         else:
-#             think, q, o, a = "思考", "钢材强度设计值，下列哪一种说法是正确的?", ["同一种牌号不同质量等级的钢材，强度设计值相同", "同一种牌号不同厚度的钢材，强度设计值相同",
-#                                                             "同一种牌号的冷弯型钢钢材和普通钢材，强度设计值相同", "同一种牌号的钢材，《门式刚架轻型房屋钢结构技术规程》(CECS 102：2002)和《钢结构设计规范》(GB 50017-2003)采用不同的强度设计值"], "A"
-
-#         o = "\n".join([f'{c}) {_o}' for c, _o in zip(["A", "B", "C", "D"], o)])
-
-#         batch_solution_str.append(
-#             f'<think>\n{think}\n</think>\n\n<question>\nQuestion: {q}\n\nOptions:\n{o}\n\nAnswer: {a}\n</question>')
-#         batch_ground_truth.append(row["reward_model"])
-#         count += 1
-#     return batch_solution_str, batch_ground_truth
-
-
-# def load_criteria_rm_data(num=100):
-#     batch_solution_str, batch_ground_truth = [], []
-#     with open("/cpfs01/shared/llm_ddd/tongjian/sft/self_improvement/xml_cot_if_enhance_0529.jsonl", "rt") as f:
-#         for line in f:
-#             example = json.loads(line)
-
-#             batch_solution_str.append(
-#                 example["self_improvement"]["responses"][0]["response"]
-#             )
-#             batch_ground_truth.append(
-#                 {
-#                     "ground_truth": example["self_improvement"]["reference_meta"]["final_answer"],
-#                     "prompt": example["self_improvement"]["prompt"]
-#                 }
-#             )
-#             if len(batch_ground_truth) == 128:
-#                 break
-
-#     return batch_solution_str, batch_ground_truth
-
-
-# def load_salt_data(num=100):
-#     filename = "/cpfs01/shared/llm_ddd/tongjian/rl/salt/runtu_error_collection_0703_test.parquet"
-#     batch_solution_str, batch_ground_truth = [], []
-
-#     df = pd.read_parquet(filename)
-#     count = 0
-#     for i, row in df.iterrows():
-#         row = row.to_dict()
-#         gt = row["reward_model"]["question"]
-#         if i > 3:
-#             break
-#         if gt is not None:
-#             batch_solution_str.append(
-#                 f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: {row["reward_model"]["answer"]}\n</question>')
-#             batch_ground_truth.append(row["reward_model"])
-#             count += 1
-#         else:
-#             continue
-#     return batch_solution_str, batch_ground_truth
-
-
-# def load_fabricate_aio_data(num=100, format="wrong_question"):
-#     filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0616.parquet"
-#     batch_solution_str, batch_ground_truth = [], []
-
-#     df = pd.read_parquet(filename)
-#     count = 0
-#     for _, row in df.iterrows():
-#         row = row.to_dict()
-#         if format == "wrong_question":
-#             gt = row["reward_model"]["question"]
-#             if gt is not None:
-#                 batch_solution_str.append(
-#                     f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
-#                 batch_ground_truth.append(row["reward_model"])
-#                 count += 1
-#             else:
-#                 continue
-#         if format == "zh_question":
-#             if row["reward_model"]["lang_code"] != "zh":
-#                 continue
-#             gt = row["reward_model"]["question"]
-#             if gt is not None:
-#                 batch_solution_str.append(
-#                     f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
-#                 batch_ground_truth.append(row["reward_model"])
-#                 count += 1
-#             else:
-#                 continue
-#         if format == "detect_bad_feature":
-#             if row["reward_model"]["lang_code"] != "zh":
-#                 continue
-#             gt = row["reward_model"]["question"]
-#             if gt is not None:
-#                 batch_solution_str.append(
-#                     f'<think>\n{generate_random_string(100)}\n</think>\n\n<question>\nQuestion: {gt}-Synthetic\n\nAnswer: \\boxed{{78}}\n\nAnswer Type: NumericalAnswer\n</question>')
-#                 batch_ground_truth.append(row["reward_model"])
-#                 count += 1
-#             else:
-#                 continue
-
-#             count += 1
-#         if count > num-1:
-#             break
-#     return batch_solution_str, batch_ground_truth
 
 
 class TestUtils(unittest.TestCase):
@@ -342,6 +251,14 @@ class TestSALT(unittest.TestCase):
 
 
 class TestDoc2QueryV3(unittest.TestCase):
+    def test_doc2query_v3_format_verify(self):
+        scorer = Doc2QueryV3FormatVerify(
+            doc2query_v2_parse_solution_fn, -1.25, -0.75)
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="doc2query_v3", num=4)
+        for x, y in zip(batch_solution_str, batch_ground_truth):
+            print(scorer.get_penalty_or_reward(x, y))
+
     def test_doc2query_v3_compute_score(self):
         batch_solution_str, batch_ground_truth = load_doc2query_v3_data(num=32)
 

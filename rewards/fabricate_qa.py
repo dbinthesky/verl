@@ -2893,214 +2893,78 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # SALT
-# ---------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-# class FabricateAIOComputeScore(object):
-#     def __init__(self, processors=None):
-#         self.processors = processors
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# DOC2QUERY V3
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-#     def compute_score(self,
-#                       batch_data_sources,
-#                       batch_solution_str,
-#                       batch_ground_truth,
-#                       stage,
-#                       max_concurrent_requests=MAX_CONCURRENT,
-#                       ):
-#         source_mapper = {}
-#         splitter = defaultdict(list)
+def doc2query_v3_parse_solution_fn(solution_str: str, remove_option_letter=True):
+    parsed = parse_question_solution_fn(solution_str)
 
-#         for i, (source, sol, gt) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-#             source_mapper[i] = source
-#             splitter[source].append((source, sol, gt))
-#             source_mapper[i] = (source, len(splitter[source])-1)
+    if parsed is None:
+        return None
 
-#         results = {}
-#         for source, flatten_elems in splitter.items():
-#             _batch_data_sources, _batch_solution_str, _batch_ground_truth = [], [], []
-#             for source, sol, gt in flatten_elems:
-#                 _batch_data_sources.append(source)
-#                 _batch_solution_str.append(sol)
-#                 _batch_ground_truth.append(gt)
+    thought, conclusion = parsed
 
-#             _results = self.processors[source].compute_score(
-#                 batch_data_sources=_batch_data_sources,
-#                 batch_solution_str=_batch_solution_str,
-#                 batch_ground_truth=_batch_ground_truth,
-#                 stage=stage,
-#                 max_concurrent_requests=max_concurrent_requests
-#             )
-#             results[source] = _results
+    try:
+        question = conclusion[conclusion.index(
+            "Question: ")+len("Question: "):conclusion.index("Options:")].strip()
+        options = conclusion[conclusion.index(
+            "Options:")+len("Options:"):conclusion.index("Answer:")].strip()
+        if remove_option_letter:
+            options = re.findall(r'[A-W]\)\s*(.*)', options)
+        else:
+            options = re.findall(r'([A-W]\)\s*.*)', options)
+        options = [_.strip() for _ in options]
 
-#         final_results = []
-#         for i, _ in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-#             source, group_index = source_mapper[i]
-#             final_results.append(results[source][group_index])
-#         return final_results
+        answer = conclusion[conclusion.index("Answer:"):].strip()
+        answer = re.findall(r'Answer:\s*([A-W])', answer)[0].strip()
 
-# _default_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _default_doc2query_v2_compute_score_train,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
-# })
-# _default_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _default_doc2query_v2_compute_score_valid,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
-# })
-# fabricate_aio_default_stage1_compute_score_train = partial(
-#     _default_fabricate_aio_compute_score_train.compute_score, stage="1")
-# fabricate_aio_default_stage1_compute_score_valid = partial(
-#     _default_fabricate_aio_compute_score_valid.compute_score, stage="1")
-# fabricate_aio_default_stage2_compute_score_train = partial(
-#     _default_fabricate_aio_compute_score_train.compute_score, stage="2",
-#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
-# fabricate_aio_default_stage2_compute_score_valid = partial(
-#     _default_fabricate_aio_compute_score_valid.compute_score, stage="2",
-#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
-
-# # Qwen2.5-32B Respondent
-# _qwen32b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _qwen32b_respondent_doc2query_v2_compute_score_train,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
-# })
-# _qwen32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _qwen32b_respondent_doc2query_v2_compute_score_valid,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
-# })
-# fabricate_aio_qwen32b_respondent_stage2_compute_score_train = partial(
-#     _qwen32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
-# fabricate_aio_qwen32b_respondent_stage2_compute_score_valid = partial(
-#     _qwen32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
-
-# # QwQ-32B Respondent
-# _qwq32b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _qwq32b_respondent_doc2query_v2_compute_score_train,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
-# })
-# _qwq32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _qwq32b_respondent_doc2query_v2_compute_score_valid,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
-# })
-# fabricate_aio_qwq32b_respondent_stage2_compute_score_train = partial(
-#     _qwq32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-#     max_concurrent_requests=128)
-# fabricate_aio_qwq32b_respondent_stage2_compute_score_valid = partial(
-#     _qwq32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-#     max_concurrent_requests=128)
-
-# # Qwen3-8B Respondent
-# _qwen3_8b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _qwen3_8b_respondent_doc2query_v2_compute_score_train,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
-# })
-# _qwen3_8b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _qwen3_8b_respondent_doc2query_v2_compute_score_valid,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
-# })
-# fabricate_aio_qwen3_8b_respondent_compute_score_train = partial(
-#     _qwen3_8b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-#     max_concurrent_requests=256)
-# fabricate_aio_qwen3_8b_respondent_compute_score_valid = partial(
-#     _qwen3_8b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-#     max_concurrent_requests=256)
-
-# # ------------------------------------------------------------------------------------------------------------------------------------------------------
-# # 问题合成
-# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+        # 选项有重复
+        if len(options) != len(set(options)):
+            return None
+        return question, options, answer
+    except Exception as err:
+        return None
 
 
-# # ------------------------------------------------------------------------------------------------------------------------------------------------------
-# # DOC2QUERY V3
-# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+class Doc2QueryV3FormatVerify(PenaltyOrReward):
+    def __init__(self, parse_solution_fn, min_score, max_score, abbrev="Format"):
+        super().__init__(
+            parse_solution_fn=parse_solution_fn, min_score=min_score, max_score=max_score, abbrev=abbrev
+        )
 
-# def doc2query_v3_parse_solution_fn(solution_str: str, remove_option_letter=True):
-#     if not solution_str.startswith("<think>"):
-#         solution_str = f'<think>\n{solution_str}'
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        def match_decimal(text):
+            # 正则表达式模式：匹配整数部分（可选的正负号 + 数字）+ 小数点 + 小数部分（至少一位数字）
+            pattern = r'[-+]?\d+\.\d+'
+            return re.findall(pattern, text)
 
-#     if solution_str.count("</question>") > 1:
-#         return None
+        solution_str = self.parse_solution_fn(solution_str)
 
-#     if solution_str.count("</think>") > 1:
-#         return None
+        if solution_str is None:
+            return 0.0
 
-#     solution_str = postprocess_solution(solution_str)
+        question, options, _ = solution_str
 
-#     if not solution_str.startswith("<think>"):
-#         return None
+        for option in options:
+            if contain_chinese(option):
+                tokens = list(jieba.cut(option))
+            else:
+                tokens = list(option.split(" "))
 
-#     if not solution_str.endswith("</question>"):
-#         return None
+            # 答案长度过长
+            if len(tokens) > 20:
+                return self.min_score
 
-#     try:
-#         thought = re.findall(r'<think>.*</think>',
-#                              solution_str, re.DOTALL)[0]
-#     except Exception as err:
-#         return None
+            # 疑似判断题
+            if option.strip().lower() in ("true", "false", "正确", "错误"):
+                return self.min_score
 
-#     solution_str = solution_str.replace(thought, "")
-#     try:
-#         conclusion = re.findall(r'<question>(.*)</question>',
-#                                 solution_str, re.DOTALL)[0]
-#     except Exception as err:
-#         return None
-
-#     if ("<question>" in conclusion) or ("</question>" in conclusion):
-#         return None
-
-#     try:
-#         question = conclusion[conclusion.index(
-#             "Question: ")+len("Question: "):conclusion.index("Options:")].strip()
-#         options = conclusion[conclusion.index(
-#             "Options:")+len("Options:"):conclusion.index("Answer:")].strip()
-#         if remove_option_letter:
-#             options = re.findall(r'[A-W]\)\s*(.*)', options)
-#         else:
-#             options = re.findall(r'([A-W]\)\s*.*)', options)
-#         options = [_.strip() for _ in options]
-
-#         answer = conclusion[conclusion.index("Answer:"):].strip()
-#         answer = re.findall(r'Answer:\s*([A-W])', answer)[0].strip()
-
-#         # 选项有重复
-#         if len(options) != len(set(options)):
-#             return None
-#         return question, options, answer
-#     except Exception as err:
-#         return None
-
-# class Doc2QueryV3QuestionAnswerFormatVerify(SALTQuestionAnswerFormatVerify):
-#     def __init__(self, parse_solution_fn=calc_qa_parse_solution_fn):
-#         self.parse_solution_fn = parse_solution_fn
-
-#     def get_penalty_or_reward(self, solution_str, ground_truth):
-#         def match_decimal(text):
-#             # 正则表达式模式：匹配整数部分（可选的正负号 + 数字）+ 小数点 + 小数部分（至少一位数字）
-#             pattern = r'[-+]?\d+\.\d+'
-#             return re.findall(pattern, text)
-
-#         solution_str = self.parse_solution_fn(solution_str)
-
-#         if solution_str is None:
-#             return 0.0
-
-#         question, options, _ = solution_str
-
-#         for option in options:
-#             if contain_chinese(option):
-#                 tokens = list(jieba.cut(option))
-#             else:
-#                 tokens = list(option.split(" "))
-
-#             # 答案长度过长
-#             if len(tokens) > 20:
-#                 return -1.6
-
-#             # 疑似判断题
-#             if option.strip().lower() in ("true", "false", "正确", "错误"):
-#                 return -1.6
-
-#         return 0.0
+        # 成功
+        return 0.0
 
 # class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 #     MULTICHOICE_LETTER = ('A', 'B', 'C', 'D', 'E', 'F', 'G',
@@ -3800,7 +3664,124 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 
 # # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # # DOC2QUERY V3
+# # -----------------------------------------
+
+
+# class FabricateAIOComputeScore(object):
+#     def __init__(self, processors=None):
+#         self.processors = processors
+
+#     def compute_score(self,
+#                       batch_data_sources,
+#                       batch_solution_str,
+#                       batch_ground_truth,
+#                       stage,
+#                       max_concurrent_requests=MAX_CONCURRENT,
+#                       ):
+#         source_mapper = {}
+#         splitter = defaultdict(list)
+
+#         for i, (source, sol, gt) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+#             source_mapper[i] = source
+#             splitter[source].append((source, sol, gt))
+#             source_mapper[i] = (source, len(splitter[source])-1)
+
+#         results = {}
+#         for source, flatten_elems in splitter.items():
+#             _batch_data_sources, _batch_solution_str, _batch_ground_truth = [], [], []
+#             for source, sol, gt in flatten_elems:
+#                 _batch_data_sources.append(source)
+#                 _batch_solution_str.append(sol)
+#                 _batch_ground_truth.append(gt)
+
+#             _results = self.processors[source].compute_score(
+#                 batch_data_sources=_batch_data_sources,
+#                 batch_solution_str=_batch_solution_str,
+#                 batch_ground_truth=_batch_ground_truth,
+#                 stage=stage,
+#                 max_concurrent_requests=max_concurrent_requests
+#             )
+#             results[source] = _results
+
+#         final_results = []
+#         for i, _ in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+#             source, group_index = source_mapper[i]
+#             final_results.append(results[source][group_index])
+#         return final_results
+
+# _default_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _default_doc2query_v2_compute_score_train,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
+# })
+# _default_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _default_doc2query_v2_compute_score_valid,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+# })
+# fabricate_aio_default_stage1_compute_score_train = partial(
+#     _default_fabricate_aio_compute_score_train.compute_score, stage="1")
+# fabricate_aio_default_stage1_compute_score_valid = partial(
+#     _default_fabricate_aio_compute_score_valid.compute_score, stage="1")
+# fabricate_aio_default_stage2_compute_score_train = partial(
+#     _default_fabricate_aio_compute_score_train.compute_score, stage="2",
+#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
+# fabricate_aio_default_stage2_compute_score_valid = partial(
+#     _default_fabricate_aio_compute_score_valid.compute_score, stage="2",
+#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
+
+# # Qwen2.5-32B Respondent
+# _qwen32b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwen32b_respondent_doc2query_v2_compute_score_train,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
+# })
+# _qwen32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwen32b_respondent_doc2query_v2_compute_score_valid,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+# })
+# fabricate_aio_qwen32b_respondent_stage2_compute_score_train = partial(
+#     _qwen32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
+#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
+# fabricate_aio_qwen32b_respondent_stage2_compute_score_valid = partial(
+#     _qwen32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
+#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
+
+# # QwQ-32B Respondent
+# _qwq32b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwq32b_respondent_doc2query_v2_compute_score_train,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
+# })
+# _qwq32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwq32b_respondent_doc2query_v2_compute_score_valid,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+# })
+# fabricate_aio_qwq32b_respondent_stage2_compute_score_train = partial(
+#     _qwq32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
+#     max_concurrent_requests=128)
+# fabricate_aio_qwq32b_respondent_stage2_compute_score_valid = partial(
+#     _qwq32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
+#     max_concurrent_requests=128)
+
+# # Qwen3-8B Respondent
+# _qwen3_8b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwen3_8b_respondent_doc2query_v2_compute_score_train,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
+# })
+# _qwen3_8b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwen3_8b_respondent_doc2query_v2_compute_score_valid,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+# })
+# fabricate_aio_qwen3_8b_respondent_compute_score_train = partial(
+#     _qwen3_8b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
+#     max_concurrent_requests=256)
+# fabricate_aio_qwen3_8b_respondent_compute_score_valid = partial(
+#     _qwen3_8b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
+#     max_concurrent_requests=256)
+
 # # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# # 问题合成
+# # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# -------------------------------------------------------------------------------------------------------------
 
 # # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # # Criteria RM
