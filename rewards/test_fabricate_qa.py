@@ -35,6 +35,7 @@ from fabricate_qa import (
     DOC2QUERY_V2_DEFAULT_PARAMS,
     DOC2QUERY_V2_DEV_PARAMS,
     SALT_DEFAULT_PARAMS,
+    SALT_DEV_PARAMS,
     #     # DOC2QUERY_V3_DEFAULT_PARAMS,
     #     # CRITERIA_DEFAULT_PARAMS,
     #     # doc2query_v2_default_stage1_compute_score_valid,
@@ -297,9 +298,14 @@ class TestSALT(unittest.TestCase):
         ))
 
     def test_compute_score(self):
-        batch_solution_str, batch_ground_truth = load_salt_data(num=100)
-        salt_default_compute_score_valid([None]*len(batch_solution_str),
-                                         batch_solution_str, batch_ground_truth)
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="salt", num=4)
+        task = SALTComputeScore(
+            salt_parse_solution_fn, split="valid", args=SALT_DEV_PARAMS)
+        print(task.compute_score(
+            [None] *
+            len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        ))
 
     def test_learnable_reward(self):
         batch_solution_str, batch_ground_truth = load_dataset(

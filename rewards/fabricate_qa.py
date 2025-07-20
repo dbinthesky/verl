@@ -1045,8 +1045,6 @@ class JudgeTwoQuestionSimilarity(BatchCallOpenAPI):
     def prompt_fn(self, example):
         prompt = self._TEMPLATE + \
             f'\n\n现在需要你比较下面两个问题的相似度。\n\n[原问题]\n{example[0]}\n\n[对比问题]\n{example[1]}\n\n[输出]\n'
-        print(prompt)
-        print("="*80)
         return prompt
 
     def postprocess(self, response: str):
@@ -2877,247 +2875,21 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
     def format_question(self, parsed_result):
         return f'Question: {parsed_result[0]}\nAnswer: {parsed_result[1]}'
 
-    # def log_ground_truth(self, ground_truth):
-    #     return repr(self.format_question(ground_truth["question"], ground_truth["answer"])
+    def log_ground_truth(self, ground_truth):
+        return repr(self.format_question((ground_truth["question"], ground_truth["answer"])))
 
-        #     def penalty_on(self):
-        #         return ("Format", "Lang", "BadQ", "QSimPenalty")
+    def coarse_process(self):
+        return [
+            # 快速判断问题质量
+            Process(name="Hack",
+                    function=self.get_hack_penalty, filter_only=True),
+            Process(name="SimPenalty",
+                    function=self.get_similarity_penalty, filter_only=False)
+        ]
 
-        #     async def _compute_score(self,
-        #                              batch_data_sources,
-        #                              batch_solution_str,
-        #                              batch_ground_truth,
-        #                              max_concurrent_requests=MAX_CONCURRENT,
-        #                              debug=False
-        #                              ):
-        #         self.initialize_record_rollout_samples_module()
+    def finegrain_process(self):
+        return Process(name="Learnability", function=self.get_learnable_reward, filter_only=False)
 
-        #         penalty = defaultdict(list)
-        #         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-        #             parsed = self.parse_solution_fn(solution_str)
-        #             if parsed is None:
-        #                 penalty[i].append(-2.0)
-        #             else:
-        #                 penalty[i].append(0.0)
-
-        #             for key in self.penalty_on():
-        #                 penalty[i].append(self.get_penalties()[key]
-        #                                   (solution_str, ground_truth))
-
-        #         # 难度降低奖励
-        #         difficulty_reduction_rewards, pass_rates = await self.get_learnable_reward(
-        #             batch_data_sources,
-        #             batch_solution_str,
-        #             batch_ground_truth,
-        #             run_args=self.args["learnable_run_args"],
-        #             metric_args=self.args["learnable_metric_args"],
-        #             max_concurrent_requests=max_concurrent_requests,
-        #             debug=debug
-        #         )
-        #         # 相似度惩罚
-        #         similarity_penalties = await self.get_similarity_penalty(
-        #             batch_data_sources,
-        #             batch_solution_str,
-        #             batch_ground_truth,
-        #             max_concurrent_requests=max_concurrent_requests,
-        #             run_args=self.args["similarity_run_args"],
-        #         )
-
-        #         hack_penalties = await self.get_hack_penalty(
-        #             batch_data_sources,
-        #             batch_solution_str,
-        #             batch_ground_truth,
-        #             max_concurrent_requests=max_concurrent_requests,
-        #             run_args=self.args["hack_detection_run_args"],
-        #         )
-
-        #         final_results = []
-        #         for i in range(len(batch_solution_str)):
-        #             scores = copy.deepcopy(penalty[i])
-
-        #             penalties = ["Parse"]+list(self.penalty_on())
-        #             penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
-        #                                         s in zip(penalties, scores)])
-        #             _difficulty = difficulty_reduction_rewards[i]
-        #             _difficulty_score = np.sum(_difficulty) if isinstance(
-        #                 _difficulty, list) else _difficulty
-        #             scores.append(_difficulty_score)
-
-        #             cur_score = 0
-
-        #             for j, _score in enumerate(scores):
-        #                 if (j == penalties.index("QSimPenalty")):  # BLEU
-        #                     if _difficulty_score > 0:
-        #                         cur_score += _score
-        #                 else:
-        #                     if _score < 0:
-        #                         cur_score = _score
-        #                         break
-        #                     else:
-        #                         cur_score += _score
-
-        #             if _difficulty_score > 0:
-        #                 cur_score += similarity_penalties[i]
-
-        #             # Hack惩罚
-        #             cur_score += hack_penalties[i]
-
-        #             # 保存Rollout信息
-        #             if cur_score > 0 and self.split == "train":
-        #                 self.update_rollout_info(
-        #                     solution_str=batch_solution_str[i],
-        #                     ground_truth=batch_ground_truth[i],
-        #                     difficulty=pass_rates[i]
-        #                 )
-
-        #             final_results.append(cur_score)
-
-        #             if cur_score > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
-        #                 log = True
-        #                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
-        #             else:
-        #                 log = False
-
-        #             if cur_score == -2.0:
-        #                 log = True
-        #                 log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN CORRUPT RESPONSE]"
-
-        #             source = batch_ground_truth[i]["source"]
-
-        #             if log:
-        #                 print(
-        #                     f"--------------------------------{log_flag}--------------------------------")
-        #                 print(
-        #                     f"【Solution】({source})`{self.log_solution(batch_solution_str[i])}`")
-        #                 try:
-        #                     print(
-        #                         f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
-        #                 except Exception as err:
-        #                     pass
-        #                 print(
-        #                     f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|DiffReduction={str(difficulty_reduction_rewards[i])}|SimPenalty={str(similarity_penalties[i])}|Hack={str(hack_penalties[i])}|{penalty_log_str}\n')
-
-        #                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
-
-        #                 if (random.random() < 0.1 or cur_score > 0.) and thought is not None:
-        #                     print(f'[Thought]\n{thought}')
-        #                     print()
-
-        #                 if cur_score == -2.0:
-        #                     print(f'[Response]\n{batch_solution_str[i]}')
-        #                     print()
-
-        #                 if self.split == "valid":
-        #                     pass
-        #                 self.save_rollout_info()
-        #         return final_results
-SALT_DEFAULT_PARAMS = {
-    "learnable_run_args": {
-        "self_taught": {
-            "model": {
-                "model": "service_dv3_for_tongjian",
-                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
-                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
-                "request_kwargs": {
-                    "temperature": 0.8,
-                    "timeout": 360,
-                    "max_tokens": 4096,
-                }
-            },
-            "fn": "reject_sample",
-            "repeat": 10,
-            "desc": '拒绝采样',
-            "max_concurrent_requests": 256
-        },
-        "w/o_content": {
-            "model": {
-                "model": "service_dv3_for_tongjian",
-                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
-                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
-                "request_kwargs": {
-                    "temperature": 0.8,
-                    "timeout": 360,
-                    "max_tokens": 4096,
-                }
-            },
-            "repeat": 8,
-            "fn": "respond_wo_context",
-            "desc": 'w/o ctx',
-            "max_concurrent_requests": 128
-        },
-        "w_content": {
-            "model": {
-                "model": "service_dv3_for_tongjian",
-                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
-                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
-                "request_kwargs": {
-                    "temperature": 0.8,
-                    "timeout": 360,
-                    "max_tokens": 4096,
-                }
-            },
-            "repeat": 8,
-            "fn": "respond_w_context",
-            "desc": 'w ctx',
-            "max_concurrent_requests": 128
-        },
-    },
-    "learnable_metric_args": {
-        "advantage": 'w_content',
-        "weakness": 'w/o_content',
-        "advantage_threshold": 2/8,
-        "difficulty_reduction_bonus_weight": 1.0
-    },
-    "similarity_run_args":  {
-        "threshold": {
-            4: -0.5,
-            5: -1.0
-        },
-        "weight": 1.0,
-    },
-    "hack_detection_run_args":  {
-        "threshold": {
-            3: -1.5,
-            4: -2.0
-        },
-        "weight": 1.0,
-    },
-    "verify_agent": {
-        "model": {
-            "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.223:8000/v1",
-            "api_keys": "EMPTY",
-            "request_kwargs": {
-                "temperature": 0.6,
-                "timeout": 360,
-                "max_tokens": 1024,
-            },
-        },
-        "max_concurrent_requests": 32
-    },
-    "auxiliary_agent": {
-        "model": {
-            "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.223:8000/v1",
-            "api_keys": "EMPTY",
-            "request_kwargs": {
-                "temperature": 0.6,
-                "timeout": 360,
-                "max_tokens": 4096,
-            },
-        },
-        "max_concurrent_requests": 32
-    },
-}
-
-# _default_salt_compute_score_train = SALTComputeScore(
-#     salt_parse_solution_fn, split="train", args=SALT_DEFAULT_PARAMS)
-# _default_salt_compute_score_valid = SALTComputeScore(
-#     salt_parse_solution_fn, split="valid", args=SALT_DEFAULT_PARAMS)
-# salt_default_compute_score_train = partial(
-#     _default_salt_compute_score_train.compute_score, max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
-# salt_default_compute_score_valid = partial(
-#     _default_salt_compute_score_valid.compute_score, max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
 
 # # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # # SALT
@@ -4504,7 +4276,6 @@ SALT_DEFAULT_PARAMS = {
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # HParams
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
 DOC2QUERY_V2_DEFAULT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
@@ -4678,6 +4449,218 @@ DOC2QUERY_V2_DEV_PARAMS = {
         # "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
     }
 }
+
+SALT_DEFAULT_PARAMS = {
+    "learnable_run_args": {
+        "self_taught": {
+            "model": {
+                "model": "service_dv3_for_tongjian",
+                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "fn": "reject_sample",
+            "repeat": 10,
+            "desc": '拒绝采样',
+            "max_concurrent_requests": 256
+        },
+        "w/o_content": {
+            "model": {
+                "model": "service_dv3_for_tongjian",
+                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "repeat": 8,
+            "fn": "respond_wo_context",
+            "desc": 'w/o ctx',
+            "max_concurrent_requests": 128
+        },
+        "w_content": {
+            "model": {
+                "model": "service_dv3_for_tongjian",
+                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "repeat": 8,
+            "fn": "respond_w_context",
+            "desc": 'w ctx',
+            "max_concurrent_requests": 128
+        },
+    },
+    "learnable_metric_args": {
+        "advantage": 'w_content',
+        "weakness": 'w/o_content',
+        "advantage_threshold": 2/8,
+        "difficulty_reduction_bonus_weight": 1.0
+    },
+    "similarity_run_args":  {
+        "threshold": {
+            4: -0.5,
+            5: -1.0
+        },
+        "weight": 1.0,
+    },
+    "hack_detection_run_args":  {
+        "threshold": {
+            3: -1.5,
+            4: -2.0
+        },
+        "weight": 1.0,
+    },
+    "verify_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.223:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 1024,
+            },
+        },
+        "max_concurrent_requests": 32
+    },
+    "auxiliary_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.223:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 4096,
+            },
+        },
+        "max_concurrent_requests": 32
+    },
+    "save_rollouts": {
+        "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
+    }
+}
+
+SALT_DEFAULT_PARAMS = {
+    "learnable_run_args": {
+        "self_taught": {
+            "model": {
+                "model": "service_dv3_for_tongjian",
+                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "fn": "reject_sample",
+            "repeat": 10,
+            "desc": '拒绝采样',
+            "max_concurrent_requests": 256
+        },
+        "w/o_content": {
+            "model": {
+                "model": "service_dv3_for_tongjian",
+                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "repeat": 8,
+            "fn": "respond_wo_context",
+            "desc": 'w/o ctx',
+            "max_concurrent_requests": 128
+        },
+        "w_content": {
+            "model": {
+                "model": "service_dv3_for_tongjian",
+                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "repeat": 8,
+            "fn": "respond_w_context",
+            "desc": 'w ctx',
+            "max_concurrent_requests": 128
+        },
+    },
+    "learnable_metric_args": {
+        "advantage": 'w_content',
+        "weakness": 'w/o_content',
+        "advantage_threshold": 2/8,
+        "difficulty_reduction_bonus_weight": 1.0
+    },
+    "similarity_run_args":  {
+        "threshold": {
+            4: -0.5,
+            5: -1.0
+        },
+        "weight": 1.0,
+    },
+    "hack_detection_run_args":  {
+        "threshold": {
+            1: 0.0
+        },
+        "weight": 1.0,
+    },
+    "verify_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.223:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 1024,
+            },
+        },
+        "max_concurrent_requests": 32
+    },
+    "auxiliary_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.223:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 4096,
+            },
+        },
+        "max_concurrent_requests": 32
+    },
+    "save_rollouts": {
+        "default_local_dir": "/tmp/fabricate_aio_rollouts"
+    }
+}
+
+# _default_salt_compute_score_train = SALTComputeScore(
+#     salt_parse_solution_fn, split="train", args=SALT_DEFAULT_PARAMS)
+# _default_salt_compute_score_valid = SALTComputeScore(
+#     salt_parse_solution_fn, split="valid", args=SALT_DEFAULT_PARAMS)
+# salt_default_compute_score_train = partial(
+#     _default_salt_compute_score_train.compute_score, max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
+# salt_default_compute_score_valid = partial(
+#     _default_salt_compute_score_valid.compute_score, max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
 
 
 _default_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScore(
