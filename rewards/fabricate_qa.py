@@ -454,6 +454,23 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
 ['B', 'D']
 
 
+
+#### **输入：**
+##### 题目
+```
+The reaction product of the o-toluidine method for measuring blood glucose is ( ).
+```
+
+##### 用户回答（答案部分）
+The question provided is unrelated to the given document about wastewater and sludge treatment technologies. The document discusses various studies on urban sewage treatment, sludge composting, landfill leachate treatment, and other environmental engineering topics, but it does not contain any information about the o-toluidine method for measuring blood glucose or its reaction products.
+
+Therefore, the correct answer is:
+**F) Cannot be determined** (from the given document). 
+
+If you have a question related to the provided document, please feel free to ask!
+
+#### **输出：**
+['F']
 """
 
 MULTICHOICE_EXTRACT_ANSWER_TEMPLATE = """现在对下面的用户回答提按格式提取出答案（参考上面的例子，输出后面直接输出提取出的列表）
@@ -1344,9 +1361,12 @@ class MultiChoiceQuestionExtractAnswerOptions(SALTSelfTaughtSimpleSolutionVerify
             question=question,
             conclusion=solver_response,
         )
+        print(prompt)
+        print('-'*80)
         return prompt
 
     def postprocess(self, response: str):
+        print(response)
         try:
             response = response.strip()
             try:
@@ -1364,15 +1384,12 @@ class MultiChoiceQuestionExtractAnswerOptions(SALTSelfTaughtSimpleSolutionVerify
                     ans_list = eval(response.strip())
 
             if not isinstance(ans_list, list):
-                raise PostprocessError(
-                    f'Parse Python List Failed, resp={response}')
+                raise PostprocessError(f'Parse Python List Failed')
             if not all(_ans in self.MULTICHOICE_LETTER for _ans in ans_list):
-                raise PostprocessError(
-                    f'Parse Python List Failed, resp={response}')
+                raise PostprocessError(f'Parse Python List Failed')
             return ans_list
         except Exception as err:
-            raise PostprocessError(
-                f'Parse Python List Failed, resp={response}')
+            raise PostprocessError(f'Parse Python List Failed')
 
 
 def parse_question_solution_fn(solution_str: str):
@@ -2093,7 +2110,7 @@ class Doc2QueryV2ComputeScore(object):
         full_rewards = []
         pass_rates = []
 
-        run_args = self.run_args
+        run_args = self.run_args()
         metric_args = self.args["difficulty_metric_args"]
 
         for i in range(len(batch_solution_str)):
@@ -3296,7 +3313,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 
         full_rewards = []
         pass_rates = []
-        run_args = self.run_args
+        run_args = self.run_args()
         metric_args = self.args["difficulty_metric_args"]
 
         for i in range(len(batch_solution_str)):
