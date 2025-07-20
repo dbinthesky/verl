@@ -1156,14 +1156,11 @@ class QuestionRefineHack(BatchCallOpenAPI):
     def prompt_fn(self, example):
         prompt = self._TEMPLATE + \
             f'\n\n\n现在需要你对下面的模型响应分析hack程度。\n\n[原题]\n{example[0]}\n\n[大模型出题]\n{example[1]}\n\n[输出]\n'
-        print(prompt)
-        print("="*80)
         return prompt
 
     def postprocess(self, response: str):
         s = response
         try:
-            print(s)
             conclusion = s[s.index(
                 "[结论]")+len("[结论]"):].strip()
             score = int(re.findall(r'Hack=(\d+)', conclusion)[0].strip())
@@ -2366,7 +2363,7 @@ class Doc2QueryV2ComputeScore(object):
                       batch_ground_truth,
                       ):
         async def main():
-            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, stage=stage, max_concurrent_requests=max_concurrent_requests)
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
         return aio.run(main())
 
     def log_solution(self, solution):
@@ -2866,7 +2863,6 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                 pass
             else:
                 _score = 0.0
-                print("fucing!!!", sim, )
                 for threshold, set_val in run_args["threshold"].items():
                     if sim >= threshold:
                         _score = min(_score, set_val)

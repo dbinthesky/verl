@@ -327,7 +327,7 @@ class TestSALT(unittest.TestCase):
 
         async def main():
             # get_similarity_penalty get_hack_penalty
-            results = await task.get_hack_penalty(
+            results = await task.get_similarity_penalty(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
             )
