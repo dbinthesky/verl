@@ -3446,123 +3446,6 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-# class FabricateAIOComputeScore(object):
-#     def __init__(self, processors=None):
-#         self.processors = processors
-
-#     def compute_score(self,
-#                       batch_data_sources,
-#                       batch_solution_str,
-#                       batch_ground_truth,
-#                       stage,
-#                       max_concurrent_requests=MAX_CONCURRENT,
-#                       ):
-#         source_mapper = {}
-#         splitter = defaultdict(list)
-
-#         for i, (source, sol, gt) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-#             source_mapper[i] = source
-#             splitter[source].append((source, sol, gt))
-#             source_mapper[i] = (source, len(splitter[source])-1)
-
-#         results = {}
-#         for source, flatten_elems in splitter.items():
-#             _batch_data_sources, _batch_solution_str, _batch_ground_truth = [], [], []
-#             for source, sol, gt in flatten_elems:
-#                 _batch_data_sources.append(source)
-#                 _batch_solution_str.append(sol)
-#                 _batch_ground_truth.append(gt)
-
-#             _results = self.processors[source].compute_score(
-#                 batch_data_sources=_batch_data_sources,
-#                 batch_solution_str=_batch_solution_str,
-#                 batch_ground_truth=_batch_ground_truth,
-#                 stage=stage,
-#                 max_concurrent_requests=max_concurrent_requests
-#             )
-#             results[source] = _results
-
-#         final_results = []
-#         for i, _ in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-#             source, group_index = source_mapper[i]
-#             final_results.append(results[source][group_index])
-#         return final_results
-
-# _default_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _default_doc2query_v2_compute_score_train,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
-# })
-# _default_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _default_doc2query_v2_compute_score_valid,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
-# })
-# fabricate_aio_default_stage1_compute_score_train = partial(
-#     _default_fabricate_aio_compute_score_train.compute_score, stage="1")
-# fabricate_aio_default_stage1_compute_score_valid = partial(
-#     _default_fabricate_aio_compute_score_valid.compute_score, stage="1")
-# fabricate_aio_default_stage2_compute_score_train = partial(
-#     _default_fabricate_aio_compute_score_train.compute_score, stage="2",
-#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
-# fabricate_aio_default_stage2_compute_score_valid = partial(
-#     _default_fabricate_aio_compute_score_valid.compute_score, stage="2",
-#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
-
-# # Qwen2.5-32B Respondent
-# _qwen32b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _qwen32b_respondent_doc2query_v2_compute_score_train,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
-# })
-# _qwen32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _qwen32b_respondent_doc2query_v2_compute_score_valid,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
-# })
-# fabricate_aio_qwen32b_respondent_stage2_compute_score_train = partial(
-#     _qwen32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
-# fabricate_aio_qwen32b_respondent_stage2_compute_score_valid = partial(
-#     _qwen32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
-
-# # QwQ-32B Respondent
-# _qwq32b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _qwq32b_respondent_doc2query_v2_compute_score_train,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
-# })
-# _qwq32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _qwq32b_respondent_doc2query_v2_compute_score_valid,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
-# })
-# fabricate_aio_qwq32b_respondent_stage2_compute_score_train = partial(
-#     _qwq32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-#     max_concurrent_requests=128)
-# fabricate_aio_qwq32b_respondent_stage2_compute_score_valid = partial(
-#     _qwq32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-#     max_concurrent_requests=128)
-
-# # Qwen3-8B Respondent
-# _qwen3_8b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _qwen3_8b_respondent_doc2query_v2_compute_score_train,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
-# })
-# _qwen3_8b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
-#     "doc2query_v2": _qwen3_8b_respondent_doc2query_v2_compute_score_valid,
-#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
-# })
-# fabricate_aio_qwen3_8b_respondent_compute_score_train = partial(
-#     _qwen3_8b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
-#     max_concurrent_requests=256)
-# fabricate_aio_qwen3_8b_respondent_compute_score_valid = partial(
-#     _qwen3_8b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
-#     max_concurrent_requests=256)
-
-# # ------------------------------------------------------------------------------------------------------------------------------------------------------
-# # 问题合成
-# # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-# -------------------------------------------------------------------------------------------------------------
-
-
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # HParams
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -4050,3 +3933,113 @@ doc2query_v2_compute_score_valid = _default_doc2query_v2_compute_score_valid.com
 #     _default_doc2query_v3_compute_score_train.compute_score)
 # doc2query_v3_default_compute_score_valid = partial(
 #     _default_doc2query_v3_compute_score_valid.compute_score)
+
+
+# class FabricateAIOComputeScore(object):
+#     def __init__(self, processors=None):
+#         self.processors = processors
+
+#     def compute_score(self,
+#                       batch_data_sources,
+#                       batch_solution_str,
+#                       batch_ground_truth,
+#                       stage,
+#                       max_concurrent_requests=MAX_CONCURRENT,
+#                       ):
+#         source_mapper = {}
+#         splitter = defaultdict(list)
+
+#         for i, (source, sol, gt) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+#             source_mapper[i] = source
+#             splitter[source].append((source, sol, gt))
+#             source_mapper[i] = (source, len(splitter[source])-1)
+
+#         results = {}
+#         for source, flatten_elems in splitter.items():
+#             _batch_data_sources, _batch_solution_str, _batch_ground_truth = [], [], []
+#             for source, sol, gt in flatten_elems:
+#                 _batch_data_sources.append(source)
+#                 _batch_solution_str.append(sol)
+#                 _batch_ground_truth.append(gt)
+
+#             _results = self.processors[source].compute_score(
+#                 batch_data_sources=_batch_data_sources,
+#                 batch_solution_str=_batch_solution_str,
+#                 batch_ground_truth=_batch_ground_truth,
+#                 stage=stage,
+#                 max_concurrent_requests=max_concurrent_requests
+#             )
+#             results[source] = _results
+
+#         final_results = []
+#         for i, _ in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+#             source, group_index = source_mapper[i]
+#             final_results.append(results[source][group_index])
+#         return final_results
+
+# _default_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _default_doc2query_v2_compute_score_train,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
+# })
+# _default_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _default_doc2query_v2_compute_score_valid,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+# })
+# fabricate_aio_default_stage1_compute_score_train = partial(
+#     _default_fabricate_aio_compute_score_train.compute_score, stage="1")
+# fabricate_aio_default_stage1_compute_score_valid = partial(
+#     _default_fabricate_aio_compute_score_valid.compute_score, stage="1")
+# fabricate_aio_default_stage2_compute_score_train = partial(
+#     _default_fabricate_aio_compute_score_train.compute_score, stage="2",
+#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
+# fabricate_aio_default_stage2_compute_score_valid = partial(
+#     _default_fabricate_aio_compute_score_valid.compute_score, stage="2",
+#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["dsv3"])
+
+# # Qwen2.5-32B Respondent
+# _qwen32b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwen32b_respondent_doc2query_v2_compute_score_train,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
+# })
+# _qwen32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwen32b_respondent_doc2query_v2_compute_score_valid,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+# })
+# fabricate_aio_qwen32b_respondent_stage2_compute_score_train = partial(
+#     _qwen32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
+#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
+# fabricate_aio_qwen32b_respondent_stage2_compute_score_valid = partial(
+#     _qwen32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
+#     max_concurrent_requests=DEFAULT_MAX_CONCURRENT["qwen3_32b"])
+
+# # QwQ-32B Respondent
+# _qwq32b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwq32b_respondent_doc2query_v2_compute_score_train,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
+# })
+# _qwq32b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwq32b_respondent_doc2query_v2_compute_score_valid,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+# })
+# fabricate_aio_qwq32b_respondent_stage2_compute_score_train = partial(
+#     _qwq32b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
+#     max_concurrent_requests=128)
+# fabricate_aio_qwq32b_respondent_stage2_compute_score_valid = partial(
+#     _qwq32b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
+#     max_concurrent_requests=128)
+
+# # Qwen3-8B Respondent
+# _qwen3_8b_respondent_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwen3_8b_respondent_doc2query_v2_compute_score_train,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_train,
+# })
+# _qwen3_8b_respondent_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+#     "doc2query_v2": _qwen3_8b_respondent_doc2query_v2_compute_score_valid,
+#     "fabricate_qa": _default_fabricate_qa_compute_score_valid,
+# })
+# fabricate_aio_qwen3_8b_respondent_compute_score_train = partial(
+#     _qwen3_8b_respondent_fabricate_aio_compute_score_train.compute_score, stage="2",
+#     max_concurrent_requests=256)
+# fabricate_aio_qwen3_8b_respondent_compute_score_valid = partial(
+#     _qwen3_8b_respondent_fabricate_aio_compute_score_valid.compute_score, stage="2",
+#     max_concurrent_requests=256)
