@@ -2187,7 +2187,6 @@ class Doc2QueryV2ComputeScore(object):
             result = self.parse_solution_fn(solution_str)
             if result is not None:
                 extra[i] = result
-
                 if skip_run is not None and i in skip_run:
                     continue
 
@@ -2384,6 +2383,8 @@ class Doc2QueryV2ComputeScore(object):
             batch_ground_truth,
             skip_run=all_skip_next_action,
         )
+        print(main_rewards)
+        print(extra)
         final_results = []
         for i in range(len(batch_solution_str)):
             scores = copy.deepcopy(penalty[i])
@@ -2439,9 +2440,9 @@ class Doc2QueryV2ComputeScore(object):
                 print(
                     f"--------------------------------{log_flag}--------------------------------")
                 print(
-                    f"【Solution】({source})`{self.log_solution(batch_solution_str[i])}`")
+                    f"【Solution{i}】({source})`{self.log_solution(batch_solution_str[i])}`")
                 print(
-                    f"【Golden】({source})`{self.log_ground_truth(batch_ground_truth[i])}`")
+                    f"【Golden{i}】({source})`{self.log_ground_truth(batch_ground_truth[i])}`")
 
                 _minor_rewards_log = []
                 for process in self.coarse_process():
@@ -3282,6 +3283,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth,
+            skip_run=skip_run
         )
 
         full_rewards = []
