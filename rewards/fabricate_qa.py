@@ -2405,8 +2405,6 @@ class Doc2QueryV2ComputeScore(object):
             batch_ground_truth,
             skip_run=all_skip_next_action,
         )
-        print(main_rewards)
-        print(extra)
         final_results = []
         for i in range(len(batch_solution_str)):
             scores = copy.deepcopy(penalty[i])
