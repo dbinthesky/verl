@@ -266,7 +266,7 @@ class TestDoc2QueryV3(unittest.TestCase):
 
         async def main():
             # simulate_respondent get_difficulty_reward
-            results = await task.simulate_respondent(
+            results = await task.get_difficulty_reward(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
             )
@@ -287,10 +287,13 @@ class TestDoc2QueryV3(unittest.TestCase):
             print(results)
         aio.run(main())
 
-    def test_doc2query_v3_compute_score(self):
-        batch_solution_str, batch_ground_truth = load_doc2query_v3_data(num=32)
+    def test_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="doc2query_v3", num=6)
+        task = Doc2QueryV3ComputeScore(
+            doc2query_v3_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
 
-        print(doc2query_v3_default_compute_score_valid(
+        print(task.compute_score(
             [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth,
         ))
 

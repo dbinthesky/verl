@@ -1878,7 +1878,7 @@ class BadQuestionDetection(PenaltyOrReward):
         return 0.0
 
 
-Process = namedtuple("Process", "name,function,filter_only")
+Process = namedtuple("Process", "name,function,filter_only,non_skip")
 
 
 class Doc2QueryV2ComputeScore(object):
@@ -2325,9 +2325,9 @@ class Doc2QueryV2ComputeScore(object):
         return [
             # 快速判断问题质量
             Process(name="QuickQuality",
-                    function=self.quick_question_eval, filter_only=True),
+                    function=self.quick_question_eval, filter_only=True, non_skip=False),
             Process(name="QuickDifficulty",
-                    function=self.llm_judge_difficulty, filter_only=False)
+                    function=self.llm_judge_difficulty, filter_only=False, non_skip=False)
         ]
 
     def finegrain_process(self):
@@ -2363,9 +2363,12 @@ class Doc2QueryV2ComputeScore(object):
                 batch_solution_str,
                 batch_ground_truth,
             )
-            skip_next_action = [
-                i for i, v in enumerate(process_eval) if v < 0.0]
-            all_skip_next_action.extend(skip_next_action)
+            # do skipping
+            if not process.non_skip:
+                skip_next_action = [
+                    i for i, v in enumerate(process_eval) if v < 0.0]
+                all_skip_next_action.extend(skip_next_action)
+
             if not process.filter_only:
                 minor_rewards[process.name] = process_eval
             all_minor_rewards[process.name] = process_eval
@@ -2982,13 +2985,13 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
         return [
             # 快速判断问题质量
             Process(name="Hack",
-                    function=self.get_hack_penalty, filter_only=True),
+                    function=self.get_hack_penalty, filter_only=True, non_skip=False),
             Process(name="SimPenalty",
-                    function=self.get_similarity_penalty, filter_only=False)
+                    function=self.get_similarity_penalty, filter_only=False, non_skip=True)
         ]
 
     def finegrain_process(self):
-        return Process(name="Learnability", function=self.get_learnable_reward, filter_only=False)
+        return Process(name="Learnability", function=self.get_learnable_reward, filter_only=False, non_skip=False)
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -3157,6 +3160,11 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         new_options.extend(distractors)
         return new_options
 
+    def format_question(self, parsed_result):
+        return self._format_question(
+            parsed_result[0], parsed_result[1], parsed_result[2]
+        )
+
     @classmethod
     def _format_question(cls, question, options, answer):
         options_str = "\n".join([f'{x}) {y}' for x, y in zip(
@@ -3262,280 +3270,156 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                 scores[index] = _score
         return scores
 
+    async def get_difficulty_reward(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth):
 
-#     def compute_score(self,
-#                       batch_data_sources,
-#                       batch_solution_str,
-#                       batch_ground_truth,
-#                       ):
-#         async def main():
-#             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
-#         return aio.run(main())
+        ans_lists = await self.simulate_respondent(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
 
+        full_rewards = []
+        pass_rates = []
+        run_args = self.run_args
+        metric_args = self.args["difficulty_metric_args"]
 
-#     async def get_difficulty_reward(
-#             self,
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth,
-#             run_args=None,
-#             metric_args=None,
-#             debug=False):
-#         assert metric_args is not None, f'`metric_args` missed'
-#         assert run_args is not None, f'`run_args` missed'
+        for i in range(len(batch_solution_str)):
+            if i in list(ans_lists.values())[0]:
+                base_score = 0.0
 
-#         ans_lists = await self.simulate_respondent(
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth,
-#             run_args=run_args,
-#             debug=debug
-#         )
+                result = self.parse_solution_fn(batch_solution_str[i])
+                if result is None:
+                    pass_rates.append({})
+                    full_rewards.append(0.0)
+                    continue
 
-#         full_rewards = []
-#         pass_rates = []
+                question, options, answer = result
+                if len(options)+1 > len(self.MULTICHOICE_LETTER)-1:
+                    pass_rates.append({})
+                    full_rewards.append(0.0)
+                    continue
 
-#         for i in range(len(batch_solution_str)):
-#             if i in list(ans_lists.values())[0]:
-#                 base_score = 0.0
+                distractors = self.get_distractor_option_letters(options)
+                adv_name, weak_name = metric_args[
+                    "advantage"], metric_args["weakness"]
 
-#                 result = self.parse_solution_fn(batch_solution_str[i])
-#                 if result is None:
-#                     pass_rates.append({})
-#                     full_rewards.append(0.0)
-#                     continue
+                _adv, _weak = ans_lists[adv_name][i], ans_lists[weak_name][i]
 
-#                 question, options, answer = result
-#                 if len(options)+1 > len(self.MULTICHOICE_LETTER)-1:
-#                     pass_rates.append({})
-#                     full_rewards.append(0.0)
-#                     continue
+                ill_form_question = False
+                for _ans in _adv+_weak:
+                    if not isinstance(_ans, list):
+                        ill_form_question = True
+                        break
 
-#                 distractors = self.get_distractor_option_letters(options)
+                if not ill_form_question:
+                    if any([(not isinstance(_ans, list)) or len(_ans) > 1 for _ans in _adv+_weak]):
+                        ill_form_question = True
 
-#                 adv_name, weak_name = metric_args[
-#                     "advantage"], metric_args["weakness"]
-#                 # anchor_name = metric_args["anchor"]
-#                 # _adv, _weak, _anch = ans_lists[adv_name][i], ans_lists[weak_name][i], ans_lists[anchor_name][i]
-#                 _adv, _weak = ans_lists[adv_name][i], ans_lists[weak_name][i]
+                    if any([any(x in distractors for x in _ans) for _ans in _adv+_weak]):
+                        ill_form_question = True
 
-#                 ill_form_question = False
-#                 for _ans in _adv+_weak:
-#                     if not isinstance(_ans, list):
-#                         ill_form_question = True
-#                         break
+                adv, weak = [], []
+                for a in _adv:
+                    if ill_form_question:
+                        adv.append(0.0)
+                    else:
+                        if len(a) > 0 and a[0] == answer:
+                            adv.append(1.0)
+                        else:
+                            adv.append(0.0)
 
-#                 if not ill_form_question:
-#                     if any([(not isinstance(_ans, list)) or len(_ans) > 1 for _ans in _adv+_weak]):
-#                         ill_form_question = True
+                for w in _weak:
+                    if ill_form_question:
+                        weak.append(0.0)
+                    else:
+                        if len(w) > 0 and w[0] == answer:
+                            weak.append(1.0)
+                        else:
+                            weak.append(0.0)
 
-#                     if any([any(x in distractors for x in _ans) for _ans in _adv+_weak]):
-#                         ill_form_question = True
+                _pass_rate = {
+                    adv_name: f'{np.sum(adv)}/{len(adv)} ANS={answer} {_adv}',
+                    weak_name: f'{np.sum(weak)}/{len(weak)} ANS={answer} {_weak}',
+                }
+                pass_rates.append(_pass_rate)
 
-#                 adv, weak = [], []
-#                 anchor = []
+                if len(weak) == 0 or len(adv) == 0:
+                    full_rewards.append(base_score)
+                    continue
 
-#                 for a in _adv:
-#                     if ill_form_question:
-#                         adv.append(0.0)
-#                     else:
-#                         if len(a) > 0 and a[0] == answer:
-#                             adv.append(1.0)
-#                         else:
-#                             adv.append(0.0)
+                # 题目过难
+                if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
+                    full_rewards.append(base_score)
+                    continue
 
-#                 for w in _weak:
-#                     if ill_form_question:
-#                         weak.append(0.0)
-#                     else:
-#                         if len(w) > 0 and w[0] == answer:
-#                             weak.append(1.0)
-#                         else:
-#                             weak.append(0.0)
+                # 题目过易
+                if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
+                    full_rewards.append(base_score)
+                    continue
 
-#                 # for c in _anch:
-#                 #     if ill_form_question:
-#                 #         anchor.append(0.0)
-#                 #     else:
-#                 #         if len(c) > 0 and c[0] == answer:
-#                 #             anchor.append(1.0)
-#                 #         else:
-#                 #             anchor.append(0.0)
+                # adv 应该比 weakness 显著好
+                if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
+                    full_rewards.append(base_score)
+                    continue
 
-#                 _pass_rate = {
-#                     adv_name: f'{np.sum(adv)}/{len(adv)} ANS={answer} {_adv}',
-#                     weak_name: f'{np.sum(weak)}/{len(weak)} ANS={answer} {_weak}',
-#                     # anchor_name: f'{np.sum(anchor)}/{len(anchor)} ANS={answer} {_anch}',
-#                 }
-#                 pass_rates.append(_pass_rate)
+                # # 但是也不能好的太多
+                # if np.mean(adv) - np.mean(weak) > metric_args["advantage_threshold_limit"]:
+                #     full_rewards.append(base_score)
+                #     continue
 
-#                 if len(weak) == 0 or len(adv) == 0:
-#                     full_rewards.append(base_score)
-#                     continue
+                # 增加限制：带参考回答Majority Vote必须和答案一致
+                majority_votes = defaultdict(int)
+                for adv_attempt in _adv:
+                    if isinstance(adv_attempt, list) and len(adv_attempt) == 1:
+                        majority_votes[adv_attempt[0]] += 1
 
-#                 # 题目过难
-#                 if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
-#                     full_rewards.append(base_score)
-#                     continue
+                success = True
+                for k, v in majority_votes.items():
+                    if k != answer:
+                        if v >= majority_votes[answer]:
+                            success = False
+                            break
+                if not success:
+                    full_rewards.append(base_score)
+                    continue
 
-#                 # 题目过易
-#                 if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
-#                     full_rewards.append(base_score)
-#                     continue
+                # 难度奖励
+                def calc_difficulty(scores, total_attempts):
+                    return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
 
-#                 # adv 应该比 weakness 显著好
-#                 if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
-#                     full_rewards.append(base_score)
-#                     continue
+                # 两部分构成
+                in_context_difficulty = metric_args["weakness_weight"] * \
+                    calc_difficulty(weak, run_args[weak_name]["repeat"])
+                # output_context_difficulty = metric_args["anchor_weight"] * (calc_difficulty(
+                #     anchor, run_args[anchor_name]["repeat"]) - calc_difficulty(adv, run_args[adv_name]["repeat"]))
 
-#                 # # 但是也不能好的太多
-#                 # if np.mean(adv) - np.mean(weak) > metric_args["advantage_threshold_limit"]:
-#                 #     full_rewards.append(base_score)
-#                 #     continue
+                base_score = [
+                    in_context_difficulty,
+                    # output_context_difficulty
+                ]
+                full_rewards.append(base_score)
+            else:
+                pass_rates.append({})
+                full_rewards.append(0.0)
+        return full_rewards, pass_rates
 
-#                 # # adv 应该比 anchor 显著好
-#                 # if not (np.mean(adv) > np.mean(anchor)):
-#                 #     full_rewards.append(base_score)
-#                 #     continue
+    def coarse_process(self):
+        return [
+            # 快速判断问题质量
+            Process(name="QuickQuality",
+                    function=self.quick_question_eval, filter_only=True, non_skip=False),
+        ]
 
-#                 # 增加限制：带参考回答Majority Vote必须和答案一致
-#                 majority_votes = defaultdict(int)
-#                 for adv_attempt in _adv:
-#                     if isinstance(adv_attempt, list) and len(adv_attempt) == 1:
-#                         majority_votes[adv_attempt[0]] += 1
+    def finegrain_process(self):
+        return Process(name="Difficulty", function=self.get_difficulty_reward, filter_only=False, non_skip=False)
 
-#                 success = True
-#                 for k, v in majority_votes.items():
-#                     if k != answer:
-#                         if v >= majority_votes[answer]:
-#                             success = False
-#                             break
-#                 if not success:
-#                     full_rewards.append(base_score)
-#                     continue
-
-#                 # 难度奖励
-#                 def calc_difficulty(scores, total_attempts):
-#                     return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
-
-#                 # 两部分构成
-#                 in_context_difficulty = metric_args["weakness_weight"] * \
-#                     calc_difficulty(weak, run_args[weak_name]["repeat"])
-#                 # output_context_difficulty = metric_args["anchor_weight"] * (calc_difficulty(
-#                 #     anchor, run_args[anchor_name]["repeat"]) - calc_difficulty(adv, run_args[adv_name]["repeat"]))
-
-#                 base_score = [
-#                     in_context_difficulty,
-#                     # output_context_difficulty
-#                 ]
-#                 full_rewards.append(base_score)
-#             else:
-#                 pass_rates.append({})
-#                 full_rewards.append(0.0)
-#         return full_rewards, pass_rates
-
-#     async def _compute_score(self,
-#                              batch_data_sources,
-#                              batch_solution_str,
-#                              batch_ground_truth,
-#                              ):
-#         self.initialize_record_rollout_samples_module()
-
-#         penalty = defaultdict(list)
-#         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-#             parsed = self.parse_solution_fn(solution_str)
-#             if parsed is None:
-#                 penalty[i].append(-2.0)
-#             else:
-#                 penalty[i].append(0.0)
-
-#             for key in self.penalty_on():
-#                 penalty[i].append(self.get_penalties()[key]
-#                                   (solution_str, ground_truth))
-
-#         # 难度奖励
-#         difficulty_rewards, pass_rates = await self.get_difficulty_reward(
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth,
-#             run_args=self.args["difficulty_run_args"],
-#             metric_args=self.args["difficulty_metric_args"],
-#         )
-
-#         bad_q_penalties = await self.get_bad_question_penalty(
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth,
-#             max_concurrent_requests=32
-#         )
-
-#         final_results = []
-#         for i in range(len(batch_solution_str)):
-#             scores = copy.deepcopy(penalty[i])
-#             penalties = ["Parse"]+list(self.penalty_on())
-#             penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
-#                                        s in zip(penalties, scores)])
-
-#             scores.append(bad_q_penalties[i])
-
-#             # 难度奖励
-#             _difficulty = difficulty_rewards[i]
-#             _difficulty_score = np.sum(_difficulty) if isinstance(
-#                 _difficulty, list) else _difficulty
-#             scores.append(_difficulty_score)
-
-#             cur_score = 0
-
-#             for j, _score in enumerate(scores):
-#                 if _score < 0:
-#                     cur_score = _score
-#                     break
-#                 else:
-#                     cur_score += _score
-
-#             # 保存Rollout信息
-#             if cur_score > 0 and self.split == "train":
-#                 self.update_rollout_info(
-#                     solution_str=batch_solution_str[i],
-#                     ground_truth=batch_ground_truth[i],
-#                     difficulty=pass_rates[i]
-#                 )
-
-#             final_results.append(cur_score)
-
-#             if cur_score > 0 or (self.split == "valid") or (self.split == "train" and random.random() < 0.1):
-#                 log = True
-#                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
-#             else:
-#                 log = False
-
-#             source = batch_ground_truth[i]["source"]
-
-#             if log:
-#                 print(
-#                     f"--------------------------------{log_flag}--------------------------------")
-#                 print(
-#                     f"【Solution】({source})`{self.log_solution(batch_solution_str[i])}`")
-
-#                 print(
-#                     f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|Difficulty={str(difficulty_rewards[i])}|BadQ={bad_q_penalties[i]}|{penalty_log_str}\n')
-
-#                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
-
-#                 if random.random() < 0.1 and thought is not None:
-#                     print(f'[Thought]\n{thought}')
-#                     print()
-
-#         if self.split == "valid":
-#             pass
-#         self.save_rollout_info()
-
-#         return final_results
-
-
-# # ------------------------------------------------------------------------------------------------------------------------------------------------------
-# # DOC2QUERY V3
-# # -----------------------------------------
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# DOC2QUERY V3
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 # class FabricateAIOComputeScore(object):
@@ -4090,7 +3974,6 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 #                     print()
 
 #         return final_results
-
 #     def clip_string(self, s: str):
 #         if len(s) > 1500:
 #             return f'{s[:700]}... [省略] ...{s[-800:]}'
