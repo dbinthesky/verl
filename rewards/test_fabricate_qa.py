@@ -318,28 +318,9 @@ class TestSALT(unittest.TestCase):
             print(results)
         aio.run(main())
 
-        # salt_default_compute_score_valid(
-        #     [None] *
-        #     len(batch_solution_str), batch_solution_str, batch_ground_truth,
-        # )
-        # async def main():
-        #     results = await task.get_learnable_reward(
-        #         [None] *
-        #         len(batch_solution_str), batch_solution_str, batch_ground_truth,
-        #         run_args=SALT_DEFAULT_PARAMS["learnable_run_args"], debug=True,
-        #         metric_args=SALT_DEFAULT_PARAMS["learnable_metric_args"]
-        #     )
-        #     # results = await task.self_taught(
-        #     #     [None] *
-        #     #     len(batch_solution_str), batch_solution_str, batch_ground_truth,
-        #     #     run_args=SALT_DEFAULT_PARAMS["learnable_run_args"], debug=True
-        #     # )
-
-        #     print(len(results))
-        # aio.run(main())
-
     def test_hack_detect(self):
-        batch_solution_str, batch_ground_truth = load_salt_data(num=100)
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="salt", num=4)
 
         task = SALTComputeScore(
             salt_parse_solution_fn, split="valid", args=SALT_DEFAULT_PARAMS)
@@ -348,10 +329,8 @@ class TestSALT(unittest.TestCase):
             results = await task.get_hack_penalty(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
-                run_args=SALT_DEFAULT_PARAMS["hack_detection_run_args"]
             )
 
-            # assert len(results[0]) == len(results[1])
             print(results)
         aio.run(main())
 

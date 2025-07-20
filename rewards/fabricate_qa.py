@@ -1132,7 +1132,7 @@ class QuestionRefineHack(BatchCallOpenAPI):
 
     @classmethod
     def task_desc(cls):
-        return "问题改进HACK"
+        return "问题HACK"
 
     def prompt_fn(self, example):
         prompt = self._TEMPLATE + \
@@ -2720,7 +2720,7 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
         full_rewards = []
         pass_rates = []
 
-        run_args = self.run_args["learnable_run_args"]
+        run_args = self.args["learnable_run_args"]
         metric_args = self.args["learnable_metric_args"]
 
         for i in range(len(batch_solution_str)):
@@ -2774,279 +2774,274 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                 full_rewards.append(0.0)
         return full_rewards, pass_rates
 
-#     async def get_hack_penalty(
-#         self,
-#         batch_data_sources,
-#         batch_solution_str,
-#         batch_ground_truth,
-#         max_concurrent_requests=128,
-#         run_args=None
-#     ):
-#         assert run_args is not None
+    async def get_hack_penalty(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+    ):
+        task = QuestionRefineHack()
+        indices = []
+        questions = []
 
-#         indices = []
-#         fabricates, authentics = [], []
-#         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-#             fabricate = self.parse_solution_fn(sol)
-#             if fabricate is not None and gt.get("question", None):
-#                 fabricates.append(fabricate[0])
-#                 authentics.append(gt["question"])
-#                 indices.append(i)
-#             else:
-#                 continue
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            result = self.parse_solution_fn(sol)
+            if result is not None and gt.get("question", None):
+                questions.append((gt["question"], result[0]))
+                indices.append(i)
+            else:
+                continue
 
-#         similarity = await self._hack_detect(
-#             agent=self.get_verify_agent(),
-#             authentic=authentics,
-#             fabricate=fabricates,
-#             max_concurrent_requests=max_concurrent_requests
-#         )
+        hacks = await task.do_job(
+            agent=self.verify_agent,
+            batch_inputs=questions,
+            max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
+        )
 
-#         scores = [0.0] * len(batch_solution_str)
-#         for sim, index in zip(similarity, indices):
-#             if sim is None:
-#                 pass
-#             else:
-#                 _score = 0.0
-#                 for threshold, set_val in run_args["threshold"].items():
-#                     if sim >= threshold:
-#                         _score = min(_score, set_val)
-#                 scores[index] = _score * run_args["weight"]
-#         return scores
+        run_args = self.args["hack_detection_run_args"]
 
-#     async def get_similarity_penalty(
-#         self,
-#         batch_data_sources,
-#         batch_solution_str,
-#         batch_ground_truth,
-#         max_concurrent_requests=128,
-#         run_args=None
-#     ):
-#         assert run_args is not None
+        scores = [0.0] * len(batch_solution_str)
+        for sim, index in zip(hacks, indices):
+            if sim is None:
+                pass
+            else:
+                _score = 0.0
+                for threshold, set_val in run_args["threshold"].items():
+                    if sim >= threshold:
+                        _score = min(_score, set_val)
+                scores[index] = _score * run_args["weight"]
+        return scores
 
-#         indices = []
-#         fabricates, authentics = [], []
-#         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-#             fabricate = self.parse_solution_fn(sol)
-#             if fabricate is not None and gt.get("question", None):
-#                 fabricates.append(fabricate[0])
-#                 authentics.append(gt["question"])
-#                 indices.append(i)
-#             else:
-#                 continue
+        #     async def get_similarity_penalty(
+        #         self,
+        #         batch_data_sources,
+        #         batch_solution_str,
+        #         batch_ground_truth,
+        #         max_concurrent_requests=128,
+        #         run_args=None
+        #     ):
+        #         assert run_args is not None
 
-#         similarity = await question_similarity(
-#             agent=self.get_verify_agent(),
-#             authentic=authentics,
-#             fabricate=fabricates,
-#             max_concurrent_requests=max_concurrent_requests
-#         )
+        #         indices = []
+        #         fabricates, authentics = [], []
+        #         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+        #             fabricate = self.parse_solution_fn(sol)
+        #             if fabricate is not None and gt.get("question", None):
+        #                 fabricates.append(fabricate[0])
+        #                 authentics.append(gt["question"])
+        #                 indices.append(i)
+        #             else:
+        #                 continue
 
-#         scores = [0.0] * len(batch_solution_str)
-#         for sim, index in zip(similarity, indices):
-#             if sim is None:
-#                 pass
-#             else:
-#                 _score = 0.0
-#                 for threshold, set_val in run_args["threshold"].items():
-#                     if sim >= threshold:
-#                         _score = min(_score, set_val)
-#                 scores[index] = _score * run_args["weight"]
-#         return scores
+        #         similarity = await question_similarity(
+        #             agent=self.get_verify_agent(),
+        #             authentic=authentics,
+        #             fabricate=fabricates,
+        #             max_concurrent_requests=max_concurrent_requests
+        #         )
 
-#     def compute_score(self,
-#                       batch_data_sources,
-#                       batch_solution_str,
-#                       batch_ground_truth,
-#                       max_concurrent_requests=MAX_CONCURRENT,
-#                       ):
-#         async def main():
-#             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, max_concurrent_requests=max_concurrent_requests)
-#         return aio.run(main())
+        #         scores = [0.0] * len(batch_solution_str)
+        #         for sim, index in zip(similarity, indices):
+        #             if sim is None:
+        #                 pass
+        #             else:
+        #                 _score = 0.0
+        #                 for threshold, set_val in run_args["threshold"].items():
+        #                     if sim >= threshold:
+        #                         _score = min(_score, set_val)
+        #                 scores[index] = _score * run_args["weight"]
+        #         return scores
 
-#     def log_solution(self, solution):
-#         norm = self.parse_solution_fn(solution)
-#         if norm is None:
-#             return repr(self.clip_string(solution))
-#         return repr(self.format_question(norm[0], norm[1]))
+        #     def compute_score(self,
+        #                       batch_data_sources,
+        #                       batch_solution_str,
+        #                       batch_ground_truth,
+        #                       max_concurrent_requests=MAX_CONCURRENT,
+        #                       ):
+        #         async def main():
+        #             return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth, max_concurrent_requests=max_concurrent_requests)
+        #         return aio.run(main())
 
-#     def format_question(self, question, answer):
-#         return f'Question: {question}\nAnswer: {answer}'
+        #     def log_solution(self, solution):
+        #         norm = self.parse_solution_fn(solution)
+        #         if norm is None:
+        #             return repr(self.clip_string(solution))
+        #         return repr(self.format_question(norm[0], norm[1]))
 
-#     def log_ground_truth(self, ground_truth):
-#         return repr(self.format_question(ground_truth["question"], ground_truth["answer"])
-#                     )
+        #     def format_question(self, question, answer):
+        #         return f'Question: {question}\nAnswer: {answer}'
 
-#     def update_rollout_info(self, solution_str, ground_truth, difficulty):
-#         parsed = self.parse_solution_fn(solution_str)
-#         if parsed is None:
-#             return
-#         question, answer = parsed
-#         inst_id = ground_truth["extra_info"]["uuid"]
-#         if inst_id not in self.self.rollout_cache:
-#             self.self.rollout_cache[inst_id] = LRUCache(
-#                 capacity=self.record_rollout_max_capacity)
+        #     def log_ground_truth(self, ground_truth):
+        #         return repr(self.format_question(ground_truth["question"], ground_truth["answer"])
+        #                     )
 
-#         args = copy.deepcopy(self.args)
-#         for k, v in args["learnable_run_args"].items():
-#             del v["fn"]
-#             for field, value in v.items():
-#                 if field == "model":
-#                     args["learnable_run_args"][k][field] = value.model
+        #     def update_rollout_info(self, solution_str, ground_truth, difficulty):
+        #         parsed = self.parse_solution_fn(solution_str)
+        #         if parsed is None:
+        #             return
+        #         question, answer = parsed
+        #         inst_id = ground_truth["extra_info"]["uuid"]
+        #         if inst_id not in self.self.rollout_cache:
+        #             self.self.rollout_cache[inst_id] = LRUCache(
+        #                 capacity=self.record_rollout_max_capacity)
 
-#         self.self.rollout_cache[inst_id][question] = {
-#             "prompt_generation_process": solution_str,
-#             "question": question,
-#             "answer": answer,
-#             "difficulty": {
-#                 "meta": args,
-#                 "pass_rate": difficulty
-#             }
-#         }
+        #         args = copy.deepcopy(self.args)
+        #         for k, v in args["learnable_run_args"].items():
+        #             del v["fn"]
+        #             for field, value in v.items():
+        #                 if field == "model":
+        #                     args["learnable_run_args"][k][field] = value.model
 
-#     def save_rollout_info(self):
-#         """将缓存保存为JSON文件"""
-#         data = {k: {"capacity": v.capacity, "items": list(v.get_items()), "access_order": list(
-#             v._access_order.keys())} for k, v in self.self.rollout_cache.items()}
+        #         self.self.rollout_cache[inst_id][question] = {
+        #             "prompt_generation_process": solution_str,
+        #             "question": question,
+        #             "answer": answer,
+        #             "difficulty": {
+        #                 "meta": args,
+        #                 "pass_rate": difficulty
+        #             }
+        #         }
 
-#         with open(self.save_rollout_samples_path, "wt") as f:
-#             json.dump(data, f, ensure_ascii=False, indent="  ")
+        #     def save_rollout_info(self):
+        #         """将缓存保存为JSON文件"""
+        #         data = {k: {"capacity": v.capacity, "items": list(v.get_items()), "access_order": list(
+        #             v._access_order.keys())} for k, v in self.self.rollout_cache.items()}
 
-#     def penalty_on(self):
-#         return ("Format", "Lang", "BadQ", "QSimPenalty")
+        #         with open(self.save_rollout_samples_path, "wt") as f:
+        #             json.dump(data, f, ensure_ascii=False, indent="  ")
 
-#     async def _compute_score(self,
-#                              batch_data_sources,
-#                              batch_solution_str,
-#                              batch_ground_truth,
-#                              max_concurrent_requests=MAX_CONCURRENT,
-#                              debug=False
-#                              ):
-#         self.initialize_record_rollout_samples_module()
+        #     def penalty_on(self):
+        #         return ("Format", "Lang", "BadQ", "QSimPenalty")
 
-#         penalty = defaultdict(list)
-#         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-#             parsed = self.parse_solution_fn(solution_str)
-#             if parsed is None:
-#                 penalty[i].append(-2.0)
-#             else:
-#                 penalty[i].append(0.0)
+        #     async def _compute_score(self,
+        #                              batch_data_sources,
+        #                              batch_solution_str,
+        #                              batch_ground_truth,
+        #                              max_concurrent_requests=MAX_CONCURRENT,
+        #                              debug=False
+        #                              ):
+        #         self.initialize_record_rollout_samples_module()
 
-#             for key in self.penalty_on():
-#                 penalty[i].append(self.get_penalties()[key]
-#                                   (solution_str, ground_truth))
+        #         penalty = defaultdict(list)
+        #         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+        #             parsed = self.parse_solution_fn(solution_str)
+        #             if parsed is None:
+        #                 penalty[i].append(-2.0)
+        #             else:
+        #                 penalty[i].append(0.0)
 
-#         # 难度降低奖励
-#         difficulty_reduction_rewards, pass_rates = await self.get_learnable_reward(
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth,
-#             run_args=self.args["learnable_run_args"],
-#             metric_args=self.args["learnable_metric_args"],
-#             max_concurrent_requests=max_concurrent_requests,
-#             debug=debug
-#         )
-#         # 相似度惩罚
-#         similarity_penalties = await self.get_similarity_penalty(
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth,
-#             max_concurrent_requests=max_concurrent_requests,
-#             run_args=self.args["similarity_run_args"],
-#         )
+        #             for key in self.penalty_on():
+        #                 penalty[i].append(self.get_penalties()[key]
+        #                                   (solution_str, ground_truth))
 
-#         hack_penalties = await self.get_hack_penalty(
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth,
-#             max_concurrent_requests=max_concurrent_requests,
-#             run_args=self.args["hack_detection_run_args"],
-#         )
+        #         # 难度降低奖励
+        #         difficulty_reduction_rewards, pass_rates = await self.get_learnable_reward(
+        #             batch_data_sources,
+        #             batch_solution_str,
+        #             batch_ground_truth,
+        #             run_args=self.args["learnable_run_args"],
+        #             metric_args=self.args["learnable_metric_args"],
+        #             max_concurrent_requests=max_concurrent_requests,
+        #             debug=debug
+        #         )
+        #         # 相似度惩罚
+        #         similarity_penalties = await self.get_similarity_penalty(
+        #             batch_data_sources,
+        #             batch_solution_str,
+        #             batch_ground_truth,
+        #             max_concurrent_requests=max_concurrent_requests,
+        #             run_args=self.args["similarity_run_args"],
+        #         )
 
-#         final_results = []
-#         for i in range(len(batch_solution_str)):
-#             scores = copy.deepcopy(penalty[i])
+        #         hack_penalties = await self.get_hack_penalty(
+        #             batch_data_sources,
+        #             batch_solution_str,
+        #             batch_ground_truth,
+        #             max_concurrent_requests=max_concurrent_requests,
+        #             run_args=self.args["hack_detection_run_args"],
+        #         )
 
-#             penalties = ["Parse"]+list(self.penalty_on())
-#             penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
-#                                         s in zip(penalties, scores)])
-#             _difficulty = difficulty_reduction_rewards[i]
-#             _difficulty_score = np.sum(_difficulty) if isinstance(
-#                 _difficulty, list) else _difficulty
-#             scores.append(_difficulty_score)
+        #         final_results = []
+        #         for i in range(len(batch_solution_str)):
+        #             scores = copy.deepcopy(penalty[i])
 
-#             cur_score = 0
+        #             penalties = ["Parse"]+list(self.penalty_on())
+        #             penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
+        #                                         s in zip(penalties, scores)])
+        #             _difficulty = difficulty_reduction_rewards[i]
+        #             _difficulty_score = np.sum(_difficulty) if isinstance(
+        #                 _difficulty, list) else _difficulty
+        #             scores.append(_difficulty_score)
 
-#             for j, _score in enumerate(scores):
-#                 if (j == penalties.index("QSimPenalty")):  # BLEU
-#                     if _difficulty_score > 0:
-#                         cur_score += _score
-#                 else:
-#                     if _score < 0:
-#                         cur_score = _score
-#                         break
-#                     else:
-#                         cur_score += _score
+        #             cur_score = 0
 
-#             if _difficulty_score > 0:
-#                 cur_score += similarity_penalties[i]
+        #             for j, _score in enumerate(scores):
+        #                 if (j == penalties.index("QSimPenalty")):  # BLEU
+        #                     if _difficulty_score > 0:
+        #                         cur_score += _score
+        #                 else:
+        #                     if _score < 0:
+        #                         cur_score = _score
+        #                         break
+        #                     else:
+        #                         cur_score += _score
 
-#             # Hack惩罚
-#             cur_score += hack_penalties[i]
+        #             if _difficulty_score > 0:
+        #                 cur_score += similarity_penalties[i]
 
-#             # 保存Rollout信息
-#             if cur_score > 0 and self.split == "train":
-#                 self.update_rollout_info(
-#                     solution_str=batch_solution_str[i],
-#                     ground_truth=batch_ground_truth[i],
-#                     difficulty=pass_rates[i]
-#                 )
+        #             # Hack惩罚
+        #             cur_score += hack_penalties[i]
 
-#             final_results.append(cur_score)
+        #             # 保存Rollout信息
+        #             if cur_score > 0 and self.split == "train":
+        #                 self.update_rollout_info(
+        #                     solution_str=batch_solution_str[i],
+        #                     ground_truth=batch_ground_truth[i],
+        #                     difficulty=pass_rates[i]
+        #                 )
 
-#             if cur_score > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
-#                 log = True
-#                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
-#             else:
-#                 log = False
+        #             final_results.append(cur_score)
 
-#             if cur_score == -2.0:
-#                 log = True
-#                 log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN CORRUPT RESPONSE]"
+        #             if cur_score > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+        #                 log = True
+        #                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+        #             else:
+        #                 log = False
 
-#             source = batch_ground_truth[i]["source"]
+        #             if cur_score == -2.0:
+        #                 log = True
+        #                 log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN CORRUPT RESPONSE]"
 
-#             if log:
-#                 print(
-#                     f"--------------------------------{log_flag}--------------------------------")
-#                 print(
-#                     f"【Solution】({source})`{self.log_solution(batch_solution_str[i])}`")
-#                 try:
-#                     print(
-#                         f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
-#                 except Exception as err:
-#                     pass
-#                 print(
-#                     f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|DiffReduction={str(difficulty_reduction_rewards[i])}|SimPenalty={str(similarity_penalties[i])}|Hack={str(hack_penalties[i])}|{penalty_log_str}\n')
+        #             source = batch_ground_truth[i]["source"]
 
-#                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
+        #             if log:
+        #                 print(
+        #                     f"--------------------------------{log_flag}--------------------------------")
+        #                 print(
+        #                     f"【Solution】({source})`{self.log_solution(batch_solution_str[i])}`")
+        #                 try:
+        #                     print(
+        #                         f"【Ground Truth】`{self.log_ground_truth(batch_ground_truth[i])}`")
+        #                 except Exception as err:
+        #                     pass
+        #                 print(
+        #                     f'[Final Reward]={cur_score:.3f}({pass_rates[i]})|DiffReduction={str(difficulty_reduction_rewards[i])}|SimPenalty={str(similarity_penalties[i])}|Hack={str(hack_penalties[i])}|{penalty_log_str}\n')
 
-#                 if (random.random() < 0.1 or cur_score > 0.) and thought is not None:
-#                     print(f'[Thought]\n{thought}')
-#                     print()
+        #                 thought = calc_qa_parse_thought_fn(batch_solution_str[i])
 
-#                 if cur_score == -2.0:
-#                     print(f'[Response]\n{batch_solution_str[i]}')
-#                     print()
+        #                 if (random.random() < 0.1 or cur_score > 0.) and thought is not None:
+        #                     print(f'[Thought]\n{thought}')
+        #                     print()
 
-#                 if self.split == "valid":
-#                     pass
+        #                 if cur_score == -2.0:
+        #                     print(f'[Response]\n{batch_solution_str[i]}')
+        #                     print()
 
-#                 self.save_rollout_info()
+        #                 if self.split == "valid":
+        #                     pass
 
-#         return final_results
-
-
+        #                 self.save_rollout_info()
+        #         return final_results
 SALT_DEFAULT_PARAMS = {
     "learnable_run_args": {
         "self_taught": {
