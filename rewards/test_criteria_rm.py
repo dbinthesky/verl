@@ -10,7 +10,11 @@ import asyncio as aio
 from tqdm import tqdm
 from criteria_rm import (
     Agent,
-    RLVRVerify
+    RLVRVerify,
+    AutoPEComputeScore,
+    parse_autope_solution_fn,
+    AUTOPE_DEFAULT_PARAMS,
+    compute_score_valid
 )
 
 
@@ -37,6 +41,27 @@ def load_data(num=100):
     return batch_solution_str, batch_ground_truth
 
 
+def load_dataset(num=100):
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/autope_dapo_math_17k_bo32.parquet"
+    batch_solution_str, batch_ground_truth = [], []
+    batch_data_sources = []
+
+    df = pd.read_parquet(filename)
+    count = 0
+    for _, row in df.iterrows():
+        row = row.to_dict()
+        batch_data_sources.append(row["data_source"])
+
+        prompt = row["reward_model"]["prompt"]
+        batch_solution_str.append(
+            f'<think>\nUNITTEST_ONLY\n</think>\n\n<prompt_engineering>\nQuestion: {prompt}\n\nThink step by step.\n</prompt_engineering>'
+        )
+        batch_ground_truth.append(row["reward_model"])
+        if len(batch_ground_truth) == num:
+            break
+    return batch_solution_str, batch_ground_truth
+
+
 class TestAutoPE(unittest.TestCase):
 
     def test_rlvr_verify(self):
@@ -54,25 +79,20 @@ class TestAutoPE(unittest.TestCase):
         aio.run(main())
 
     def test_compute_score(self):
-        pass
-        # batch_solution_str, batch_ground_truth = load_data()
-        # task = MapReduceComputeScore(split="valid")
-
-        # # async def main():
-        # #     results = await task._compute_score(
-        # #         [None] *
-        # #         len(batch_solution_str), batch_solution_str, batch_ground_truth,
-        # #     )
-        # # aio.run(main())
-
-        # print(compute_score_valid(
-        #     [None] *
-        #     len(batch_solution_str), batch_solution_str, batch_ground_truth
-        # ))
-        # print(compute_score_valid(
-        #     [None] *
-        #     len(batch_solution_str), batch_solution_str, batch_ground_truth
-        # ))
+        # task = AutoPEComputeScore(
+        #     parse_autope_solution_fn, split="valid", args=AUTOPE_DEFAULT_PARAMS)
+        batch_solution_str, batch_ground_truth = load_dataset(num=6)
+        compute_score_valid(
+            [None] *
+            len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        )
+        # async def main():
+        #     results = await task._compute_score(
+        #         [None] *
+        #         len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        #     )
+        #     print(results)
+        # aio.run(main())
 
 
 if __name__ == '__main__':

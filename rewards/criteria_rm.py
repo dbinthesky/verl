@@ -2,11 +2,16 @@ import re
 import os
 import json
 import uuid
+import jieba
 import random
 import aiohttp
 import requests
 import tqdm.asyncio
+import numpy as np
 import asyncio as aio
+from functools import partial
+from collections import namedtuple, defaultdict
+from sacremoses import MosesTokenizer, MosesDetokenizer
 from abc import ABCMeta, abstractmethod, abstractclassmethod
 
 
@@ -15,6 +20,8 @@ from collections import defaultdict
 
 from openai import OpenAI, RateLimitError, AsyncOpenAI, RateLimitError
 from tenacity import retry, stop_after_attempt, wait_exponential
+
+en_mt = MosesTokenizer(lang='en')
 
 
 RLVR_VERIFY_FEWSHOTS = """### **基于标准答案判断回答是否正确**
@@ -184,6 +191,19 @@ def postprocess_solution(solution_str):
     return solution_str
 
 
+def contains_chinese(text):
+    pattern = re.compile(r'[\u4e00-\u9fff]')
+    return bool(pattern.search(text))
+
+
+def tokenize(s, lang_code):
+    if lang_code == "en":
+        tokenized_text = en_mt.tokenize(s.lower())
+    elif lang_code == "zh":
+        tokenized_text = list(jieba.cut(s))
+    return tokenized_text
+
+
 class BatchCallOpenAPI(metaclass=ABCMeta):
 
     @abstractmethod
@@ -280,147 +300,347 @@ class RLVRVerify(BatchCallOpenAPI):
 # AUTOPE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+
+def parse_autope_solution_fn(solution_str: str, max_prompt_size=4096):
+    if solution_str.count("</prompt_engineering>") > 1:
+        return None
+
+    if solution_str.count("</think>") > 1:
+        return None
+
+    solution_str = postprocess_solution(solution_str)
+    if not solution_str.startswith("<think>"):
+        solution_str = f'<think>\n{solution_str}'
+
+    try:
+        thought = re.findall(r'<think>.*</think>',
+                             solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+
+    solution_str = solution_str.replace(thought, "")
+
+    try:
+        conclusion = re.findall(r'<prompt_engineering>(.*)</prompt_engineering>',
+                                solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+    if ("<prompt_engineering>" in conclusion) or ("</prompt_engineering>" in conclusion):
+        return None
+
+    if contains_chinese(conclusion):
+        tokens = tokenize(conclusion, "zh")
+    else:
+        tokens = tokenize(conclusion, "en")
+
+    if len(tokens) > max_prompt_size:
+        return None
+
+    return thought, conclusion
+
+
+VerifyInfo = namedtuple("VerifyInfo", "index,tag,response,extra,ground_truth")
+
+
+class AutoPEComputeScore(object):
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-2.0
+                 ):
+
+        self.split = split
+        self.parse_solution_fn = parse_solution_fn
+        assert args is not None
+        self.args = args
+        self.task_name = "AUTOPE"
+        self.min_reward = min_reward
+
+        # 初始化API Client
+        self.init_agent()
+
+        self.initialized_save_rollout = False
+
+    def init_save_rollouts(self):
+        if self.initialized_save_rollout:
+            return
+
+        # 保存Rollouts数据
+        default_local_dir = self.args["save_rollouts"]["default_local_dir"]
+
+        save_path = os.path.join(
+            default_local_dir, f'{self.task_name}_{uuid.uuid4().hex}.jsonl')
+        self.save_rollouts_path = save_path
+
+        print(
+            f'[INFO] SAVE ROLLOUTS {self.task_name}: {self.save_rollouts_path}')
+
+        self.rollout_cache = []
+        self.initialized_save_rollout = True
+
+    def init_agent(self):
+        self.agents = {}
+        self.init_verify_agent()
+        self.init_solver_agent()
+
+    def init_verify_agent(self):
+        self.verify_agent = Agent(
+            **self.args["verify_agent"]["model"])
+
+    def init_solver_agent(self):
+        self.solver_agent = Agent(
+            **self.args["solver_agent"]["model"])
+        self.agents["solver_agent"] = self.solver_agent
+
+    def clip_string(self, s: str):
+        if len(s) > 1500:
+            return f'{s[:700]}... [省略] ...{s[-800:]}'
+        return s
+
+    async def simulate_respondent(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            skip_run=None
+    ):
+        verify_task = RLVRVerify()
+
+        return await self._simulate_respondent(
+            batch_data_sources=batch_data_sources,
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=batch_ground_truth,
+            skip_run=skip_run,
+            run_args={"solver_agent": self.args["solver_agent"]},
+            batch_verify_fn=partial(
+                self.batch_verify_results, verify_task=verify_task),
+            resp_postprocess_fn=self.postprocess,
+            prompt_contexts=None
+        )
+
+    def postprocess(self, s):
+        try:
+            thought = re.findall(r'think>.*</think>', s, re.DOTALL)
+            if len(thought) > 0:
+                thought = thought[0]
+                conclusion = s.replace(thought, "")
+                return conclusion
+            else:
+                return s
+        except Exception as err:
+            raise PostprocessError(f'{err}')
+
+    async def batch_verify_results(self,
+                                   verify_queue,
+                                   max_concurrent_requests,
+                                   group_names,
+                                   verify_task,
+                                   return_input_response=False,
+                                   ):
+        correctness = {name: defaultdict(list) for name in group_names}
+
+        result_index2queue_index = {}
+
+        batch_eval_inputs = []
+        for queue_index, example in enumerate(verify_queue):
+            solver_response = example.response
+            if solver_response is None:
+                correctness[example.tag][example.index].append(0.0)
+            else:
+                batch_eval_inputs.append(
+                    (solver_response, example.ground_truth))
+
+                result_index2queue_index[len(
+                    batch_eval_inputs)-1] = queue_index
+
+        task = verify_task
+        evaluations = await task.do_job(
+            agent=self.verify_agent,
+            batch_inputs=batch_eval_inputs,
+            max_concurrent_requests=max_concurrent_requests,
+        )
+
+        for j, (eval_result, eval_input) in enumerate(zip(evaluations, batch_eval_inputs)):
+            queue_index = result_index2queue_index[j]
+            queue_elem = verify_queue[queue_index]
+            if eval_result is not None:
+                if return_input_response:
+                    correctness[queue_elem.tag][queue_elem.index].append(
+                        (eval_result, eval_input[0]))
+                else:
+                    correctness[queue_elem.tag][queue_elem.index].append(
+                        eval_result)
+        return correctness
+
+    def autope_template(self, result, gt):
+        thought, new_pe = result
+        return new_pe
+
+    async def _simulate_respondent(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            run_args,
+            batch_verify_fn,
+            resp_postprocess_fn,
+            skip_run=None,
+            prompt_contexts=None
+    ):
+        prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
+        extra = {}
+
+        if prompt_contexts is None:
+            prompt_contexts = [None] * len(batch_ground_truth)
+
+        for i, (solution_str, gt, extra_ctx) in enumerate(zip(batch_solution_str, batch_ground_truth, prompt_contexts)):
+            result = self.parse_solution_fn(solution_str)
+            if result is not None:
+                extra[i] = result
+                if skip_run is not None and i in skip_run:
+                    continue
+
+                for name, v in run_args.items():
+                    fn = getattr(self, v["fn"])
+                    if extra_ctx is None:
+                        _prompt = fn(result, gt)
+                    else:
+                        _prompt = fn(result, gt, extra_ctx)
+                    prompt2index[name][_prompt].append(i)
+        tasks = []
+        task_names = []
+        for name, v in prompt2index.items():
+            prompts = list(v.keys()) * run_args[name]["repeat"]
+            tasks.append(self.agents[name].run(
+                prompts,
+                run_args[name]["max_concurrent_requests"],
+                desc=f'[{run_args[name]["desc"]} {run_args[name]["model"]["model"]} Solver]',
+                pbar=True,
+                postprocess_fns=[resp_postprocess_fn] * len(prompts)
+            ))
+            task_names.append(name)
+
+        respond_questions = await aio.gather(*tasks)
+        # 验证答案正确性
+        verify_queue = []
+        for name, results in zip(task_names, respond_questions):
+            for (p, r) in results:
+                for index in prompt2index[name][p]:
+                    verify_queue.append(VerifyInfo(
+                        index=index,
+                        tag=name,
+                        response=r,
+                        extra=extra[index],
+                        ground_truth=batch_ground_truth[index]))
+
+        correctness = await batch_verify_fn(
+            verify_queue=verify_queue,
+            max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
+            group_names=task_names
+        )
+        return correctness["solver_agent"]
+
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+        async def main():
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+        return aio.run(main())
+
+    def log_solution(self, solution):
+        norm = self.parse_solution_fn(solution)
+        if norm is None:
+            return repr(self.clip_string(solution.strip()))
+        return repr(norm[1])
+
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+        accuracy = await self.simulate_respondent(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            if i in accuracy:
+                _reward = np.mean(accuracy[i])
+            else:
+                _reward = 0.0
+            final_results.append(_reward)
+
+            if _reward > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+                log = True
+                log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+            else:
+                log = False
+
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f'【Question】`{repr(batch_ground_truth[i]["prompt"])}`')
+                print(
+                    f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f'【Ground Truth】`{batch_ground_truth[i]["ground_truth"]}`')
+                print(
+                    f'[Final Reward]={_reward:.3f}\n')
+
+                parsed = self.parse_solution_fn(batch_solution_str[i])
+
+                if parsed is not None and random.random() < 0.2:
+                    print(f'[Thought]\n{parsed[0]}')
+                    print()
+        return final_results
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # AUTOPE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-# def parse_solution_fn(solution_str: str):
-#     if solution_str.count("</think>") > 1:
-#         return None
 
-#     solution_str = postprocess_solution(solution_str)
+AUTOPE_DEFAULT_PARAMS = {
+    "verify_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.154:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.7,
+                "timeout": 360,
+                "max_tokens": 512,
+            },
+        },
+        "max_concurrent_requests": 64
+    },
+    "solver_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.154:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.9,
+                "timeout": 360,
+                "max_tokens": 8192,
+            },
+        },
+        "repeat": 8,
+        "fn": "autope_template",
+        "desc": 'AUTOPE',
+        "max_concurrent_requests": 128
+    },
+    "save_rollouts": {
+        "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/autope_rollouts"
+    }
+}
 
-#     if not solution_str.startswith("<think>"):
-#         solution_str = f'<think>\n{solution_str}'
-
-#     try:
-#         thought = re.findall(r'<think>.*</think>',
-#                              solution_str, re.DOTALL)[0]
-#     except Exception as err:
-#         return None
-#     return solution_str.replace(thought, "").strip()
-
-
-# def parse_thought_fn(solution_str: str, remove_option_letter=True):
-#     if solution_str.count("</think>") > 1:
-#         return None
-
-#     solution_str = postprocess_solution(solution_str)
-
-#     if not solution_str.startswith("<think>"):
-#         solution_str = f'<think>\n{solution_str}'
-
-#     try:
-#         thought = re.findall(r'<think>.*</think>',
-#                              solution_str, re.DOTALL)[0]
-#     except Exception as err:
-#         return None
-#     return thought
-
-
-# class MapReduceComputeScore(object):
-#     def __init__(self, split="train"):
-#         self.split = split
-#         self.task_name = "MapReduce"
-#         self.initialized = False
-
-#     def initialize_record_rollout_samples_module(self):
-#         if not self.initialized:
-#             self.initialized = True
-#             self.save_rollout_samples_path = os.path.join(
-#                 ROLLOUT_SAVE_DIR, f'{self.task_name}_{uuid.uuid4().hex}.json')
-
-#             print(
-#                 f'[INFO] Save {self.task_name} rollout data into path: {self.save_rollout_samples_path}')
-
-#     @classmethod
-#     def get_verify_agent(cls):
-#         return Agent(**{
-#             "model": "qwen25_32B_instruct",
-#             "base_url": "http://10.130.142.154:8000/v1",
-#             "api_keys": "EMPTY",
-#             "request_kwargs": {
-#                 "temperature": 0.6,
-#                 "timeout": 360,
-#                 "max_tokens": 4096,
-#             },
-#         })
-
-
-#     def clip_string(self, s: str):
-#         if len(s) > 1500:
-#             return f'{s[:700]}... [省略] ...{s[-800:]}'
-#         return s
-
-#     def log_solution(self, solution):
-#         norm = parse_solution_fn(solution)
-#         if norm is None:
-#             return repr(self.clip_string(solution))
-#         return repr(norm)
-
-#     def compute_score(self,
-#                       batch_data_sources,
-#                       batch_solution_str,
-#                       batch_ground_truth,
-#                       max_concurrent_requests=64,
-#                       ):
-#         async def main():
-#             self.initialize_record_rollout_samples_module()
-#             rewards = await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth,  max_concurrent_requests=max_concurrent_requests)
-
-#             rollouts = defaultdict(list)
-#             for gt, reward in zip(batch_ground_truth, rewards):
-#                 rollouts[gt["uuid"]].append(reward)
-#             with open(self.save_rollout_samples_path, "a+") as f:
-#                 for k, v in rollouts.items():
-#                     f.write(
-#                         f'{json.dumps({"uuid": k, "rollouts": v}, ensure_ascii=False)}\n')
-#             return rewards
-#         return aio.run(main())
-
-#     async def _compute_score(self,
-#                              batch_data_sources,
-#                              batch_solution_str,
-#                              batch_ground_truth,
-#                              max_concurrent_requests=64,
-#                              ):
-#         accuracy = await self.get_accuracy(
-#             batch_data_sources,
-#             batch_solution_str,
-#             batch_ground_truth,
-#         )
-
-#         final_results = []
-#         for i in range(len(batch_solution_str)):
-#             _reward = accuracy[i]
-#             final_results.append(_reward)
-
-#             if _reward > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
-#                 log = True
-#                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
-#             else:
-#                 log = False
-
-#             if log:
-#                 print(
-#                     f"--------------------------------{log_flag}--------------------------------")
-#                 print(
-#                     f"【Solution】`{self.log_solution(batch_solution_str[i])}`")
-#                 try:
-#                     print(
-#                         f'【Ground Truth】`{batch_ground_truth[i]["ground_truth"]}`')
-#                 except Exception as err:
-#                     pass
-#                 print(
-#                     f'[Final Reward]={_reward:.3f}\n')
-
-#                 thought = parse_thought_fn(batch_solution_str[i])
-
-#                 if random.random() < 0.5 and thought is not None and _reward > 0:
-#                     print(f'[Thought]\n{thought}')
-#                     print()
-#         return final_results
-
-
-# compute_score_train = MapReduceComputeScore(split="train").compute_score
-# compute_score_valid = MapReduceComputeScore(split="valid").compute_score
+compute_score_train = AutoPEComputeScore(
+    parse_autope_solution_fn, split="train", args=AUTOPE_DEFAULT_PARAMS).compute_score
+compute_score_valid = AutoPEComputeScore(
+    parse_autope_solution_fn, split="valid", args=AUTOPE_DEFAULT_PARAMS).compute_score
