@@ -2420,7 +2420,8 @@ class Doc2QueryV2ComputeScore(object):
                 scores[index] = _score
 
         weight = 0.3
-        return [_ * weight for _ in scores]
+        # 五分制
+        return [_ * weight / 5.0 for _ in scores]
 
     async def quick_question_eval(
         self,
@@ -2530,6 +2531,9 @@ class Doc2QueryV2ComputeScore(object):
             skip_run=all_skip_next_action,
         )
         final_results = []
+
+        # TODO
+        main_reward_pos = None  # 记录主奖励位置
         for i in range(len(batch_solution_str)):
             scores = copy.deepcopy(penalty[i])
             penalties = ["Parse"]+[_.abbrev for _ in self._penalties]
@@ -2541,15 +2545,21 @@ class Doc2QueryV2ComputeScore(object):
                 _main_reward, list) else _main_reward
             scores.append(_main_reward)
 
+            main_reward_pos = len(scores) - 1
+
             for name, v in minor_rewards.items():
                 scores.append(v[i])
 
             cur_score = 0
 
+            # TODO
             for j, _score in enumerate(scores):
                 if _score < 0:
-                    cur_score = _score
-                    break
+                    if j < main_reward_pos:
+                        cur_score = _score
+                        break
+                    else:
+                        cur_score += _score
                 else:
                     cur_score += _score
 
