@@ -303,15 +303,18 @@ class RLVRVerify(BatchCallOpenAPI):
 
 
 def parse_autope_solution_fn(solution_str: str, max_prompt_size=4096):
-    if solution_str.count("</prompt_engineering>") > 1:
-        return None
-
-    if solution_str.count("</think>") > 1:
-        return None
-
     solution_str = postprocess_solution(solution_str)
     if not solution_str.startswith("<think>"):
         solution_str = f'<think>\n{solution_str}'
+
+    if solution_str.count("</prompt_engineering>") > 1 or solution_str.count("<prompt_engineering>") > 1:
+        return None
+
+    if solution_str.count("</think>") > 1 or solution_str.count("<think>") > 1:
+        return None
+
+    if not solution_str.endswith("</prompt_engineering>"):
+        return None
 
     try:
         thought = re.findall(r'<think>.*</think>',
@@ -326,7 +329,11 @@ def parse_autope_solution_fn(solution_str: str, max_prompt_size=4096):
                                 solution_str, re.DOTALL)[0]
     except Exception as err:
         return None
+
     if ("<prompt_engineering>" in conclusion) or ("</prompt_engineering>" in conclusion):
+        return None
+
+    if ("<think>" in conclusion) or ("</think>" in conclusion):
         return None
 
     if contains_chinese(conclusion):
