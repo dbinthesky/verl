@@ -12,8 +12,10 @@ from criteria_rm import (
     Agent,
     RLVRVerify,
     AutoPEComputeScore,
+    CriteriaRMRecallComputeScore,
     parse_autope_solution_fn,
     AUTOPE_DEFAULT_PARAMS,
+    CRITERIA_RM_RECALL_DEFAULT_PARAMS,
     compute_score_valid,
     criteria_parse_solution_fn
 )
@@ -32,7 +34,10 @@ UNITTEST_AGENT = Agent(**{
 
 
 def load_dataset(num=100, format="autope"):
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/autope_dapo_math_17k_bo32.parquet"
+    if format == "autope":
+        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/autope_dapo_math_17k_bo32.parquet"
+    elif format == "criteria_rm_recall":
+        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/ultra_feedback_test.parquet"
     batch_solution_str, batch_ground_truth = [], []
     batch_data_sources = []
 
@@ -42,8 +47,8 @@ def load_dataset(num=100, format="autope"):
         row = row.to_dict()
         batch_data_sources.append(row["data_source"])
 
-        prompt = row["reward_model"]["prompt"]
         if format == "autope":
+            prompt = row["reward_model"]["prompt"]
             batch_solution_str.append(
                 f'<think>\nUNITTEST_ONLY\n</think>\n\n<prompt_engineering>\nQuestion: {prompt}\n\nThink step by step.\n</prompt_engineering>'
             )
@@ -63,6 +68,20 @@ class TestCriteriaRMRecall(unittest.TestCase):
             num=6, format="criteria_rm_recall")
         for sol in batch_solution_str:
             print(criteria_parse_solution_fn(sol))
+
+    def test_compute_score(self):
+        task = CriteriaRMRecallComputeScore(
+            criteria_parse_solution_fn, split="valid", args=CRITERIA_RM_RECALL_DEFAULT_PARAMS)
+        batch_solution_str, batch_ground_truth = load_dataset(
+            num=6, format="criteria_rm_recall")
+
+        async def main():
+            results = await task._compute_score(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth,
+            )
+            print(results)
+        aio.run(main())
 
 
 class TestAutoPE(unittest.TestCase):

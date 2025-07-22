@@ -93,6 +93,113 @@ RLVR_VERIFY_TEMPLATE = """
 #### **输出：**
 """
 
+CRITIQUE_RECALL_FEWSHOTS = """
+下面是对于同一用户提问的相同回复的两条不同评论，第一个是人类评论员，第二个是大模型评论员；
+
+任务：现在需要你按照要求帮我分析**大模型评论员**的评论内容
+分析**大模型评论员**的评论中是否覆盖**人类评论员**指出的批评？覆盖度1-5分，5分是最高分，分数仅包含1、2、3、4、5不包含小数点。
+
+#### 输出要求
+{分析内容}
+```json
+{{
+    "批评覆盖度": *** # int (1-5)
+}}
+```
+
+下面是一些例子
+
+#### 用户提问
+```
+Can you provide a comprehensive list of stress management techniques using a bullet-point format in a [Mark down] document? Please include both physical and mental techniques that can be used to manage stress. Additionally, it would be helpful to categorize the techniques as short-term or long-term solutions. Thank you.
+```
+
+#### **人类评论员**
+```
+Your answer was well-organized and comprehensive, covering a variety of short-term and long-term stress management techniques. You also followed the instruction to use bullet-points and categorize the techniques. However, the instruction asked for a Markdown document, which requires specific formatting.
+
+To improve, use proper Markdown formatting, such as adding asterisks or dashes for bullet points and using double asterisks for bold text. Additionally, the note in the instruction asks for a blend of accuracy, positivity, and intrigue, while keeping the user engaged. Your response is accurate and positive, but adding a touch of intrigue or a fun fact could make it more engaging.
+```
+
+#### **大模型评论员**
+```
+[分析开始]
+用户的请求明确要求提供一个结构化的压力管理技巧列表，并以Markdown格式呈现。用户还特别指出要将技巧分为短期和长期，并包含物理和心理方法。这意味着我需要确保内容全面且易于理解，同时满足分类要求。
+
+首先，我需要确定哪些技巧属于短期和长期。短期技巧通常是一些快速应用的方法，如深呼吸、冥想或写作，这些方法可以在短时间内缓解压力。长期技巧则涉及更系统的行为，如规律的锻炼、健康的饮食习惯或良好的睡眠，这些需要更持续的努力。
+
+其次，用户强调了物理和心理方法的结合，因此我需要确保每个类别中都涵盖这两种方法。例如，深呼吸和冥想是物理和心理的结合，而写作或绘画则是心理表达的方式。
+
+此外，考虑到用户可能需要个性化的建议，我提醒用户根据自身情况选择最适合的方法，并建议在长期压力情况下寻求专业帮助。这不仅增加了回复的实用性，也体现了对用户需求的尊重。
+
+最后，我组织了内容，确保每个类别下的技巧清晰易读，并使用了Markdown格式的列表结构，以提高可读性和专业性。
+[分析结束]
+```
+
+#### 输出
+我现在需要分析大模型评论员的评论是否覆盖了人类评论员指出的批评。首先，先看人类评论员的批评点：
+
+人类评论员指出的问题有两个：1. 没有使用要求的 Markdown 格式（比如项目符号用星号或破折号，粗体用双星号）；2. 虽然准确和积极，但缺乏吸引力或趣味点，没有达到指令中提到的 “融合准确性、积极性和吸引力，保持用户参与”。
+
+接下来看大模型评论员的评论，但这里提供的大模型评论员内容是 “[分析开始]”，看起来不完整，没有实际的评论内容。由于大模型评论员的评论没有包含任何内容，自然无法覆盖人类评论员指出的任何批评点。
+
+所以，批评覆盖度应该是 1 分？不，因为完全没有覆盖，按照评分标准，1-5 分，完全不覆盖的话应该是 1 分吗？是的，因为没有覆盖任何一点，所以分数是 1。
+
+``` json
+{{
+    "批评覆盖度": 1
+}}
+```
+
+#### 用户提问
+```
+Can you recommend a car service that offers private day tours to Versailles from Paris?
+```
+
+#### **人类评论员**
+```
+Your answer is well-structured, informative, and it adheres to the instructions given. You provided two options, which gives the user a choice, and you included the important details about each service. Your reminder for the user to conduct further research and compare options is also valuable. However, you could improve by providing more sources for the user to verify the information. For example, you could suggest checking the companies' websites or other reliable platforms for reviews and up-to-date information.
+```
+
+#### **大模型评论员**
+```
+
+[分析开始]
+模型响应中提供了两个具体的车服务公司：Cityrama 和 Versailles Express。这两个公司都详细介绍了其服务亮点，包括行程内容、语言支持和交通安排，这在满足用户需求方面做得很好，属于有用性高的内容。此外，两个公司都是知名且值得信赖的，因此安全性较高。信息真实可靠，没有虚构内容，因此真实性评分也较高。虽然模型没有直接比较两家公司的优劣，但提供了足够的信息供用户参考，因此在有用性和可靠性方面得分高。
+[分析结束]
+```
+
+#### 输出
+我需要分析大模型评论员的评论是否覆盖人类评论员指出的批评。人类评论员指出的批评点是：回复虽有价值，但可改进之处在于提供更多让用户验证信息的来源（如公司网站、可靠平台的评论和最新信息）。
+
+而大模型评论员的评论仅分析了响应中两个车服务公司的服务亮点、有用性、安全性、真实性，以及未直接比较但提供了参考信息，完全没有提及人类评论员指出的 “提供更多信息来源” 这一批评点。
+
+``` json
+{{
+    "批评覆盖度": 1
+}}
+```
+"""
+
+CRITIQUE_RECALL_TEMPLATE = """
+#### 用户提问
+```
+{instruction}
+```
+
+#### **人类评论员**
+```
+{human}
+```
+
+#### **大模型评论员**
+```
+{llm}
+```
+
+#### 输出
+"""
+
 
 class Agent:
     def __init__(
@@ -298,6 +405,63 @@ class RLVRVerify(BatchCallOpenAPI):
         except Exception as err:
             raise PostprocessError(f'{err}')
 
+
+class CritiqueRecall(BatchCallOpenAPI):
+    def __init__(self):
+        pass
+
+    @classmethod
+    def task_desc(cls):
+        return "批评覆盖度"
+
+    def prompt_fn(self, example):
+        solver_response, gt = example
+        prompt = CRITIQUE_RECALL_FEWSHOTS + "\n\n\n" + CRITIQUE_RECALL_TEMPLATE.format(
+            llm=solver_response,
+            human=gt["critique"],
+            instruction=gt["instruction"]
+        )
+        return prompt
+
+    def postprocess(self, response: str):
+        s = response
+        try:
+            conclusion = s.strip()
+
+            recall = re.findall(
+                r'\"批评覆盖度\": (\d+)', conclusion)[0]
+            if isinstance(recall, str):
+                recall = float(recall)
+            assert isinstance(recall, float)
+            assert recall in (0, 1, 2, 3, 4, 5)
+            return recall
+
+        except Exception as err:
+            raise PostprocessError(f'{err}')
+
+    async def do_job(self, agent, batch_inputs, max_concurrent_requests, repeats=3):
+        prompts = defaultdict(list)
+        for index, example in enumerate(batch_inputs):
+            prompt = self.prompt_fn(example)
+            prompts[prompt].append(index)
+
+        _prompts = list(prompts.keys()) * repeats
+        results = await agent.run(_prompts, 64, desc=f"[{self.task_desc()} {agent.model}={max_concurrent_requests}]", postprocess_fns=[self.postprocess]*len(_prompts))
+
+        results_mapper = defaultdict(list)
+        for (k, v) in results:
+            for _ in prompts[k]:
+                results_mapper[_].append(v)
+
+        outputs = []
+        for i in range(len(batch_inputs)):
+            if i in results_mapper:
+                scores = [_ for _ in results_mapper[i] if _ is not None]
+                outputs.append(np.mean(scores) / 5.0)
+            else:
+                outputs.append(0.0)
+        return outputs
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # AUTOPE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -416,17 +580,18 @@ class AutoPEComputeScore(object):
     ):
         verify_task = RLVRVerify()
 
-        return await self._simulate_respondent(
+        result = await self._simulate_respondent(
             batch_data_sources=batch_data_sources,
             batch_solution_str=batch_solution_str,
             batch_ground_truth=batch_ground_truth,
             skip_run=skip_run,
-            run_args={"solver_agent": self.args["solver_agent"]},
+            run_args={"judge_agent": self.args["judge_agent"]},
             batch_verify_fn=partial(
                 self.batch_verify_results, verify_task=verify_task),
-            resp_postprocess_fn=self.postprocess,
+            resp_postprocess_fn=self.response_postprocess,
             prompt_contexts=None
         )
+        return result["solver_agent"]
 
     def postprocess(self, s):
         try:
@@ -531,6 +696,7 @@ class AutoPEComputeScore(object):
             task_names.append(name)
 
         respond_questions = await aio.gather(*tasks)
+
         # 验证答案正确性
         verify_queue = []
         for name, results in zip(task_names, respond_questions):
@@ -548,7 +714,7 @@ class AutoPEComputeScore(object):
             max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
             group_names=task_names
         )
-        return correctness["solver_agent"]
+        return correctness
 
     def compute_score(self,
                       batch_data_sources,
@@ -711,6 +877,146 @@ def criteria_parse_solution_fn(solution_str: str):
         return None
     conclusion = conclusion[conclusion.index("# 评价标准"):]
     return conclusion
+
+
+class CriteriaRMRecallComputeScore(AutoPEComputeScore):
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-2.0
+                 ):
+        super().__init__(
+            split=split, parse_solution_fn=parse_solution_fn, args=args, min_reward=min_reward
+        )
+
+    def init_agent(self):
+        self.agents = {}
+        self.init_verify_agent()
+        self.init_judge_agent()
+
+    def init_verify_agent(self):
+        self.verify_agent = Agent(
+            **self.args["verify_agent"]["model"])
+
+    def init_judge_agent(self):
+        self.judge_agent = Agent(
+            **self.args["judge_agent"]["model"])
+        self.agents["judge_agent"] = self.judge_agent
+
+    def response_postprocess(self, s, debug=False):
+        if "</think>" in s:
+            s = s[s.index("</think>")+len("</think>"):].strip()
+
+        if "[分析开始]" in s and "[结论结束]" in s:
+            s = s[s.index("[分析开始]"):s.index("[结论结束]")+len("[结论结束]")].strip()
+        return s
+
+    def judge_with_criteria(self, result, gt):
+        format_template = """
+
+基于上面的评价标准对“[模型响应]”进行评价，找出回答的不足。
+
+你最终的回答部分需要包含**分析**和**结论**两部分
+- 分析：详细的分析与思考过程
+- 结论：对于模型响应的评价，给出全面的评价。
+
+按照下面的格式
+[分析开始]
+... ...
+[分析结束]
+
+[结论开始]
+{得分}
+[结论结束]
+"""
+
+        prompt = f'[用户指令]\n{gt["response"]}\n\n[模型响应]\n{gt["instruction"]}\n\n[评价标准]\n{result}\n\n\n' + format_template
+        return prompt
+
+    async def simulate_respondent(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            skip_run=None
+    ):
+        verify_task = CritiqueRecall()
+
+        result = await self._simulate_respondent(
+            batch_data_sources=batch_data_sources,
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=batch_ground_truth,
+            skip_run=skip_run,
+            run_args={"judge_agent": self.args["judge_agent"]},
+            batch_verify_fn=partial(
+                self.batch_verify_results, verify_task=verify_task),
+            resp_postprocess_fn=self.response_postprocess,
+            prompt_contexts=None
+        )
+        return result["judge_agent"]
+
+    def log_solution(self, solution):
+        norm = self.parse_solution_fn(solution)
+        if norm is None:
+            return repr(self.clip_string(solution.strip()))
+        return repr(norm)
+
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+        self.init_save_rollouts()
+
+        recall = await self.simulate_respondent(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            if i in recall:
+                _reward = np.mean(recall[i])
+            else:
+                _reward = 0.0
+            final_results.append(_reward)
+
+            # 保存Rollout信息
+            if self.split == "train":
+                self.update_rollout_info(
+                    solution_str=batch_solution_str[i],
+                    ground_truth=batch_ground_truth[i],
+                    score=_reward,
+                )
+
+            if _reward > 0.5 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+                log = True
+                log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+            else:
+                log = False
+
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f'【Question】`{repr(batch_ground_truth[i]["instruction"])}`')
+                print(
+                    f"【Critique LLM】`{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f'【Critique Human】`{repr(batch_ground_truth[i]["critique"])}`')
+                print(
+                    f'[Final Reward]={_reward:.3f}\n')
+
+                parsed = self.parse_solution_fn(batch_solution_str[i])
+
+                if parsed is not None and random.random() < 0.5:
+                    print(f'[Thought]\n{parsed[0]}')
+                    print()
+
+        self.save_rollout_info()
+        return final_results
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # CRITERIA_RM_RECALL
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -751,7 +1057,49 @@ AUTOPE_DEFAULT_PARAMS = {
     }
 }
 
+CRITERIA_RM_RECALL_DEFAULT_PARAMS = {
+    "verify_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.154:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.7,
+                "timeout": 360,
+                "max_tokens": 512,
+            },
+        },
+        "max_concurrent_requests": 64
+    },
+    "judge_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.154:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 4096,
+            },
+        },
+        "repeat": 1,
+        "fn": "judge_with_criteria",
+        "desc": 'JUDGE W CRITERIA',
+        "max_concurrent_requests": 128
+    },
+    "save_rollouts": {
+        "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/autope_rollouts"
+    }
+}
+
+
 compute_score_train = AutoPEComputeScore(
     parse_autope_solution_fn, split="train", args=AUTOPE_DEFAULT_PARAMS).compute_score
 compute_score_valid = AutoPEComputeScore(
     parse_autope_solution_fn, split="valid", args=AUTOPE_DEFAULT_PARAMS).compute_score
+
+
+criteria_recall_score_train = CriteriaRMRecallComputeScore(
+    criteria_parse_solution_fn, split="train", args=CRITERIA_RM_RECALL_DEFAULT_PARAMS).compute_score
+criteria_recall_score_valid = CriteriaRMRecallComputeScore(
+    criteria_parse_solution_fn, split="valid", args=CRITERIA_RM_RECALL_DEFAULT_PARAMS).compute_score
