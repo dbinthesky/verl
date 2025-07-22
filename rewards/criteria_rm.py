@@ -516,7 +516,7 @@ class AutoPEComputeScore(object):
                 prompts,
                 run_args[name]["max_concurrent_requests"],
                 desc=f'[{run_args[name]["desc"]} {run_args[name]["model"]["model"]} Solver]',
-                pbar=True,
+                pbar=False,
                 postprocess_fns=[resp_postprocess_fn] * len(prompts)
             ))
             task_names.append(name)
@@ -556,11 +556,35 @@ class AutoPEComputeScore(object):
             return repr(self.clip_string(solution.strip()))
         return repr(norm[1])
 
+    def update_rollout_info(self, solution_str, ground_truth, score):
+        inst_id = ground_truth["extra_info"]["uuid"]
+        args = copy.deepcopy(self.args)
+
+        self.rollout_cache.append({
+            "prompt_generation_process": solution_str,
+            "score": score,
+            "uuid": inst_id,
+        })
+
+    def save_rollout_info(self):
+        """将缓存保存为JSON文件"""
+        if os.path.exists(self.save_rollouts_path):
+            flag = "a+"
+        else:
+            flag = "wt"
+
+        with open(self.save_rollouts_path, flag) as f:
+            for _ in self.rollout_cache:
+                f.write(f'{json.dumps(_, ensure_ascii=False)}\n')
+        self.rollout_cache = []
+
     async def _compute_score(self,
                              batch_data_sources,
                              batch_solution_str,
                              batch_ground_truth,
                              ):
+        self.init_save_rollouts()
+
         accuracy = await self.simulate_respondent(
             batch_data_sources,
             batch_solution_str,
@@ -574,6 +598,14 @@ class AutoPEComputeScore(object):
             else:
                 _reward = 0.0
             final_results.append(_reward)
+
+            # 保存Rollout信息
+            if self.split == "train":
+                self.update_rollout_info(
+                    solution_str=batch_solution_str[i],
+                    ground_truth=batch_ground_truth[i],
+                    score=_reward,
+                )
 
             if _reward > 0.5 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
                 log = True
@@ -598,6 +630,8 @@ class AutoPEComputeScore(object):
                 if parsed is not None and random.random() < 0.2:
                     print(f'[Thought]\n{parsed[0]}')
                     print()
+
+        self.save_rollout_info()
         return final_results
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -2612,7 +2612,7 @@ class Doc2QueryV2ComputeScore(object):
                     print(f'[Thought]\n{parsed[0]}')
                     print()
 
-            self.save_rollout_info()
+        self.save_rollout_info()
         return final_results
 
     def compute_score(self,
