@@ -14,7 +14,8 @@ from criteria_rm import (
     AutoPEComputeScore,
     parse_autope_solution_fn,
     AUTOPE_DEFAULT_PARAMS,
-    compute_score_valid
+    compute_score_valid,
+    criteria_parse_solution_fn
 )
 
 
@@ -30,18 +31,7 @@ UNITTEST_AGENT = Agent(**{
 })
 
 
-def load_data(num=100):
-    batch_solution_str, batch_ground_truth = [], []
-    with open("/cpfs01/shared/llm_ddd/tongjian/verl/rewards/math_rewards.jsonl", "rt") as f:
-        for line in f:
-            example = json.loads(line)
-            batch_solution_str.append(example["solution_str"])
-            batch_ground_truth.append(
-                {"ground_truth": example["ground_truth"], "prompt": "<skip>", "uuid": uuid.uuid4().hex})
-    return batch_solution_str, batch_ground_truth
-
-
-def load_dataset(num=100):
+def load_dataset(num=100, format="autope"):
     filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/autope_dapo_math_17k_bo32.parquet"
     batch_solution_str, batch_ground_truth = [], []
     batch_data_sources = []
@@ -53,13 +43,26 @@ def load_dataset(num=100):
         batch_data_sources.append(row["data_source"])
 
         prompt = row["reward_model"]["prompt"]
-        batch_solution_str.append(
-            f'<think>\nUNITTEST_ONLY\n</think>\n\n<prompt_engineering>\nQuestion: {prompt}\n\nThink step by step.\n</prompt_engineering>'
-        )
+        if format == "autope":
+            batch_solution_str.append(
+                f'<think>\nUNITTEST_ONLY\n</think>\n\n<prompt_engineering>\nQuestion: {prompt}\n\nThink step by step.\n</prompt_engineering>'
+            )
+        elif format == "criteria_rm_recall":
+            batch_solution_str.append(
+                f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\n# 评价标准\n有用性，真实性，安全性\n</conclusion>\n```xml'
+            )
         batch_ground_truth.append(row["reward_model"])
         if len(batch_ground_truth) == num:
             break
     return batch_solution_str, batch_ground_truth
+
+
+class TestCriteriaRMRecall(unittest.TestCase):
+    def test_criteria_parse_solution_fn(self):
+        batch_solution_str, batch_ground_truth = load_dataset(
+            num=6, format="criteria_rm_recall")
+        for sol in batch_solution_str:
+            print(criteria_parse_solution_fn(sol))
 
 
 class TestAutoPE(unittest.TestCase):
