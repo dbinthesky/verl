@@ -17,7 +17,8 @@ from criteria_rm import (
     AUTOPE_DEFAULT_PARAMS,
     CRITERIA_RM_RECALL_DEFAULT_PARAMS,
     compute_score_valid,
-    criteria_parse_solution_fn
+    criteria_parse_solution_fn,
+    criteria_recall_score_valid
 )
 
 
@@ -74,14 +75,17 @@ class TestCriteriaRMRecall(unittest.TestCase):
             criteria_parse_solution_fn, split="valid", args=CRITERIA_RM_RECALL_DEFAULT_PARAMS)
         batch_solution_str, batch_ground_truth = load_dataset(
             num=6, format="criteria_rm_recall")
-
-        async def main():
-            results = await task._compute_score(
-                [None] *
-                len(batch_solution_str), batch_solution_str, batch_ground_truth,
-            )
-            print(results)
-        aio.run(main())
+        criteria_recall_score_valid(
+            [None] *
+            len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        )
+        # async def main():
+        #     results = await task._compute_score(
+        #         [None] *
+        #         len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        #     )
+        #     print(results)
+        # aio.run(main())
 
 
 class TestAutoPE(unittest.TestCase):

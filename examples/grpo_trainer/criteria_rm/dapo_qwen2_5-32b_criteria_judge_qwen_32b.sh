@@ -57,7 +57,7 @@ setup_path() {
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/ultra_feedback_train.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/ultra_feedback_test.parquet"
 
-    experiment_name="distill-qwen-32b_criteria-${YYMMDD}-${HHMMSS}"
+    experiment_name="distill-qwen-32b_criteria_recall-${YYMMDD}-${HHMMSS}"
     project_name="criteria_rm"
 
     OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/criteria_rm/${experiment_name}/"
@@ -90,16 +90,16 @@ run_training() {
     # self.config.actor.ppo_micro_batch_size_per_gpu = self.config.actor.ppo_micro_batch_size
 
     python3 -m recipe.dapo.main_dapo \
-        custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        custom_reward_function.name=criteria_rm_default_compute_score_train \
-        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        +custom_valid_reward_function.name=criteria_rm_default_compute_score_valid \
+        custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/criteria_rm.py" \
+        custom_reward_function.name=criteria_recall_score_train \
+        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/criteria_rm.py" \
+        +custom_valid_reward_function.name=criteria_recall_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
         data.train_batch_size=32 \
-        data.max_prompt_length=8192 \
-        data.max_response_length=8192 \
+        data.max_prompt_length=4096 \
+        data.max_response_length=12288 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
@@ -131,7 +131,7 @@ run_training() {
         actor_rollout_ref.rollout.name="vllm" \
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.75 \
-        actor_rollout_ref.rollout.temperature=0.8 \
+        actor_rollout_ref.rollout.temperature=1.0 \
         actor_rollout_ref.rollout.n=16 \
         actor_rollout_ref.rollout.top_p=0.95 \
         actor_rollout_ref.ref.ulysses_sequence_parallel_size=2 \

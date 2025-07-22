@@ -1012,7 +1012,7 @@ class CriteriaRMRecallComputeScore(AutoPEComputeScore):
                 parsed = self.parse_solution_fn(batch_solution_str[i])
 
                 if parsed is not None and random.random() < 0.5:
-                    print(f'[Thought]\n{parsed[0]}')
+                    print(f'[Thought]\n{parsed}')
                     print()
 
         self.save_rollout_info()
