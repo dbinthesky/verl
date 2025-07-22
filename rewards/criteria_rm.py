@@ -3,6 +3,7 @@ import os
 import copy
 import json
 import uuid
+import math
 import jieba
 import random
 import aiohttp
@@ -196,6 +197,104 @@ CRITIQUE_RECALL_TEMPLATE = """
 ```
 {llm}
 ```
+
+#### 输出
+"""
+
+
+JUDGE_WITH_CRITERIA_FEWSHOTS = """
+任务：基于打分表对下面回答的大模型响应作出打分
+
+#### 输出要求
+先在<think>...</think>里给出详细的思考过程，然后在最终结论部分给出评分。（其中评分分为两个部分，一个是对于回答的评分，另一个说明该评分表下满分为多少）
+
+```json
+{{
+     "最终评分": ***, # int
+     "满分总分": *** # int
+}}
+```
+
+下面是一些例子
+
+#### 用户提问
+```
+You will be given a definition of a task first, then some input of the task.\nIn this task, you are given the name of an Indian food dish. You need to classify the dish as a \"main course\", \"dessert\" or \"snack\".\n\nDum aloo\nOutput:
+```
+
+#### 模型响应
+```
+The dish Dum aloo is a main course dish from Indian cuisine, commonly served with rice or roti. It is a spicy appetizer or side dish made of baby potatoes cooked in a spicy and tangy tamarind gravy. The main ingredients include the baby potatoes, tamarind, oil, onion, ginger, garlic, tomatoes, and various spices such as turmeric, cumin, and garam masala.\n\nJustification: Dum aloo is typically served as a main course in Indian restaurants and households, and is often accompanied by a side of rice or roti and a vegetable dish. Therefore, it falls under the category of main course dishes. As a main course dish, it is not typically served as a dessert or snack, and its flavor profile is not typically sweet.
+```
+
+#### 评分表
+```
+# 评价标准\n\n  ## 评估方法简述\n  本评价标准从「有用性」、「真实性」、「安全性」和「核心任务相关性」四个维度对回答进行评估。每个维度包含具体的评分细则，确保评估结果的客观性和可量化性。\n\n  ## 有用性（20分）\n  1. 回答是否明确输出分类结果（10分）：\n     - 明确输出分类结果：10分\n     - 仅包含菜品名称：5分\n     - 未输出分类结果：0分\n  2. 是否包含菜品名称（10分）：\n     - 包含完整菜品名称：10分\n     - 部分包含菜品名称：5分\n     - 未包含菜品名称：0分\n\n  ## 真实性（40分）\n  1. 分类是否准确（30分）：\n     - 分类完全正确：30分\n     - 分类部分正确：15分\n     - 分类完全错误：0分\n  2. 是否包含正确分类依据（10分）：\n     - 提供合理分类依据：10分\n     - 仅提供分类结果：5分\n     - 无分类依据：0分\n\n  ## 安全性（20分）\n  1. 回答是否包含误导信息（10分）：\n     - 无误导信息：10分\n     - 轻微误导信息：5分\n     - 严重误导信息：0分\n  2. 是否包含有害信息（10分）：\n     - 无有害信息：10分\n     - 包含有害信息：0分\n\n  ## 核心任务相关性（20分）\n  1. 分类依据是否合理（10分）：\n     - 依据充分且合理：10分\n     - 依据部分合理：5分\n     - 依据完全不合理：0分\n  2. 是否考虑地域差异（10分）：\n     - 考虑地域差异：10分\n     - 未考虑地域差异：5分\n     - 忽视地域差异：0分
+```
+
+
+#### 输出
+<think>
+我现在需要根据用户提供的评分表，对给定的模型响应进行打分。首先，我需要仔细理解评分表的各个维度和具体细则，然后逐一对照模型响应来评分。
+
+首先看评分表的四个维度：有用性（20 分）、真实性（40 分）、安全性（20 分）、核心任务相关性（20 分），总分是 20+40+20+20=100 分，所以满分总分是 100 分。
+
+接下来逐个分析：
+
+有用性（20 分）：
+
+回答是否明确输出分类结果（10 分）：模型响应中明确提到 “Dum aloo 是主菜（main course）”，明确输出了分类结果，所以这一项得 10 分。
+是否包含菜品名称（10 分）：模型响应中包含完整的菜品名称 “Dum aloo”，所以这一项得 10 分。
+有用性总分：10+10=20 分。
+
+真实性（40 分）：
+
+分类是否准确（30 分）：Dum aloo 确实是印度的主菜，分类正确，所以这一项得 30 分。
+是否包含正确分类依据（10 分）：模型响应中提到 “通常在印度餐厅和家庭中作为主菜供应，搭配米饭或面包等”，提供了合理的分类依据，所以这一项得 10 分。
+真实性总分：30+10=40 分。
+
+安全性（20 分）：
+
+回答是否包含误导信息（10 分）：模型响应中没有误导信息，所以得 10 分。
+是否包含有害信息（10 分）：模型响应中没有有害信息，所以得 10 分。
+安全性总分：10+10=20 分。
+
+核心任务相关性（20 分）：
+
+分类依据是否合理（10 分）：模型提到 “通常作为主菜供应，搭配米饭或面包”，依据充分合理，得 10 分。
+是否考虑地域差异（10 分）：模型中没有提到地域差异相关内容，根据细则，未考虑地域差异得 5 分。
+核心任务相关性总分：10+5=15 分。
+
+现在把各维度分数相加：20（有用性）+40（真实性）+20（安全性）+15（核心任务相关性）=95 分。
+
+检查是否有遗漏：有用性的两项都满足，真实性分类正确且有依据，安全性没问题，核心任务相关性中依据合理但未考虑地域差异。所以总分是 95 分，满分 100 分。
+</think>
+```json
+{{
+     "最终评分": 95,
+     "满分总分": 100
+}}
+```
+"""
+
+JUDGE_WITH_CRITERIA_TEMPLATE = """
+现在对下面的大模型响应基于评分表进行打分
+
+#### 用户提问
+```
+{instruction}
+```
+
+#### 模型响应
+```
+{response}
+```
+
+#### 评分表
+```
+{criteria}
+```
+
 
 #### 输出
 """
@@ -404,6 +503,63 @@ class RLVRVerify(BatchCallOpenAPI):
                     raise PostprocessError(f'{err}')
         except Exception as err:
             raise PostprocessError(f'{err}')
+
+
+class JudgeWithCriteria(BatchCallOpenAPI):
+    def __init__(self):
+        pass
+
+    @classmethod
+    def task_desc(cls):
+        return "评分表打分"
+
+    def prompt_fn(self, example):
+        solver_response, gt = example
+        prompt = JUDGE_WITH_CRITERIA_FEWSHOTS + "\n\n\n" + JUDGE_WITH_CRITERIA_TEMPLATE.format(
+            instruction=gt["instruction"], response=solver_response, criteria=gt["criteria"]
+        )
+        return prompt
+
+    def postprocess(self, response: str):
+        s = response
+        try:
+            if "</think>" in s:
+                s = s[s.index("</think>"):].strip()
+
+            conclusion = s.strip()
+            score = re.findall(
+                r'\"最终评分\": ([\d\.]+)', conclusion)[0]
+            total_score = re.findall(
+                r'\"满分总分\": (.*)', conclusion)[0]
+            final_score = min(float(score) / float(total_score), 1.0)
+            if math.isnan(final_score) or np.isnan(final_score):
+                return 0.0
+            return final_score
+        except Exception as err:
+            raise PostprocessError(f'{err}')
+
+    async def do_job(self, agent, batch_inputs, max_concurrent_requests, repeats=3):
+        prompts = defaultdict(list)
+        for index, example in enumerate(batch_inputs):
+            prompt = self.prompt_fn(example)
+            prompts[prompt].append(index)
+
+        _prompts = list(prompts.keys()) * repeats
+        results = await agent.run(_prompts, 64, desc=f"[{self.task_desc()} {agent.model}={max_concurrent_requests}]", postprocess_fns=[self.postprocess]*len(_prompts))
+
+        results_mapper = defaultdict(list)
+        for (k, v) in results:
+            for _ in prompts[k]:
+                results_mapper[_].append(v)
+
+        outputs = []
+        for i in range(len(batch_inputs)):
+            if i in results_mapper:
+                scores = [_ for _ in results_mapper[i] if _ is not None]
+                outputs.append(np.mean(scores))
+            else:
+                outputs.append(0.0)
+        return outputs
 
 
 class CritiqueRecall(BatchCallOpenAPI):
@@ -889,6 +1045,7 @@ class CriteriaRMRecallComputeScore(AutoPEComputeScore):
         super().__init__(
             split=split, parse_solution_fn=parse_solution_fn, args=args, min_reward=min_reward
         )
+        self.task_name = "CRITERIA_RM_RECALL"
 
     def init_agent(self):
         self.agents = {}
@@ -1021,6 +1178,130 @@ class CriteriaRMRecallComputeScore(AutoPEComputeScore):
 # CRITERIA_RM_RECALL
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# CRITERIA_RM_RFT
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+def criteria_rft_parse_solution_fn(solution_str: str):
+    solution_str = postprocess_solution(solution_str)
+    if not solution_str.startswith("<think>"):
+        solution_str = f'<think>\n{solution_str}'
+
+    try:
+        root = xml_cot_parse_solution_fn(solution_str)
+    except Exception as err:
+        return None
+
+    if root is not None:
+        try:
+            conclusion = [
+                child for child in root if child.tag == "conclusion"][0]
+
+            conclusion = conclusion.text.strip()
+        except Exception as err:
+            return None
+    else:
+        return None
+    return conclusion
+
+
+class CriteriaRFTComputeScore(CriteriaRMRecallComputeScore):
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-2.0
+                 ):
+        super().__init__(
+            split=split, parse_solution_fn=parse_solution_fn, args=args, min_reward=min_reward
+        )
+        self.task_name = "CRITERIA_RM_RFT"
+
+    def init_agent(self):
+        self.agents = {}
+        self.init_verify_agent()
+
+    def init_verify_agent(self):
+        self.verify_agent = Agent(
+            **self.args["verify_agent"]["model"])
+
+    async def get_accuracy(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth):
+
+        task = JudgeWithCriteria()
+
+        indices = []
+        eval_inputs = []
+        result_index2queue_index = {}
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            result = self.parse_solution_fn(sol)
+            if result is not None:
+                eval_inputs.append((result, gt))
+                indices.append(i)
+                result_index2queue_index[len(
+                    eval_inputs)-1] = i
+            else:
+                continue
+
+        evaluations = await task.do_job(
+            agent=self.verify_agent,
+            batch_inputs=eval_inputs,
+            max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
+        )
+        full_rewards = [0.0] * len(batch_solution_str)
+        for j, (eval_result, eval_input) in enumerate(zip(evaluations, eval_inputs)):
+            queue_index = result_index2queue_index[j]
+            if eval_result:
+                full_rewards[queue_index] = eval_result
+        return full_rewards
+
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+        accuracy = await self.get_accuracy(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            _reward = accuracy[i]
+            final_results.append(_reward)
+
+            if (_reward > 0 and random.random() < 0.1) or (self.split == "valid" and random.random() < 0.05) or (self.split == "train" and random.random() < 0.05):
+                log = True
+                log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+            else:
+                log = False
+                log_flag = ""
+
+            # log = True
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f'【Question】`{repr(batch_ground_truth[i]["instruction"])}`')
+                print(
+                    f'【Criteria】`{repr(batch_ground_truth[i]["criteria"])}`')
+                print(
+                    f'[Final Reward]={_reward:.3f}\n')
+                print(
+                    f'【Solution】')
+                print(batch_solution_str[i])
+
+        return final_results
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# CRITERIA_RM_RFT
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 AUTOPE_DEFAULT_PARAMS = {
     "verify_agent": {
@@ -1092,6 +1373,25 @@ CRITERIA_RM_RECALL_DEFAULT_PARAMS = {
     }
 }
 
+CRITERIA_RM_RFT_DEFAULT_PARAMS = {
+    "verify_agent": {
+        "model": {
+            "model": "distill_qwen25_7B",
+            "base_url": "http://10.130.142.154:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 16384,
+            },
+        },
+        "max_concurrent_requests": 128
+    },
+    "save_rollouts": {
+        "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/autope_rollouts"
+    }
+}
+
 
 compute_score_train = AutoPEComputeScore(
     parse_autope_solution_fn, split="train", args=AUTOPE_DEFAULT_PARAMS).compute_score
@@ -1103,3 +1403,9 @@ criteria_recall_score_train = CriteriaRMRecallComputeScore(
     criteria_parse_solution_fn, split="train", args=CRITERIA_RM_RECALL_DEFAULT_PARAMS).compute_score
 criteria_recall_score_valid = CriteriaRMRecallComputeScore(
     criteria_parse_solution_fn, split="valid", args=CRITERIA_RM_RECALL_DEFAULT_PARAMS).compute_score
+
+
+criteria_rft_score_train = CriteriaRFTComputeScore(
+    criteria_rft_parse_solution_fn, split="train", args=CRITERIA_RM_RFT_DEFAULT_PARAMS).compute_score
+criteria_rft_score_valid = CriteriaRFTComputeScore(
+    criteria_rft_parse_solution_fn, split="valid", args=CRITERIA_RM_RFT_DEFAULT_PARAMS).compute_score
