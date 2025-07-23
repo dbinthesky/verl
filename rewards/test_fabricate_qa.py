@@ -42,7 +42,8 @@ from fabricate_qa import (
     RLVRVerify,
     RLVRComputeScore,
     fabricate_aio_compute_score_valid,
-    rlvr_compute_score_valid
+    xml_cot_fabricate_aio_compute_score_valid,
+    rlvr_compute_score_valid,
 )
 
 UNITTEST_AGENT = Agent(**{
@@ -112,7 +113,7 @@ _doc2query_v3_qas = [
 ]
 
 
-def load_dataset(task_name, num=100):
+def load_dataset(task_name, num=100, xml_cot=False):
     filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0718.parquet"
     batch_solution_str, batch_ground_truth = [], []
     batch_data_sources = []
@@ -128,26 +129,45 @@ def load_dataset(task_name, num=100):
 
         if row["data_source"] == "doc2query_v2":
             sample = random.choice(_doc2query_v2_qas)
-            batch_solution_str.append(
-                f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: {sample[0]}\n\nAnswer: {sample[1]}\n\nAnswer Type: {sample[2]}\n</question>'
-            )
+            if not xml_cot:
+                batch_solution_str.append(
+                    f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: {sample[0]}\n\nAnswer: {sample[1]}\n\nAnswer Type: {sample[2]}\n</question>'
+                )
+            else:
+                batch_solution_str.append(
+                    f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\n\nxxxxx\n<question>\nQuestion: {sample[0]}\n\nAnswer: {sample[1]}\n\nAnswer Type: {sample[2]}\n</question>\nsdfdsfs\n</conclusion>\n```'
+                )
         elif row["data_source"] == "salt":
             sample = random.choice(_salt_qas)
-            batch_solution_str.append(
-                f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nAnswer: [SYNTHETIC] {sample[1]}\n</question>'
-            )
+            if not xml_cot:
+                batch_solution_str.append(
+                    f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nAnswer: [SYNTHETIC] {sample[1]}\n</question>'
+                )
+            else:
+                batch_solution_str.append(
+                    f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\nxxxxx\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nAnswer: [SYNTHETIC] {sample[1]}\n</question>\n\nxxxxx\n</conclusion>\n```'
+                )
         elif row["data_source"] == "doc2query_v3":
             sample = random.choice(_doc2query_v3_qas)
             o = "\n".join([f'{c}) {_o}' for c, _o in zip(
                 ["A", "B", "C", "D"], sample[1])])
-
-            batch_solution_str.append(
-                f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nOptions: {o}\n\nAnswer: {sample[2]}\n</question>'
-            )
+            if not xml_cot:
+                batch_solution_str.append(
+                    f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nOptions: {o}\n\nAnswer: {sample[2]}\n</question>'
+                )
+            else:
+                batch_solution_str.append(
+                    f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\nxxxxx\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nOptions: {o}\n\nAnswer: {sample[2]}\n</question>\nyyyyyy\n</conclusion>\n```'
+                )
         elif row["data_source"] == "rlvr":
-            batch_solution_str.append(
-                f'<think>\nUNITTEST_ONLY\n</think>\n\n答案：{row["reward_model"]["ground_truth"]}'
-            )
+            if not xml_cot:
+                batch_solution_str.append(
+                    f'<think>\nUNITTEST_ONLY\n</think>\n\n答案：{row["reward_model"]["ground_truth"]}'
+                )
+            else:
+                batch_solution_str.append(
+                    f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n<conclusion>\n\n答案：{row["reward_model"]["ground_truth"]}\n</conclusion>\n```'
+                )
         batch_ground_truth.append(row["reward_model"])
         if len(batch_ground_truth) == num:
             break
@@ -250,9 +270,14 @@ class TestSALT(unittest.TestCase):
 
 class TestFabricateAIO(unittest.TestCase):
     def test_compute_score(self):
+        # batch_data_sources, batch_solution_str, batch_ground_truth = load_dataset(
+        #     task_name=None, num=100,)
+        # fabricate_aio_compute_score_valid(
+        #     batch_data_sources, batch_solution_str, batch_ground_truth
+        # )
         batch_data_sources, batch_solution_str, batch_ground_truth = load_dataset(
-            task_name=None, num=100)
-        fabricate_aio_compute_score_valid(
+            task_name=None, num=100, xml_cot=True)
+        xml_cot_fabricate_aio_compute_score_valid(
             batch_data_sources, batch_solution_str, batch_ground_truth
         )
 

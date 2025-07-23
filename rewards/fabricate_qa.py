@@ -1837,8 +1837,8 @@ class WithUnitSymbol(object):
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # Doc2Query V2
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
-def doc2query_v2_parse_solution_fn(solution_str: str, remove_option_letter=True):
-    parsed = parse_question_solution_fn(solution_str)
+def doc2query_v2_parse_solution_fn(solution_str: str, remove_option_letter=True, extract_question_fn=parse_question_solution_fn):
+    parsed = extract_question_fn(solution_str)
 
     if parsed is None:
         return None
@@ -2667,8 +2667,8 @@ class Doc2QueryV2ComputeScore(object):
 # SALT
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def salt_parse_solution_fn(solution_str: str):
-    parsed = parse_question_solution_fn(solution_str)
+def salt_parse_solution_fn(solution_str: str, extract_question_fn=parse_question_solution_fn):
+    parsed = extract_question_fn(solution_str)
 
     if parsed is None:
         return None
@@ -3167,8 +3167,8 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
 # DOC2QUERY V3
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def doc2query_v3_parse_solution_fn(solution_str: str, remove_option_letter=True):
-    parsed = parse_question_solution_fn(solution_str)
+def doc2query_v3_parse_solution_fn(solution_str: str, remove_option_letter=True, extract_question_fn=parse_question_solution_fn):
+    parsed = extract_question_fn(solution_str)
 
     if parsed is None:
         return None
@@ -4271,6 +4271,7 @@ RLVR_DEFAULT_PARAMS = {
 }
 
 
+# LongCoT Response
 _default_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScore(
     doc2query_v2_parse_solution_fn, split="train", args=DOC2QUERY_V2_DEFAULT_PARAMS)
 _default_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScore(
@@ -4302,6 +4303,127 @@ _default_rlvr_compute_score_valid = RLVRComputeScore(
 rlvr_compute_score_train = _default_rlvr_compute_score_train.compute_score
 rlvr_compute_score_valid = _default_rlvr_compute_score_valid.compute_score
 
+# XMLCoT Response
+
+
+def xml_cot_parse_solution_fn(solution_str):
+    def get_thought(solution_str: str):
+        thought = re.findall(r'```xml.*```', solution_str, re.DOTALL)[0]
+        return thought
+
+    def get_conclusion(solution_str: str):
+        thought = get_thought(solution_str)
+        return solution_str[solution_str.index(thought)+len(thought):].strip()
+
+    try:
+        thought = get_thought(solution_str)
+    except Exception as err:
+        return None
+    try:
+        conclusion = get_conclusion(solution_str).strip()
+    except Exception as err:
+        return None
+    if any(_ in conclusion for _ in ("```xml", "<think>", "</think>", "<conclusion>", "</conclusion>")):
+        return None
+    try:
+        thought_content = re.findall(r'```xml(.*)```', thought, re.DOTALL)[0]
+    except Exception as err:
+        return None
+    thought_content = f'<doc> {thought_content} </doc>'
+    try:
+        root = ET.fromstring(thought_content)
+    except Exception as err:
+        return None
+    if not all(tag in [child.tag for child in root]
+               for tag in ("think", "conclusion")):
+        return None
+    return root
+
+
+def xml_cot_parse_question_solution_fn(solution_str: str):
+    solution_str = postprocess_solution(solution_str)
+    if not solution_str.startswith("<think>"):
+        solution_str = f'<think>\n{solution_str}'
+
+    try:
+        root = xml_cot_parse_solution_fn(solution_str)
+    except Exception as err:
+        return None
+
+    if root is not None:
+        try:
+            conclusion = [
+                child for child in root if child.tag == "conclusion"][0]
+            think = [
+                child for child in root if child.tag == "think"][0]
+            conclusion = [
+                child for child in conclusion if child.tag == "question"][0]
+            think = think.text.strip()
+            conclusion = conclusion.text.strip()
+        except Exception as err:
+            return None
+    else:
+        return None
+    if ("<question>" in conclusion) or ("</question>" in conclusion):
+        return None
+
+    return think, conclusion
+
+
+def xml_cot_rlvr_parse_solution_fn(solution_str: str, remove_option_letter=True):
+    solution_str = postprocess_solution(solution_str)
+    if not solution_str.startswith("<think>"):
+        solution_str = f'<think>\n{solution_str}'
+
+    try:
+        root = xml_cot_parse_solution_fn(solution_str)
+    except Exception as err:
+        return None
+
+    if root is not None:
+        try:
+            conclusion = [
+                child for child in root if child.tag == "conclusion"][0]
+
+            conclusion = conclusion.text.strip()
+        except Exception as err:
+            return None
+    else:
+        return None
+    return conclusion
+
+
+_xml_cot_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScore(
+    partial(doc2query_v2_parse_solution_fn, extract_question_fn=xml_cot_parse_question_solution_fn), split="train", args=DOC2QUERY_V2_DEFAULT_PARAMS)
+_xml_cot_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScore(
+    partial(doc2query_v2_parse_solution_fn, extract_question_fn=xml_cot_parse_question_solution_fn), split="valid", args=DOC2QUERY_V2_DEFAULT_PARAMS)
+xml_cot_doc2query_v2_compute_score_train = _xml_cot_doc2query_v2_compute_score_train.compute_score
+xml_cot_doc2query_v2_compute_score_valid = _xml_cot_doc2query_v2_compute_score_valid.compute_score
+
+
+_xml_cot_doc2query_v3_compute_score_train = Doc2QueryV3ComputeScore(
+    partial(doc2query_v3_parse_solution_fn, extract_question_fn=xml_cot_parse_question_solution_fn), split="train", args=DOC2QUERY_V3_DEFAULT_PARAMS)
+_xml_cot_doc2query_v3_compute_score_valid = Doc2QueryV3ComputeScore(
+    partial(doc2query_v3_parse_solution_fn, extract_question_fn=xml_cot_parse_question_solution_fn), split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
+xml_cot_doc2query_v3_compute_score_train = _xml_cot_doc2query_v3_compute_score_train.compute_score
+xml_cot_doc2query_v3_compute_score_valid = _xml_cot_doc2query_v3_compute_score_valid.compute_score
+
+
+_xml_cot_salt_compute_score_train = SALTComputeScore(
+    partial(salt_parse_solution_fn, extract_question_fn=xml_cot_parse_question_solution_fn), split="train", args=SALT_DEFAULT_PARAMS)
+_xml_cot_salt_compute_score_valid = SALTComputeScore(
+    partial(salt_parse_solution_fn, extract_question_fn=xml_cot_parse_question_solution_fn), split="valid", args=SALT_DEFAULT_PARAMS)
+xml_cot_salt_compute_score_train = _xml_cot_salt_compute_score_train.compute_score
+xml_cot_salt_compute_score_valid = _xml_cot_salt_compute_score_valid.compute_score
+
+
+_xml_cot_rlvr_compute_score_train = RLVRComputeScore(
+    xml_cot_rlvr_parse_solution_fn, split="train", args=RLVR_DEFAULT_PARAMS)
+_xml_cot_rlvr_compute_score_valid = RLVRComputeScore(
+    xml_cot_rlvr_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
+xml_cot_rlvr_compute_score_train = _xml_cot_rlvr_compute_score_train.compute_score
+xml_cot_rlvr_compute_score_valid = _xml_cot_rlvr_compute_score_valid.compute_score
+
 
 _fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
     "doc2query_v2": _default_doc2query_v2_compute_score_train,
@@ -4317,3 +4439,19 @@ _fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
 })
 fabricate_aio_compute_score_train = _fabricate_aio_compute_score_train.compute_score
 fabricate_aio_compute_score_valid = _fabricate_aio_compute_score_valid.compute_score
+
+
+_xml_cot_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
+    "doc2query_v2": _xml_cot_doc2query_v2_compute_score_train,
+    "salt": _xml_cot_salt_compute_score_train,
+    "doc2query_v3": _xml_cot_doc2query_v3_compute_score_train,
+    "rlvr": _xml_cot_rlvr_compute_score_train,
+})
+_xml_cot_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
+    "doc2query_v2": _xml_cot_doc2query_v2_compute_score_valid,
+    "salt": _xml_cot_salt_compute_score_valid,
+    "doc2query_v3": _xml_cot_doc2query_v3_compute_score_valid,
+    "rlvr": _xml_cot_rlvr_compute_score_valid,
+})
+xml_cot_fabricate_aio_compute_score_train = _xml_cot_fabricate_aio_compute_score_train.compute_score
+xml_cot_fabricate_aio_compute_score_valid = _xml_cot_fabricate_aio_compute_score_valid.compute_score
