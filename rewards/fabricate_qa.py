@@ -3611,16 +3611,17 @@ def rlvr_parse_solution_fn(solution_str: str, remove_option_letter=True):
 
 class RLVRComputeScore(Doc2QueryV2ComputeScore):
     def __init__(self,
+                 parse_solution_fn,
                  split="train",
                  args=None,
-                 min_reward=-2.0
+                 min_reward=-2.0,
                  ):
 
         super().__init__(
             split=split,
             args=args,
             min_reward=min_reward,
-            parse_solution_fn=rlvr_parse_solution_fn
+            parse_solution_fn=parse_solution_fn
         )
         self.task_name = "RLVR"
 
@@ -4295,9 +4296,9 @@ salt_compute_score_valid = _default_salt_compute_score_valid.compute_score
 
 
 _default_rlvr_compute_score_train = RLVRComputeScore(
-    split="train", args=RLVR_DEFAULT_PARAMS)
+    rlvr_parse_solution_fn, split="train", args=RLVR_DEFAULT_PARAMS)
 _default_rlvr_compute_score_valid = RLVRComputeScore(
-    split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
+    rlvr_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
 rlvr_compute_score_train = _default_rlvr_compute_score_train.compute_score
 rlvr_compute_score_valid = _default_rlvr_compute_score_valid.compute_score
 

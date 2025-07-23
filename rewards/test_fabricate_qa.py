@@ -41,7 +41,8 @@ from fabricate_qa import (
     Doc2QueryV3ComputeScore,
     RLVRVerify,
     RLVRComputeScore,
-    fabricate_aio_compute_score_valid
+    fabricate_aio_compute_score_valid,
+    rlvr_compute_score_valid
 )
 
 UNITTEST_AGENT = Agent(**{
@@ -273,18 +274,13 @@ class TestRLVR(unittest.TestCase):
         aio.run(main())
 
     def test_get_accuracy(self):
-        task = RLVRComputeScore(split="valid", args=RLVR_DEFAULT_PARAMS)
-
         batch_solution_str, batch_ground_truth = load_dataset(
             task_name="rlvr", num=6)
 
-        async def main():
-            results = await task._compute_score(
-                [None] *
-                len(batch_solution_str), batch_solution_str, batch_ground_truth,
-            )
-            print(results)
-        aio.run(main())
+        rlvr_compute_score_valid(
+            [None] *
+            len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        )
 
 
 class TestDoc2QueryV3(unittest.TestCase):
