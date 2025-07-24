@@ -4352,14 +4352,16 @@ def xml_cot_parse_question_solution_fn(solution_str: str):
 
     if root is not None:
         try:
-            conclusion = [
-                child for child in root if child.tag == "conclusion"][0]
             think = [
                 child for child in root if child.tag == "think"][0]
-            conclusion = [
-                child for child in conclusion if child.tag == "question"][0]
             think = think.text.strip()
-            conclusion = conclusion.text.strip()
+
+            try:
+                conclusion = re.findall(r'<question>(.*)</question>',
+                                        solution_str, re.DOTALL)[0]
+            except Exception as err:
+                return None
+
         except Exception as err:
             return None
     else:
