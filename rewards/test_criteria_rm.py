@@ -22,7 +22,8 @@ from criteria_rm import (
     criteria_parse_solution_fn,
     criteria_recall_score_valid,
     criteria_rft_parse_solution_fn,
-    CriteriaRFTComputeScore
+    CriteriaRFTComputeScore,
+    rft_score_valid
 )
 
 
@@ -57,10 +58,14 @@ def load_dataset(num=100, format="autope"):
         filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/ultra_feedback_test.parquet"
     elif format == "criteria_rm_rft":
         filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/ultra_feedback_rft_test.parquet"
+    elif format == "xml_cot_rft":
+        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/xml_cot_rft_aime_2024_2025.parquet"
+
     batch_solution_str, batch_ground_truth = [], []
     batch_data_sources = []
 
     df = pd.read_parquet(filename)
+
     count = 0
     for _, row in df.iterrows():
         row = row.to_dict()
@@ -78,6 +83,10 @@ def load_dataset(num=100, format="autope"):
         elif format == "criteria_rm_rft":
             batch_solution_str.append(
                 f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\n{random.choice(row["reward_model"]["completions"])}\n</conclusion>\n```xml'
+            )
+        elif format == "xml_cot_rft":
+            batch_solution_str.append(
+                f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\n{random.choice(row["reward_model"]["criteria"])}\n</conclusion>\n```xml'
             )
         batch_ground_truth.append(row["reward_model"])
         if len(batch_ground_truth) == num:
@@ -108,6 +117,17 @@ class TestCriteriaRMRecall(unittest.TestCase):
         #     )
         #     print(results)
         # aio.run(main())
+
+
+class TestRFT(unittest.TestCase):
+    def test_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_dataset(
+            num=6, format="xml_cot_rft")
+        print(len(batch_solution_str))
+        rft_score_valid(
+            [None] *
+            len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        )
 
 
 class TestCriteriaRFT(unittest.TestCase):

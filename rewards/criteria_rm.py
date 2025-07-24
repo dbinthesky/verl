@@ -505,6 +505,27 @@ class RLVRVerify(BatchCallOpenAPI):
             raise PostprocessError(f'{err}')
 
 
+class RFTRLVRVerify(RLVRVerify):
+    def __init__(self):
+        pass
+
+    @classmethod
+    def task_desc(cls):
+        return "RLVR验证"
+
+    def prompt_fn(self, example):
+        solver_response, gt = example
+        content = {
+            "题目": gt["instruction"],
+            "用户回答": solver_response,
+            "标准答案": gt["criteria"],
+        }
+        prompt = RLVR_VERIFY_FEWSHOTS + "\n\n\n" + RLVR_VERIFY_TEMPLATE.format(
+            content=json.dumps(content, ensure_ascii=False, indent="  ")
+        )
+        return prompt
+
+
 class JudgeWithCriteria(BatchCallOpenAPI):
     def __init__(self):
         pass
@@ -1217,6 +1238,7 @@ class CriteriaRFTComputeScore(CriteriaRMRecallComputeScore):
             split=split, parse_solution_fn=parse_solution_fn, args=args, min_reward=min_reward
         )
         self.task_name = "CRITERIA_RM_RFT"
+        self.task = JudgeWithCriteria()
 
     def init_agent(self):
         self.agents = {}
@@ -1232,7 +1254,7 @@ class CriteriaRFTComputeScore(CriteriaRMRecallComputeScore):
             batch_solution_str,
             batch_ground_truth):
 
-        task = JudgeWithCriteria()
+        task = self.task
 
         indices = []
         eval_inputs = []
@@ -1393,6 +1415,20 @@ CRITERIA_RM_RFT_DEFAULT_PARAMS = {
 }
 
 
+class RFTComputeScore(CriteriaRFTComputeScore):
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-2.0
+                 ):
+        super().__init__(
+            split=split, parse_solution_fn=parse_solution_fn, args=args, min_reward=min_reward
+        )
+        self.task_name = "RFT"
+        self.task = RFTRLVRVerify()
+
+
 compute_score_train = AutoPEComputeScore(
     parse_autope_solution_fn, split="train", args=AUTOPE_DEFAULT_PARAMS).compute_score
 compute_score_valid = AutoPEComputeScore(
@@ -1408,4 +1444,10 @@ criteria_recall_score_valid = CriteriaRMRecallComputeScore(
 criteria_rft_score_train = CriteriaRFTComputeScore(
     criteria_rft_parse_solution_fn, split="train", args=CRITERIA_RM_RFT_DEFAULT_PARAMS).compute_score
 criteria_rft_score_valid = CriteriaRFTComputeScore(
+    criteria_rft_parse_solution_fn, split="valid", args=CRITERIA_RM_RFT_DEFAULT_PARAMS).compute_score
+
+
+rft_score_train = RFTComputeScore(
+    criteria_rft_parse_solution_fn, split="train", args=CRITERIA_RM_RFT_DEFAULT_PARAMS).compute_score
+rft_score_valid = RFTComputeScore(
     criteria_rft_parse_solution_fn, split="valid", args=CRITERIA_RM_RFT_DEFAULT_PARAMS).compute_score
