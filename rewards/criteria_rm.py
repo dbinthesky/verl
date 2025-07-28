@@ -1286,6 +1286,7 @@ class CriteriaRFTComputeScore(CriteriaRMRecallComputeScore):
                              batch_solution_str,
                              batch_ground_truth,
                              ):
+        self.init_save_rollouts()
         accuracy = await self.get_accuracy(
             batch_data_sources,
             batch_solution_str,
@@ -1304,7 +1305,14 @@ class CriteriaRFTComputeScore(CriteriaRMRecallComputeScore):
                 log = False
                 log_flag = ""
 
-            # log = True
+            # 保存Rollout信息
+            if self.split == "train":
+                self.update_rollout_info(
+                    solution_str=batch_solution_str[i],
+                    ground_truth=batch_ground_truth[i],
+                    score=_reward,
+                )
+
             if log:
                 print(
                     f"--------------------------------{log_flag}--------------------------------")
@@ -1318,6 +1326,7 @@ class CriteriaRFTComputeScore(CriteriaRMRecallComputeScore):
                     f'【Solution】')
                 print(batch_solution_str[i])
 
+        self.save_rollout_info()
         return final_results
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1391,28 +1400,102 @@ CRITERIA_RM_RECALL_DEFAULT_PARAMS = {
         "max_concurrent_requests": 128
     },
     "save_rollouts": {
-        "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/autope_rollouts"
+        "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/criteria_rm_recall"
     }
 }
 
 CRITERIA_RM_RFT_DEFAULT_PARAMS = {
     "verify_agent": {
         "model": {
-            "model": "distill_qwen25_7B",
-            "base_url": "http://10.130.142.154:8000/v1",
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.223:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.6,
                 "timeout": 360,
-                "max_tokens": 16384,
+                "max_tokens": 1024,
             },
         },
-        "max_concurrent_requests": 128
+        "max_concurrent_requests": 32
     },
     "save_rollouts": {
-        "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/autope_rollouts"
+        "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/criteria_rft"
     }
 }
+
+
+def count_unique_tags(root: ET.Element) -> int:
+    """
+    计算XML元素树中所有唯一标签的数量
+
+    参数:
+    root (ET.Element): XML根元素
+
+    返回:
+    int: 唯一标签的数量
+    """
+    tags = set()
+
+    def collect_tags(element: ET.Element) -> None:
+        if element is None:
+            return
+        tags.add(element.tag)
+        for child in element:
+            collect_tags(child)
+
+    collect_tags(root)
+    DEFAULT_TAGS = ("goal-revision", "loop", "critic", "reflection", "metacognition", "self-doubt", "association", "insight",
+                    "intuition")
+    DEFAULT_TAGS = set(DEFAULT_TAGS)
+    return len(tags.intersection(DEFAULT_TAGS))
+
+
+def calculate_max_depth(root: ET.Element) -> int:
+    """
+    计算XML元素树的最大嵌套深度
+
+    参数:
+    root (ET.Element): XML根元素
+
+    返回:
+    int: 最大嵌套深度（根节点深度为1）
+    """
+    if not list(root):  # 如果没有子节点
+        return 1
+
+    max_child_depth = 0
+    for child in root:
+        child_depth = calculate_max_depth(child)
+        if child_depth > max_child_depth:
+            max_child_depth = child_depth
+
+    return max_child_depth + 1
+
+
+def calculate_average_depth(root: ET.Element) -> float:
+    """
+    计算XML元素树的平均嵌套深度
+
+    参数:
+    root (ET.Element): XML根元素
+
+    返回:
+    float: 平均嵌套深度（根节点深度为1）
+    """
+    def traverse(node, current_depth):
+        total_depth = current_depth
+        node_count = 1
+        for child in node:
+            child_total, child_count = traverse(child, current_depth + 1)
+            total_depth += child_total
+            node_count += child_count
+        return total_depth, node_count
+
+    if root is None:
+        return 0.0
+
+    total, count = traverse(root, 1)
+    return total / count if count > 0 else 0.0
 
 
 class RFTComputeScore(CriteriaRFTComputeScore):
@@ -1427,6 +1510,117 @@ class RFTComputeScore(CriteriaRFTComputeScore):
         )
         self.task_name = "RFT"
         self.task = RFTRLVRVerify()
+
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+        self.init_save_rollouts()
+
+        struct_scores = defaultdict(list)
+        accuracy = await self.get_accuracy(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            _uuid = batch_ground_truth[i]["extra_info"]["uuid"]
+            _reward = accuracy[i]
+            if _reward > 0:
+                try:
+                    root = xml_cot_parse_solution_fn(batch_solution_str[i])
+                    depth = calculate_average_depth(root)
+                    width = count_unique_tags(root)
+                    struct_scores[_uuid].append((depth, width))
+                except Exception as err:
+                    struct_scores[_uuid].append((-1, -1))
+            else:
+                struct_scores[_uuid].append((-1, -1))
+
+        def convert_to_ranks(points, max_score=0.1):
+            # 提取所有x值和y值
+            x_values = [point[0] for point in points]
+            y_values = [point[1] for point in points]
+
+            # 按降序排序并生成排名（数值越大排名越靠前）
+            x_sorted = sorted(x_values, reverse=True)
+            y_sorted = sorted(y_values, reverse=True)
+
+            # 计算x和y维度的分数（排名越高分数越高，等差递减）
+            n_x = len(x_sorted)
+            n_y = len(y_sorted)
+
+            # 计算等差步长（确保最后一名分数为0）
+            step_x = max_score / (n_x - 1) if n_x > 1 else 0
+            step_y = max_score / (n_y - 1) if n_y > 1 else 0
+
+            # 为每个唯一值分配分数
+            x_scores = {x: max_score - step_x *
+                        x_sorted.index(x) for x in set(x_values)}
+            y_scores = {y: max_score - step_y *
+                        y_sorted.index(y) for y in set(y_values)}
+
+            # 生成每个点的分数
+            return [(x_scores[point[0]], y_scores[point[1]]) for point in points]
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            _uuid = batch_ground_truth[i]["extra_info"]["uuid"]
+            _reward = accuracy[i]
+            mapper = {x: y for x, y in zip(
+                struct_scores[_uuid], convert_to_ranks(struct_scores[_uuid]))}
+
+            struct_info_str = ""
+            if _reward > 0:
+                try:
+                    root = xml_cot_parse_solution_fn(batch_solution_str[i])
+                    depth = calculate_average_depth(root)
+                    width = count_unique_tags(root)
+                    score = mapper[(depth, width)]
+
+                    # FIXME
+                    # _reward += np.sum(score)
+                    _reward += np.sum(score[1])
+                    struct_info_str = f'W={width},D={depth}'
+                except Exception as err:
+                    print(f'[ERROR] {err}')
+                    struct_info_str = f'NO INFO'
+            else:
+                struct_info_str = f'NO INFO'
+
+            final_results.append(_reward)
+            if (_reward > 0 and random.random() < 0.05) or (self.split == "valid" and random.random() < 0.01) or (self.split == "train" and random.random() < 0.01):
+                log = True
+                log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+            else:
+                log = False
+                log_flag = ""
+
+            # 保存Rollout信息
+            if self.split == "train":
+                self.update_rollout_info(
+                    solution_str=batch_solution_str[i],
+                    ground_truth=batch_ground_truth[i],
+                    score=_reward,
+                )
+
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f'【Question】`{repr(batch_ground_truth[i]["instruction"])}`')
+                print(
+                    f'【Criteria】`{repr(batch_ground_truth[i]["criteria"])}`')
+                print(
+                    f'[Final Reward]={_reward:.3f}|{struct_info_str}\n')
+                print(
+                    f'【Solution】')
+                print(batch_solution_str[i])
+        self.save_rollout_info()
+        return final_results
 
 
 compute_score_train = AutoPEComputeScore(

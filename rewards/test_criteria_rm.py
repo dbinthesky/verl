@@ -59,38 +59,68 @@ def load_dataset(num=100, format="autope"):
     elif format == "criteria_rm_rft":
         filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/ultra_feedback_rft_test.parquet"
     elif format == "xml_cot_rft":
-        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/xml_cot_rft_aime_2024_2025.parquet"
+        # filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/xml_cot_rft_aime_2024_2025.parquet"
+        filename = '/cpfs01/shared/llm_ddd/tongjian/sft/self_improvement/dapo_math_17k_xml_cot_pass1_2@2_elite.jsonl'
 
     batch_solution_str, batch_ground_truth = [], []
     batch_data_sources = []
 
-    df = pd.read_parquet(filename)
+    if format != "xml_cot_rft":
+        df = pd.read_parquet(filename)
 
-    count = 0
-    for _, row in df.iterrows():
-        row = row.to_dict()
-        batch_data_sources.append(row["data_source"])
+        count = 0
+        for _, row in df.iterrows():
+            row = row.to_dict()
+            batch_data_sources.append(row["data_source"])
 
-        if format == "autope":
-            prompt = row["reward_model"]["prompt"]
-            batch_solution_str.append(
-                f'<think>\nUNITTEST_ONLY\n</think>\n\n<prompt_engineering>\nQuestion: {prompt}\n\nThink step by step.\n</prompt_engineering>'
-            )
-        elif format == "criteria_rm_recall":
-            batch_solution_str.append(
-                f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\n# 评价标准\n有用性，真实性，安全性\n</conclusion>\n```xml'
-            )
-        elif format == "criteria_rm_rft":
-            batch_solution_str.append(
-                f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\n{random.choice(row["reward_model"]["completions"])}\n</conclusion>\n```xml'
-            )
-        elif format == "xml_cot_rft":
-            batch_solution_str.append(
-                f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\n{random.choice(row["reward_model"]["criteria"])}\n</conclusion>\n```xml'
-            )
-        batch_ground_truth.append(row["reward_model"])
-        if len(batch_ground_truth) == num:
-            break
+            if format == "autope":
+                prompt = row["reward_model"]["prompt"]
+                batch_solution_str.append(
+                    f'<think>\nUNITTEST_ONLY\n</think>\n\n<prompt_engineering>\nQuestion: {prompt}\n\nThink step by step.\n</prompt_engineering>'
+                )
+            elif format == "criteria_rm_recall":
+                batch_solution_str.append(
+                    f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\n# 评价标准\n有用性，真实性，安全性\n</conclusion>\n```xml'
+                )
+            elif format == "criteria_rm_rft":
+                batch_solution_str.append(
+                    f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\n{random.choice(row["reward_model"]["completions"])}\n</conclusion>\n```xml'
+                )
+            elif format == "xml_cot_rft":
+                batch_solution_str.append(
+                    f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\n{row["reward_model"]["criteria"]}\n</conclusion>\n```xml'
+                )
+            batch_ground_truth.append(row["reward_model"])
+            if len(batch_ground_truth) == num:
+                break
+    else:
+        with open(filename, "rt") as f:
+            for i, line in enumerate(f):
+                example = json.loads(line)
+                batch_solution_str.append(
+                    example["self_improvement"]["responses"][0]["response"]["text"]
+                )
+                batch_solution_str.append(
+                    example["self_improvement"]["responses"][0]["response"]["text"]
+                )
+                batch_ground_truth.append({
+                        "source":  "dapo",
+                        "instruction": example["self_improvement"]["prompt"],
+                        "criteria": f'Answer: {example["self_improvement"]["answer"]}',
+                        "extra_info": {
+                            "uuid": example["uuid"],
+                        },
+                    })
+                batch_ground_truth.append({
+                        "source":  "dapo",
+                        "instruction": example["self_improvement"]["prompt"],
+                        "criteria": f'Answer: {example["self_improvement"]["answer"]}',
+                        "extra_info": {
+                            "uuid": example["uuid"],
+                        },
+                    })
+                if len(batch_ground_truth) == num:
+                    break
     return batch_solution_str, batch_ground_truth
 
 
@@ -119,15 +149,7 @@ class TestCriteriaRMRecall(unittest.TestCase):
         # aio.run(main())
 
 
-class TestRFT(unittest.TestCase):
-    def test_compute_score(self):
-        batch_solution_str, batch_ground_truth = load_dataset(
-            num=6, format="xml_cot_rft")
-        print(len(batch_solution_str))
-        rft_score_valid(
-            [None] *
-            len(batch_solution_str), batch_solution_str, batch_ground_truth,
-        )
+
 
 
 class TestCriteriaRFT(unittest.TestCase):
@@ -192,6 +214,15 @@ class TestAutoPE(unittest.TestCase):
         #     print(results)
         # aio.run(main())
 
+
+class TestRFT(unittest.TestCase):
+    def test_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_dataset(
+            num=24, format="xml_cot_rft")
+        rft_score_valid(
+            [None] *
+            len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        )
 
 if __name__ == '__main__':
     unittest.main()

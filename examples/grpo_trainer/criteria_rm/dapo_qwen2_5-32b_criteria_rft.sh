@@ -52,14 +52,13 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/guoxu/hf_hub/models/models--deepseek-ai--DeepSeek-R1-Distill-Qwen-7B/snapshots/6602cadec947dbb53e64f3d8d6425320b2197247"
-    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_enhance_0529"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/criteria_rm_recall_0722_distillv17_roll16_bsz32_dapo_wo_kl_coef_wo_entropy_t8_step_40"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/ultra_feedback_rft_train.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/ultra_feedback_rft_test.parquet"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_v1_3_0728/checkpoint-93"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/dapo_math_17k_xml_cot_stage2_pass1_2@8/index0.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/xml_cot_rft_aime_2024_2025.parquet"
 
     experiment_name="distill-qwen-32b_criteria_rft-${YYMMDD}-${HHMMSS}"
     project_name="criteria_rft"
+    save_dir="xml_cot_v16_0728_sft_0728_roll16_bsz64_dapo_wo_kl_coef_wo_entropy_t12_1_2pass@8"
 
     OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/criteria_rm/${experiment_name}/"
     mkdir -p "${OUTPUT_DIR}"
@@ -92,14 +91,14 @@ run_training() {
 
     python3 -m recipe.dapo.main_dapo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/criteria_rm.py" \
-        custom_reward_function.name=criteria_rft_score_train \
+        custom_reward_function.name=rft_score_train \
         +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/criteria_rm.py" \
-        +custom_valid_reward_function.name=criteria_rft_score_train \
+        +custom_valid_reward_function.name=rft_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=32 \
-        data.max_prompt_length=2048 \
+        data.train_batch_size=64 \
+        data.max_prompt_length=4096 \
         data.max_response_length=10240 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
@@ -109,17 +108,17 @@ run_training() {
         actor_rollout_ref.actor.optim.weight_decay=0.1 \
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=32 \
-        actor_rollout_ref.actor.ppo_micro_batch_size=32 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=64 \
+        actor_rollout_ref.actor.ppo_micro_batch_size=64 \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=2 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=12288 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=14336 \
         actor_rollout_ref.actor.use_kl_loss=False \
-        actor_rollout_ref.actor.kl_loss_coef=0.0 \
+        actor_rollout_ref.actor.kl_loss_coef=0.00 \
         actor_rollout_ref.actor.entropy_coeff=0.0 \
         actor_rollout_ref.actor.grad_clip=1.0 \
         actor_rollout_ref.actor.clip_ratio_low=0.2 \
-        actor_rollout_ref.actor.clip_ratio_high=0.28 \
+        actor_rollout_ref.actor.clip_ratio_high=0.25 \
         actor_rollout_ref.actor.clip_ratio_c=10.0 \
         reward_model.overlong_buffer.enable=True \
         reward_model.overlong_buffer.len=$((1024 * 4)) \
@@ -132,9 +131,14 @@ run_training() {
         actor_rollout_ref.rollout.name="vllm" \
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.75 \
-        actor_rollout_ref.rollout.temperature=1.0 \
+        actor_rollout_ref.rollout.temperature=1.2 \
         actor_rollout_ref.rollout.n=16 \
         actor_rollout_ref.rollout.top_p=0.95 \
+        actor_rollout_ref.rollout.val_kwargs.temperature=1.0 \
+        actor_rollout_ref.rollout.val_kwargs.top_p=0.95 \
+        actor_rollout_ref.rollout.val_kwargs.top_k=20 \
+        actor_rollout_ref.rollout.val_kwargs.n=16 \
+        actor_rollout_ref.rollout.val_kwargs.do_sample=True \
         actor_rollout_ref.ref.ulysses_sequence_parallel_size=2 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
