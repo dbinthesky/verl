@@ -2419,7 +2419,7 @@ class Doc2QueryV2ComputeScore(object):
                 _score = np.mean(difficulty)
                 scores[index] = _score
 
-        weight = 0.3
+        weight = 0.2
         # 五分制
         return [_ * weight / 5.0 for _ in scores]
 
@@ -2446,7 +2446,6 @@ class Doc2QueryV2ComputeScore(object):
             max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
         )
         # True = 质量高
-
         scores = [0.0] * len(batch_solution_str)
         for quality, index in zip(qualities, indices):
             if quality is None:
@@ -2552,7 +2551,6 @@ class Doc2QueryV2ComputeScore(object):
 
             cur_score = 0
 
-            # TODO
             for j, _score in enumerate(scores):
                 if _score < 0:
                     if j < main_reward_pos:
