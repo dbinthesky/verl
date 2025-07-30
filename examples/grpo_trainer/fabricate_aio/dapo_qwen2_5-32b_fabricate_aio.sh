@@ -50,14 +50,24 @@ setup_path() {
     YYMMDD=$(date +%Y-%m-%d)
     HHMMSS=$(date +%H-%M-%S)
 
+    # Hparams
+    local num_gpus="${KUBERNETES_CONTAINER_RESOURCE_GPU:-8}"
+    local world_size="${WORLD_SIZE:-1}"
+
+    ROLLOUT_N=24
+    TRAIN_BSZ=$((num_gpus * world_size))
+    KL_LOSS_COEF="0"
+    TEMPERATURE="0.85"
+    TRAIN_DATA_NAME="fabricate_aio_train_0730"
+
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/DeepSeek-R1-Distill-Qwen-32B-fabricate_qa_v17"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/fabricate_aio_0720_distillv17_roll16_bsz64_dapo_wo_kl_coef_wo_entropy_t8_step_45"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0718.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_test_0718.parquet"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0730.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_test_0730.parquet"
 
-    experiment_name="distill-qwen-32b_fabricate_aio-${YYMMDD}-${HHMMSS}"
+    experiment_name="fabricate_aio_v18_0730_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_${TRAIN_DATA_NAME}"
+
     project_name="fabricate_aio"
 
     OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio/${experiment_name}/"
@@ -131,14 +141,14 @@ run_training() {
         actor_rollout_ref.rollout.name="vllm" \
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.75 \
-        actor_rollout_ref.rollout.temperature=0.7 \
-        actor_rollout_ref.rollout.n=16 \
+        actor_rollout_ref.rollout.temperature=${TEMPERATURE} \
+        actor_rollout_ref.rollout.n=${ROLLOUT_N} \
         actor_rollout_ref.rollout.top_p=0.95 \
         actor_rollout_ref.ref.ulysses_sequence_parallel_size=2 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
-        algorithm.kl_ctrl.kl_coef=0.000 \
+        algorithm.kl_ctrl.kl_coef=${KL_LOSS_COEF} \
         algorithm.lam=0.95 \
         reward_model.reward_manager=dapo_custom \
         trainer.logger='["console", "wandb"]' \

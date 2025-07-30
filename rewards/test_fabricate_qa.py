@@ -114,7 +114,7 @@ _doc2query_v3_qas = [
 
 
 def load_dataset(task_name, num=100, xml_cot=False):
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0718.parquet"
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0730.parquet"
     batch_solution_str, batch_ground_truth = [], []
     batch_data_sources = []
 
