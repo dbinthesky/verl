@@ -3441,7 +3441,6 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         batch_ground_truth,
         skip_run=None
     ):
-
         ans_lists = await self.simulate_respondent(
             batch_data_sources,
             batch_solution_str,

@@ -1,5 +1,6 @@
 import re
 import os
+import math
 import copy
 import json
 import uuid
@@ -69,9 +70,86 @@ RLVR_VERIFY_FEWSHOTS = """### **基于标准答案判断回答是否正确**
 
 #### **输出：**
 ### 分析过程：
-1. **理解题意和标准答案**：题目要求计算在单位正方形区域内，满足拉普拉斯方程且四边φ=0的条件下，经Gauss-Seidel迭代法100次后φ(0.5, 0.5)的值（保留两位小数），标准答案为\boxed{0.00}。
-2. **提取用户回答的最终结论**：用户回答通过分析推导，最终结论为\boxed{0.25}，去除过程性描述后，核心结果为0.25。
+1. **理解题意和标准答案**：题目要求计算在单位正方形区域内，满足拉普拉斯方程且四边φ=0的条件下，经Gauss-Seidel迭代法100次后φ(0.5, 0.5)的值（保留两位小数），标准答案为\\boxed{0.00}。
+2. **提取用户回答的最终结论**：用户回答通过分析推导，最终结论为\\boxed{0.25}，去除过程性描述后，核心结果为0.25。
 3. **对比结果**：用户回答的最终结论0.25与标准答案0.00不一致，且不存在数值题的合理误差范围，因此判定为错误。
+
+```json
+{
+  "判断结果": "错误"
+}
+```
+
+
+#### **输入：**
+```json
+{
+  "题目": "Suppose we draw this SVG path element:M 33.34742,22.43250 L 62.47296,22.43250 M 62.47296,22.43250 L 50.84847,35.60722 M 50.84847,35.60722 L 58.79792,26.59764 M 58.79792,26.59764 L 46.06248,41.03147 M 46.06248,41.03147 L 33.34742,22.43250 M 59.28939,7.78141 L -8.37042,10.57501 .Out of the following shapes:\n1. rectangle that is not a square and with no diagonals drawn\n2. square with no diagonals drawn\n3. triangle that is not a right triangle\n4. right triangle\n5. parallelogram that is not a rectangle and with no diagonals drawn\n6. trapezoid with exactly one pair of parallel sides and with no diagonals drawn\n7. irregular convex pentagon with no diagonals drawn\n8. irregular concave pentagon with no diagonals drawn\n9. regular pentagon with no diagonals drawn\n10. regular hexagon with no diagonals drawn\nwhich one can be viewed when the lines in the SVG are visualized? Note that a shape with n sides should not necessarily be drawn by n lines; e.g., a triangle might be drawn by 4 lines, two of which collinear. \nCoordinates have been rounded to 5 decimal places so ignore slight differences. Solve this problem step by step and provide the final answer within \\boxed{}. For example: \"Final Answer: \\boxed{3}.\"",
+  "标准答案": '\n{\n    "data_source": "BbehGeometricShapes",\n    "ground_truth": {\n      "Paths": "M 33.34742,22.43250 L 62.47296,22.43250 M 62.47296,22.43250 L 50.84847,35.60722 M 50.84847,35.60722 L 58.79792,26.59764 M 58.79792,26.59764 L 46.06248,41.03147 M 46.06248,41.03147 L 33.34742,22.43250 M 59.28939,7.78141 L -8.37042,10.57501",\n      "ans": "3"\n    }\n  }\n',
+  "用户回答": '\nTo determine the shape formed by the SVG path, we analyze the given line segments and their connections:\n\n### Step 1: Identify Line Segments\nThe SVG path consists of 6 line segments, defined by their start and end coordinates:\n1. \\( (33.34742, 22.43250) \\) to \\( (62.47296, 22.43250) \\)\n2. \\( (62.47296, 22.43250) \\) to \\( (50.84847, 35.60722) \\)\n3. \\( (50.84847, 35.60722) \\) to \\( (58.79792, 26.59764) \\)\n4. \\( (58.79792, 26.59764) \\) to \\( (46.06248, 41.03147) \\)\n5. \\( (46.06248, 41.03147) \\) to \\( (33.34742, 22.43250) \\)\n6. \\( (59.28939, 7.78141) \\) to \\( (-8.37042, 10.57501) \\)\n\n### Step 2: Detect Closed Shapes\nSegments 1–5 form a closed loop: the end of segment 5 matches the start of segment 1. This creates a 5-sided polygon (pentagon). The 6th segment is separate, with endpoints not coinciding with any vertices of the pentagon, so it does not affect the pentagon’s structure.\n\n### Step 3: Classify the Pentagon\n- **Regular vs. Irregular**: A regular pentagon requires all sides and angles to be equal. Calculating side lengths (distances between consecutive vertices) shows they are unequal (29.12554, ~17.57, ~12.015, ~19.25, ~22.53), so it is irregular.\n- **Convex vs. Concave**: Convex polygons have all internal angles < 180° and consistent turning directions (verified using cross products of consecutive edge vectors, all positive, indicating counterclockwise turns). Thus, it is convex.\n- **Diagonals**: The pentagon’s segments are its sides, with no lines connecting non-consecutive vertices (no diagonals).\n\n### Conclusion\nThe shape is an irregular convex pentagon with no diagonals drawn.\n\nFinal Answer: \x08oxed{7}\n',
+}
+```
+
+#### **输出：**
+### 分析过程：
+1. **理解题意和标准答案**：题目要求判断给定SVG路径形成的形状，选项共10个。标准答案中明确“ans”为“3”，即对应的形状是“三角形 that is not a right triangle”（非直角三角形）。
+2. **提取用户回答的最终结论**：用户回答通过分析推导，最终结论为\\boxed{7}，即认为形状是“irregular convex pentagon with no diagonals drawn”（不规则凸五边形且无对角线），去除过程性描述后，核心结果为7。
+3. **对比结果**：用户回答的最终结论7与标准答案3不一致，因此判定为错误。
+
+```json
+{
+  "判断结果": "错误"
+}
+```
+
+
+#### **输入：**
+```json
+{
+  "题目": '你正在解决一个Nonogram谜题。根据行和列的数字线索填充网格：\n\n规则说明：\n1. 数字表示连续填充的单元格块，块间至少间隔一个空格\n2. 行线索从左到右排列，列线索从上到下排列\n3. 用'X'表示填充，用空格或'.'表示空白\n\n行线索：\n第1行: 无\n第2行: [1, 1]\n第3行: 无\n第4行: [1]\n第5行: [1, 1]\n\n列线索：\n第1列: [1, 2]\n第2列: 无\n第3列: 无\n第4列: [1, 1]\n第5列: 无\n\n请将最终答案放在[answer]标签内，每行用'X'和空格表示填充状态：\n示例：\n[answer]\nXX X\n XXX\nX  X\n[/answer]'
+  "标准答案": '{\n  \"data_source\": \"Nonograms\",\n  \"ground_truth\": {\n    \"rows\": [\n      [],\n      [\n        1,\n        1\n      ],\n      [],\n      [\n        1\n      ],\n      [\n        1,\n        1\n      ]\n    ],\n    \"columns\": [\n      [\n        1,\n        2\n      ],\n      [],\n      [],\n      [\n        1,\n        1\n      ],\n      []\n    ]\n  }\n}'
+  "用户回答": '\n[answer]\n     \nX  X\n     \nX    \nX  X\n[/answer]\n'
+}
+```
+
+#### **输出：**
+### 分析过程：
+1. **理解题意和核心判断依据**：题目为Nonogram谜题，判断标准是用户回答的网格是否符合行线索和列线索。行线索和列线索是核心依据，标准答案中“ground_truth”的行和列线索即为此谜题的规则约束。
+2. **提取用户回答的内容**：用户回答的网格为：
+   - 第1行：全空格（符合行线索“无”）
+   - 第2行：X  X（两个单独的1格块，符合行线索[1,1]）
+   - 第3行：全空格（符合行线索“无”）
+   - 第4行：X    （一个1格块，符合行线索[1]）
+   - 第5行：X  X（两个单独的1格块，符合行线索[1,1]）
+3. **验证列线索符合性**：
+   - 第1列：第2行X、第4行X、第5行X，形成1格块（第2行）和2格块（第4-5行），符合列线索[1,2]
+   - 第2列：全空格，符合列线索“无”
+   - 第3列：全空格，符合列线索“无”
+   - 第4列：第2行X、第5行X，形成两个1格块，符合列线索[1,1]
+   - 第5列：全空格，符合列线索“无”
+4. **对比结果**：用户回答的网格内容完全符合所有行和列线索，内容正确。
+
+```json
+{
+  "判断结果": "正确"
+}
+```
+
+
+#### **输入：**
+```json
+{
+  "题目": 'Solve this Binairo puzzle (size 4x4):\n\nRules:\n1. Equal 0s/1s in each row/column\n2. No three consecutive identical digits\n3. All rows/columns must be unique\n4. Exactly one valid solution\n\nPuzzle:\nRow 1: _ 1 _ _\nRow 2: 1 _ _ _\nRow 3: _ 1 _ 0\nRow 4: _ 0 _ _\n\nPlace your final answer between [answer] and [/answer] tags as:\n\n[answer]\n1 0 1 0\n0 1 0 1\n...[/answer]'
+  "标准答案": '\n{\n    "data_source": "Binairo",\n    "ground_truth": {\n      "puzzle": [\n        [\n          null,\n          1,\n          null,\n          null\n        ],\n        [\n          1,\n          null,\n          null,\n          null\n        ],\n        [\n          null,\n          1,\n          null,\n          0\n        ],\n        [\n          null,\n          0,\n          null,\n          null\n        ]\n      ],\n      "solution": [\n        [\n          0,\n          1,\n          0,\n          1\n        ],\n        [\n          1,\n          0,\n          1,\n          0\n        ],\n        [\n          0,\n          1,\n          1,\n          0\n        ],\n        [\n          1,\n          0,\n          0,\n          1\n        ]\n      ]\n    }\n  }\n\n'
+  "用户回答": '\n[answer]\n0 1 1 0\n1 0 0 1\n1 1 0 0\n0 0 1 1\n[/answer]\n'
+}
+```
+
+#### **输出：**
+### 分析过程：
+1. **理解题意和标准答案**：题目为4x4的Binairo谜题，需依据给定规则求解。标准答案中的“solution”明确四行正确答案依次为“0 1 0 1”“1 0 1 0”“0 1 1 0”“1 0 0 1”。
+2. **提取用户回答的最终结论**：用户回答通过[answer]标签给出的最终结果为“0 1 1 0”“1 0 0 1”“1 1 0 0”“0 0 1 1”，去除标签后，核心结果为这四行数字。
+3. **对比结果**：用户回答的四行结果与标准答案的四行结果均不一致，因此判定为错误。
 
 ```json
 {
@@ -1219,7 +1297,15 @@ def criteria_rft_parse_solution_fn(solution_str: str):
             conclusion = [
                 child for child in root if child.tag == "conclusion"][0]
 
+            # Verify <conclusion> node should not have children.
+            has_child = False
+            for child in conclusion:
+                has_child = True
+            if has_child:
+                return None
+
             conclusion = conclusion.text.strip()
+
         except Exception as err:
             return None
     else:
@@ -1444,10 +1530,16 @@ def count_unique_tags(root: ET.Element) -> int:
             collect_tags(child)
 
     collect_tags(root)
-    DEFAULT_TAGS = ("goal-revision", "loop", "critic", "reflection", "metacognition", "self-doubt", "association", "insight",
+    DEFAULT_TAGS = ("goal-revision", "loop", "critic", "reflection", "mutter", "metacognition", "self-doubt", "association", "insight",
                     "intuition")
     DEFAULT_TAGS = set(DEFAULT_TAGS)
     return len(tags.intersection(DEFAULT_TAGS))
+
+
+def count_mutter_counts(solution: str) -> int:
+    if solution is None:
+        return 0
+    return solution.count("<mutter>")
 
 
 def calculate_max_depth(root: ET.Element) -> int:
@@ -1498,6 +1590,141 @@ def calculate_average_depth(root: ET.Element) -> float:
     return total / count if count > 0 else 0.0
 
 
+def calculate_tree_metrics(root):
+    """计算XML树的广度和深度指标"""
+    if root is None:
+        # 返回包含默认值的字典，而非元组
+        return {
+            'total_nodes': 0,
+            'depth': 0,
+            'max_width': 0,
+            'average_width': 0,
+            'distribution_entropy': 0,
+            'branching_factor': 0
+        }
+
+    # 以下为原逻辑（正常计算并返回字典）
+    max_width = 0
+    total_nodes = 0
+    depth = 0
+    node_count_by_level = {}
+
+    queue = [(root, 0)]
+    while queue:
+        node, level = queue.pop(0)
+        total_nodes += 1
+        if level in node_count_by_level:
+            node_count_by_level[level] += 1
+        else:
+            node_count_by_level[level] = 1
+        current_width = node_count_by_level[level]
+        if current_width > max_width:
+            max_width = current_width
+        if level > depth:
+            depth = level
+        for child in node:
+            queue.append((child, level + 1))
+
+    average_width = total_nodes / (depth + 1) if depth > 0 else 0
+
+    import math
+    total_nodes_float = float(total_nodes)
+    entropy = 0.0
+    for count in node_count_by_level.values():
+        p = count / total_nodes_float
+        if p > 0:
+            entropy -= p * math.log2(p)
+
+    total_children = 0
+    non_leaf_nodes = 0
+    for elem in root.iter():
+        children_count = len(list(elem))
+        if children_count > 0:
+            non_leaf_nodes += 1
+            total_children += children_count
+    branching_factor = total_children / non_leaf_nodes if non_leaf_nodes > 0 else 0
+
+    return {
+        'total_nodes': total_nodes,
+        'depth': depth,
+        'max_width': max_width,
+        'average_width': average_width,
+        'distribution_entropy': entropy,
+        'branching_factor': branching_factor
+    }
+
+
+def calculate_breadth_score(metrics):
+    """计算广度得分 (归一化后加权)"""
+    # 各指标权重
+    weights = {
+        'total_nodes': 0.3,
+        'average_width': 0.3,
+        'distribution_entropy': 0.4
+    }
+
+    # 归一化参数 (可根据实际数据范围调整)
+    norms = {
+        'total_nodes': 1000,      # 假设最大节点数为1000
+        'average_width': 50,      # 假设平均宽度最大为50
+        'distribution_entropy': 3  # 熵值通常不超过3
+    }
+
+    # 计算归一化得分
+    normalized = {
+        'total_nodes': min(metrics['total_nodes'] / norms['total_nodes'], 1.0),
+        'average_width': min(metrics['average_width'] / norms['average_width'], 1.0),
+        'distribution_entropy': min(metrics['distribution_entropy'] / norms['distribution_entropy'], 1.0)
+    }
+
+    # 加权求和
+    return sum(normalized[key] * weights[key] for key in weights)
+
+
+def calculate_depth_score(metrics):
+    """计算深度得分 (归一化后加权)"""
+    # 各指标权重
+    weights = {
+        'depth': 0.3,
+        'branching_factor': 0.4,
+        'max_width': 0.3
+    }
+
+    # 归一化参数 (可根据实际数据范围调整)
+    norms = {
+        'depth': 20,             # 假设最大深度为20
+        'branching_factor': 10,  # 假设最大分支因子为10
+        'max_width': 200         # 假设最大宽度为200
+    }
+
+    # 计算归一化得分
+    normalized = {
+        'depth': min(metrics['depth'] / norms['depth'], 1.0),
+        'branching_factor': min(metrics['branching_factor'] / norms['branching_factor'], 1.0),
+        'max_width': min(metrics['max_width'] / norms['max_width'], 1.0)
+    }
+
+    # 加权求和
+    return sum(normalized[key] * weights[key] for key in weights)
+
+
+def calculate_vitality_index(root):
+    """计算XML树的枝繁叶茂指数"""
+    metrics = calculate_tree_metrics(root)
+    breadth_score = calculate_breadth_score(metrics)
+    depth_score = calculate_depth_score(metrics)
+
+    # 最终指数: 广度得分×0.4 + 深度得分×0.6
+    vitality_index = (breadth_score * 0.4) + (depth_score * 0.6)
+
+    return {
+        'metrics': metrics,
+        'breadth_score': breadth_score,
+        'depth_score': depth_score,
+        'vitality_index': vitality_index
+    }
+
+
 class RFTComputeScore(CriteriaRFTComputeScore):
     def __init__(self,
                  parse_solution_fn,
@@ -1529,42 +1756,48 @@ class RFTComputeScore(CriteriaRFTComputeScore):
         for i in range(len(batch_solution_str)):
             _uuid = batch_ground_truth[i]["extra_info"]["uuid"]
             _reward = accuracy[i]
-            if _reward > 0:
-                try:
-                    root = xml_cot_parse_solution_fn(batch_solution_str[i])
-                    depth = calculate_average_depth(root)
-                    width = count_unique_tags(root)
-                    struct_scores[_uuid].append((depth, width))
-                except Exception as err:
-                    struct_scores[_uuid].append((-1, -1))
-            else:
-                struct_scores[_uuid].append((-1, -1))
+            try:
+                root = xml_cot_parse_solution_fn(batch_solution_str[i])
+                width = count_unique_tags(root)
+                vitality_index = calculate_vitality_index(root)[
+                    "vitality_index"]
+                mutter_counts = count_mutter_counts(batch_solution_str[i])
+                struct_scores[_uuid].append(
+                    (width, vitality_index, mutter_counts))
+            except Exception as err:
+                struct_scores[_uuid].append((-1, -1, -1))
 
-        def convert_to_ranks(points, max_score=0.1):
+        def convert_to_ranks(points, max_score=0.05):
             # 提取所有x值和y值
             x_values = [point[0] for point in points]
             y_values = [point[1] for point in points]
+            z_values = [point[2] for point in points]
 
             # 按降序排序并生成排名（数值越大排名越靠前）
             x_sorted = sorted(x_values, reverse=True)
             y_sorted = sorted(y_values, reverse=True)
+            z_sorted = sorted(z_values, reverse=True)
 
             # 计算x和y维度的分数（排名越高分数越高，等差递减）
             n_x = len(x_sorted)
             n_y = len(y_sorted)
+            n_z = len(z_sorted)
 
             # 计算等差步长（确保最后一名分数为0）
             step_x = max_score / (n_x - 1) if n_x > 1 else 0
             step_y = max_score / (n_y - 1) if n_y > 1 else 0
+            step_z = max_score / (n_y - 1) if n_z > 1 else 0
 
             # 为每个唯一值分配分数
             x_scores = {x: max_score - step_x *
                         x_sorted.index(x) for x in set(x_values)}
             y_scores = {y: max_score - step_y *
                         y_sorted.index(y) for y in set(y_values)}
+            z_scores = {z: max_score - step_z *
+                        z_sorted.index(z) for z in set(z_values)}
 
             # 生成每个点的分数
-            return [(x_scores[point[0]], y_scores[point[1]]) for point in points]
+            return [(x_scores[point[0]], y_scores[point[1]], z_scores[point[2]]) for point in points]
 
         final_results = []
         for i in range(len(batch_solution_str)):
@@ -1573,23 +1806,22 @@ class RFTComputeScore(CriteriaRFTComputeScore):
             mapper = {x: y for x, y in zip(
                 struct_scores[_uuid], convert_to_ranks(struct_scores[_uuid]))}
 
-            struct_info_str = ""
-            if _reward > 0:
-                try:
-                    root = xml_cot_parse_solution_fn(batch_solution_str[i])
-                    depth = calculate_average_depth(root)
-                    width = count_unique_tags(root)
-                    score = mapper[(depth, width)]
+            struct_info_str = f'[NO INFO]'
 
-                    # FIXME
-                    # _reward += np.sum(score)
-                    _reward += np.sum(score[1])
-                    struct_info_str = f'W={width},D={depth}'
-                except Exception as err:
-                    print(f'[ERROR] {err}')
-                    struct_info_str = f'NO INFO'
-            else:
-                struct_info_str = f'NO INFO'
+            # if self.split == "train":
+            #     try:
+            #         root = xml_cot_parse_solution_fn(batch_solution_str[i])
+            #         width = count_unique_tags(root)
+            #         vitality_index = calculate_vitality_index(root)[
+            #             "vitality_index"]
+            #         mutter_counts = count_mutter_counts(batch_solution_str[i])
+
+            #         score = mapper[(width, vitality_index, mutter_counts)]
+
+            #         _reward += np.sum(score)
+            #         struct_info_str = f'Vitality={vitality_index:.3f};Width={width:.3f};Mutter={mutter_counts}'
+            #     except Exception as err:
+            #         print(f'[ERROR] {err}')
 
             final_results.append(_reward)
             if (_reward > 0 and random.random() < 0.05) or (self.split == "valid" and random.random() < 0.01) or (self.split == "train" and random.random() < 0.01):

@@ -50,15 +50,26 @@ setup_path() {
     YYMMDD=$(date +%Y-%m-%d)
     HHMMSS=$(date +%H-%M-%S)
 
+    local num_gpus="${KUBERNETES_CONTAINER_RESOURCE_GPU:-8}"
+    local world_size="${WORLD_SIZE:-1}"
+
+    ROLLOUT_N=16
+    TRAIN_BSZ=$((num_gpus * world_size))
+    KL_LOSS_COEF="0"
+    TEMPERATURE="1.2"
+    TRAIN_DATA_NAME="dapo_math_17k_xml_cot_pass1_2@8"
+
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_v1_3_0728/checkpoint-93"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/dapo_math_17k_xml_cot_stage2_pass1_2@8/index0.parquet"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_v1_3_0729/checkpoint-67"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_v1_3_0726/checkpoint-88"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_v1_3_0730/checkpoint-96"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_v1_3_0731"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/${TRAIN_DATA_NAME}/index0.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/xml_cot_rft_aime_2024_2025.parquet"
 
-    experiment_name="distill-qwen-32b_criteria_rft-${YYMMDD}-${HHMMSS}"
+    experiment_name="xml_cot_v16_0731_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_${TRAIN_DATA_NAME}"
     project_name="criteria_rft"
-    save_dir="xml_cot_v16_0728_sft_0728_roll16_bsz64_dapo_wo_kl_coef_wo_entropy_t12_1_2pass@8"
 
     OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/criteria_rm/${experiment_name}/"
     mkdir -p "${OUTPUT_DIR}"
@@ -97,7 +108,7 @@ run_training() {
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=64 \
+        data.train_batch_size=${TRAIN_BSZ} \
         data.max_prompt_length=4096 \
         data.max_response_length=10240 \
         data.filter_overlong_prompts=True \
@@ -108,13 +119,13 @@ run_training() {
         actor_rollout_ref.actor.optim.weight_decay=0.1 \
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=64 \
-        actor_rollout_ref.actor.ppo_micro_batch_size=64 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=${TRAIN_BSZ} \
+        actor_rollout_ref.actor.ppo_micro_batch_size=${TRAIN_BSZ} \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=2 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=14336 \
         actor_rollout_ref.actor.use_kl_loss=False \
-        actor_rollout_ref.actor.kl_loss_coef=0.00 \
+        actor_rollout_ref.actor.kl_loss_coef=${KL_LOSS_COEF} \
         actor_rollout_ref.actor.entropy_coeff=0.0 \
         actor_rollout_ref.actor.grad_clip=1.0 \
         actor_rollout_ref.actor.clip_ratio_low=0.2 \
@@ -131,8 +142,8 @@ run_training() {
         actor_rollout_ref.rollout.name="vllm" \
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.75 \
-        actor_rollout_ref.rollout.temperature=1.2 \
-        actor_rollout_ref.rollout.n=16 \
+        actor_rollout_ref.rollout.temperature=${TEMPERATURE} \
+        actor_rollout_ref.rollout.n=${ROLLOUT_N} \
         actor_rollout_ref.rollout.top_p=0.95 \
         actor_rollout_ref.rollout.val_kwargs.temperature=1.0 \
         actor_rollout_ref.rollout.val_kwargs.top_p=0.95 \
@@ -151,7 +162,7 @@ run_training() {
         trainer.experiment_name="${experiment_name}" \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
-        trainer.save_freq=20 \
+        trainer.save_freq=40 \
         trainer.test_freq=10 \
         trainer.total_epochs=10000 \
         "$@"
