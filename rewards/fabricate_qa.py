@@ -3798,9 +3798,9 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
                 "base_url": "http://10.130.0.220:21002/v1",
                 "api_keys": "EMPTY",
                 "request_kwargs": {
-                    "temperature": 0.65,
+                    "temperature": 0.75,
                     "timeout": 600,
-                    "max_tokens": 20480,
+                    "max_tokens": 32768,
                 },
             },
             "repeat": 5,
@@ -3814,9 +3814,9 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
                 "base_url": "http://10.130.0.220:21002/v1",
                 "api_keys": "EMPTY",
                 "request_kwargs": {
-                    "temperature": 0.65,
+                    "temperature": 0.75,
                     "timeout": 600,
-                    "max_tokens": 20480,
+                    "max_tokens": 32768,
                 },
             },
             "repeat": 5,
