@@ -23,7 +23,8 @@ from criteria_rm import (
     criteria_recall_score_valid,
     criteria_rft_parse_solution_fn,
     CriteriaRFTComputeScore,
-    rft_score_valid
+    rft_score_valid,
+    xml_cot_score_valid
 )
 
 
@@ -59,13 +60,14 @@ def load_dataset(num=100, format="autope"):
     elif format == "criteria_rm_rft":
         filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/ultra_feedback_rft_test.parquet"
     elif format == "xml_cot_rft":
-        # filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/xml_cot_rft_aime_2024_2025.parquet"
         filename = '/cpfs01/shared/llm_ddd/tongjian/sft/self_improvement/dapo_math_17k_xml_cot_pass1_2@2_elite.jsonl'
+    elif format == "xml_cot_translation":
+        filename = '/cpfs01/shared/llm_ddd/tongjian/sft/self_improvement/xml_cot_translation_if_test_0731.jsonl'
 
     batch_solution_str, batch_ground_truth = [], []
     batch_data_sources = []
 
-    if format != "xml_cot_rft":
+    if format != "xml_cot_rft" and format != "xml_cot_translation":
         df = pd.read_parquet(filename)
 
         count = 0
@@ -93,7 +95,7 @@ def load_dataset(num=100, format="autope"):
             batch_ground_truth.append(row["reward_model"])
             if len(batch_ground_truth) == num:
                 break
-    else:
+    elif format == "xml_cot_rft":
         with open(filename, "rt") as f:
             for i, line in enumerate(f):
                 example = json.loads(line)
@@ -104,21 +106,41 @@ def load_dataset(num=100, format="autope"):
                     example["self_improvement"]["responses"][0]["response"]["text"]
                 )
                 batch_ground_truth.append({
-                        "source":  "dapo",
-                        "instruction": example["self_improvement"]["prompt"],
-                        "criteria": f'Answer: {example["self_improvement"]["answer"]}',
-                        "extra_info": {
-                            "uuid": example["uuid"],
-                        },
-                    })
+                    "source":  "dapo",
+                    "instruction": example["self_improvement"]["prompt"],
+                    "criteria": f'Answer: {example["self_improvement"]["answer"]}',
+                    "extra_info": {
+                        "uuid": example["uuid"],
+                    },
+                })
                 batch_ground_truth.append({
-                        "source":  "dapo",
-                        "instruction": example["self_improvement"]["prompt"],
-                        "criteria": f'Answer: {example["self_improvement"]["answer"]}',
-                        "extra_info": {
-                            "uuid": example["uuid"],
-                        },
-                    })
+                    "source":  "dapo",
+                    "instruction": example["self_improvement"]["prompt"],
+                    "criteria": f'Answer: {example["self_improvement"]["answer"]}',
+                    "extra_info": {
+                        "uuid": example["uuid"],
+                    },
+                })
+                if len(batch_ground_truth) == num:
+                    break
+    elif format == "xml_cot_translation":
+        with open(filename, "rt") as f:
+            for i, line in enumerate(f):
+                example = json.loads(line)
+                resp = example["self_improvement"]["responses"][0]["response"]
+                conclusion = resp[resp.index("</think>"):].strip()
+                batch_solution_str.append(
+                    f"```xml\n<think></think>\n<conclusion>{conclusion}</conclusion>\n```")
+
+                batch_ground_truth.append({
+                    "source":  "dapo",
+                    "instruction": example["self_improvement"]["prompt"],
+                    "criteria": f'Answer: {conclusion}',
+                    "meta_cognition": ["<mutter> unittest </mutter>"],
+                    "extra_info": {
+                        "uuid": example["uuid"],
+                    },
+                })
                 if len(batch_ground_truth) == num:
                     break
     return batch_solution_str, batch_ground_truth
@@ -147,9 +169,6 @@ class TestCriteriaRMRecall(unittest.TestCase):
         #     )
         #     print(results)
         # aio.run(main())
-
-
-
 
 
 class TestCriteriaRFT(unittest.TestCase):
@@ -223,6 +242,17 @@ class TestRFT(unittest.TestCase):
             [None] *
             len(batch_solution_str), batch_solution_str, batch_ground_truth,
         )
+
+
+class TestXMLCoTTranslation(unittest.TestCase):
+    def test_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_dataset(
+            num=24, format="xml_cot_translation")
+        xml_cot_score_valid(
+            [None] *
+            len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        )
+
 
 if __name__ == '__main__':
     unittest.main()

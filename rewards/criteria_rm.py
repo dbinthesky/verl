@@ -1419,6 +1419,161 @@ class CriteriaRFTComputeScore(CriteriaRMRecallComputeScore):
 # CRITERIA_RM_RFT
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# XML_COT
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+class RFTComputeScore(CriteriaRFTComputeScore):
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-2.0
+                 ):
+        super().__init__(
+            split=split, parse_solution_fn=parse_solution_fn, args=args, min_reward=min_reward
+        )
+        self.task_name = "RFT"
+        self.task = RFTRLVRVerify()
+
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+        self.init_save_rollouts()
+
+        struct_scores = defaultdict(list)
+        accuracy = await self.get_accuracy(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            _uuid = batch_ground_truth[i]["extra_info"]["uuid"]
+            _reward = accuracy[i]
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            _uuid = batch_ground_truth[i]["extra_info"]["uuid"]
+            _reward = accuracy[i]
+
+            struct_info_str = f'[TODO]'
+
+            final_results.append(_reward)
+            if (_reward > 0 and random.random() < 0.05) or (self.split == "valid" and random.random() < 0.01) or (self.split == "train" and random.random() < 0.01):
+                log = True
+                log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+            else:
+                log = False
+                log_flag = ""
+
+            # 保存Rollout信息
+            if self.split == "train":
+                self.update_rollout_info(
+                    solution_str=batch_solution_str[i],
+                    ground_truth=batch_ground_truth[i],
+                    score=_reward,
+                )
+
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f'【Question】`{repr(batch_ground_truth[i]["instruction"])}`')
+                print(
+                    f'【Criteria】`{repr(batch_ground_truth[i]["criteria"])}`')
+                print(
+                    f'[Final Reward]={_reward:.3f}|{struct_info_str}\n')
+                print(
+                    f'【Solution】')
+                print(batch_solution_str[i])
+        self.save_rollout_info()
+        return final_results
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# XML_COT
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# XML_COT_TRANSLATION
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+class XMLCoTTranslation(RFTComputeScore):
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-2.0
+                 ):
+        super().__init__(
+            split=split, parse_solution_fn=parse_solution_fn, args=args, min_reward=min_reward
+        )
+        self.task_name = "XML COT TRANSLATION"
+
+    def compute_meta_cognition_recall(self,
+                                      solution_str,
+                                      ground_truth,
+                                      ):
+        meta = ground_truth["meta_cognition"]
+        return len([_ for _ in meta if _ in solution_str]) / len(meta)
+
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+        accuracy = await self.get_accuracy(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            _uuid = batch_ground_truth[i]["extra_info"]["uuid"]
+            _reward = accuracy[i]
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            _uuid = batch_ground_truth[i]["extra_info"]["uuid"]
+            _reward = accuracy[i]
+            recall = self.compute_meta_cognition_recall(
+                batch_solution_str[i], batch_ground_truth[i]
+            )
+            _reward += recall
+
+            final_results.append(_reward)
+            if (_reward > 0 and random.random() < 0.05) or (self.split == "valid" and random.random() < 0.01) or (self.split == "train" and random.random() < 0.01):
+                log = True
+                log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+            else:
+                log = False
+                log_flag = ""
+
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f'【Question】`{repr(batch_ground_truth[i]["instruction"])}`')
+                print(
+                    f'【Criteria】`{repr(batch_ground_truth[i]["criteria"])}`')
+                print(
+                    f'[Final Reward]={_reward:.3f}|Recall={recall:.3f}\n')
+                print(
+                    f'【Solution】')
+                print(batch_solution_str[i])
+        return final_results
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# XML_COT_TRANSLATION
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 AUTOPE_DEFAULT_PARAMS = {
     "verify_agent": {
@@ -1510,77 +1665,6 @@ CRITERIA_RM_RFT_DEFAULT_PARAMS = {
 }
 
 
-class RFTComputeScore(CriteriaRFTComputeScore):
-    def __init__(self,
-                 parse_solution_fn,
-                 split="train",
-                 args=None,
-                 min_reward=-2.0
-                 ):
-        super().__init__(
-            split=split, parse_solution_fn=parse_solution_fn, args=args, min_reward=min_reward
-        )
-        self.task_name = "RFT"
-        self.task = RFTRLVRVerify()
-
-    async def _compute_score(self,
-                             batch_data_sources,
-                             batch_solution_str,
-                             batch_ground_truth,
-                             ):
-        self.init_save_rollouts()
-
-        struct_scores = defaultdict(list)
-        accuracy = await self.get_accuracy(
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-        )
-
-        final_results = []
-        for i in range(len(batch_solution_str)):
-            _uuid = batch_ground_truth[i]["extra_info"]["uuid"]
-            _reward = accuracy[i]
-
-        final_results = []
-        for i in range(len(batch_solution_str)):
-            _uuid = batch_ground_truth[i]["extra_info"]["uuid"]
-            _reward = accuracy[i]
-
-            struct_info_str = f'[TODO]'
-
-            final_results.append(_reward)
-            if (_reward > 0 and random.random() < 0.05) or (self.split == "valid" and random.random() < 0.01) or (self.split == "train" and random.random() < 0.01):
-                log = True
-                log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
-            else:
-                log = False
-                log_flag = ""
-
-            # 保存Rollout信息
-            if self.split == "train":
-                self.update_rollout_info(
-                    solution_str=batch_solution_str[i],
-                    ground_truth=batch_ground_truth[i],
-                    score=_reward,
-                )
-
-            if log:
-                print(
-                    f"--------------------------------{log_flag}--------------------------------")
-                print(
-                    f'【Question】`{repr(batch_ground_truth[i]["instruction"])}`')
-                print(
-                    f'【Criteria】`{repr(batch_ground_truth[i]["criteria"])}`')
-                print(
-                    f'[Final Reward]={_reward:.3f}|{struct_info_str}\n')
-                print(
-                    f'【Solution】')
-                print(batch_solution_str[i])
-        self.save_rollout_info()
-        return final_results
-
-
 compute_score_train = AutoPEComputeScore(
     parse_autope_solution_fn, split="train", args=AUTOPE_DEFAULT_PARAMS).compute_score
 compute_score_valid = AutoPEComputeScore(
@@ -1602,4 +1686,10 @@ criteria_rft_score_valid = CriteriaRFTComputeScore(
 rft_score_train = RFTComputeScore(
     criteria_rft_parse_solution_fn, split="train", args=CRITERIA_RM_RFT_DEFAULT_PARAMS).compute_score
 rft_score_valid = RFTComputeScore(
+    criteria_rft_parse_solution_fn, split="valid", args=CRITERIA_RM_RFT_DEFAULT_PARAMS).compute_score
+
+
+xml_cot_score_train = XMLCoTTranslation(
+    criteria_rft_parse_solution_fn, split="train", args=CRITERIA_RM_RFT_DEFAULT_PARAMS).compute_score
+xml_cot_score_valid = XMLCoTTranslation(
     criteria_rft_parse_solution_fn, split="valid", args=CRITERIA_RM_RFT_DEFAULT_PARAMS).compute_score
