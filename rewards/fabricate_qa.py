@@ -4429,12 +4429,16 @@ _fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
     "salt": _default_salt_compute_score_train,
     "doc2query_v3": _default_doc2query_v3_compute_score_train,
     "rlvr": _default_rlvr_compute_score_train,
+    "aime_2025": _default_rlvr_compute_score_valid,
+    "aime_2024": _default_rlvr_compute_score_valid,
 })
 _fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
     "doc2query_v2": _default_doc2query_v2_compute_score_valid,
     "salt": _default_salt_compute_score_valid,
     "doc2query_v3": _default_doc2query_v3_compute_score_valid,
     "rlvr": _default_rlvr_compute_score_valid,
+    "aime_2025": _default_rlvr_compute_score_valid,
+    "aime_2024": _default_rlvr_compute_score_valid,
 })
 fabricate_aio_compute_score_train = _fabricate_aio_compute_score_train.compute_score
 fabricate_aio_compute_score_valid = _fabricate_aio_compute_score_valid.compute_score

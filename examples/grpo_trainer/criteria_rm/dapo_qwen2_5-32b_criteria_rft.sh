@@ -56,7 +56,7 @@ setup_path() {
     ROLLOUT_N=16
     TRAIN_BSZ=$((num_gpus * world_size))
     KL_LOSS_COEF="0"
-    TEMPERATURE="1.2"
+    TEMPERATURE="1.0"
     TRAIN_DATA_NAME="dapo_math_17k_xml_cot_pass1_2@8"
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
@@ -64,7 +64,8 @@ setup_path() {
     # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_v1_3_0729/checkpoint-67"
     # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_v1_3_0726/checkpoint-88"
     # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_v1_3_0730/checkpoint-96"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_v1_3_0731"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_v1_3_0731"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/DeepSeek-R1-Distill-Qwen-32B-xml_cot_if_v1_3_0731/checkpoint-56"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/${TRAIN_DATA_NAME}/index0.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/xml_cot_rft_aime_2024_2025.parquet"
 
