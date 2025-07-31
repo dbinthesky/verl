@@ -1523,6 +1523,13 @@ class XMLCoTTranslation(RFTComputeScore):
         meta = ground_truth["meta_cognition"]
         return len([_ for _ in meta if _ in solution_str]) / len(meta)
 
+    def detect_meta_cognition_hack(self, solution_str):
+        # 匹配</mutter>后接任意空白字符，再接<mutter>的模式
+        pattern = r'</mutter>\s*<mutter>'
+        # 查找所有匹配项
+        matches = re.findall(pattern, solution_str, re.IGNORECASE)
+        return len(matches) > 0
+
     async def _compute_score(self,
                              batch_data_sources,
                              batch_solution_str,
@@ -1548,8 +1555,14 @@ class XMLCoTTranslation(RFTComputeScore):
             )
             _reward += recall
 
+            hack_detection = self.detect_meta_cognition_hack(
+                batch_solution_str[i]
+            )
+            if hack_detection:
+                _reward = 0.0
+
             final_results.append(_reward)
-            if (_reward > 0 and random.random() < 0.05) or (self.split == "valid" and random.random() < 0.01) or (self.split == "train" and random.random() < 0.01):
+            if (accuracy[i] > 0 and random.random() < 0.05) or (self.split == "valid" and random.random() < 0.01) or (self.split == "train" and random.random() < 0.01):
                 log = True
                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
             else:
@@ -1689,7 +1702,7 @@ rft_score_valid = RFTComputeScore(
     criteria_rft_parse_solution_fn, split="valid", args=CRITERIA_RM_RFT_DEFAULT_PARAMS).compute_score
 
 
-xml_cot_score_train = XMLCoTTranslation(
+xml_cot_translation_score_train = XMLCoTTranslation(
     criteria_rft_parse_solution_fn, split="train", args=CRITERIA_RM_RFT_DEFAULT_PARAMS).compute_score
-xml_cot_score_valid = XMLCoTTranslation(
+xml_cot_translation_score_valid = XMLCoTTranslation(
     criteria_rft_parse_solution_fn, split="valid", args=CRITERIA_RM_RFT_DEFAULT_PARAMS).compute_score
