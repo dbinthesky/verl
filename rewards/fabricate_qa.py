@@ -3727,8 +3727,131 @@ class RLVRComputeScore(Doc2QueryV2ComputeScore):
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# KG2QUERY V1
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+class QuestionSimilarityReward(PenaltyOrReward):
+    """ 问题相似度奖励：新问题与原问题越接近越好 """
+
+    def __init__(self, parse_solution_fn, min_score, max_score, abbrev="TokSimReward", key="question"):
+        super().__init__(
+            parse_solution_fn=parse_solution_fn, min_score=min_score, max_score=max_score, abbrev=abbrev
+        )
+        self.key = key
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        if ground_truth.get(self.key, None) is None:
+            return 0.0
+        try:
+            solution_str = self.parse_solution_fn(solution_str)
+
+            if solution_str is None:
+                return 0.0
+            question, answer = solution_str
+
+            if ground_truth.get(self.key, None):
+                gt = ground_truth[self.key]
+            else:
+                return 0.0
+
+            gt_tokens = " ".join(tokenize(gt.lower(), "en"))
+            sl_tokens = " ".join(tokenize(question.lower(), "en"))
+            bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
+            similarity = bleu / 100
+            return similarity * (self.max_score - self.min_score)
+        except Exception as err:
+            return 0.0
+
+
+class KG2QueryV1ComputeScore(SALTComputeScore):
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-2.0
+                 ):
+
+        super().__init__(
+            parse_solution_fn=parse_solution_fn, split=split,
+            args=args,
+            min_reward=min_reward
+        )
+        self.task_name = "KG2QUERY V1"
+
+    @classmethod
+    def rule_based_penalties(cls):
+        return [
+            SALTFormatVerify,
+            LanguageConsistency,
+            QuestionSimilarityReward
+        ]
+
+    def init_rule_based_penalties(self):
+        size = len(self.rule_based_penalties())-1
+        interval = (0 - self.min_reward) / 2 / \
+            (size+1)
+        penalty_scopes = [(self.min_reward + (i * 2 + 1) *
+                           interval, self.min_reward + (i * 2 + 2) *
+                           interval) for i in range(size)]
+        self._penalties = []
+        for p, s in zip(self.rule_based_penalties()[:-1], penalty_scopes):
+            self._penalties.append(p(parse_solution_fn=self.parse_solution_fn,
+                                     min_score=s[0], max_score=s[1]))
+        self._penalties.append(self.rule_based_penalties()[-1](
+            parse_solution_fn=self.parse_solution_fn, min_score=0, max_score=1.0
+        ))
+
+    async def get_similarity_reward(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+    ):
+        task = JudgeTwoQuestionSimilarity()
+        indices = []
+        questions = []
+
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            result = self.parse_solution_fn(sol)
+            if result is not None and gt.get("question", None):
+                questions.append((gt["question"], result[0]))
+                indices.append(i)
+            else:
+                continue
+
+        sim_penalties = await task.do_job(
+            agent=self.verify_agent,
+            batch_inputs=questions,
+            max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
+        )
+
+        run_args = self.args["similarity_run_args"]
+
+        scores = [0.0] * len(batch_solution_str)
+        for sim, index in zip(sim_penalties, indices):
+            if sim is None:
+                pass
+            else:
+                _score = 0.0
+                for threshold, set_val in run_args["threshold"].items():
+                    if sim >= threshold:
+                        _score = max(_score, set_val)
+                scores[index] = _score * run_args["weight"]
+        return scores
+
+    def coarse_process(self):
+        return [
+            Process(name="SimPenalty",
+                    function=self.get_similarity_reward, filter_only=False, non_skip=True)
+        ]
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# KG2QUERY V1
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
 # AIO
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 class FabricateAIOComputeScore(object):
     def __init__(self, processors=None):
@@ -4267,6 +4390,104 @@ RLVR_DEFAULT_PARAMS = {
     }
 }
 
+KG2QUERY_V1_DEFAULT_PARAMS = {
+    "learnable_run_args": {
+        "self_taught": {
+            "model": {
+                "model": "service_dv3_for_tongjian",
+                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "fn": "reject_sample",
+            "repeat": 10,
+            "desc": '拒绝采样',
+            "max_concurrent_requests": 92
+        },
+        "w/o_content": {
+            "model": {
+                "model": "service_dv3_for_tongjian",
+                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "repeat": 8,
+            "fn": "respond_wo_context",
+            "desc": 'w/o ctx',
+            "max_concurrent_requests": 92
+        },
+        "w_content": {
+            "model": {
+                "model": "service_dv3_for_tongjian",
+                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "repeat": 8,
+            "fn": "respond_w_context",
+            "desc": 'w ctx',
+            "max_concurrent_requests": 92
+        },
+    },
+    "learnable_metric_args": {
+        "advantage": 'w_content',
+        "weakness": 'w/o_content',
+        "advantage_threshold": 2/8,
+        "difficulty_reduction_bonus_weight": 1.0
+    },
+    "similarity_run_args":  {
+        "threshold": {
+            1: 0.001,
+            2: 0.01,
+            3: 0.1,
+            4: 0.5,
+            5: 1.0
+        },
+        "weight": 0.25,
+    },
+    "verify_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.223:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 1024,
+            },
+        },
+        "max_concurrent_requests": 32
+    },
+    "auxiliary_agent": {
+        "model": {
+            "model": "qwen25_32B_instruct",
+            "base_url": "http://10.130.142.223:8000/v1",
+            "api_keys": "EMPTY",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 4096,
+            },
+        },
+        "max_concurrent_requests": 32
+    },
+    "save_rollouts": {
+        "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
+    }
+}
+
 
 # LongCoT Response
 _default_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScore(
@@ -4299,6 +4520,7 @@ _default_rlvr_compute_score_valid = RLVRComputeScore(
     rlvr_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
 rlvr_compute_score_train = _default_rlvr_compute_score_train.compute_score
 rlvr_compute_score_valid = _default_rlvr_compute_score_valid.compute_score
+
 
 # XMLCoT Response
 
@@ -4458,3 +4680,11 @@ _xml_cot_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors
 })
 xml_cot_fabricate_aio_compute_score_train = _xml_cot_fabricate_aio_compute_score_train.compute_score
 xml_cot_fabricate_aio_compute_score_valid = _xml_cot_fabricate_aio_compute_score_valid.compute_score
+
+
+_kg2query_v1_compute_score_train = KG2QueryV1ComputeScore(
+    salt_parse_solution_fn, split="train", args=KG2QUERY_V1_DEFAULT_PARAMS)
+_kg2query_v1_compute_score_valid = KG2QueryV1ComputeScore(
+    salt_parse_solution_fn, split="valid", args=KG2QUERY_V1_DEFAULT_PARAMS)
+kg2query_v1_compute_score_train = _kg2query_v1_compute_score_train.compute_score
+kg2query_v1_compute_score_valid = _kg2query_v1_compute_score_valid.compute_score

@@ -34,6 +34,7 @@ from fabricate_qa import (
     DOC2QUERY_V2_DEFAULT_PARAMS,
     DOC2QUERY_V2_DEV_PARAMS,
     DOC2QUERY_V3_DEFAULT_PARAMS,
+    KG2QUERY_V1_DEFAULT_PARAMS,
     SALT_DEFAULT_PARAMS,
     SALT_DEV_PARAMS,
     RLVR_DEFAULT_PARAMS,
@@ -44,6 +45,7 @@ from fabricate_qa import (
     fabricate_aio_compute_score_valid,
     xml_cot_fabricate_aio_compute_score_valid,
     rlvr_compute_score_valid,
+    KG2QueryV1ComputeScore
 )
 
 UNITTEST_AGENT = Agent(**{
@@ -115,6 +117,8 @@ _doc2query_v3_qas = [
 
 def load_dataset(task_name, num=100, xml_cot=False):
     filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0730.parquet"
+    if task_name == "kg2query_v1":
+        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/kg2query_v1_oc_v1_7_hard_problem_0623.parquet"
     batch_solution_str, batch_ground_truth = [], []
     batch_data_sources = []
 
@@ -137,7 +141,7 @@ def load_dataset(task_name, num=100, xml_cot=False):
                 batch_solution_str.append(
                     f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\n\nxxxxx\n<question>\nQuestion: {sample[0]}\n\nAnswer: {sample[1]}\n\nAnswer Type: {sample[2]}\n</question>\nsdfdsfs\n</conclusion>\n```'
                 )
-        elif row["data_source"] == "salt":
+        elif row["data_source"] == "salt" or row["data_source"] == "kg2query_v1":
             sample = random.choice(_salt_qas)
             if not xml_cot:
                 batch_solution_str.append(
@@ -548,6 +552,48 @@ class TestCriteriaRM(unittest.TestCase):
     #         [None] *
     #         len(batch_solution_str), batch_solution_str, batch_ground_truth,
     #     )
+
+
+class TestKG2QueryV1(unittest.TestCase):
+    def test_salt_format_verify(self):
+        scorer = SALTFormatVerify(
+            salt_parse_solution_fn, -1.75, -1.25)
+        print(scorer.get_penalty_or_reward(
+            '<think>\nssssss\n</think>\n\n<question>\nQuestion: 某公司生产密码设备，其产品批次密码t为两位正整数。密码设置规则要求：将t乘以生产效率系数K后，结果最后两位必须是36。效率系数K通过如下方式计算：去年设备计划运行250天，实际因维护停机30天，另5%时间用于年度升级。K值等于[(计划运行天数 - 停机天数 - 升级天数) × 0.05] + 1。同时，公司年度维护成本为80,000元，但这不影响K的计算。求满足条件的密码t值。  \nAnswer: \\boxed{76}xxxxx xxx xxx xxx xxx xxx xxx xxx xxx xxx xxx xx\n</question><|im_end|><｜end▁of▁sentence｜>', None
+        ))
+
+    def test_question_similarity_reward(self):
+        task = KG2QueryV1ComputeScore(
+            salt_parse_solution_fn, split="valid", args=KG2QUERY_V1_DEFAULT_PARAMS)
+
+        print(task._penalties[-1].get_penalty_or_reward(
+            '<think>\nssssss\n</think>\n\n<question>\nQuestion: During a materials analysis audit, an engineer incorrectly noted white heart malleable iron\'s microstructure matrix as containing graphite. Properly, the matrix consists of two iron phases plus cementite. Identify these two phases separated by \'+\' symbols. \nAnswer: ferrite+cementite\n</question><|im_end|><｜end▁of▁sentence｜>',
+            {"question": "In an industrial setting, a quality control technician inspects a sample labeled as malleable iron with a ferrite-pearlite matrix and hard nodules, mistakenly reported as graphite. Identify the three primary microstructural components present.", "lang_code": "en"}
+        ))
+
+    def test_similarity_reward(self):
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="kg2query_v1", num=4)
+        task = KG2QueryV1ComputeScore(
+            salt_parse_solution_fn, split="valid", args=KG2QUERY_V1_DEFAULT_PARAMS)
+
+        async def main():
+            results = await task.get_similarity_reward(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth,
+            )
+            print(results)
+        aio.run(main())
+
+    def test_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="kg2query_v1", num=4)
+        task = KG2QueryV1ComputeScore(
+            salt_parse_solution_fn, split="valid", args=KG2QUERY_V1_DEFAULT_PARAMS)
+        print(task.compute_score(
+            [None] *
+            len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        ))
 
 
 if __name__ == '__main__':
