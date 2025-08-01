@@ -1705,9 +1705,9 @@ class XMLCoTTranslation(RFTComputeScore):
 AUTOPE_DEFAULT_PARAMS = {
     "verify_agent": {
         "model": {
-            "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.154:8000/v1",
-            "api_keys": "EMPTY",
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
                 "temperature": 0.7,
                 "timeout": 360,
@@ -1718,9 +1718,9 @@ AUTOPE_DEFAULT_PARAMS = {
     },
     "solver_agent": {
         "model": {
-            "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.154:8000/v1",
-            "api_keys": "EMPTY",
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
                 "temperature": 0.9,
                 "timeout": 360,
@@ -1740,9 +1740,9 @@ AUTOPE_DEFAULT_PARAMS = {
 CRITERIA_RM_RECALL_DEFAULT_PARAMS = {
     "verify_agent": {
         "model": {
-            "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.154:8000/v1",
-            "api_keys": "EMPTY",
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
                 "temperature": 0.7,
                 "timeout": 360,
@@ -1753,9 +1753,9 @@ CRITERIA_RM_RECALL_DEFAULT_PARAMS = {
     },
     "judge_agent": {
         "model": {
-            "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.154:8000/v1",
-            "api_keys": "EMPTY",
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
                 "temperature": 0.6,
                 "timeout": 360,
@@ -1775,9 +1775,9 @@ CRITERIA_RM_RECALL_DEFAULT_PARAMS = {
 CRITERIA_RM_RFT_DEFAULT_PARAMS = {
     "verify_agent": {
         "model": {
-            "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.154:8000/v1",
-            "api_keys": "EMPTY",
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
                 "temperature": 0.6,
                 "timeout": 360,
