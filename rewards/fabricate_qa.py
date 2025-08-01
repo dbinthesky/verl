@@ -4406,7 +4406,7 @@ KG2QUERY_V1_DEFAULT_PARAMS = {
             "fn": "reject_sample",
             "repeat": 10,
             "desc": '拒绝采样',
-            "max_concurrent_requests": 92
+            "max_concurrent_requests": 512
         },
         "w/o_content": {
             "model": {
@@ -4422,7 +4422,7 @@ KG2QUERY_V1_DEFAULT_PARAMS = {
             "repeat": 8,
             "fn": "respond_wo_context",
             "desc": 'w/o ctx',
-            "max_concurrent_requests": 92
+            "max_concurrent_requests": 256
         },
         "w_content": {
             "model": {
@@ -4438,7 +4438,7 @@ KG2QUERY_V1_DEFAULT_PARAMS = {
             "repeat": 8,
             "fn": "respond_w_context",
             "desc": 'w ctx',
-            "max_concurrent_requests": 92
+            "max_concurrent_requests": 256
         },
     },
     "learnable_metric_args": {
