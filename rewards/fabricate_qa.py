@@ -3776,7 +3776,7 @@ class KG2QueryV1ComputeScore(SALTComputeScore):
             args=args,
             min_reward=min_reward
         )
-        self.task_name = "KG2QUERY V1"
+        self.task_name = "KG2QUERY_V1"
 
     @classmethod
     def rule_based_penalties(cls):
@@ -4003,8 +4003,8 @@ DOC2QUERY_V2_DEV_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": {
-                "model": "service_dv3_for_tongjian",
-                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
@@ -4019,8 +4019,8 @@ DOC2QUERY_V2_DEV_PARAMS = {
         },
         "w_content": {
             "model": {
-                "model": "service_dv3_for_tongjian",
-                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
@@ -4091,8 +4091,8 @@ SALT_DEFAULT_PARAMS = {
     "learnable_run_args": {
         "self_taught": {
             "model": {
-                "model": "service_dv3_for_tongjian",
-                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
@@ -4107,8 +4107,8 @@ SALT_DEFAULT_PARAMS = {
         },
         "w/o_content": {
             "model": {
-                "model": "service_dv3_for_tongjian",
-                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
@@ -4123,8 +4123,8 @@ SALT_DEFAULT_PARAMS = {
         },
         "w_content": {
             "model": {
-                "model": "service_dv3_for_tongjian",
-                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
@@ -4193,8 +4193,8 @@ SALT_DEV_PARAMS = {
     "learnable_run_args": {
         "self_taught": {
             "model": {
-                "model": "service_dv3_for_tongjian",
-                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
@@ -4209,8 +4209,8 @@ SALT_DEV_PARAMS = {
         },
         "w/o_content": {
             "model": {
-                "model": "service_dv3_for_tongjian",
-                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
@@ -4225,8 +4225,8 @@ SALT_DEV_PARAMS = {
         },
         "w_content": {
             "model": {
-                "model": "service_dv3_for_tongjian",
-                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
@@ -4294,8 +4294,8 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": {
-                "model": "service_dv3_for_tongjian",
-                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
@@ -4310,8 +4310,8 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
         },
         "w_content": {
             "model": {
-                "model": "service_dv3_for_tongjian",
-                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
@@ -4394,8 +4394,8 @@ KG2QUERY_V1_DEFAULT_PARAMS = {
     "learnable_run_args": {
         "self_taught": {
             "model": {
-                "model": "service_dv3_for_tongjian",
-                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
@@ -4410,8 +4410,8 @@ KG2QUERY_V1_DEFAULT_PARAMS = {
         },
         "w/o_content": {
             "model": {
-                "model": "service_dv3_for_tongjian",
-                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
@@ -4426,8 +4426,8 @@ KG2QUERY_V1_DEFAULT_PARAMS = {
         },
         "w_content": {
             "model": {
-                "model": "service_dv3_for_tongjian",
-                "base_url": "https://sd1rmf3k2fg6tnkffih50.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
