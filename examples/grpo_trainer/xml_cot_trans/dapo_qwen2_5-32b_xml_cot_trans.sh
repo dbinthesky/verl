@@ -61,11 +61,12 @@ setup_path() {
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
 
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_v1_3_0726/checkpoint-88"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/xml_cot_translation/xml_cot_translation_if_0731.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/xml_cot_translation/xml_cot_translation_if_test_0731.parquet"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_v1_3_0726/checkpoint-88"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/xml_cot_trans_2025-07-31_roll8_32_dapo_kl_coef_0_wo_entropy_t1.0_step_40"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/xml_cot_translation/xml_cot_translation_if_stage1_0731.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/xml_cot_translation/xml_cot_translation_if_stage1_test_0731.parquet"
 
-    experiment_name="xml_cot_trans_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}"
+    experiment_name="xml_cot_trans_stage1_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}"
     project_name="xml_cot_trans"
 
     OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/xml_cot_translation/${experiment_name}/"
@@ -106,8 +107,8 @@ run_training() {
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
         data.train_batch_size=${TRAIN_BSZ} \
-        data.max_prompt_length=4096 \
-        data.max_response_length=14336 \
+        data.max_prompt_length=10240 \
+        data.max_response_length=8192 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \

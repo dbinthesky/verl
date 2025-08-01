@@ -1530,6 +1530,65 @@ class XMLCoTTranslation(RFTComputeScore):
         matches = re.findall(pattern, solution_str, re.IGNORECASE)
         return len(matches) > 0
 
+    def traverse_recursive(self, node, all_nodes=None, depth=0, correct=[]):
+        """
+        递归遍历XML节点及其所有后代节点（DFS方式）
+
+        参数:
+            node: 当前要处理的节点（Element对象）
+            all_nodes: 用于收集节点信息的列表（默认自动初始化）
+            depth: 当前节点的深度（根节点为0）
+
+        返回:
+            list: 包含所有节点信息的列表
+        """
+        # 处理node为None的情况
+        if node is None:
+            return []
+
+        # 初始化节点列表（仅在第一次调用时）
+        if all_nodes is None:
+            all_nodes = []
+
+        # 收集当前节点信息
+        node_info = {
+            'tag': node.tag,
+            'text': node.text.strip() if node.text else None,
+            'attributes': dict(node.attrib),
+            'depth': depth
+        }
+        all_nodes.append(node_info)
+
+        # 递归处理每个子节点，深度+1
+        for i, child in enumerate(node):
+            if child is not None and child.tag == "mutter":
+                if i == 0:
+                    correct.append(0)
+                else:
+                    correct.append(1)
+            self.traverse_recursive(child, all_nodes, depth + 1, correct)
+
+        return all_nodes
+
+    def compute_meta_cognition_precision(self, solution_str):
+        solution_str = postprocess_solution(solution_str)
+        if not solution_str.startswith("<think>"):
+            solution_str = f'<think>\n{solution_str}'
+
+        try:
+            root = xml_cot_parse_solution_fn(solution_str)
+        except Exception as err:
+            return 0.0
+
+        if root is None:
+            return 0.0
+
+        corrects = []
+        self.traverse_recursive(root, None, 0, corrects)
+        if len(corrects) == 0:
+            return 0
+        return np.mean(corrects)
+
     async def _compute_score(self,
                              batch_data_sources,
                              batch_solution_str,
@@ -1553,7 +1612,12 @@ class XMLCoTTranslation(RFTComputeScore):
             recall = self.compute_meta_cognition_recall(
                 batch_solution_str[i], batch_ground_truth[i]
             )
-            _reward += recall
+            _reward += recall * 0.5
+
+            precision = self.compute_meta_cognition_precision(
+                batch_solution_str[i]
+            )
+            _reward += precision * 0.5
 
             hack_detection = self.detect_meta_cognition_hack(
                 batch_solution_str[i]
@@ -1577,7 +1641,7 @@ class XMLCoTTranslation(RFTComputeScore):
                 print(
                     f'【Criteria】`{repr(batch_ground_truth[i]["criteria"])}`')
                 print(
-                    f'[Final Reward]={_reward:.3f}|Recall={recall:.3f}\n')
+                    f'[Final Reward]={_reward:.3f}|Recall={recall:.3f}|Precision={precision:.3f}\n')
                 print(
                     f'【Solution】')
                 print(batch_solution_str[i])
@@ -1662,7 +1726,7 @@ CRITERIA_RM_RFT_DEFAULT_PARAMS = {
     "verify_agent": {
         "model": {
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.223:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.6,

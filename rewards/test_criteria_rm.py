@@ -24,7 +24,7 @@ from criteria_rm import (
     criteria_rft_parse_solution_fn,
     CriteriaRFTComputeScore,
     rft_score_valid,
-    xml_cot_score_valid
+    xml_cot_translation_score_valid
 )
 
 
@@ -130,7 +130,7 @@ def load_dataset(num=100, format="autope"):
                 resp = example["self_improvement"]["responses"][0]["response"]
                 conclusion = resp[resp.index("</think>"):].strip()
                 batch_solution_str.append(
-                    f"```xml\n<think></think>\n<conclusion>{conclusion}</conclusion>\n```")
+                    f"```xml\n<think><approach><mutter></mutter></approach></think>\n<conclusion>NO ANSWER</conclusion>\n```")
 
                 batch_ground_truth.append({
                     "source":  "dapo",
@@ -237,7 +237,7 @@ class TestAutoPE(unittest.TestCase):
 class TestRFT(unittest.TestCase):
     def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_dataset(
-            num=24, format="xml_cot_rft")
+            num=100, format="xml_cot_rft")
         rft_score_valid(
             [None] *
             len(batch_solution_str), batch_solution_str, batch_ground_truth,
@@ -247,8 +247,8 @@ class TestRFT(unittest.TestCase):
 class TestXMLCoTTranslation(unittest.TestCase):
     def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_dataset(
-            num=24, format="xml_cot_translation")
-        xml_cot_score_valid(
+            num=4, format="xml_cot_translation")
+        xml_cot_translation_score_valid(
             [None] *
             len(batch_solution_str), batch_solution_str, batch_ground_truth,
         )

@@ -3917,14 +3917,14 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": {
-                "model": "qwen3_30b_a3b",
-                "base_url": "http://10.130.0.220:21002/v1",
-                "api_keys": "EMPTY",
+                "model": "Qwen3-235B-A22B-Thinking-2507",
+                "base_url": "https://sd262n9i80c6ft26qc27g.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.75,
                     "timeout": 600,
                     "max_tokens": 32768,
-                },
+                }
             },
             "repeat": 5,
             "fn": "respond_wo_context",
@@ -3933,15 +3933,25 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
         },
         "w_content": {
             "model": {
-                "model": "qwen3_30b_a3b",
-                "base_url": "http://10.130.0.220:21002/v1",
-                "api_keys": "EMPTY",
+                "model": "Qwen3-235B-A22B-Thinking-2507",
+                "base_url": "https://sd262n9i80c6ft26qc27g.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.75,
                     "timeout": 600,
                     "max_tokens": 32768,
-                },
+                }
             },
+            # "model": {
+            #     "model": "qwen3_30b_a3b",
+            #     "base_url": "http://10.130.0.220:21002/v1",
+            #     "api_keys": "EMPTY",
+            #     "request_kwargs": {
+            #         "temperature": 0.75,
+            #         "timeout": 600,
+            #         "max_tokens": 32768,
+            #     },
+            # },
             "repeat": 5,
             "fn": "respond_w_context",
             "desc": 'w ctx',
@@ -3964,7 +3974,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
     "verify_agent": {
         "model": {
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.223:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.6,
@@ -3977,7 +3987,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
     "auxiliary_agent": {
         "model": {
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.223:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.6,
@@ -4050,7 +4060,7 @@ DOC2QUERY_V2_DEV_PARAMS = {
     "verify_agent": {
         "model": {
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.223:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.6,
@@ -4063,7 +4073,7 @@ DOC2QUERY_V2_DEV_PARAMS = {
     "auxiliary_agent": {
         "model": {
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.223:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.6,
@@ -4161,7 +4171,7 @@ SALT_DEFAULT_PARAMS = {
     "verify_agent": {
         "model": {
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.223:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.6,
@@ -4174,7 +4184,7 @@ SALT_DEFAULT_PARAMS = {
     "auxiliary_agent": {
         "model": {
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.223:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.6,
@@ -4262,7 +4272,7 @@ SALT_DEV_PARAMS = {
     "verify_agent": {
         "model": {
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.223:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.6,
@@ -4275,7 +4285,7 @@ SALT_DEV_PARAMS = {
     "auxiliary_agent": {
         "model": {
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.223:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.6,
@@ -4342,7 +4352,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     "verify_agent": {
         "model": {
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.223:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.6,
@@ -4355,7 +4365,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     "auxiliary_agent": {
         "model": {
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.223:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.6,
@@ -4374,7 +4384,7 @@ RLVR_DEFAULT_PARAMS = {
     "verify_agent": {
         "model": {
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.223:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.6,
@@ -4460,7 +4470,7 @@ KG2QUERY_V1_DEFAULT_PARAMS = {
     "verify_agent": {
         "model": {
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.223:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.6,
@@ -4473,7 +4483,7 @@ KG2QUERY_V1_DEFAULT_PARAMS = {
     "auxiliary_agent": {
         "model": {
             "model": "qwen25_32B_instruct",
-            "base_url": "http://10.130.142.223:8000/v1",
+            "base_url": "http://10.130.142.154:8000/v1",
             "api_keys": "EMPTY",
             "request_kwargs": {
                 "temperature": 0.6,
