@@ -1158,7 +1158,7 @@ class BatchCallOpenAPI(metaclass=ABCMeta):
             prompt = self.prompt_fn(example)
             prompts[prompt].append(index)
 
-        results = await agent.run(list(prompts.keys()), 64, desc=f"[{self.task_desc()} {agent.model}={max_concurrent_requests}]", postprocess_fns=[self.postprocess]*len(list(prompts.keys())))
+        results = await agent.run(list(prompts.keys()), 32, desc=f"[{self.task_desc()} {agent.model}={max_concurrent_requests}]", postprocess_fns=[self.postprocess]*len(list(prompts.keys())))
 
         results_mapper = {}
         for (k, v) in results:
@@ -3929,7 +3929,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
             "repeat": 5,
             "fn": "respond_wo_context",
             "desc": 'w/o ctx',
-            "max_concurrent_requests": 128
+            "max_concurrent_requests": 256
         },
         "w_content": {
             "model": {
@@ -3955,7 +3955,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
             "repeat": 5,
             "fn": "respond_w_context",
             "desc": 'w ctx',
-            "max_concurrent_requests": 128
+            "max_concurrent_requests": 256
         },
     },
     "difficulty_metric_args": {
