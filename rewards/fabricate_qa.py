@@ -3917,12 +3917,12 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": {
-                "model": "Qwen3-235B-A22B-Thinking-2507",
-                "base_url": "https://sd262n9i80c6ft26qc27g.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "Qwen3-32B",
+                "base_url": "https://sd267fpa80c6ft26qcaa0.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.75,
-                    "timeout": 600,
+                    "timeout": 1200,
                     "max_tokens": 32768,
                 }
             },
@@ -3933,12 +3933,12 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
         },
         "w_content": {
             "model": {
-                "model": "Qwen3-235B-A22B-Thinking-2507",
-                "base_url": "https://sd262n9i80c6ft26qc27g.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "Qwen3-32B",
+                "base_url": "https://sd267fpa80c6ft26qcaa0.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.75,
-                    "timeout": 600,
+                    "timeout": 1200,
                     "max_tokens": 32768,
                 }
             },

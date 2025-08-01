@@ -1530,6 +1530,46 @@ class XMLCoTTranslation(RFTComputeScore):
         matches = re.findall(pattern, solution_str, re.IGNORECASE)
         return len(matches) > 0
 
+    def compute_tree_max_depth(self, solution_str):
+        solution_str = postprocess_solution(solution_str)
+        if not solution_str.startswith("<think>"):
+            solution_str = f'<think>\n{solution_str}'
+
+        try:
+            root = xml_cot_parse_solution_fn(solution_str)
+        except Exception as err:
+            return 0.0
+
+        return self.calculate_max_depth(root)
+
+    def calculate_max_depth(self, element):
+        """
+        计算XML元素的最大深度，处理element为None的情况
+
+        参数:
+            element: ET.Element or None - 要计算深度的XML元素，可能为None
+
+        返回:
+            int - 最大深度值（根元素深度为1，element为None时返回0）
+        """
+        # 如果元素为None，返回0
+        if element is None:
+            return 0
+
+        # 如果没有子元素，深度为1
+        children = list(element)
+        if not children:
+            return 1
+
+        # 递归计算所有子元素的深度，当前深度加1
+        max_child_depth = 0
+        for child in children:
+            child_depth = self.calculate_max_depth(child)
+            if child_depth > max_child_depth:
+                max_child_depth = child_depth
+
+        return max_child_depth + 1
+
     def traverse_recursive(self, node, all_nodes=None, depth=0, correct=[]):
         """
         递归遍历XML节点及其所有后代节点（DFS方式）
@@ -1618,6 +1658,16 @@ class XMLCoTTranslation(RFTComputeScore):
                 batch_solution_str[i]
             )
             _reward += precision * 0.5
+
+            # 树结构化奖励
+            max_depth = self.compute_tree_max_depth(
+                batch_solution_str[i])
+            if max_depth >= 5:
+                _reward += 0.25
+            elif max_depth >= 6:
+                _reward += 0.5
+            elif max_depth >= 7:
+                _reward += 0.6
 
             hack_detection = self.detect_meta_cognition_hack(
                 batch_solution_str[i]
