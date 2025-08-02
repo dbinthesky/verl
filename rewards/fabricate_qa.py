@@ -3556,7 +3556,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             if valid is None:
                 pass
             else:
-                _score = 0.0 if valid else -0.5
+                _score = 0.0 if valid else -0.2
                 scores[index].append(_score)
 
         final_scores = [0.0] * len(batch_solution_str)
@@ -3565,7 +3565,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                 final_scores[i] = 0.0
             else:
                 final_scores[i] = min(score)
-        
+
         return final_scores
 
     async def quick_question_eval(
