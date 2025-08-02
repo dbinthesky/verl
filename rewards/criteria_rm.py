@@ -279,6 +279,150 @@ CRITIQUE_RECALL_TEMPLATE = """
 #### 输出
 """
 
+DOC2QUERY_V3_CRITIQUE_RECALL_FEWSHOTS = """
+下面是对于同一道题目的两个来自不同方的质检见过，第一个是人类质检员，第二个是大模型质检员；二者的任务都是尝试对一道问题进行质检判断是否符合要求。
+
+下面是对于问题的质检要求
+## 问题要求说明
+1. 问题侧重考察知识、推理 > 计算，避免需要复杂计算的问题；题型为**单项**选择题。
+2. 关键术语的清晰度与具体性
+  - 检查点：题目中的专业术语、缩写、实验阶段、参数等是否明确定义或具体化？ 
+  - 问题迹象：  
+    - 缩写未解释（如“CCV”未扩写）。（ 注：此处需要结合上下文，如果通过题干已经明确问题领域，且缩写不会造成歧义，则建议不要扩写，因为缩写理解也是模型需要具备的能力之一）
+    - 概念笼统（如“稳定性”未说明具体条件）。   
+3. 相关性与教育价值
+  - 检查点：题目是否聚焦学科核心知识，避免琐碎或边缘内容？  
+    - 内容琐碎（如考查书籍章节作者等细节，而非核心概念）。  
+    - 与学科知识脱节（如问题不涉及原理、机制或应用）。  
+4. 信息完整性
+  - 检查点：题目要求独立作答，不依赖原文文档。需要你判断问题是否提供所有必要信息，包括背景、条件、数据来源或参考材料？  
+  - 问题迹象：
+    - 关键条件缺失（如未提实验设置）。  
+    - 引用不存在的材料（如“根据材料”但无实际材料）。  
+    - 背景信息不足。  
+  - 评价依据：避免因信息缺失导致题目不严谨；通过添加背景改善完整性。
+5. 无歧义性
+  - 检查点：题目表述是否单一解释，避免歧义或多义？  
+  - 问题迹象：
+    - 用词模糊（如“影响”未指定正向/负向）。  
+    - 选项范围过大（如百分比区间过宽）。  
+    - 问题结构易引发误解。  
+6. 答案正确性
+  - 检查点：给出的问题答案正确无误。
+7. 答案为多选题：
+  - 检查点：题目要求答案为单选。
+
+
+## 提示
+下面是一些常见的问题供你参考
+1. 题目背景信息不足或指代不清
+- 题目要求独立作答不依赖文档，因为如果题目存在背景信息不足的情况，答题者在不看原文的情况下无法给出正确答案；其中一种最常见的情况是问题解答依赖某个信息，而该信息指代原文的内容（比如，基于**实验, 根据作者的观点..., 化合物5.., According to Theorem/Formula/Method 1）
+2. 问题或选项中英文混杂
+- 我们希望问题整体的语言一致性较高，不要有明显的中英文混杂现象
+3. 缺乏教育价值
+- 问题指向极端长尾信息或边缘只是，对于学生掌握知识的考查意义不大
+4. 题目要求复杂计算
+- 问题并非测重知识与推理，题目求解依赖复杂计算。
+5. 题目过于复杂，解法难以判断
+- 依赖文档/文献/参考材料的情况下，对于题目解法仍然无法有效判断，则也需要判断问题为不合格
+6. 答案不正确
+- 给出的参考答案不正确
+7. 题目实际正确答案包含多个选项
+- 出题要求为单项选择题，题目不符合要求
+
+
+现在你的任务并非是重新对问题进行质检，而是比较大模型质检结果和人类质检结果，判断大模型质检结果是否指出了和人类质检员同样的问题。
+**注意**：这里人类质检员的结果是Ground Truth 完全正确，你仅需要比较人类质检员和大模型质检员的质检结论，判断一致性。
+
+一致性按1-5分，5分是最高分，分数仅包含1、2、3、4、5不包含小数点。
+
+#### 输出要求
+{分析内容}
+```json
+{{
+    "一致性": *** # int (1-5)
+}}
+```
+
+下面是一些例子
+
+#### 命题
+```
+Which interaction between the operating variables was found to be non-significant in affecting biogas yield according to the ANOVA analysis?\n\nA) Substrate ratio and Dilution\nB) Inoculum concentration and Dilution\nC) Substrate ratio and Temperature\nD) Substrate ratio and Inoculum concentration
+```
+
+#### **人类质检员**
+```
+题目背景信息不足/不完整或指代不清
+```
+
+#### **大模型质检员**
+```
+<conclusion>
+``` json
+{
+  "qualified": false,
+  "reason": "问题存在信息完整性不足的问题。题目询问根据ANOVA分析哪个操作变量间的交互作用对沼气产量影响不显著，但未提供任何ANOVA分析的背景信息、实验数据或结果依据。答题者不依赖原文文档无法判断各选项中交互作用的显著性，违反了“问题要求独立作答，不依赖原文文档”的要求，属于关键背景信息缺失。"
+}
+```
+
+#### 输出
+分析：人类质检员指出题目存在 “背景信息不足 / 不完整或指代不清” 的问题；大模型质检员同样指出问题 “信息完整性不足，未提供 ANOVA 分析的背景信息等，答题者不依赖原文文档无法判断”，二者均聚焦于题目背景信息缺失、需依赖外部文档才能作答这一核心问题，结论完全一致。
+
+``` json
+{{
+    "一致性": 5
+}}
+```
+
+#### 命题
+```
+In the improved asymptotic formula for \\( S_3(X) \\), what is the exponent of \\( X \\) in the error term?\n\n    A) \\( \\frac\{5\}\{3\} \\)\n    B) 3\n    C) 2\n    D) \\( \\frac{8}{3} \\)
+```
+
+#### **人类质检员**
+```
+缺乏教育价值（问题指向极端长尾信息或边缘只是，对于学生掌握知识的考查意义不大）
+```
+
+#### **大模型质检员**
+```
+``` json
+{
+  "qualified": false,
+  "reason": "关键术语不清晰且背景信息不足。问题中提到的符号 \( S_3(X) \) 未在题干中解释其具体含义，且“improved asymptotic formula for \( S_3(X) \)”的相关背景信息缺失，导致答题者若不依赖原文文档无法明确问题所指的具体公式，不符合信息完整性要求，即题目无法独立作答。"
+}
+```
+```
+
+#### 输出
+分析：人类质检员指出题目存在“缺乏教育价值，指向极端长尾信息或边缘知识，考查意义不大”的问题；大模型质检员则认为问题存在“关键术语不清晰且背景信息不足，符号\( S_3(X) \)未解释，无法独立作答”的问题。二者指出的问题核心完全不同，人类聚焦于内容的教育价值和核心性，大模型聚焦于术语清晰度和信息完整性，未涉及相同问题。
+```json
+{
+    "一致性": 1
+}
+```
+"""
+
+DOC2QUERY_V3_CRITIQUE_RECALL_TEMPLATE = """
+#### 命题
+```
+{instruction}
+```
+
+#### **人类质检员**
+```
+{human}
+```
+
+#### **大模型质检员**
+```
+{llm}
+```
+
+#### 输出
+"""
+
 
 JUDGE_WITH_CRITERIA_FEWSHOTS = """
 任务：基于打分表对下面回答的大模型响应作出打分
@@ -716,6 +860,44 @@ class CritiqueRecall(BatchCallOpenAPI):
             else:
                 outputs.append(0.0)
         return outputs
+
+
+class Doc2QueryV3VerifierCritiqueRecall(CritiqueRecall):
+    def __init__(self):
+        super().__init__()
+
+    @classmethod
+    def task_desc(cls):
+        return "批评覆盖度"
+
+    def prompt_fn(self, example):
+        solver_response, gt = example
+        critique = gt["critique"]
+        if critique is None:
+            critique = f'质检合格'
+        prompt = DOC2QUERY_V3_CRITIQUE_RECALL_FEWSHOTS + "\n\n\n" + DOC2QUERY_V3_CRITIQUE_RECALL_TEMPLATE.format(
+            llm=solver_response,
+            human=critique,
+            instruction=gt["instruction"]
+        )
+        return prompt
+
+    def postprocess(self, response: str):
+        s = response
+        try:
+            conclusion = s.strip()
+
+            recall = re.findall(
+                r'\"一致性\": (\d+)', conclusion)[0]
+            if isinstance(recall, str):
+                recall = float(recall)
+            assert isinstance(recall, float)
+            assert recall in (0, 1, 2, 3, 4, 5)
+            return recall
+
+        except Exception as err:
+            raise PostprocessError(f'{err}')
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # AUTOPE
@@ -1420,6 +1602,136 @@ class CriteriaRFTComputeScore(CriteriaRMRecallComputeScore):
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
+# DOC2QUERY V3 VERIFIER
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+def doc2query_verifier_parse_solution_fn(solution_str: str):
+    solution_str = postprocess_solution(solution_str)
+    if not solution_str.startswith("<think>"):
+        solution_str = f'<think>\n{solution_str}'
+
+    if solution_str.count("</think>") > 1 or solution_str.count("</conclusion>") > 1:
+        return None
+    try:
+        conclusion = re.findall(r'<conclusion>(.*)</conclusion>', solution_str, re.DOTALL)[0]
+        return conclusion
+    except Exception as err:
+        return None
+
+
+class Doc2QueryV3VerifierComputeScore(CriteriaRMRecallComputeScore):
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-2.0
+                 ):
+        super().__init__(
+            split=split, parse_solution_fn=parse_solution_fn, args=args, min_reward=min_reward
+        )
+        self.task_name = "DOC2QUERY_V3_VERIFIER"
+
+    def init_agent(self):
+        self.agents = {}
+        self.init_verify_agent()
+
+    def init_verify_agent(self):
+        self.verify_agent = Agent(
+            **self.args["verify_agent"]["model"])
+
+    async def calc_critique_recall(self, batch_solution_str, batch_ground_truth):
+        task = Doc2QueryV3VerifierCritiqueRecall()
+        indices = []
+        llm_critique = []
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            result = self.parse_solution_fn(sol)
+            if result is not None:
+                llm_critique.append((result.strip(), gt))
+                indices.append(i)
+            else:
+                continue
+
+        recall = await task.do_job(
+            agent=self.verify_agent,
+            batch_inputs=llm_critique,
+            max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
+        )
+        scores = [0.0] * len(batch_solution_str)
+        for _recall, index in zip(recall, indices):
+            if _recall is None:
+                pass
+            else:
+                scores[index] = _recall
+        return scores
+
+    def calc_judge_accuracy(self, batch_solution_str, batch_ground_truth):
+        acc = []
+        for i, (sol, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            result = self.parse_solution_fn(sol)
+            if result is None:
+                acc.append(-2.0)
+            else:
+                critique = gt["critique"]
+                if critique is None:
+                    correct = True
+                else:
+                    correct = False
+                judge = re.findall(r'\"qualified\": (.*)', result)
+                if len(judge) == 1 and ("true" in judge[0].lower().strip()):
+                    if correct:
+                        acc.append(1.0)
+                    else:
+                        acc.append(0.0)
+                else:
+                    if correct:
+                        acc.append(0.0)
+                    else:
+                        acc.append(1.0)
+        return acc
+
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+        acc = self.calc_judge_accuracy(batch_solution_str, batch_ground_truth)
+        recall = await self.calc_critique_recall(batch_solution_str, batch_ground_truth)
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            _reward = acc[i] + recall[i]
+            final_results.append(_reward)
+
+            if _reward > 1.3 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+                log = True
+                log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+            else:
+                log = False
+
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f'【Question】`{repr(batch_ground_truth[i]["instruction"])}`')
+                print(
+                    f"【Critique LLM】`{self.log_solution(batch_solution_str[i])}`")
+                print(
+                    f'【Critique Human】`{repr(batch_ground_truth[i]["critique"])}`')
+                print(
+                    f'[Final Reward]={_reward:.3f}|ACC={acc[i]}|RECALL={recall[i]}\n')
+
+                if random.random() < 0.5:
+                    print(f'[Thought]\n{batch_solution_str[i]}')
+                    print()
+
+        return final_results
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# DOC2QUERY V3 VERIFIER
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
 # XML_COT
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -1792,6 +2104,26 @@ CRITERIA_RM_RFT_DEFAULT_PARAMS = {
 }
 
 
+DOC2QUERY_V3_VERIFIER_DEFAULT_PARAMS = {
+    "verify_agent": {
+        "model": {
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+            "request_kwargs": {
+                "temperature": 0.7,
+                "timeout": 360,
+                "max_tokens": 512,
+            },
+        },
+        "max_concurrent_requests": 64
+    },
+    "save_rollouts": {
+        "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/criteria_rm_recall"
+    }
+}
+
+
 compute_score_train = AutoPEComputeScore(
     parse_autope_solution_fn, split="train", args=AUTOPE_DEFAULT_PARAMS).compute_score
 compute_score_valid = AutoPEComputeScore(
@@ -1820,3 +2152,8 @@ xml_cot_translation_score_train = XMLCoTTranslation(
     criteria_rft_parse_solution_fn, split="train", args=CRITERIA_RM_RFT_DEFAULT_PARAMS).compute_score
 xml_cot_translation_score_valid = XMLCoTTranslation(
     criteria_rft_parse_solution_fn, split="valid", args=CRITERIA_RM_RFT_DEFAULT_PARAMS).compute_score
+
+doc2query_verifier_score_train = Doc2QueryV3VerifierComputeScore(
+    doc2query_verifier_parse_solution_fn, split="train", args=DOC2QUERY_V3_VERIFIER_DEFAULT_PARAMS).compute_score
+doc2query_verifier_score_valid = Doc2QueryV3VerifierComputeScore(
+    doc2query_verifier_parse_solution_fn, split="valid", args=DOC2QUERY_V3_VERIFIER_DEFAULT_PARAMS).compute_score

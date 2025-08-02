@@ -24,7 +24,10 @@ from criteria_rm import (
     criteria_rft_parse_solution_fn,
     CriteriaRFTComputeScore,
     rft_score_valid,
-    xml_cot_translation_score_valid
+    xml_cot_translation_score_valid,
+    Doc2QueryV3VerifierComputeScore,
+    doc2query_verifier_parse_solution_fn,
+    DOC2QUERY_V3_VERIFIER_DEFAULT_PARAMS
 )
 
 
@@ -63,6 +66,8 @@ def load_dataset(num=100, format="autope"):
         filename = '/cpfs01/shared/llm_ddd/tongjian/sft/self_improvement/dapo_math_17k_xml_cot_pass1_2@2_elite.jsonl'
     elif format == "xml_cot_translation":
         filename = '/cpfs01/shared/llm_ddd/tongjian/sft/self_improvement/xml_cot_translation_if_test_0731.jsonl'
+    elif format == "doc2query_v3_verifier":
+        filename = '/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3_verifier/doc2query_v3_critique_annotations.parquet'
 
     batch_solution_str, batch_ground_truth = [], []
     batch_data_sources = []
@@ -92,6 +97,21 @@ def load_dataset(num=100, format="autope"):
                 batch_solution_str.append(
                     f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\n{row["reward_model"]["criteria"]}\n</conclusion>\n```xml'
                 )
+            elif format == "doc2query_v3_verifier":
+                if row["reward_model"]["critique"] is None:
+                    batch_solution_str.append(
+                        f'<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\n"qualified": True\n</conclusion>\n```xml'
+                    )
+                else:
+                    critique = {
+                        "qualified": "False",
+                        "reason": row["reward_model"]["critique"]
+                    }
+                    critique = json.dumps(
+                        critique, ensure_ascii=False, indent="  ")
+                    batch_solution_str.append(
+                        f'<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\n{critique}\n</conclusion>\n```xml'
+                    )
             batch_ground_truth.append(row["reward_model"])
             if len(batch_ground_truth) == num:
                 break
@@ -252,6 +272,19 @@ class TestXMLCoTTranslation(unittest.TestCase):
             [None] *
             len(batch_solution_str), batch_solution_str, batch_ground_truth,
         )
+
+
+class TestDoc2QueryV3Verifier(unittest.TestCase):
+    def test_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_dataset(
+            num=4, format="doc2query_v3_verifier")
+        task = Doc2QueryV3VerifierComputeScore(
+            doc2query_verifier_parse_solution_fn, args=DOC2QUERY_V3_VERIFIER_DEFAULT_PARAMS
+        )
+        print(task.compute_score(
+            [None] *
+            len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        ))
 
 
 if __name__ == '__main__':
