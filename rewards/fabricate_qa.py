@@ -226,6 +226,86 @@ MC_KNOWLEDGE_QUESTION_QUALITY_VALUE_TEMPLATE = """任务：基于下面的标准
 
 """
 
+DOC2QUERY_V3_CRITIQUE_INSTRUCT_ZH = """
+你是大模型问题质检专家，你的任务是给定一个问题，该问题是基于一篇文档生成。你的任务是对该生成的问题和答案进行质检，评价该问题是否合格。
+
+
+## 问题要求说明
+1. 问题侧重考察知识、推理 > 计算，避免需要复杂计算的问题；题型为**单项**选择题。
+2. 关键术语的清晰度与具体性
+  - 检查点：题目中的专业术语、缩写、实验阶段、参数等是否明确定义或具体化？ 
+  - 问题迹象：  
+    - 缩写未解释（如“CCV”未扩写）。（ 注：此处需要结合上下文，如果通过题干已经明确问题领域，且缩写不会造成歧义，则建议不要扩写，因为缩写理解也是模型需要具备的能力之一）
+    - 概念笼统（如“稳定性”未说明具体条件）。   
+3. 相关性与教育价值
+  - 检查点：题目是否聚焦学科核心知识，避免琐碎或边缘内容？  
+    - 内容琐碎（如考查书籍章节作者等细节，而非核心概念）。  
+    - 与学科知识脱节（如问题不涉及原理、机制或应用）。  
+4. 信息完整性
+  - 检查点：题目要求独立作答，不依赖原文文档。需要你判断问题是否提供所有必要信息，包括背景、条件、数据来源或参考材料？  
+  - 问题迹象：
+    - 关键条件缺失（如未提实验设置）。  
+    - 引用不存在的材料（如“根据材料”但无实际材料）。  
+    - 背景信息不足。  
+  - 评价依据：避免因信息缺失导致题目不严谨；通过添加背景改善完整性。
+5. 无歧义性
+  - 检查点：题目表述是否单一解释，避免歧义或多义？  
+  - 问题迹象：
+    - 用词模糊（如“影响”未指定正向/负向）。  
+    - 选项范围过大（如百分比区间过宽）。  
+    - 问题结构易引发误解。  
+6. 答案正确性
+  - 检查点：给出的问题答案正确无误。
+7. 答案为多选题：
+  - 检查点：题目要求答案为单选。
+
+
+## 提示
+下面是一些常见的问题供你参考
+1. 题目背景信息不足或指代不清
+- 题目要求独立作答不依赖文档，因为如果题目存在背景信息不足的情况，答题者在不看原文的情况下无法给出正确答案；其中一种最常见的情况是问题解答依赖某个信息，而该信息指代原文的内容（比如，基于**实验, 根据作者的观点..., 化合物5.., According to Theorem/Formula/Method 1）
+2. 问题或选项中英文混杂
+- 我们希望问题整体的语言一致性较高，不要有明显的中英文混杂现象
+3. 缺乏教育价值
+- 问题指向极端长尾信息或边缘只是，对于学生掌握知识的考查意义不大
+4. 题目要求复杂计算
+- 问题并非测重知识与推理，题目求解依赖复杂计算。
+5. 题目过于复杂，解法难以判断
+- 依赖文档/文献/参考材料的情况下，对于题目解法仍然无法有效判断，则也需要判断问题为不合格
+6. 答案不正确
+- 给出的参考答案不正确
+7. 题目实际正确答案包含多个选项
+- 出题要求为单项选择题，题目不符合要求
+
+
+## 响应格式要求
+首先在<think> ... </think>内给出详细的思考过程，然后在结尾处按照如下的格式返回最终结论。(字段`qualified`类型为Boolean, `reason`类型为String)
+```
+<think>
+... ...
+</think>
+<conclusion>
+{
+  "reason": "***",
+  "qualified": True/False
+}
+</conclusion>
+```
+"""
+
+
+DOC2QUERY_V3_CRITIQUE_TEMPLATE_ZH = """
+[参考文献]
+{document}    
+[/参考文献]
+
+[待质检问题]
+{question}
+
+答案：{answer}
+[/待质检问题]
+"""
+
 
 QUESTION_REFINE_HACK_TEMPLATE = """任务：你是大模型响应审核员，你的任务是审核大模型的响应，判断响应是否在Reward Hacking用户的真实意图。（看似满足需求，实际是通过曲解、绕开用户的真实需求，虚假欺骗地完成目的）
 
@@ -1229,6 +1309,40 @@ class MultichoiceKnowledgeQuestionQualityEval(BatchCallOpenAPI):
     def prompt_fn(self, example):
         prompt = self._TEMPLATE + \
             f'\n\n\n现在需要你对下面的学科问题分析是否需要修改。\n\n[问题]\n{example}\n'
+        return prompt
+
+
+class Doc2QueryV3QAVerify(BatchCallOpenAPI):
+    def __init__(self):
+        pass
+
+    @classmethod
+    def task_desc(cls):
+        return "特训问题质检"
+
+    def postprocess(self, response: str):
+        try:
+            conclusion = re.findall(
+                r'<conclusion>(.*)</conclusion>', response, re.DOTALL)[0]
+            judge = re.findall(r'\"qualified\": (.*)',
+                               conclusion)[0].lower().strip()
+            if "true" in judge:
+                if "false" in judge:
+                    return False
+                else:
+                    return True
+            else:
+                return False
+        except Exception as err:
+            raise PostprocessError(f'{err}')
+
+    def prompt_fn(self, example):
+        prompt, answer, gt = example
+        prompt = DOC2QUERY_V3_CRITIQUE_TEMPLATE_ZH.format(
+            document=gt["document"],
+            question=prompt,
+            answer=answer,
+        ) + f'\n\n\n{DOC2QUERY_V3_CRITIQUE_INSTRUCT_ZH}'
         return prompt
 
 
@@ -3250,6 +3364,12 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         )
         self.task_name = "DOC2QUERY_V3"
 
+    def init_verify_agent(self):
+        self.verify_agent = Agent(
+            **self.args["verify_agent"]["model"])
+        self.strict_qa_verify_agent = Agent(
+            **self.args["strict_qa_verify_agent"]["model"])
+
     @classmethod
     def rule_based_penalties(cls):
         return [
@@ -3396,6 +3516,56 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                 self.batch_verify_results, verify_task=verify_task),
             resp_postprocess_fn=self.response_postprocess
         )
+
+    async def strict_question_eval(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+    ):
+        task = Doc2QueryV3QAVerify()
+        indices = []
+        questions = []
+
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            result = self.parse_solution_fn(sol)
+            if result is not None:
+                questions.append((
+                    self._format_question(
+                        result[0], result[1], None
+                    ), result[2], gt
+                ))
+                indices.append(i)
+            else:
+                continue
+
+        repeat_questions = questions * \
+            self.args["strict_qa_verify_agent"]["repeat"]
+        repeat_indices = indices * \
+            self.args["strict_qa_verify_agent"]["repeat"]
+
+        qualities = await task.do_job(
+            agent=self.strict_qa_verify_agent,
+            batch_inputs=repeat_questions,
+            max_concurrent_requests=self.args["strict_qa_verify_agent"]["max_concurrent_requests"],
+        )
+        scores = []
+        for i in range(len(batch_solution_str)):
+            scores.append([])
+        for valid, index in zip(qualities, repeat_indices):
+            if valid is None:
+                pass
+            else:
+                _score = 0.0 if valid else -0.5
+                scores[index].append(_score)
+
+        final_scores = [0.0] * len(batch_solution_str)
+        for i, score in enumerate(scores):
+            if len(score) == 0:
+                final_scores[i] = 0.0
+            else:
+                final_scores[i] = min(score)
+        return scores
 
     async def quick_question_eval(
         self,
@@ -3576,6 +3746,8 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             # 快速判断问题质量
             Process(name="QuickQuality",
                     function=self.quick_question_eval, filter_only=True, non_skip=False),
+            Process(name="StrictQuality",
+                    function=self.strict_question_eval, filter_only=True, non_skip=False)
         ]
 
     def finegrain_process(self):
@@ -4351,6 +4523,20 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             },
         },
         "max_concurrent_requests": 32
+    },
+    "strict_qa_verify_agent": {
+        "model": {
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 1024,
+            },
+        },
+        "max_concurrent_requests": 64,
+        "repeat": 3
     },
     "auxiliary_agent": {
         "model": {
