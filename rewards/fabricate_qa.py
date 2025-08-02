@@ -3565,7 +3565,8 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                 final_scores[i] = 0.0
             else:
                 final_scores[i] = min(score)
-        return scores
+        
+        return final_scores
 
     async def quick_question_eval(
         self,

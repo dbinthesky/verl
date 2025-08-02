@@ -1614,7 +1614,8 @@ def doc2query_verifier_parse_solution_fn(solution_str: str):
     if solution_str.count("</think>") > 1 or solution_str.count("</conclusion>") > 1:
         return None
     try:
-        conclusion = re.findall(r'<conclusion>(.*)</conclusion>', solution_str, re.DOTALL)[0]
+        conclusion = re.findall(
+            r'<conclusion>(.*)</conclusion>', solution_str, re.DOTALL)[0]
         return conclusion
     except Exception as err:
         return None
@@ -1677,6 +1678,14 @@ class Doc2QueryV3VerifierComputeScore(CriteriaRMRecallComputeScore):
                     correct = True
                 else:
                     correct = False
+                result = result.lower()
+                if "true" in result and "false" in result:
+                    acc.append(-2.0)
+                    continue
+                if "***" in result:
+                    acc.append(-2.0)
+                    continue
+
                 judge = re.findall(r'\"qualified\": (.*)', result)
                 if len(judge) == 1 and ("true" in judge[0].lower().strip()):
                     if correct:
