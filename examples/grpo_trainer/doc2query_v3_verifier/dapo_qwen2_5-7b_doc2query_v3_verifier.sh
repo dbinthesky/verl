@@ -60,7 +60,8 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/opencompass/models/hf_hub/models--deepseek-ai--DeepSeek-R1-Distill-Qwen-7B/snapshots/008b8c2e0b59dac9b7619d58a5ad609f43a5b6b1"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/opencompass/models/hf_hub/models--deepseek-ai--DeepSeek-R1-Distill-Qwen-7B/snapshots/008b8c2e0b59dac9b7619d58a5ad609f43a5b6b1"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v3_verifier_2025-08-02_roll16_32_dapo_kl_coef_0_wo_entropy_t1.0_step_20"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3_verifier/doc2query_v3_critique_annotations.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3_verifier/doc2query_v3_critique_annotations_test.parquet"
 

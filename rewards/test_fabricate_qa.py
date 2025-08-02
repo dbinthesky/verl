@@ -119,6 +119,9 @@ def load_dataset(task_name, num=100, xml_cot=False):
     filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0730.parquet"
     if task_name == "kg2query_v1":
         filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/kg2query_v1_oc_v1_7_hard_problem_0623.parquet"
+    elif task_name == "doc2query_v3":
+        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_kcle_rl_8k_train.parquet"
+
     batch_solution_str, batch_ground_truth = [], []
     batch_data_sources = []
 
@@ -356,7 +359,6 @@ class TestDoc2QueryV3(unittest.TestCase):
             task_name="doc2query_v3", num=6)
         task = Doc2QueryV3ComputeScore(
             doc2query_v3_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
-
         print(task.compute_score(
             [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth,
         ))
