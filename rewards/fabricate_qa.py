@@ -464,9 +464,8 @@ Under which stress condition did the yeast expressing Ac DHN exhibit significant
 
 
 DOC2QUERY_V3_CRITIQUE_TEMPLATE_ZH = """
-[参考文献]
-{document}    
-[/参考文献]
+现在你已经了解了任务背景，你需要正式对下面的问题进行严格质检。
+
 
 [待质检问题]
 {question}
@@ -1510,7 +1509,6 @@ class Doc2QueryV3QAVerify(BatchCallOpenAPI):
     def prompt_fn(self, example):
         prompt, answer, gt = example
         prompt = DOC2QUERY_V3_CRITIQUE_INSTRUCT_ZH + "\n\n\n" + DOC2QUERY_V3_CRITIQUE_TEMPLATE_ZH.format(
-            document=gt["document"],
             question=prompt,
             answer=answer,
         )
