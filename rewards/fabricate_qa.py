@@ -226,8 +226,7 @@ MC_KNOWLEDGE_QUESTION_QUALITY_VALUE_TEMPLATE = """任务：基于下面的标准
 
 """
 
-DOC2QUERY_V3_CRITIQUE_INSTRUCT_ZH = """
-你是大模型问题质检专家，你的任务是给定一个问题，该问题是基于一篇文档生成。你的任务是对该生成的问题和答案进行质检，评价该问题是否合格。
+DOC2QUERY_V3_CRITIQUE_INSTRUCT_ZH = """你是大模型问题质检专家，你的任务是给定一个问题，该问题是基于一篇文档生成。你的任务是对该生成的问题和答案进行质检，评价该问题是否合格。
 
 
 ## 问题要求说明
@@ -291,6 +290,142 @@ DOC2QUERY_V3_CRITIQUE_INSTRUCT_ZH = """
 }
 </conclusion>
 ```
+
+下面是一些例子，因为篇幅原因，例子里对应的文档就不不在这边展示了
+
+[待质检问题]
+A researcher reports a separability probability of approximately 0.2424 for a bipartite system, obtained by Monte Carlo sampling with \\(5 \\times 10^{11}\\) points. According to the conjecture formula in the study, which value of \\(\\alpha\\) corresponds to this probability?\n\n    A) \\(2\\)\n    B) \\( \\frac{3}{2} \\)\n    C) \\(1\\)\n    D) \\( \\frac{1}{2} \\)
+
+答案：C
+[/待质检问题]
+
+[输出]
+<think>
+我现在需要处理用户提供的质检任务。首先，我要仔细阅读用户的问题要求和提示，确保自己理解所有的检查点。用户给了一个待质检的问题和答案，我的任务是判断这个问题是否合格。
+
+首先看问题本身：“A researcher reports a separability probability of approximately 0.2424 for a bipartite system, obtained by Monte Carlo sampling with 
+5×10 
+11
+ 
+ points. According to the conjecture formula in the study, which value of 
+α
+ corresponds to this probability? 选项是 A) 2，B) 3/2，C) 1，D) 1/2，答案是 C。”
+
+接下来，我需要对照问题要求逐一检查：
+
+问题侧重知识、推理 > 计算，避免复杂计算。这个问题看起来是根据概率值对应 α 的值，可能需要知道公式，但没有复杂计算，符合这一点。
+关键术语清晰度：问题中的术语如 “bipartite system”（ bipartite 系统，可能是指 bipartite quantum system，二分量子系统）、“separability probability”（可分概率）、“Monte Carlo sampling” 都是专业术语，但在物理或相关领域中是常见的，可能不需要额外解释。“conjecture formula in the study” 这里提到了 “研究中的猜想公式”，但问题中没有给出该公式，这可能是个问题。
+相关性与教育价值：问题涉及物理中的可分概率和参数对应，属于核心知识吗？如果这是量子信息或相关领域的核心概念，可能有教育价值，但需要看是否琐碎。这里看起来是考查公式与参数的对应，不算琐碎。
+信息完整性：问题要求独立作答，不依赖原文。但问题中提到 “According to the conjecture formula in the study”，而这个公式并没有在问题中给出。答题者如果不知道这个公式，就无法根据 0.2424 的概率对应 α 的值，因为缺少关键的公式信息。这属于关键条件缺失，背景信息不足，因为依赖原文中的公式，而问题中没有提供，导致无法独立作答。
+无歧义性：问题表述是否有歧义？“which value of α corresponds to this probability” 表述清晰，选项明确，没有模糊用词或结构问题。
+答案正确性：假设答案 C 是正确的，但需要基于公式是否正确对应，但这里的问题不在于答案本身是否正确，而在于是否有足够信息判断，但根据现有信息，无法验证答案是否正确，但用户给出答案是 C，暂时假设答案正确。
+答案为多选题：题目是单选题，符合要求。
+
+再看提示中的常见问题，第一条是 “题目背景信息不足或指代不清”，这里问题依赖 “the conjecture formula in the study”，但该公式未在问题中给出，属于关键信息缺失，导致不看原文无法作答，符合这一问题迹象。
+
+所以，主要问题是信息不完整，因为关键的猜想公式没有提供，答题者无法独立根据问题中的信息（概率值 0.2424）推断出 α 的值，必须依赖原文中的公式，因此不符合信息完整性的要求。
+</think>
+
+<conclusion>
+{
+  "reason": "问题存在信息完整性不足的问题。题目中提到“According to the conjecture formula in the study”，但关键的“猜想公式”未在问题中给出，导致答题者在不依赖原文文档的情况下无法独立作答，不符合信息完整性要求。",
+  "qualified": false
+}
+</conclusion>
+
+
+[待质检问题]
+Euler's result in his paper E421 is equivalent to which of the following fundamental properties of the Γ-function?\n\n    A) The duplication formula Γ(x/2)Γ((x+1)/2) = sqrt(π) 2^(1-x) Γ(x)\n    B) The reflection formula Γ(x)Γ(1-x) = π/sin(πx)\n    C) The multiplication formula Γ(x/n)Γ((x+1)/n)⋯Γ((x+n-1)/n) = (2π)^((n-1)/2) n^(1-x) Γ(x)\n    D) The Beta function relation B(x,y) = Γ(x)Γ(y)/Γ(x+y)
+
+答案：C
+[/待质检问题]
+
+[输出]
+<think>
+我现在需要处理用户提供的这个质检任务。首先，我得仔细阅读用户给出的问题要求和提示，确保自己理解所有的检查点。用户的任务是判断一个基于文档生成的单项选择题是否合格，根据给定的七个标准来评估。
+
+首先看用户提供的待质检问题：“Euler's result in his paper E421 is equivalent to which of the following fundamental properties of the Γ-function? 选项是四个关于 Γ 函数的公式，答案是 C。”
+
+接下来，我需要对照问题要求逐一检查：
+
+侧重知识、推理 > 计算，题型为单选题：这个问题是关于 Γ 函数性质与欧拉论文结果的对应，属于知识考查，没有复杂计算，题型也是单选，这一点符合。
+关键术语的清晰度与具体性：问题中的术语如 “Γ-function”（伽马函数）是明确的数学术语，缩写没有问题。“Euler's result in his paper E421” 这里提到了欧拉的论文 E421，但问题中没有解释 E421 的具体内容。不过，伽马函数的基本性质是数学中的常见知识，可能不需要额外解释论文细节，但需要看是否影响理解。
+相关性与教育价值：检查点是是否聚焦学科核心知识，避免琐碎内容。这里的问题是问欧拉某篇论文的结果对应哪个 Γ 函数性质。Γ 函数的基本性质（如反射公式、倍增公式等）是核心知识，但问题的关键在于 “Euler's result in his paper E421” 是否属于核心考查点。如果 E421 论文的具体结果是非常细节、边缘的知识，而非 Γ 函数性质本身的理解，那么可能缺乏教育价值。用户的提示也提到 “教育意义不足”，这可能是因为考查的是特定论文的对应关系，而非 Γ 函数性质的原理或应用，属于较为琐碎的细节。
+信息完整性：问题是否提供所有必要信息，不依赖原文。这里问题中没有说明 E421 论文中的结果具体是什么，答题者需要知道 E421 的内容才能对应到选项。但 Γ 函数的几个性质是标准的，可能通过知识储备可以判断。不过，如果 E421 的结果并非广为人知的核心内容，而是需要依赖特定文档中的描述，那么可能存在信息不足的问题。但通常来说，伽马函数的乘法公式（选项 C）确实与欧拉的工作相关，可能属于常识，但需要确认是否必须依赖原文。
+无歧义性：问题表述是否单一解释。问题问的是 “equivalent to which...properties”，表述清晰，选项都是明确的公式，没有歧义。
+答案正确性：假设答案 C 正确，即乘法公式对应欧拉 E421 的结果，需要确认这一事实是否正确。根据数学知识，欧拉确实研究过伽马函数的乘法公式，可能 E421 对应的就是这个结果，所以答案可能正确。
+答案为多选题：题目是单选，符合要求。
+
+结合用户的提示 “教育意义不足”，重点在相关性与教育价值。问题考查的是特定论文（E421）的结果与哪个性质对应，这更像是考查文献细节，而非 Γ 函数性质本身的理解或应用。Γ 函数的性质本身是核心知识，但将其与某篇具体论文的编号对应，属于较为琐碎的信息，缺乏对核心原理的考查，因此教育价值不足。
+
+另外，信息完整性方面，虽然伽马函数性质是标准的，但 “E421” 的具体内容未在问题中说明，如果答题者不知道该论文的结果，可能无法作答，这依赖于对特定文献的了解，而非核心知识，进一步说明其教育价值不足，属于边缘内容。
+
+综上，该问题的主要问题是缺乏教育价值，考查琐碎的文献细节而非核心知识，因此不合格。
+</think>
+<conclusion>
+{
+"reason": "该问题缺乏教育价值，聚焦于琐碎内容。问题考查的是欧拉论文E421的结果与Γ函数某一性质的对应关系，重点在于特定文献的细节对应，而非Γ函数核心性质的原理、机制或应用。这种对边缘文献编号与知识的关联考查，对学生掌握核心数学知识的意义不大，不符合聚焦学科核心知识的要求。",
+"qualified": false
+}
+</conclusion>
+
+
+[待质检问题]
+Under which stress condition did the yeast expressing Ac DHN exhibit significantly higher survival rates across all tested concentrations compared to the control yeast?\n\n    A) Heat (53°C)\n    B) Drought (PEG and山梨醇)\n    C) Alkaline (Na₂CO₃ and NaHCO₃ at 6% and 8% concentrations)\n    D) Cold (-20°C)\n    E) Salt (NaCl and KCl)
+
+答案：C
+[/待质检问题]
+
+[输出]
+<think>
+用户现在需要我提供针对上一个待质检问题的 “think 部分”，也就是思考过程。首先，我需要回顾之前的问题和回答。
+
+待质检问题是关于酵母在不同应激条件下的存活率，选项中有中英文混杂的情况，特别是选项 B 里的 “PEG and 山梨醇”，其中 “山梨醇” 是中文，而其他部分是英文。根据质检标准，问题或选项中英文混杂是不符合要求的，因为希望语言一致性较高，避免明显的中英文混杂。
+
+首先，我需要确认是否符合质检标准中的 “问题或选项中英文混杂” 这一点。题目整体是英文表述，选项 A 到 E 中，选项 B 出现了中文词汇 “山梨醇”，而其他选项如 A 的 “Heat (53°C)”、C 的 “Alkaline (Na₂CO₃ and NaHCO₃...)”、D 的 “Cold (-20°C)”、E 的 “Salt (NaCl and KCl)” 都是英文或化学符号，没有中文。因此，选项 B 的中英文混杂明显违反了语言一致性的要求。
+
+接下来，检查是否有其他问题，比如信息完整性、歧义性等，但主要问题集中在中英文混杂上。根据提示中的常见问题，“问题或选项中英文混杂” 是明确的不合格情况，因此判断该问题不合格的原因就是选项中的中英文混杂，语言一致性不足。
+
+总结思考过程，需要明确指出选项中的中英文混杂现象，引用质检标准中的相关要求，说明不符合的原因，从而得出不合格的结论。
+</think>
+<conclusion>
+{
+  "reason": "问题选项存在中英文混杂现象。选项B中出现“PEG and山梨醇”，其中“山梨醇”为中文，而其他选项及题目主体均为英文表述，语言一致性不足，不符合要求。",
+  "qualified": false
+}
+</conclusion>
+
+
+[待质检问题]
+在PIV 3感染豚鼠中，NK1 mRNA的表达与咳嗽反射敏感性（CRS）的相关性在哪个时间段达到最高？\n\n    A) 第42天\n    B) 第28天\n    C) 第12天\n    D) 第6天
+
+答案：A
+[/待质检问题]
+
+[输出]
+<think>
+我现在需要对这个待质检问题进行分析。首先，我要仔细阅读问题和答案，然后对照给出的质检标准来逐一检查。
+
+首先，问题是关于 PIV 3 感染豚鼠中 NK1 mRNA 表达与咳嗽反射敏感性（CRS）相关性的最高时间段，选项是四个不同的天数，答案是 A 选项第 42 天。
+
+接下来看质检标准：
+
+问题侧重知识、推理 > 计算，题型为单选题。这个问题是关于实验结果的时间点，不需要复杂计算，是单选题，符合这一点。
+关键术语的清晰度与具体性。问题中的术语有 “PIV 3”、“NK1 mRNA”、“咳嗽反射敏感性（CRS）”。“PIV 3” 应该是副流感病毒 3 型的缩写，在生物学领域这是比较常见的缩写，可能不需要额外解释，因为题干明确了是感染豚鼠的情境，领域明确，不会造成歧义。“NK1 mRNA” 是神经激肽 1 受体的信使 RNA，属于专业术语，但在相关领域是明确的。“CRS” 在这里已经扩写为 “咳嗽反射敏感性”，所以缩写处理正确。没有发现术语不清晰或笼统的问题。
+相关性与教育价值。问题考查的是实验中指标相关性的时间变化，属于实验结果的核心知识，涉及生物学中感染与基因表达及生理反应的关系，不是琐碎的细节（比如作者或章节），与学科知识相关，有教育价值。
+信息完整性。问题需要独立作答，不依赖原文。这里的问题是问在 PIV 3 感染豚鼠中，两者相关性最高的时间段，选项给出了具体天数。但关键是，这些时间段的数据是否是常识性的，还是必须依赖原文中的实验结果？因为不同实验的时间设置可能不同，这类具体的实验时间点结果通常是特定研究的数据，不看原文的话，答题者无法仅凭知识储备知道哪个时间段最高。这属于背景信息不足，关键条件依赖原文数据，不符合信息完整性要求，因为无法独立作答。
+无歧义性。问题表述清晰，“哪个时间段达到最高” 明确，选项是具体天数，没有模糊用词或结构问题，无歧义。
+答案正确性。假设答案 A 是正确的，但作为质检，无法验证原文数据，但这里的问题不在于答案本身是否正确，而在于问题设置是否合理。
+答案为多选题：题目是单选题，符合要求。
+
+根据提示中的常见问题，第一条就是 “题目背景信息不足或指代不清”，这里问题中的时间段结果依赖于原文的实验数据，不看原文无法正确作答，属于信息不足，导致题目不严谨。因此，这个问题不合格，因为信息完整性不足，依赖原文数据才能作答。
+</think>
+<conclusion>
+{
+"reason": "问题存在信息完整性不足的问题。题目询问PIV 3感染豚鼠中NK1 mRNA表达与咳嗽反射敏感性（CRS）相关性最高的时间段，但相关时间段的实验结果数据属于特定研究的具体发现，未在问题中提供必要背景信息，答题者需依赖原文文档才能作答，无法独立判断，不符合信息完整性要求。",
+"qualified": false
+}
+</conclusion>
 """
 
 
@@ -304,6 +439,8 @@ DOC2QUERY_V3_CRITIQUE_TEMPLATE_ZH = """
 
 答案：{answer}
 [/待质检问题]
+
+[输出]
 """
 
 
@@ -1318,7 +1455,7 @@ class Doc2QueryV3QAVerify(BatchCallOpenAPI):
 
     @classmethod
     def task_desc(cls):
-        return "特训问题质检"
+        return "问题严格质检"
 
     def postprocess(self, response: str):
         try:
@@ -1338,11 +1475,11 @@ class Doc2QueryV3QAVerify(BatchCallOpenAPI):
 
     def prompt_fn(self, example):
         prompt, answer, gt = example
-        prompt = DOC2QUERY_V3_CRITIQUE_TEMPLATE_ZH.format(
+        prompt = DOC2QUERY_V3_CRITIQUE_INSTRUCT_ZH + "\n\n\n" + DOC2QUERY_V3_CRITIQUE_TEMPLATE_ZH.format(
             document=gt["document"],
             question=prompt,
             answer=answer,
-        ) + f'\n\n\n{DOC2QUERY_V3_CRITIQUE_INSTRUCT_ZH}' + "\n<think>"
+        )
         return prompt
 
 
