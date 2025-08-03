@@ -31,8 +31,6 @@ setup_proxy() {
     export https_proxy="https://${PROXY_CREDENTIALS}@${PROXY_URL}"
     export HTTP_PROXY="${https_proxy}"
     export HTTPS_PROXY="${https_proxy}"
-
-    # export no_proxy="localhost,127.0.0.1,*local,10.130.133.200"
 }
 # setup_proxy
 
@@ -54,14 +52,14 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/DeepSeek-R1-Distill-Qwen-32B-fabricate_qa_v16"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0623.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_test_0619.parquet"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/salt_distillv16_roll16_bsz32_dapo_wo_kl_coef_wo_entropy_t09_solver_dsv3_bo8_grpo_step_245"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/salt/runtu_error_collection_0710_train.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/salt/runtu_error_collection_0703_test.parquet"
 
-    experiment_name="distill-qwen-32b_fabricate_aio-${YYMMDD}-${HHMMSS}"
-    project_name="fabricate_aio"
+    experiment_name="distill-qwen-32b_salt-${YYMMDD}-${HHMMSS}"
+    project_name="salt"
 
-    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio/${experiment_name}/"
+    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/salt/${experiment_name}/"
     mkdir -p "${OUTPUT_DIR}"
 }
 setup_path
@@ -90,17 +88,17 @@ run_training() {
     # self.config.actor.ppo_mini_batch_size //= (self.device_mesh.size() // self.ulysses_sequence_parallel_size)
     # self.config.actor.ppo_micro_batch_size_per_gpu = self.config.actor.ppo_micro_batch_size
 
-    python3 -m verl.trainer.main_ppo \
+    python3 -m recipe.dapo.main_dapo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        custom_reward_function.name=fabricate_aio_qwen32b_respondent_stage2_compute_score_train \
+        custom_reward_function.name=salt_default_compute_score_train \
         +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        +custom_valid_reward_function.name=fabricate_aio_qwen32b_respondent_stage2_compute_score_valid \
+        +custom_valid_reward_function.name=salt_default_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
         data.train_batch_size=32 \
-        data.max_prompt_length=8192 \
-        data.max_response_length=8192 \
+        data.max_prompt_length=6144 \
+        data.max_response_length=10240 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
@@ -114,14 +112,17 @@ run_training() {
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=2 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=16384 \
-        actor_rollout_ref.actor.use_kl_loss=True \
-        actor_rollout_ref.actor.kl_loss_coef=0.001 \
-        actor_rollout_ref.actor.entropy_coeff=0.0005 \
-        actor_rollout_ref.actor.kl_loss_type="low_var_kl" \
-        actor_rollout_ref.actor.grad_clip=1.0 \
+        actor_rollout_ref.actor.use_kl_loss=False \
+        actor_rollout_ref.actor.kl_loss_coef=0.0 \
+        actor_rollout_ref.actor.entropy_coeff=0.0 \
+        actor_rollout_ref.actor.grad_clip=0.85 \
         actor_rollout_ref.actor.clip_ratio_low=0.2 \
-        actor_rollout_ref.actor.clip_ratio_high=0.25 \
+        actor_rollout_ref.actor.clip_ratio_high=0.28 \
         actor_rollout_ref.actor.clip_ratio_c=10.0 \
+        reward_model.overlong_buffer.enable=True \
+        reward_model.overlong_buffer.len=$((1024 * 4)) \
+        reward_model.overlong_buffer.penalty_factor=1.0 \
+        algorithm.filter_groups.enable=False \
         actor_rollout_ref.model.enable_gradient_checkpointing=True \
         actor_rollout_ref.actor.fsdp_config.param_offload=True \
         actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
@@ -136,19 +137,18 @@ run_training() {
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
-        reward_model.reward_manager=custom \
         algorithm.kl_ctrl.kl_coef=0.000 \
         algorithm.lam=0.95 \
+        reward_model.reward_manager=dapo_custom \
         trainer.logger='["console", "wandb"]' \
         trainer.project_name="${project_name}" \
         trainer.experiment_name="${experiment_name}" \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
-        trainer.save_freq=10 \
+        trainer.save_freq=5 \
         trainer.test_freq=10 \
         trainer.total_epochs=10000 \
-        reward_model.reward_manager="custom" "$@"
-
+        "$@"
     local training_status=$?
 
     # 显式传递训练状态
@@ -185,6 +185,7 @@ setup_ray() {
                 --port="$MASTER_PORT"
             sleep 240
         else
+            sleep 10
             ray start --address "${MASTER_ADDR}:${MASTER_PORT}" \
                 --block
         fi

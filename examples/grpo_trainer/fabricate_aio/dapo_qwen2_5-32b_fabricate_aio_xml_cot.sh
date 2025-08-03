@@ -38,7 +38,8 @@ setup_proxy() {
 # Conda Environment Setup
 # ------------------------------
 activate_conda() {
-    source /cpfs01/shared/llm_ddd/guoxu/public/verl_env/verl_env/bin/activate /cpfs01/shared/llm_ddd/tongjian/verl
+    source /cpfs01/shared/llm_ddd/tongjian/.bashrc
+    conda activate /cpfs01/shared/llm_ddd/gaoxuan/anaconda3/envs/Verl
 }
 activate_conda
 
@@ -51,11 +52,15 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-fabricate_qa_v15"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0623.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_test_0619.parquet"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_enhance_0529"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-32B-fabricate_qa_xml_cot_v17"
+    # TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_xml_cot_train_0718.parquet"
+    # VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_xml_cot_test_0718.parquet"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/fabricate_aio_0724_xml_cot_roll16_bsz64_dapo_wo_kl_coef_wo_entropy_t10_step_30"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_plus_xml_cot_train_0718.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_plus_xml_cot_test_0718.parquet"
 
-    experiment_name="distill-qwen-32b_fabricate_aio-${YYMMDD}-${HHMMSS}"
+    experiment_name="distill-qwen-32b_fabricate_aio_xml_cot-${YYMMDD}-${HHMMSS}"
     project_name="fabricate_aio"
 
     OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio/${experiment_name}/"
@@ -83,36 +88,35 @@ run_training() {
     local num_gpus="${KUBERNETES_CONTAINER_RESOURCE_GPU:-8}"
     local world_size="${WORLD_SIZE:-1}"
     local total_gpus=$((num_gpus * world_size))
-    # self.config.actor.ppo_mini_batch_size *= self.config.rollout.n
-    # self.config.actor.ppo_mini_batch_size //= (self.device_mesh.size() // self.ulysses_sequence_parallel_size)
-    # self.config.actor.ppo_micro_batch_size_per_gpu = self.config.actor.ppo_micro_batch_size
 
     python3 -m recipe.dapo.main_dapo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        custom_reward_function.name=fabricate_aio_default_stage1_compute_score_train \
+        custom_reward_function.name=xml_cot_fabricate_aio_compute_score_train \
         +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        +custom_valid_reward_function.name=fabricate_aio_default_stage1_compute_score_valid \
+        +custom_valid_reward_function.name=xml_cot_fabricate_aio_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=32 \
-        data.max_prompt_length=8192 \
-        data.max_response_length=12288 \
+        data.train_batch_size=64 \
+        data.max_prompt_length=12288 \
+        data.max_response_length=8192 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
         actor_rollout_ref.actor.optim.lr=1e-6 \
+        actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
+        actor_rollout_ref.actor.optim.weight_decay=0.1 \
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=16 \
-        actor_rollout_ref.actor.ppo_micro_batch_size=32 \
-        actor_rollout_ref.actor.ulysses_sequence_parallel_size=4 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=64 \
+        actor_rollout_ref.actor.ppo_micro_batch_size=64 \
+        actor_rollout_ref.actor.ulysses_sequence_parallel_size=2 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=20480 \
-        actor_rollout_ref.actor.use_kl_loss=True \
-        actor_rollout_ref.actor.kl_loss_coef=0.004 \
-        actor_rollout_ref.actor.entropy_coeff=0.001 \
-        actor_rollout_ref.actor.grad_clip=1.0 \
+        actor_rollout_ref.actor.use_kl_loss=False \
+        actor_rollout_ref.actor.kl_loss_coef=0.0 \
+        actor_rollout_ref.actor.entropy_coeff=0.0 \
+        actor_rollout_ref.actor.grad_clip=0.9 \
         actor_rollout_ref.actor.clip_ratio_low=0.2 \
         actor_rollout_ref.actor.clip_ratio_high=0.28 \
         actor_rollout_ref.actor.clip_ratio_c=10.0 \
@@ -122,29 +126,28 @@ run_training() {
         algorithm.filter_groups.enable=False \
         actor_rollout_ref.model.enable_gradient_checkpointing=True \
         actor_rollout_ref.actor.fsdp_config.param_offload=True \
-        actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
+        actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
         actor_rollout_ref.rollout.tensor_model_parallel_size=4 \
         actor_rollout_ref.rollout.name="vllm" \
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
-        actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
-        actor_rollout_ref.rollout.temperature=0.9 \
+        actor_rollout_ref.rollout.gpu_memory_utilization=0.75 \
+        actor_rollout_ref.rollout.temperature=1.0 \
         actor_rollout_ref.rollout.n=16 \
+        actor_rollout_ref.rollout.top_p=0.95 \
+        actor_rollout_ref.ref.ulysses_sequence_parallel_size=2 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
         algorithm.kl_ctrl.kl_coef=0.000 \
         algorithm.lam=0.95 \
         reward_model.reward_manager=dapo_custom \
-        reward_model.overlong_buffer.enable=True \
-        reward_model.overlong_buffer.len=$((1024 * 4)) \
-        reward_model.overlong_buffer.penalty_factor=1.0 \
         trainer.logger='["console", "wandb"]' \
         trainer.project_name="${project_name}" \
         trainer.experiment_name="${experiment_name}" \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
         trainer.save_freq=10 \
-        trainer.test_freq=10 \
+        trainer.test_freq=25 \
         trainer.total_epochs=10000 \
         "$@"
     local training_status=$?
@@ -162,7 +165,7 @@ run_training() {
 # ------------------------------
 setup_ray() {
     export MASTER_ADDR=${MASTER_ADDR:-"127.0.0.1"}
-    export MASTER_PORT=${MASTER_PORT:-$(shuf -i 20001-29999 -n 1)}
+    export MASTER_PORT=29905
     export WORLD_SIZE=${WORLD_SIZE:-1}
     export RANK=${RANK:-0}
     # export no_proxy="localhost,127.0.0.1,*local,10.130.133.200"
@@ -181,7 +184,9 @@ setup_ray() {
             ray start --head \
                 --node-ip-address="$MASTER_ADDR" \
                 --port="$MASTER_PORT"
+            sleep 240
         else
+            sleep 10
             ray start --address "${MASTER_ADDR}:${MASTER_PORT}" \
                 --block
         fi

@@ -50,16 +50,27 @@ setup_path() {
     YYMMDD=$(date +%Y-%m-%d)
     HHMMSS=$(date +%H-%M-%S)
 
+    local num_gpus="${KUBERNETES_CONTAINER_RESOURCE_GPU:-8}"
+    local world_size="${WORLD_SIZE:-1}"
+
+    ROLLOUT_N=8
+    TRAIN_BSZ=$((num_gpus * world_size))
+    KL_LOSS_COEF="0"
+    TEMPERATURE="1.0"
+
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/distillv16_s2_roll16_bsz32_grpo_w_kl_coef_1e3_w_entropy_5e4_t08_solver_qwen32b_bo32_grpo_step_30"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0623.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_test_0619.parquet"
 
-    experiment_name="distill-qwen-32b_fabricate_aio-${YYMMDD}-${HHMMSS}"
-    project_name="fabricate_aio"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_v1_3_0726/checkpoint-88"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/xml_cot_trans_2025-07-31_roll8_32_dapo_kl_coef_0_wo_entropy_t1.0_step_40"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/xml_cot_trans_stage1_2025-08-01_roll8_32_dapo_kl_coef_0_wo_entropy_t1.0_meta_sample03_step_40"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/xml_cot_translation/xml_cot_translation_if_stage1_sample05_0731.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/xml_cot_translation/xml_cot_translation_if_stage1_sample05_test_0731.parquet"
 
-    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio/${experiment_name}/"
+    experiment_name="xml_cot_trans_stage1_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_meta_sample03"
+    project_name="xml_cot_trans"
+
+    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/xml_cot_translation/${experiment_name}/"
     mkdir -p "${OUTPUT_DIR}"
 }
 setup_path
@@ -89,16 +100,16 @@ run_training() {
     # self.config.actor.ppo_micro_batch_size_per_gpu = self.config.actor.ppo_micro_batch_size
 
     python3 -m recipe.dapo.main_dapo \
-        custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        custom_reward_function.name=fabricate_aio_qwen32b_respondent_stage2_compute_score_train \
-        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        +custom_valid_reward_function.name=fabricate_aio_qwen32b_respondent_stage2_compute_score_valid \
+        custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/criteria_rm.py" \
+        custom_reward_function.name=xml_cot_translation_score_train \
+        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/criteria_rm.py" \
+        +custom_valid_reward_function.name=xml_cot_translation_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=32 \
-        data.max_prompt_length=8192 \
-        data.max_response_length=12288 \
+        data.train_batch_size=${TRAIN_BSZ} \
+        data.max_prompt_length=10240 \
+        data.max_response_length=8192 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
@@ -107,17 +118,17 @@ run_training() {
         actor_rollout_ref.actor.optim.weight_decay=0.1 \
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=32 \
-        actor_rollout_ref.actor.ppo_micro_batch_size=32 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=${TRAIN_BSZ} \
+        actor_rollout_ref.actor.ppo_micro_batch_size=${TRAIN_BSZ} \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=2 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=20480 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=18432 \
         actor_rollout_ref.actor.use_kl_loss=False \
-        actor_rollout_ref.actor.kl_loss_coef=0.0 \
+        actor_rollout_ref.actor.kl_loss_coef=${KL_LOSS_COEF} \
         actor_rollout_ref.actor.entropy_coeff=0.0 \
         actor_rollout_ref.actor.grad_clip=1.0 \
         actor_rollout_ref.actor.clip_ratio_low=0.2 \
-        actor_rollout_ref.actor.clip_ratio_high=0.28 \
+        actor_rollout_ref.actor.clip_ratio_high=0.25 \
         actor_rollout_ref.actor.clip_ratio_c=10.0 \
         reward_model.overlong_buffer.enable=True \
         reward_model.overlong_buffer.len=$((1024 * 4)) \
@@ -130,9 +141,14 @@ run_training() {
         actor_rollout_ref.rollout.name="vllm" \
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.75 \
-        actor_rollout_ref.rollout.temperature=0.8 \
-        actor_rollout_ref.rollout.n=16 \
+        actor_rollout_ref.rollout.temperature=${TEMPERATURE} \
+        actor_rollout_ref.rollout.n=${ROLLOUT_N} \
         actor_rollout_ref.rollout.top_p=0.95 \
+        actor_rollout_ref.rollout.val_kwargs.temperature=1.0 \
+        actor_rollout_ref.rollout.val_kwargs.top_p=0.95 \
+        actor_rollout_ref.rollout.val_kwargs.top_k=20 \
+        actor_rollout_ref.rollout.val_kwargs.n=4 \
+        actor_rollout_ref.rollout.val_kwargs.do_sample=True \
         actor_rollout_ref.ref.ulysses_sequence_parallel_size=2 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
