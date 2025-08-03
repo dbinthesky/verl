@@ -3694,6 +3694,46 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             resp_postprocess_fn=self.response_postprocess
         )
 
+    async def llm_judge_difficulty(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+    ):
+        task = QuestionDifficultyEval()
+        indices = []
+        questions = []
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            result = self.parse_solution_fn(sol)
+            if result is not None:
+                questions.append((self._format_question(
+                    result[0], result[1], None
+                ), sol))
+                indices.append(i)
+            else:
+                continue
+
+        difficulties = await task.do_job(
+            agent=self.loose_qa_verify_agent,
+            batch_inputs=questions,
+            max_concurrent_requests=self.args["loose_qa_verify_agent"]["max_concurrent_requests"],
+        )
+
+        # 1.5 is the average score
+        scores = [1.5] * len(batch_solution_str)
+        for difficulty, index in zip(difficulties, indices):
+            if difficulty is not Non and len(difficulty) > 1:
+                difficulty = difficulty[1:]  # 第一项是计算复杂度,不考虑
+            if difficulty is None or len(difficulty) == 0:
+                pass
+            else:
+                _score = np.mean(difficulty)
+                scores[index] = _score
+
+        weight = 0.25
+        # 五分制
+        return [_ * weight / 5.0 for _ in scores]
+
     async def strict_question_eval(
         self,
         batch_data_sources,
@@ -3939,7 +3979,9 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             Process(name="QuickQuality",
                     function=self.quick_question_eval, filter_only=False, non_skip=False),
             Process(name="StrictQuality",
-                    function=self.strict_question_eval, filter_only=False, non_skip=False)
+                    function=self.strict_question_eval, filter_only=False, non_skip=False),
+            Process(name="QuickDifficulty",
+                    function=self.llm_judge_difficulty, filter_only=False, non_skip=False)
         ]
 
     def finegrain_process(self):

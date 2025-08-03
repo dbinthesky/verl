@@ -358,7 +358,7 @@ class TestDoc2QueryV3(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_dataset(
             task_name="doc2query_v3", num=6)
         task = Doc2QueryV3ComputeScore(
-            doc2query_v3_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
+            doc2query_v3_parse_solution_fn, split="train", args=DOC2QUERY_V3_DEFAULT_PARAMS)
         print(task.compute_score(
             [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth,
         ))
