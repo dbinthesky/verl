@@ -1765,24 +1765,51 @@ class RFTComputeScore(CriteriaRFTComputeScore):
                              ):
         self.init_save_rollouts()
 
-        struct_scores = defaultdict(list)
         accuracy = await self.get_accuracy(
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth,
         )
 
-        final_results = []
+        def get_meta_cognition_counts(sol):
+            return len(re.findall(r'<mutter>.*?</mutter>', sol, re.DOTALL))
+
+        def convert_to_ranks(points, max_score=0.05):
+            # 按降序排序并生成排名（数值越大排名越靠前）
+            points_sorted = sorted(points, reverse=True)
+            n = len(points_sorted)
+            # 计算等差步长（确保最后一名分数为0）
+            step = max_score / (n - 1) if n > 1 else 0
+
+            # 为每个唯一值分配分数
+            scores = {x: max_score - step *
+                      points_sorted.index(x) for x in set(points)}
+            return [scores[point] for point in points]
+
+        meta_cognition_counts = defaultdict(list)
         for i in range(len(batch_solution_str)):
             _uuid = batch_ground_truth[i]["extra_info"]["uuid"]
             _reward = accuracy[i]
+            if _reward > 0:
+                meta_cognition_counts[_uuid].append(
+                    get_meta_cognition_counts(batch_solution_str[i]))
 
         final_results = []
         for i in range(len(batch_solution_str)):
             _uuid = batch_ground_truth[i]["extra_info"]["uuid"]
             _reward = accuracy[i]
+            mapper = {x: y for x, y in zip(
+                meta_cognition_counts[_uuid], convert_to_ranks(meta_cognition_counts[_uuid]))}
 
             struct_info_str = f'[TODO]'
+            if _reward > 0:
+                extra_reward = 0.0
+                if len(mapper) > 1:
+                    c = get_meta_cognition_counts(batch_solution_str[i])
+                    if c in mapper:
+                        extra_reward = mapper[c]
+                        struct_info_str = f'[EXTRA={extra_reward}]'
+                _reward += extra_reward
 
             final_results.append(_reward)
             if (_reward > 0 and random.random() < 0.05) or (self.split == "valid" and random.random() < 0.01) or (self.split == "train" and random.random() < 0.01):

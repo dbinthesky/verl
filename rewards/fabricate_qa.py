@@ -3937,9 +3937,9 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         return [
             # 快速判断问题质量
             Process(name="QuickQuality",
-                    function=self.quick_question_eval, filter_only=True, non_skip=False),
+                    function=self.quick_question_eval, filter_only=False, non_skip=False),
             Process(name="StrictQuality",
-                    function=self.strict_question_eval, filter_only=True, non_skip=False)
+                    function=self.strict_question_eval, filter_only=False, non_skip=False)
         ]
 
     def finegrain_process(self):

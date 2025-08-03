@@ -60,7 +60,7 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v3_32b_2025-08-03_roll16_32_dapo_kl_coef_0_wo_entropy_t0.9_solver_dsv3_step_15"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v3_32b_2025-08-03_roll16_32_dapo_kl_coef_0_wo_entropy_t0.9_solver_dsv3_step_30"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_kcle_rl_8k_train.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/seed_discipline_250426_4k_test.parquet"
 
@@ -153,7 +153,7 @@ run_training() {
         trainer.experiment_name="${experiment_name}" \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
-        trainer.save_freq=5 \
+        trainer.save_freq=10 \
         trainer.test_freq=10 \
         trainer.total_epochs=10000 \
         "$@"
