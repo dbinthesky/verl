@@ -1238,7 +1238,7 @@ class BatchCallOpenAPI(metaclass=ABCMeta):
             prompt = self.prompt_fn(example)
             prompts[prompt].append(index)
 
-        results = await agent.run(list(prompts.keys()), 32, desc=f"[{self.task_desc()} {agent.model}={max_concurrent_requests}]", postprocess_fns=[self.postprocess]*len(list(prompts.keys())))
+        results = await agent.run(list(prompts.keys()), max_concurrent_requests, desc=f"[{self.task_desc()} {agent.model}={max_concurrent_requests}]", postprocess_fns=[self.postprocess]*len(list(prompts.keys())))
 
         results_mapper = {}
         for (k, v) in results:
@@ -1342,7 +1342,7 @@ class Doc2QueryV3QAVerify(BatchCallOpenAPI):
             document=gt["document"],
             question=prompt,
             answer=answer,
-        ) + f'\n\n\n{DOC2QUERY_V3_CRITIQUE_INSTRUCT_ZH}'
+        ) + f'\n\n\n{DOC2QUERY_V3_CRITIQUE_INSTRUCT_ZH}' + "\n<think>"
         return prompt
 
 
@@ -4527,16 +4527,16 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     },
     "strict_qa_verify_agent": {
         "model": {
-            "model": "Qwen2.5-32B-Instruct",
-            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "DeepSeek-V3-0324",
+            "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
-                "temperature": 0.6,
+                "temperature": 0.9,
                 "timeout": 360,
-                "max_tokens": 1024,
-            },
+                "max_tokens": 2048,
+            }
         },
-        "max_concurrent_requests": 64,
+        "max_concurrent_requests": 128,
         "repeat": 3
     },
     "auxiliary_agent": {

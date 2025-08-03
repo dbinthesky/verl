@@ -98,9 +98,9 @@ run_training() {
 
     python3 -m recipe.dapo.main_dapo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        custom_reward_function.name=doc2query_v3_default_compute_score_train \
+        custom_reward_function.name=doc2query_v3_compute_score_train \
         +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        +custom_valid_reward_function.name=doc2query_v3_default_compute_score_valid \
+        +custom_valid_reward_function.name=doc2query_v3_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
@@ -153,7 +153,7 @@ run_training() {
         trainer.experiment_name="${experiment_name}" \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
-        trainer.save_freq=20 \
+        trainer.save_freq=5 \
         trainer.test_freq=40 \
         trainer.total_epochs=10000 \
         "$@"
