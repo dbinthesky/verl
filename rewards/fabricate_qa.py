@@ -3533,11 +3533,19 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         )
         self.task_name = "DOC2QUERY_V3"
 
+    def init_agent(self):
+        self.agents = {}
+        self.init_weak_agent()
+        self.init_adv_agent()
+        self.init_verify_agent()
+
     def init_verify_agent(self):
         self.verify_agent = Agent(
             **self.args["verify_agent"]["model"])
         self.strict_qa_verify_agent = Agent(
             **self.args["strict_qa_verify_agent"]["model"])
+        self.loose_qa_verify_agent = Agent(
+            **self.args["loose_qa_verify_agent"]["model"])
 
     @classmethod
     def rule_based_penalties(cls):
@@ -3757,20 +3765,34 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             else:
                 continue
 
+        repeat_questions = questions * \
+            self.args["loose_qa_verify_agent"]["repeat"]
+        repeat_indices = indices * \
+            self.args["loose_qa_verify_agent"]["repeat"]
+
         qualities = await task.do_job(
-            agent=self.verify_agent,
-            batch_inputs=questions,
-            max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
+            agent=self.loose_qa_verify_agent,
+            batch_inputs=repeat_questions,
+            max_concurrent_requests=self.args["loose_qa_verify_agent"]["max_concurrent_requests"],
         )
 
-        scores = [0.0] * len(batch_solution_str)
-        for valid, index in zip(qualities, indices):
+        scores = []
+        for i in range(len(batch_solution_str)):
+            scores.append([])
+        for valid, index in zip(qualities, repeat_indices):
             if valid is None:
                 pass
             else:
                 _score = 0.0 if valid else -0.5
-                scores[index] = _score
-        return scores
+                scores[index].append(_score)
+
+        final_scores = [0.0] * len(batch_solution_str)
+        for i, score in enumerate(scores):
+            if len(score) == 0:
+                final_scores[i] = 0.0
+            else:
+                final_scores[i] = min(score)
+        return final_scores
 
     async def get_difficulty_reward(
         self,
@@ -4708,17 +4730,18 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
         "max_concurrent_requests": 512,
         "repeat": 5
     },
-    "auxiliary_agent": {
+    "loose_qa_verify_agent": {
         "model": {
             "model": "Qwen2.5-32B-Instruct",
             "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
-                "temperature": 0.6,
+                "temperature": 0.9,
                 "timeout": 360,
                 "max_tokens": 4096,
             },
         },
+        "repeat": 5,
         "max_concurrent_requests": 128
     },
     "save_rollouts": {
