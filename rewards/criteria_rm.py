@@ -1774,7 +1774,7 @@ class RFTComputeScore(CriteriaRFTComputeScore):
         def get_meta_cognition_counts(sol):
             return len(re.findall(r'<mutter>.*?</mutter>', sol, re.DOTALL))
 
-        def convert_to_ranks(points, max_score=0.05):
+        def convert_to_ranks(points, max_score=0.1):
             # 按降序排序并生成排名（数值越大排名越靠前）
             points_sorted = sorted(points, reverse=True)
             n = len(points_sorted)
@@ -1790,9 +1790,8 @@ class RFTComputeScore(CriteriaRFTComputeScore):
         for i in range(len(batch_solution_str)):
             _uuid = batch_ground_truth[i]["extra_info"]["uuid"]
             _reward = accuracy[i]
-            if _reward > 0:
-                meta_cognition_counts[_uuid].append(
-                    get_meta_cognition_counts(batch_solution_str[i]))
+            meta_cognition_counts[_uuid].append(
+                get_meta_cognition_counts(batch_solution_str[i]))
 
         final_results = []
         for i in range(len(batch_solution_str)):
@@ -1802,13 +1801,14 @@ class RFTComputeScore(CriteriaRFTComputeScore):
                 meta_cognition_counts[_uuid], convert_to_ranks(meta_cognition_counts[_uuid]))}
 
             struct_info_str = f'[TODO]'
-            if _reward > 0:
-                extra_reward = 0.0
-                if len(mapper) > 1:
-                    c = get_meta_cognition_counts(batch_solution_str[i])
-                    if c in mapper:
-                        extra_reward = mapper[c]
-                        struct_info_str = f'[EXTRA={extra_reward}]'
+            extra_reward = 0.0
+            if len(mapper) > 1:
+                c = get_meta_cognition_counts(batch_solution_str[i])
+                if c in mapper:
+                    extra_reward = mapper[c]
+                    struct_info_str = f'[EXTRA={extra_reward}]'
+
+            if self.split == "train":
                 _reward += extra_reward
 
             final_results.append(_reward)

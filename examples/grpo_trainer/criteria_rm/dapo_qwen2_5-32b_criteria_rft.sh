@@ -65,7 +65,7 @@ setup_path() {
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/${TRAIN_DATA_NAME}/index0.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/xml_cot_rft_aime_2024_2025.parquet"
 
-    experiment_name="xml_cot_v16_0731_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_${TRAIN_DATA_NAME}"
+    experiment_name="xml_cot_v1_6_0801_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_${TRAIN_DATA_NAME}"
     project_name="criteria_rft"
 
     OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/criteria_rm/${experiment_name}/"

@@ -3722,7 +3722,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         # 1.5 is the average score
         scores = [1.5] * len(batch_solution_str)
         for difficulty, index in zip(difficulties, indices):
-            if difficulty is not Non and len(difficulty) > 1:
+            if difficulty is not None and len(difficulty) > 1:
                 difficulty = difficulty[1:]  # 第一项是计算复杂度,不考虑
             if difficulty is None or len(difficulty) == 0:
                 pass
