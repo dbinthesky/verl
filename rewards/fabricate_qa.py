@@ -4335,7 +4335,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
             "repeat": 5,
             "fn": "respond_wo_context",
             "desc": 'w/o ctx',
-            "max_concurrent_requests": 128
+            "max_concurrent_requests": 512
         },
         "w_content": {
             "model": {
@@ -4351,7 +4351,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
             "repeat": 5,
             "fn": "respond_w_context",
             "desc": 'w ctx',
-            "max_concurrent_requests": 128
+            "max_concurrent_requests": 512
         },
     },
     "difficulty_metric_args": {
@@ -4378,7 +4378,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
                 "max_tokens": 1024,
             },
         },
-        "max_concurrent_requests": 32
+        "max_concurrent_requests": 128
     },
     "auxiliary_agent": {
         "model": {
@@ -4391,7 +4391,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
                 "max_tokens": 4096,
             },
         },
-        "max_concurrent_requests": 32
+        "max_concurrent_requests": 128
     },
     "similarity_run_args":  {
         "threshold": {

@@ -26,8 +26,10 @@ from criteria_rm import (
     rft_score_valid,
     xml_cot_translation_score_valid,
     Doc2QueryV3VerifierComputeScore,
+    Doc2QueryV3SolverComputeScore,
     doc2query_verifier_parse_solution_fn,
-    DOC2QUERY_V3_VERIFIER_DEFAULT_PARAMS
+    DOC2QUERY_V3_VERIFIER_DEFAULT_PARAMS,
+    DOC2QUERY_V3_SOLVER_DEFAULT_PARAMS
 )
 
 
@@ -68,6 +70,8 @@ def load_dataset(num=100, format="autope"):
         filename = '/cpfs01/shared/llm_ddd/tongjian/sft/self_improvement/xml_cot_translation_if_test_0731.jsonl'
     elif format == "doc2query_v3_verifier":
         filename = '/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3_verifier/doc2query_v3_critique_annotations.parquet'
+    elif format == "doc2query_v3_solver":
+        filename = '/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_solver_enhance_kcle.parquet'
 
     batch_solution_str, batch_ground_truth = [], []
     batch_data_sources = []
@@ -112,6 +116,11 @@ def load_dataset(num=100, format="autope"):
                     batch_solution_str.append(
                         f'<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\n{critique}\n</conclusion>\n```xml'
                     )
+            elif format == "doc2query_v3_solver":
+                batch_solution_str.append(
+                    row["reward_model"]["extra_info"]["response"] +
+                    f'\nAnswer: {row["reward_model"]["ground_truth"]}'
+                )
             batch_ground_truth.append(row["reward_model"])
             if len(batch_ground_truth) == num:
                 break
@@ -285,6 +294,22 @@ class TestDoc2QueryV3Verifier(unittest.TestCase):
             [None] *
             len(batch_solution_str), batch_solution_str, batch_ground_truth,
         ))
+
+
+class TestDoc2QueryV3Solver(unittest.TestCase):
+    def test_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_dataset(
+            num=20, format="doc2query_v3_solver")
+        task = Doc2QueryV3SolverComputeScore(
+            lambda x: x, args=DOC2QUERY_V3_SOLVER_DEFAULT_PARAMS)
+
+        async def main():
+            results = await task._compute_score(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth,
+            )
+            print(results)
+        aio.run(main())
 
 
 if __name__ == '__main__':
