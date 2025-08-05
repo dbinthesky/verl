@@ -9,7 +9,7 @@ setup_env() {
     export WANDB_API_KEY="2e3700316fecb744b594dff815d1b11fbe514d24"
     export WANDB_BASE_URL=https://api.bandw.top
 
-    export WANDB_MODE="offline"
+    # export WANDB_MODE="offline"
     export VERL_PPO_LOGGING_LEVEL='DEBUG'
     export VLLM_ATTENTION_BACKEND="XFORMERS"
     export VLLM_USE_MODELSCOPE="False"
@@ -50,27 +50,25 @@ setup_path() {
     YYMMDD=$(date +%Y-%m-%d)
     HHMMSS=$(date +%H-%M-%S)
 
-    # Hparams
     local num_gpus="${KUBERNETES_CONTAINER_RESOURCE_GPU:-8}"
     local world_size="${WORLD_SIZE:-1}"
 
-    ROLLOUT_N=20
+    ROLLOUT_N=16
     TRAIN_BSZ=$((num_gpus * world_size))
     KL_LOSS_COEF="0"
-    TEMPERATURE="0.6"
-    TRAIN_DATA_NAME="fabricate_aio_train_0730"
+    TEMPERATURE="1.0"
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/fabricate_aio_distillv16_s3_roll16_bsz32_dapo_wo_kl_coef_wo_entropy_t08_solver_qwq_bo8_grpo_step_100"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0730.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_test_0730.parquet"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/opencompass/models/hf_hub/models--Qwen--Qwen2.5-32B-Instruct/snapshots/afb2829595f63efa3548e9d6b13aa66e61aa0f38"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_solver_enhance_kcle.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_solver_enhance_kcle_test.parquet"
 
-    experiment_name="fabricate_aio_v18_0730_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_${TRAIN_DATA_NAME}"
+    experiment_name="doc2query_v3_solver_32b_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}"
 
-    project_name="fabricate_aio"
+    project_name="doc2query_v3_solver"
 
-    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio/${experiment_name}/"
+    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/doc2query_v3_solver/${experiment_name}/"
     mkdir -p "${OUTPUT_DIR}"
 }
 setup_path
@@ -100,16 +98,16 @@ run_training() {
     # self.config.actor.ppo_micro_batch_size_per_gpu = self.config.actor.ppo_micro_batch_size
 
     python3 -m recipe.dapo.main_dapo \
-        custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        custom_reward_function.name=fabricate_aio_compute_score_train \
-        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        +custom_valid_reward_function.name=fabricate_aio_compute_score_valid \
+        custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/criteria_rm.py" \
+        custom_reward_function.name=doc2query_solver_score_train \
+        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/criteria_rm.py" \
+        +custom_valid_reward_function.name=doc2query_solver_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=64 \
-        data.max_prompt_length=6144 \
-        data.max_response_length=14336 \
+        data.train_batch_size=${TRAIN_BSZ} \
+        data.max_prompt_length=12288 \
+        data.max_response_length=8192 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
@@ -118,15 +116,15 @@ run_training() {
         actor_rollout_ref.actor.optim.weight_decay=0.1 \
         actor_rollout_ref.model.use_remove_padding=True \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=64 \
-        actor_rollout_ref.actor.ppo_micro_batch_size=64 \
-        actor_rollout_ref.actor.ulysses_sequence_parallel_size=2 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=${TRAIN_BSZ} \
+        actor_rollout_ref.actor.ppo_micro_batch_size=${TRAIN_BSZ} \
+        actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=20480 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=24576 \
         actor_rollout_ref.actor.use_kl_loss=False \
         actor_rollout_ref.actor.kl_loss_coef=0.0 \
         actor_rollout_ref.actor.entropy_coeff=0.0 \
-        actor_rollout_ref.actor.grad_clip=0.9 \
+        actor_rollout_ref.actor.grad_clip=1.0 \
         actor_rollout_ref.actor.clip_ratio_low=0.2 \
         actor_rollout_ref.actor.clip_ratio_high=0.28 \
         actor_rollout_ref.actor.clip_ratio_c=10.0 \
@@ -144,7 +142,7 @@ run_training() {
         actor_rollout_ref.rollout.temperature=${TEMPERATURE} \
         actor_rollout_ref.rollout.n=${ROLLOUT_N} \
         actor_rollout_ref.rollout.top_p=0.95 \
-        actor_rollout_ref.ref.ulysses_sequence_parallel_size=2 \
+        actor_rollout_ref.ref.ulysses_sequence_parallel_size=1 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
@@ -156,8 +154,8 @@ run_training() {
         trainer.experiment_name="${experiment_name}" \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
-        trainer.save_freq=10 \
-        trainer.test_freq=25 \
+        trainer.save_freq=5 \
+        trainer.test_freq=40 \
         trainer.total_epochs=10000 \
         "$@"
     local training_status=$?
