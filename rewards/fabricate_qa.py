@@ -464,9 +464,8 @@ Under which stress condition did the yeast expressing Ac DHN exhibit significant
 
 
 DOC2QUERY_V3_CRITIQUE_TEMPLATE_ZH = """
-[参考文献]
-{document}    
-[/参考文献]
+现在你已经了解了任务背景，你需要正式对下面的问题进行严格质检。
+
 
 [待质检问题]
 {question}
@@ -1510,7 +1509,6 @@ class Doc2QueryV3QAVerify(BatchCallOpenAPI):
     def prompt_fn(self, example):
         prompt, answer, gt = example
         prompt = DOC2QUERY_V3_CRITIQUE_INSTRUCT_ZH + "\n\n\n" + DOC2QUERY_V3_CRITIQUE_TEMPLATE_ZH.format(
-            document=gt["document"],
             question=prompt,
             answer=answer,
         )
@@ -3535,11 +3533,19 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         )
         self.task_name = "DOC2QUERY_V3"
 
+    def init_agent(self):
+        self.agents = {}
+        self.init_weak_agent()
+        self.init_adv_agent()
+        self.init_verify_agent()
+
     def init_verify_agent(self):
         self.verify_agent = Agent(
             **self.args["verify_agent"]["model"])
         self.strict_qa_verify_agent = Agent(
             **self.args["strict_qa_verify_agent"]["model"])
+        self.loose_qa_verify_agent = Agent(
+            **self.args["loose_qa_verify_agent"]["model"])
 
     @classmethod
     def rule_based_penalties(cls):
@@ -3688,6 +3694,46 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             resp_postprocess_fn=self.response_postprocess
         )
 
+    async def llm_judge_difficulty(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+    ):
+        task = QuestionDifficultyEval()
+        indices = []
+        questions = []
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            result = self.parse_solution_fn(sol)
+            if result is not None:
+                questions.append((self._format_question(
+                    result[0], result[1], None
+                ), sol))
+                indices.append(i)
+            else:
+                continue
+
+        difficulties = await task.do_job(
+            agent=self.loose_qa_verify_agent,
+            batch_inputs=questions,
+            max_concurrent_requests=self.args["loose_qa_verify_agent"]["max_concurrent_requests"],
+        )
+
+        # 1.5 is the average score
+        scores = [1.5] * len(batch_solution_str)
+        for difficulty, index in zip(difficulties, indices):
+            if difficulty is not None and len(difficulty) > 1:
+                difficulty = difficulty[1:]  # 第一项是计算复杂度,不考虑
+            if difficulty is None or len(difficulty) == 0:
+                pass
+            else:
+                _score = np.mean(difficulty)
+                scores[index] = _score
+
+        weight = 0.25
+        # 五分制
+        return [_ * weight / 5.0 for _ in scores]
+
     async def strict_question_eval(
         self,
         batch_data_sources,
@@ -3759,20 +3805,34 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             else:
                 continue
 
+        repeat_questions = questions * \
+            self.args["loose_qa_verify_agent"]["repeat"]
+        repeat_indices = indices * \
+            self.args["loose_qa_verify_agent"]["repeat"]
+
         qualities = await task.do_job(
-            agent=self.verify_agent,
-            batch_inputs=questions,
-            max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
+            agent=self.loose_qa_verify_agent,
+            batch_inputs=repeat_questions,
+            max_concurrent_requests=self.args["loose_qa_verify_agent"]["max_concurrent_requests"],
         )
 
-        scores = [0.0] * len(batch_solution_str)
-        for valid, index in zip(qualities, indices):
+        scores = []
+        for i in range(len(batch_solution_str)):
+            scores.append([])
+        for valid, index in zip(qualities, repeat_indices):
             if valid is None:
                 pass
             else:
                 _score = 0.0 if valid else -0.5
-                scores[index] = _score
-        return scores
+                scores[index].append(_score)
+
+        final_scores = [0.0] * len(batch_solution_str)
+        for i, score in enumerate(scores):
+            if len(score) == 0:
+                final_scores[i] = 0.0
+            else:
+                final_scores[i] = min(score)
+        return final_scores
 
     async def get_difficulty_reward(
         self,
@@ -3917,9 +3977,11 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         return [
             # 快速判断问题质量
             Process(name="QuickQuality",
-                    function=self.quick_question_eval, filter_only=True, non_skip=False),
+                    function=self.quick_question_eval, filter_only=False, non_skip=False),
             Process(name="StrictQuality",
-                    function=self.strict_question_eval, filter_only=True, non_skip=False)
+                    function=self.strict_question_eval, filter_only=False, non_skip=False),
+            Process(name="QuickDifficulty",
+                    function=self.llm_judge_difficulty, filter_only=False, non_skip=False)
         ]
 
     def finegrain_process(self):
@@ -4261,14 +4323,22 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": {
-                "model": "Qwen3-32B",
-                "base_url": "https://sd267fpa80c6ft26qcaa0.apigateway-cn-beijing.volceapi.com/v1",
-                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "model": "qwen3_30b_a3b",
+                "base_url": "http://10.130.0.220:21002/v1",
+                "api_keys": "EMPTY",
                 "request_kwargs": {
                     "temperature": 0.75,
                     "timeout": 1200,
                     "max_tokens": 32768,
                 }
+                # "model": "Qwen3-32B",
+                # "base_url": "https://sd267fpa80c6ft26qcaa0.apigateway-cn-beijing.volceapi.com/v1",
+                # "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                # "request_kwargs": {
+                #     "temperature": 0.75,
+                #     "timeout": 1200,
+                #     "max_tokens": 32768,
+                # }
             },
             "repeat": 5,
             "fn": "respond_wo_context",
@@ -4277,14 +4347,22 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
         },
         "w_content": {
             "model": {
-                "model": "Qwen3-32B",
-                "base_url": "https://sd267fpa80c6ft26qcaa0.apigateway-cn-beijing.volceapi.com/v1",
-                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "model": "qwen3_30b_a3b",
+                "base_url": "http://10.130.0.220:21002/v1",
+                "api_keys": "EMPTY",
                 "request_kwargs": {
                     "temperature": 0.75,
                     "timeout": 1200,
                     "max_tokens": 32768,
                 }
+                # "model": "Qwen3-32B",
+                # "base_url": "https://sd267fpa80c6ft26qcaa0.apigateway-cn-beijing.volceapi.com/v1",
+                # "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                # "request_kwargs": {
+                #     "temperature": 0.75,
+                #     "timeout": 1200,
+                #     "max_tokens": 32768,
+                # }
             },
             "repeat": 5,
             "fn": "respond_w_context",
@@ -4316,7 +4394,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
                 "max_tokens": 1024,
             },
         },
-        "max_concurrent_requests": 32
+        "max_concurrent_requests": 128
     },
     "auxiliary_agent": {
         "model": {
@@ -4329,7 +4407,7 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
                 "max_tokens": 4096,
             },
         },
-        "max_concurrent_requests": 32
+        "max_concurrent_requests": 128
     },
     "similarity_run_args":  {
         "threshold": {
@@ -4650,7 +4728,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             "repeat": 10,
             "fn": "respond_wo_context",
             "desc": 'w/o ctx',
-            "max_concurrent_requests": 92
+            "max_concurrent_requests": 256
         },
         "w_content": {
             "model": {
@@ -4666,7 +4744,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             "repeat": 8,
             "fn": "respond_w_context",
             "desc": 'w ctx',
-            "max_concurrent_requests": 92
+            "max_concurrent_requests": 256
         },
     },
     "difficulty_metric_args": {
@@ -4694,7 +4772,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 "max_tokens": 1024,
             },
         },
-        "max_concurrent_requests": 32
+        "max_concurrent_requests": 64
     },
     "strict_qa_verify_agent": {
         "model": {
@@ -4707,20 +4785,21 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 "max_tokens": 2048,
             }
         },
-        "max_concurrent_requests": 256,
+        "max_concurrent_requests": 512,
         "repeat": 5
     },
-    "auxiliary_agent": {
+    "loose_qa_verify_agent": {
         "model": {
             "model": "Qwen2.5-32B-Instruct",
             "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
-                "temperature": 0.6,
+                "temperature": 0.9,
                 "timeout": 360,
                 "max_tokens": 4096,
             },
         },
+        "repeat": 5,
         "max_concurrent_requests": 128
     },
     "save_rollouts": {

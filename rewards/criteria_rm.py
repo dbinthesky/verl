@@ -521,6 +521,284 @@ JUDGE_WITH_CRITERIA_TEMPLATE = """
 #### 输出
 """
 
+RATIONALE_RECALL_FEWSHOTS = """
+下面给你某个提问的回复和一个思维导图，你的任务是根据思维导图（树结构）对比回答进行分析，判断回答的拆解是否足够细致，越细致得分越高。
+
+细致度得分1-5分，5分是最高分，分数仅包含1、2、3、4、5不包含小数点。
+
+#### 细致度要求
+层级覆盖完整性：判断回答是否覆盖思维导图中的所有核心主分支（如定理背景、证明特殊性、选项分析、结论推导等），以及各主分支下的关键子分支。若存在主分支或重要子分支完全未提及，则细致度降低。
+细节颗粒度匹配度：检查思维导图各子分支下的细分内容（如具体机制、条件、逻辑理由等）是否在回答中得到对应展开。
+逻辑链条完整性：评估回答是否体现思维导图中节点间的关键逻辑关联。若逻辑链条断裂或简化，则细致度下降。
+关键节点无遗漏性：确认思维导图中对结论起决定性作用的细分节点是否在回答中呈现。重要节点遗漏会显著降低细致度。
+阐述深度匹配度：对比回答与思维导图对同一内容的阐述深度。若思维导图对某一节点有多层细分解释，而回答仅停留在表层描述，则深度不足。
+
+
+#### 输出要求
+{分析}
+```json
+{{
+    "细致度": *** # int (1-5)
+}}
+```
+在分析中你需要详细的分析过程，并最终得出结论。
+
+下面是一些例子
+
+#### **问题**
+```
+What is a necessary condition for using supersymmetry to prove the Hirzebruch-Riemann-Roch theorem on a complex manifold?\n\n    A) The manifold must have a Kähler structure.\n    B) The manifold must be spin.\n    C) The manifold must have a trivial tangent bundle.\n    D) The manifold must have even dimension.
+```
+
+#### **回答**
+```
+To determine the necessary condition for using supersymmetry to prove the Hirzebruch-Riemann-Roch (HRR) theorem on a complex manifold, we analyze the options as follows:
+
+
+### Key Background: Supersymmetric Proofs and Manifold Structures  
+Supersymmetric proofs of index theorems (including HRR) rely on constructing supersymmetric quantum field theories on the manifold, which requires specific geometric structures to define supersymmetry operators (e.g., Dirac operators) and their interactions with the manifold’s geometry.  
+
+
+### Analysis of Options  
+- **Option A: The manifold must have a Kähler structure.**  
+  A Kähler structure is a strong condition combining a complex structure, a Riemannian metric, and a symplectic form, with compatibility conditions between them. Supersymmetric proofs of HRR typically require the manifold to be Kähler. This is because Kähler geometry provides the necessary framework for defining supersymmetric Lagrangians, holomorphic vector bundles, and the curvature terms essential to the theorem.  
+
+- **Option B: The manifold must be spin.**  
+  A spin structure is required for the existence of a Dirac operator, but supersymmetric proofs of HRR do not inherently demand the manifold to be spin. The theorem applies to complex manifolds more generally, and spinness is not a necessary condition here.  
+
+- **Option C: The manifold must have a trivial tangent bundle.**  
+  A trivial tangent bundle (where the tangent bundle is isomorphic to a product bundle) is an extremely restrictive condition. Most complex manifolds (e.g., projective spaces) do not have trivial tangent bundles, yet HRR still applies to them. This is not a necessary condition.  
+
+- **Option D: The manifold must have even dimension.**  
+  While complex manifolds are always even-dimensional (since their real dimension is twice their complex dimension), this is a property of complex manifolds themselves, not a specific condition required for the supersymmetric proof of HRR. The proof’s necessity stems from Kähler geometry, not merely even dimension.  
+
+
+**Conclusion:** The necessary condition for using supersymmetry to prove HRR is that the manifold is Kähler.  
+
+**Answer: A**
+```
+
+#### **思维导图**
+```\n问题：What is a necessary condition for using supersymmetry to prove the Hirzebruch-Riemann-Roch theorem on a complex manifold?\n├─ 定理背景分析\n│  ├─ HRR定理核心：将全纯向量丛的欧拉示性数与陈类及流形结构关联\n│  └─ 原始证明方法：代数几何/拓扑方法，不依赖超对称性\n│\n├─ 超对称证明的特殊性\n│  ├─ 超对称在数学中的应用场景：通常与指标定理（如Atiyah-Singer）证明相关\n│  ├─ 关键机制：通过超对称量子力学将Dolbeault算子与Witten指标关联\n│  └─ 结构要求：需保证超对称代数闭合（如Laplacian一致性、算子反交换性）\n│\n├─ 选项逻辑排除\n│  ├─ A) Kähler结构\n│  │  ├─ 必要性：保证Hermitian度量与复结构兼容，使Dolbeault与Hodge Laplacian一致\n│  │  └─ 超对称代数闭合的充分条件\n│  ├─ B) Spin结构\n│  │  └─ 无关性：HRR定理依赖复结构而非Spin结构，Dirac算子非本问题核心\n│  ├─ C) 平凡切丛\n│  │  └─ 过度限制：定理适用于一般复流形，与切丛平凡性无关\n│  └─ D) 偶数维\n│     └─ 冗余性：所有复流形实维数均为偶数，非额外条件\n│\n├─ 超对称证明的严格需求\n│  ├─ 核心矛盾：非Kähler流形中Dolbeault与Hodge Laplacian可能不重合\n│  └─ 结构依赖：Kähler度量确保超对称生成元的数学可实现性\n│\n└─ 结论推导路径\n   ├─ 排除法：B/C/D均无法满足超对称证明的特殊结构要求\n   └─ 正向确认：Kähler结构是保证超对称代数闭合的最小充分条件\n```
+
+#### 输出
+1. **层级覆盖完整性**：思维导图主分支包括定理背景分析、超对称证明的特殊性、选项逻辑排除、超对称证明的严格需求、结论推导路径。回答中，定理背景分析未提及HRR定理核心内容及原始证明方法；超对称证明的特殊性未涵盖关键机制（Dolbeault算子与Witten指标关联）和结构要求（超对称代数闭合）；超对称证明的严格需求（核心矛盾与结构依赖）完全未提及。仅选项逻辑排除和结论推导路径有部分覆盖，存在多个主分支及重要子分支遗漏。
+2. **细节颗粒度匹配度**：思维导图子分支的细分内容，如A选项中“Dolbeault与Hodge Laplacian一致”“超对称代数闭合的充分条件”、超对称证明的核心机制等，在回答中未对应展开，颗粒度不足。
+3. **逻辑链条完整性**：思维导图中“超对称代数闭合→Kähler结构保证→其他选项不满足”的逻辑链条，回答中简化了中间环节，未明确超对称代数闭合与Kähler结构的具体关联，逻辑链条存在简化。
+4. **关键节点无遗漏性**：对结论起决定性作用的节点，如HRR定理核心、原始证明方法、超对称证明的关键机制和结构要求、超对称证明的核心矛盾等，在回答中均有遗漏。
+5. **阐述深度匹配度**：思维导图对超对称证明的特殊性有多层解释，回答仅停留在“需要特定几何结构定义超对称算子”的表层描述，深度不足。
+
+综上，回答在层级覆盖、细节颗粒度、逻辑链条、关键节点和阐述深度上均存在明显不足。
+```json
+{
+    "细致度": 2
+}
+```
+
+
+
+#### **问题**
+```
+在某工业设施中，设备的电源和控制线路由继电器和接触器切换，且这些线路与其他线路不分离。根据GB/T 17626.4-1998标准，应选择哪个试验等级进行电快速瞬变脉群抗扰度试验？\n\nA) 第1级：良好保护环境\nB) 第2级：受保护环境\nC) 第4级：较严酷工业环境\nD) 第3级：典型工业环境\nE) 第5级：特殊环境
+```
+
+#### **回答**
+```
+根据GB/T 17626.4-1998《电磁兼容 试验和测量技术 电快速瞬变脉冲群抗扰度试验》标准，结合题目描述的场景，应选择的试验等级为 **D) 第3级：典型工业环境**。以下是具体分析：
+
+
+### 1. 标准中试验等级的核心划分依据
+GB/T 17626.4-1998对电快速瞬变脉冲群（EFT/B）抗扰度试验等级的划分，主要基于设备所处的电磁环境严酷程度，尤其是**线路与其他干扰源的分离程度**和**工业活动的典型干扰水平**。等级越高，代表环境中电磁干扰越严重，试验施加的脉冲群强度越大。
+
+
+### 2. 题目场景的关键特征
+题目明确描述：“设备的电源和控制线路由继电器和接触器切换，且这些线路与其他线路不分离”。这一特征符合标准中对“典型工业环境”的定义：
+- 存在继电器、接触器等开关设备，这些设备在操作时会产生电快速瞬变脉冲群干扰；
+- 线路未与其他线路分离，意味着干扰更容易通过线缆耦合到设备，环境电磁干扰水平中等。
+
+
+### 3. 其他等级的排除理由
+- **A) 第1级（良好保护环境）**：通常指无强干扰源的实验室或控制室，线路分离良好，与题目中“线路不分离”和“继电器/接触器切换”的场景不符。
+- **B) 第2级（受保护环境）**：适用于有一定防护措施的环境，如普通办公室或轻度工业环境，线路可能部分分离，干扰水平较低，不符合题意。
+- **C) 第4级（较严酷工业环境）**：适用于干扰极强的环境，如重工业车间、强电磁辐射区域，线路可能完全暴露且干扰源密集，题目未提及“较严酷”特征，因此不适用。
+- **E) 第5级（特殊环境）**：标准中第5级为非标准通用等级，需根据具体特殊需求协商确定，题目未涉及特殊环境描述，因此排除。
+
+
+综上，题目场景最符合 **第3级（典型工业环境）** 的定义。
+
+**答案：D** 
+```
+
+#### **思维导图**
+```\n问题：在某工业设施中，设备的电源和控制线路由继电器和接触器切换，且这些线路与其他线路不分离。根据GB/T 17626.4-1998标准，应选择哪个试验等级进行电快速瞬变脉群抗扰度试验？\n├─ 问题背景解析\n│  ├─ 核心对象：工业设施中的电源/控制线路\n│  ├─ 关键特征：继电器/接触器切换、线路未分离\n│  └─ 标准依据：GB/T 17626.4-1998（等效IEC 61000-4-4）\n│\n├─ 标准框架梳理\n│  ├─ 试验等级划分逻辑\n│  │  ├─ 1级：良好保护环境（如计算机房）\n│  │  ├─ 2级：受保护环境（住宅/商业）\n│  │  ├─ 3级：典型工业环境\n│  │  ├─ 4级：较严酷工业环境\n│  │  └─ 5级：特殊环境\n│  └─ 等级选择原则：干扰源强度+耦合路径可能性\n│\n├─ 干扰机制分析\n│  ├─ 干扰源特性\n│  │  └─ 继电器/接触器切换→产生高频瞬态脉冲（电火花）\n│  └─ 耦合路径特性\n│     └─ 线路未分离→干扰易通过传导/辐射耦合到其他线路\n│\n├─ 场景匹配推理\n│  ├─ 典型工业环境（3级）对比\n│  │  └─ 适用于一般工业控制柜，干扰源强度中等\n│  ├─ 较严酷工业环境（4级）特征\n│  │  └─ 高压/频繁切换设备+无隔离线路→高干扰能量+强耦合\n│  └─ 排除法应用\n│     ├─ 排除1/2级（非工业场景）\n│     ├─ 排除5级（需直接电力系统连接）\n│     └─ 3级不满足\"线路未分离\"的严酷条件\n│\n├─ 结论验证\n│  └─ 题目场景完全符合4级定义的\"较严酷工业环境\"特征\n│     ├─ 干扰源：频繁切换的继电器/接触器\n│     └─ 传播条件：未分离线路导致低阻抗耦合路径\n```
+
+#### 输出
+1. **层级覆盖完整性**：思维导图主分支包括问题背景解析、标准框架梳理、干扰机制分析、场景匹配推理、结论验证。回答中，问题背景解析和标准框架梳理有部分覆盖；干扰机制分析提到了干扰源和耦合路径的基本特征；但场景匹配推理中未涵盖思维导图中“3级不满足‘线路未分离’的严酷条件”这一关键子分支，且结论验证主分支（认为场景符合4级特征）完全未提及，存在重要主分支和子分支遗漏。
+2. **细节颗粒度匹配度**：思维导图子分支的细分内容，如标准框架中1级（计算机房）、2级（住宅/商业）的具体场景，干扰机制中“高频瞬态脉冲（电火花）”“传导/辐射耦合”，场景匹配推理中4级“高压/频繁切换设备+无隔离线路→高干扰能量+强耦合”等细节，在回答中未对应展开，仅进行了表层描述，颗粒度不足。
+3. **逻辑链条完整性**：思维导图的逻辑链条为“干扰源（继电器切换）+耦合路径（线路未分离）→高干扰强度→匹配4级”，而回答的逻辑链条为“干扰源和线路未分离→中等干扰→匹配3级”，与思维导图的关键逻辑关联存在偏差，逻辑链条断裂。
+4. **关键节点无遗漏性**：对结论起决定性作用的节点，如思维导图中“3级不满足线路未分离的严酷条件”“4级的较严酷工业环境特征（频繁切换+未分离线路导致低阻抗耦合）”等，在回答中均有遗漏。
+5. **阐述深度匹配度**：思维导图对各等级特征、干扰机制和场景匹配有多层细分解释，而回答对干扰强度的判断、等级特征的描述仅停留在基础层面，未深入匹配思维导图的细分解释，阐述深度不足。
+
+综上，回答在层级覆盖、细节颗粒度、逻辑链条、关键节点和阐述深度上均存在明显缺陷。
+```json
+{
+    "细致度": 2
+}
+```
+"""
+
+RATIONALE_RECALL_TEMPLATE = """
+#### **问题**
+```
+{question}
+```
+
+#### **回答**
+```
+{response}
+```
+
+#### **思维导图**
+```
+{rationale}
+```
+"""
+
+
+DOC_LEAKAGE_DETECT_TEMPLATE = """### **回答话术分析**
+任务描述：下面的回答是基于一篇文档进行参考回答的，你的任务是需要对回答的话术进行分析，判断是否会让读者意识到文档的存在。
+
+#### 注意点：
+1. 是否存在直接指向 “文档” 的表述
+若回答中出现明确提及 “文档”“参考资料”“材料”“原文” 等词汇的表述（如 “根据文档内容”“参考资料中提到”“原文指出”“该材料显示” 等），则会直接让读者意识到回答基于外部文档，属于明显的 “暴露线索”。
+
+2. 是否存在间接指代外部来源的痕迹
+若未直接提及 “文档”，但表述中隐含对 “特定来源信息” 的依赖（如 “根据提供的信息”“从给定内容可知”“结合背景材料分析” 等），读者会通过这类表述推断回答并非完全基于普遍公认的知识，而是依赖某一外部信息载体（即文档），从而意识到文档的存在。
+
+3. 内容呈现是否符合 “普遍知识陈述” 的逻辑
+若回答中的信息（如数据、结论、分析逻辑）以 “客观事实”“学科公认知识” 的形式自然呈现，未体现对某一特定来源的依赖（例如直接陈述 “太阳系碎片的典型速度约为 30-80 km/s”，而非 “文档中提到太阳系碎片速度为 30-80 km/s”），则读者会默认内容是基于通用知识的解答，不会联想到 “文档” 这一外部载体。
+反之，若内容呈现带有 “对特定信息的复述或针对性解读” 痕迹（如严格围绕某一非普遍已知的细节展开，且表述中隐含 “仅基于该信息” 的逻辑），则可能让读者察觉依赖外部文档。
+
+
+#### 输出要求
+- 先按照方法进行详细、准确、仔细地分析
+- 再最后的部分按下面的JSON格式输出最后的结论
+```json
+{{
+  "文档泄漏": "是/否",
+}}
+```
+
+下面是一个具体的例子
+
+## 问题
+A vehicle is experiencing reduced engine performance, increased fuel consumption, and a strong unpleasant odor inside the cabin. Which filter is most likely clogged?\n\n    A) Cabin air filter\n    B) Fuel filter\n    C) Oil filter\n    D) Air filter
+
+## 回答
+The most likely clogged filter is a combination of the **air filter** and the **cabin air filter**, but based on the options provided and the primary symptoms, the key filter to identify is:
+
+**D) Air filter**  
+
+
+### Analysis of Symptoms:  
+1. **Reduced engine performance and increased fuel consumption**: These are explicitly listed as consequences of a clogged **air filter** in the text. A clogged air filter restricts airflow to the engine, disrupting the air-fuel mixture, which leads to inefficient combustion, reduced power, and higher fuel usage.  
+
+2. **Strong unpleasant odor inside the cabin**: While this aligns with issues related to cabin air filters (which remove odors via activated carbon layers), the question asks for the "most likely clogged" filter among the options. The engine-related symptoms (performance and fuel consumption) are directly tied to the air filter, making it the primary culprit here.  
+
+
+Other options are less likely:  
+- **A) Cabin air filter**: Would cause poor air quality or odors but not engine performance issues.  
+- **B) Fuel filter**: Clogging would lead to engine stalling or fuel supply issues, not increased fuel consumption.  
+- **C) Oil filter**: Clogging would harm engine components but not typically cause increased fuel consumption or cabin odors.  
+
+
+**Answer: D**
+
+
+## 输出
+该回答会让读者意识到文档的存在，具体分析如下：  
+
+1. **存在间接指代外部来源的痕迹**：回答中出现了 “These are explicitly listed as consequences of a clogged air filter in the text” 的表述，其中 “in the text” 明确隐含了对某一特定外部文本（即参考文档）的依赖，读者会通过这一表述推断回答的信息来源于该文本，而非单纯基于普遍公认的知识。  
+
+2. **内容呈现带有对特定信息的复述痕迹**：虽然发动机性能下降、油耗增加与空气滤清器堵塞的关联属于汽车维修领域的常见知识，但回答中强调症状是 “explicitly listed in the text”，突出了对特定文本中信息的直接引用和针对性解读，而非以独立的普遍知识逻辑自然呈现，进一步暗示了对外部文档的依赖。  
+
+综上，该回答通过间接指代外部文本的表述，会让读者意识到其基于参考文档生成。 
+
+```json
+{{
+  "文档泄漏": "是",
+}}
+```
+
+
+## 问题
+在电化学腐蚀法制备多孔硅时，为了使n型硅形成多孔结构，必须满足的条件是？\n\n    A) 在黑暗中进行腐蚀\n    B) 在光照条件下进行腐蚀\n    C) 保持恒定电流密度\n    D) 使用高浓度HF溶液\n    E) 使用p型硅片
+
+## 回答
+在电化学腐蚀法制备多孔硅时，对于n型硅形成多孔结构必须满足的条件是**在光照条件下进行腐蚀**。  
+
+文中明确提到：“当腐蚀n型硅时，应在光照下进行。” 这是因为n型硅的导电性依赖于电子，而在电化学腐蚀过程中，需要足够的空穴参与阳极氧化反应。光照可激发n型硅产生电子-空穴对，提供反应所需的空穴，从而促进阳极腐蚀过程中非均匀选择型腐蚀的发生，形成多孔结构。  
+
+其他选项分析：  
+- A) 在黑暗中进行腐蚀：与文中描述相反，黑暗条件下n型硅难以产生足够空穴，无法有效形成多孔结构。  
+- C) 保持恒定电流密度：虽为电化学腐蚀的常见控制参数，但并非n型硅特有的必要条件。  
+- D) 使用高浓度HF溶液：HF浓度影响孔径等结构参数，但不是n型硅形成多孔结构的必需条件。  
+- E) 使用p型硅片：题干明确针对n型硅，此选项与问题无关。  
+
+
+**答案：B** 
+
+## 输出
+该回答会让读者意识到文档的存在，具体分析如下：  
+
+1. **存在直接指向外部来源的表述**：回答中出现了 “文中明确提到：‘当腐蚀n型硅时，应在光照下进行。’” 的表述，其中 “文中” 直接指代了某一外部文本（即参考文档），明确表明回答的信息来源于该文本，属于直接的“暴露线索”，会让读者意识到存在参考文档。  
+
+2. **内容呈现带有对特定信息的复述痕迹**：虽然n型硅在光照下电化学腐蚀形成多孔结构的原理属于电化学领域的专业知识，但回答中通过“文中明确提到”直接引用外部文本内容，并围绕该引用展开分析，突出了对特定文本中信息的直接依赖和针对性解读，而非以独立的普遍知识逻辑自然呈现，进一步明确了对外部文档的依赖。  
+
+综上，该回答通过直接指代外部文本的表述，会让读者意识到其基于参考文档生成。  
+
+```json
+{{
+  "文档泄漏": "是"
+}}
+```
+
+
+
+## 问题
+在比较不同损失函数时，哪种损失函数使得模型的AUC值最高？\n\nA) 焦点损失\nB) 交叉熵损失\nC) 均方误差\nD) KL-focal损失
+
+## 回答
+## 一、核心概念精准阐释\n### 1. AUC（Area Under the Curve）\nAUC（曲线下面积）是衡量分类模型性能的一个指标，具体是指ROC曲线（受试者工作特征曲线）下的面积。AUC值的范围在0到1之间，AUC值越接近1，表示模型的分类性能越好，即模型能够更准确地区分正负样本。AUC主要关注的是模型在不同阈值下的分类性能。\n\n### 2. 损失函数\n损失函数用于衡量模型预测值与真实值之间的差异，是机器学习算法优化过程中的目标函数。不同的损失函数适用于不同的问题类型（如分类、回归）和数据分布特性。损失函数的选择直接影响模型的训练效果和最终性能。\n\n### 3. 选项解释\n- **A) 焦点损失（Focal Loss）**：一种用于解决类别不平衡问题的损失函数，特别适用于目标检测任务。它通过减少对容易分类样本的关注，增加对难分类样本的关注，以提升模型的分类效果。\n- **B) 交叉熵损失（Categorical Cross Entropy）**：适用于多分类任务的损失函数，用于衡量预测概率分布与真实概率分布之间的差异。\n- **C) 均方误差（Mean Squared Error）**：通常用于回归问题，衡量预测值与真实值之间的平方差。\n- **D) KL-focal损失（KL-focal Loss）**：结合了Kullback-Leibler散度和焦点损失，旨在平衡不同样本的权重，适用于类别不平衡的分类任务。\n\n## 二、实验数据溯源与关键信息提取\n### 1. 实验背景与条件\n本研究使用了多个损失函数在相同数据集上进行了对比实验，通过计算AUC值来评估不同损失函数对模型性能的影响。实验过程中，所有模型的训练条件（如训练轮数、学习率、优化器等）均保持一致，以确保实验结果的可比性。\n\n### 2. 核心数据点定位\n从文献或实验报告中提取关键数据点：\n- **焦点损失（Focal Loss）**：AUC = 0.6104\n- **交叉熵损失（Categorical Cross Entropy）**：AUC = 0.6515\n- **均方误差（Mean Squared Error）**：AUC = 0.5464\n- **KL-focal损失（KL-focal Loss）**：AUC = 0.6757\n\n这些数据在严格控制其他变量（模型结构、训练参数等）的情况下获得，确保了损失函数与AUC值的直接关联性。\n\n## 三、趋势分析：损失函数与AUC的关联逻辑\n### 1. 不同损失函数对AUC的影响\n- **焦点损失（Focal Loss）**：设计用于处理类别不平衡问题，通过调整样本权重，减少容易分类样本的影响。实验结果显示其AUC为0.6104。\n- **交叉熵损失（Categorical Cross Entropy）**：适用于多分类任务，通过最小化预测概率与真实概率之间的差异来优化模型。实验结果显示其AUC为0.6515。\n- **均方误差（Mean Squared Error）**：适用于回归任务，通过最小化预测值与真实值之间的平方差来优化模型。由于是回归损失函数，其在分类任务中的表现较差，AUC仅为0.5464。\n- **KL-focal损失（KL-focal Loss）**：结合了KL散度和焦点损失，旨在平衡样本权重和类别不平衡问题。实验结果显示其AUC为0.6757，是所有损失函数中最高的。\n\n### 2. 损失函数选择的考量\n不同损失函数的性能差异，主要反映了其在处理特定问题（如类别不平衡、预测误差等）上的优势。实验数据表明，KL-focal损失在本研究中表现最优，其AUC值显著高于其他损失函数。\n\n## 四、机理深化：损失函数设计的优化机制\n### 1. 损失函数设计的背景\n损失函数的设计考虑了数据集的特性（如类别不平衡）和任务目标（如分类或回归）。KL-focal损失通过结合KL散度和焦点损失，旨在平衡样本权重，减少类别不平衡问题对模型性能的影响。\n\n### 2. 优化机制\nKL-focal损失通过以下机制优化了模型性能：\n- **平衡样本权重**：通过调整样本权重，减少容易分类样本的影响，增加难分类样本的影响，提高模型对难分类样本的分类能力。\n- **类别不平衡处理**：通过结合KL散度，更好地处理类别不平衡问题，减少类别间样本数量差异对模型性能的影响。\n\n## 五、选项逐一辨析与错误原因剖析\n### 1. 选项A（焦点损失）\n错误原因：尽管焦点损失在处理类别不平衡问题上表现出色，但其AUC值（0.6104）低于其他损失函数，特别是在KL-focal损失面前。实验数据显示，焦点损失在本研究中的性能不如KL-focal损失。\n\n### 2. 选项B（交叉熵损失）\n错误原因：交叉熵损失虽然适用于多分类任务，但在本研究中其AUC值（0.6515）低于KL-focal损失，显示其在处理类别不平衡问题上不如KL-focal损失有效。\n\n### 3. 选项C（均方误差）\n错误原因：均方误差适用于回归任务，而在分类任务中表现较差，其AUC值（0.5464）远低于其他损失函数，不适合用于本研究中的分类任务。\n\n### 4. 选项D（KL-focal损失）\n正确原因：KL-focal损失在本研究中表现最优，其AUC值（0.6757）显著高于其他损失函数，显示其在处理类别不平衡问题上的优势。\n\n## 六、结论与工程启示\n本分析表明：在比较不同损失函数时，KL-focal损失使得模型的AUC值最高，核心原因在于其结合了KL散度和焦点损失的优势，有效处理了类别不平衡问题，提升了模型的分类性能。这一结论对实际应用的指导意义在于：在处理类别不平衡的分类任务时，优先考虑使用KL-focal损失，以获得更好的分类性能。\n\n**答案：D**
+
+## 输出
+该回答会让读者意识到文档的存在，具体分析如下：  
+
+1. **存在间接指代外部来源的痕迹**：回答中出现了 “本研究使用了多个损失函数在相同数据集上进行了对比实验”“从文献或实验报告中提取关键数据点” 等表述。其中 “本研究”“文献或实验报告” 隐含了对特定外部研究成果或文献资料（即参考文档）的依赖，读者会通过这类表述推断回答中的实验数据、结论等信息来源于外部研究或文献，而非单纯基于普遍公认的知识。  
+
+2. **内容呈现带有对特定信息的复述痕迹**：回答中提供了各损失函数对应的具体AUC数值（如焦点损失AUC=0.6104、KL-focal损失AUC=0.6757等），这些具体数据并非机器学习领域的普遍公认常识，而是特定实验或研究的结果。同时，回答围绕这些特定数据展开分析，强调“在严格控制其他变量的情况下获得”，突出了对特定研究中信息的依赖和针对性解读，而非以独立的普遍知识逻辑自然呈现，进一步暗示了对外部文档的依赖。  
+
+综上，该回答通过间接指代外部研究或文献的表述及对特定实验数据的复述，会让读者意识到其基于参考文档生成。  
+
+```json
+{{
+  "文档泄漏": "是"
+}}
+```
+
+
+
+现在你需要对下面的回答进行话术分析，判断是否存在文档泄漏的情况。
+
+## 问题
+{question}
+
+## 回答
+{response}
+
+## 输出
+"""
+
 
 class Agent:
     def __init__(
@@ -655,7 +933,7 @@ class BatchCallOpenAPI(metaclass=ABCMeta):
             prompts[prompt].append(index)
 
         _prompts = list(prompts.keys()) * repeats
-        results = await agent.run(_prompts, 64, desc=f"[{self.task_desc()} {agent.model}={max_concurrent_requests}]", postprocess_fns=[self.postprocess]*len(_prompts))
+        results = await agent.run(_prompts, max_concurrent_requests, desc=f"[{self.task_desc()} {agent.model}={max_concurrent_requests}]", postprocess_fns=[self.postprocess]*len(_prompts))
 
         results_mapper = defaultdict(list)
         for (k, v) in results:
@@ -845,7 +1123,7 @@ class CritiqueRecall(BatchCallOpenAPI):
             prompts[prompt].append(index)
 
         _prompts = list(prompts.keys()) * repeats
-        results = await agent.run(_prompts, 64, desc=f"[{self.task_desc()} {agent.model}={max_concurrent_requests}]", postprocess_fns=[self.postprocess]*len(_prompts))
+        results = await agent.run(_prompts, max_concurrent_requests, desc=f"[{self.task_desc()} {agent.model}={max_concurrent_requests}]", postprocess_fns=[self.postprocess]*len(_prompts))
 
         results_mapper = defaultdict(list)
         for (k, v) in results:
@@ -896,6 +1174,89 @@ class Doc2QueryV3VerifierCritiqueRecall(CritiqueRecall):
             return recall
 
         except Exception as err:
+            raise PostprocessError(f'{err}')
+
+
+class RationaleRecall(CritiqueRecall):
+    def __init__(self):
+        super().__init__()
+
+    @classmethod
+    def task_desc(cls):
+        return "思维覆盖度"
+
+    def prompt_fn(self, example):
+        solver_response, gt = example
+        prompt = RATIONALE_RECALL_FEWSHOTS + "\n\n\n" + RATIONALE_RECALL_TEMPLATE.format(
+            question=gt["question"],
+            response=solver_response,
+            rationale=gt["rationale"]
+        )
+        return prompt
+
+    def postprocess(self, response: str):
+        s = response
+        try:
+            conclusion = s.strip()
+
+            recall = re.findall(
+                r'\"细致度\": (\d+)', conclusion)[0]
+            if isinstance(recall, str):
+                recall = float(recall)
+            assert isinstance(recall, float)
+            assert recall in (0, 1, 2, 3, 4, 5)
+            return recall
+
+        except Exception as err:
+            raise PostprocessError(f'{err}')
+
+
+class DocLeakageDetect(BatchCallOpenAPI):
+    def __init__(self):
+        pass
+
+    @classmethod
+    def task_desc(cls):
+        return "文档泄漏检测"
+
+    def prompt_fn(self, example):
+        solver_response, gt = example
+        prompt = DOC_LEAKAGE_DETECT_TEMPLATE.format(
+            question=gt["question"],
+            response=solver_response
+        )
+        return prompt
+
+    def postprocess(self, response: str):
+        s = response
+        try:
+            conclusion = s.strip()
+            judge = re.findall(
+                r'\"文档泄漏\": \"(.*)\"', conclusion)
+            if len(judge) > 0 and judge[0] in ("是", "否"):
+                return judge[0] == "是"
+
+            conclusion = conclusion[conclusion.index(
+                "```json")+len("```json"):].strip()
+            conclusion = conclusion[:conclusion.index("```")].strip()
+            try:
+                conclusion = json.loads(conclusion)
+                if conclusion["文档泄漏"] not in ("是", "否"):
+                    raise PostprocessError(f'corrupt')
+                return conclusion["文档泄漏"] == "是"
+            except Exception as err:
+                print(err)
+                try:
+                    conclusion = re.findall(
+                        r'\"文档泄漏\": \"(.*)\"', conclusion)[0]
+                    if not conclusion in ("是", "否"):
+                        raise PostprocessError(f'corrupt')
+                    return conclusion == "是"
+                except Exception as err:
+                    print(err)
+                    raise PostprocessError(f'{err}')
+        except Exception as err:
+            print(err)
             raise PostprocessError(f'{err}')
 
 
@@ -1765,24 +2126,51 @@ class RFTComputeScore(CriteriaRFTComputeScore):
                              ):
         self.init_save_rollouts()
 
-        struct_scores = defaultdict(list)
         accuracy = await self.get_accuracy(
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth,
         )
 
-        final_results = []
+        def get_meta_cognition_counts(sol):
+            return len(re.findall(r'<mutter>.*?</mutter>', sol, re.DOTALL))
+
+        def convert_to_ranks(points, max_score=0.1):
+            # 按降序排序并生成排名（数值越大排名越靠前）
+            points_sorted = sorted(points, reverse=True)
+            n = len(points_sorted)
+            # 计算等差步长（确保最后一名分数为0）
+            step = max_score / (n - 1) if n > 1 else 0
+
+            # 为每个唯一值分配分数
+            scores = {x: max_score - step *
+                      points_sorted.index(x) for x in set(points)}
+            return [scores[point] for point in points]
+
+        meta_cognition_counts = defaultdict(list)
         for i in range(len(batch_solution_str)):
             _uuid = batch_ground_truth[i]["extra_info"]["uuid"]
             _reward = accuracy[i]
+            meta_cognition_counts[_uuid].append(
+                get_meta_cognition_counts(batch_solution_str[i]))
 
         final_results = []
         for i in range(len(batch_solution_str)):
             _uuid = batch_ground_truth[i]["extra_info"]["uuid"]
             _reward = accuracy[i]
+            mapper = {x: y for x, y in zip(
+                meta_cognition_counts[_uuid], convert_to_ranks(meta_cognition_counts[_uuid]))}
 
             struct_info_str = f'[TODO]'
+            extra_reward = 0.0
+            if len(mapper) > 1:
+                c = get_meta_cognition_counts(batch_solution_str[i])
+                if c in mapper:
+                    extra_reward = mapper[c]
+                    struct_info_str = f'[EXTRA={extra_reward}]'
+
+            if self.split == "train":
+                _reward += extra_reward
 
             final_results.append(_reward)
             if (_reward > 0 and random.random() < 0.05) or (self.split == "valid" and random.random() < 0.01) or (self.split == "train" and random.random() < 0.01):
@@ -2022,6 +2410,161 @@ class XMLCoTTranslation(RFTComputeScore):
 # XML_COT_TRANSLATION
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# DOC2QUERY_V3_SOLVER
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+class Doc2QueryV3SolverComputeScore(CriteriaRMRecallComputeScore):
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-2.0
+                 ):
+        super().__init__(
+            split=split, parse_solution_fn=parse_solution_fn, args=args, min_reward=min_reward
+        )
+        self.task_name = "DOC2QUERY_V3_SOLVER"
+
+    def init_agent(self):
+        self.agents = {}
+        self.init_verify_agent()
+
+    def init_verify_agent(self):
+        self.verify_agent = Agent(
+            **self.args["verify_agent"]["model"])
+
+    def parse_answer_from_solution(self, sol):
+        sol = self.parse_solution_fn(sol)
+        if sol is None:
+            return None
+
+        try:
+            conclusion = sol.strip().split("\n")[-1]
+            conclusion = conclusion[conclusion.index(
+                "Answer:")+len("Answer:"):].strip()
+            return conclusion
+        except Exception as err:
+            return None
+
+    def get_accuracy(
+        self, batch_solution_str, batch_ground_truth
+    ):
+        acc = []
+        for sol, gt in zip(batch_solution_str, batch_ground_truth):
+            acc.append(1.0 if self.parse_answer_from_solution(
+                sol) == gt["ground_truth"] else 0.0)
+        return acc
+
+    async def get_rationale_recall(self, batch_solution_str, batch_ground_truth):
+        task = RationaleRecall()
+        indices = []
+        llm_critique = []
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            result = sol
+            if result is not None:
+                llm_critique.append((result.strip(), gt))
+                indices.append(i)
+            else:
+                continue
+
+        recall = await task.do_job(
+            agent=self.verify_agent,
+            batch_inputs=llm_critique,
+            max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
+        )
+        scores = [0.0] * len(batch_solution_str)
+        for _recall, index in zip(recall, indices):
+            if _recall is None:
+                pass
+            else:
+                scores[index] = _recall
+        return scores
+
+    async def detect_doc_leakage(
+            self,
+            batch_solution_str,
+            batch_ground_truth):
+
+        task = DocLeakageDetect()
+        indices = []
+        llm_critique = []
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            result = sol
+            if result is not None:
+                llm_critique.append((result.strip(), gt))
+                indices.append(i)
+            else:
+                continue
+
+        evaluations = await task.do_job(
+            agent=self.verify_agent,
+            batch_inputs=llm_critique,
+            max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
+        )
+        scores = [0.0] * len(batch_solution_str)
+        for _eval, index in zip(evaluations, indices):
+            if _eval is None:
+                pass
+            else:
+                scores[index] = _eval
+        return scores
+
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+        leakage = await self.detect_doc_leakage(
+            batch_solution_str,
+            batch_ground_truth,
+        )
+        rationale_recall = await self.get_rationale_recall(
+            batch_solution_str,
+            batch_ground_truth,
+        )
+        acc = self.get_accuracy(
+            batch_solution_str,
+            batch_ground_truth,
+        )
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            _reward = acc[i]
+            if _reward > 0:
+                _reward += 0.2 * rationale_recall[i] + 0.1 * (1.0-leakage[i])
+            final_results.append(_reward)
+
+            if (_reward > 1.0 and random.random() < 0.1) or (self.split == "valid" and random.random() < 0.01) or (self.split == "train" and random.random() < 0.001):
+                log = True
+                log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+            else:
+                log = False
+                log_flag = ""
+
+            log = True
+            if log:
+                print(
+                    f"--------------------------------{log_flag}--------------------------------")
+                print(
+                    f'【Question】`{repr(batch_ground_truth[i]["question"])}`')
+                print(
+                    f'【Answer】`{repr(batch_ground_truth[i]["ground_truth"])}`')
+                print(
+                    f'【Rationale】`{batch_ground_truth[i]["rationale"]}`')
+                print(
+                    f'[Final Reward]={_reward:.3f}|Leakage={leakage[i]}|Rationale={rationale_recall[i]}\n')
+                print(
+                    f'【Solution】')
+                print(batch_solution_str[i])
+
+        return final_results
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# DOC2QUERY_V3_SOLVER
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 AUTOPE_DEFAULT_PARAMS = {
     "verify_agent": {
@@ -2132,6 +2675,22 @@ DOC2QUERY_V3_VERIFIER_DEFAULT_PARAMS = {
     }
 }
 
+DOC2QUERY_V3_SOLVER_DEFAULT_PARAMS = {
+    "verify_agent": {
+        "model": {
+            "model": "DeepSeek-V3-0324",
+            "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 2048,
+            }
+        },
+        "max_concurrent_requests": 256
+    },
+}
+
 
 compute_score_train = AutoPEComputeScore(
     parse_autope_solution_fn, split="train", args=AUTOPE_DEFAULT_PARAMS).compute_score
@@ -2166,3 +2725,16 @@ doc2query_verifier_score_train = Doc2QueryV3VerifierComputeScore(
     doc2query_verifier_parse_solution_fn, split="train", args=DOC2QUERY_V3_VERIFIER_DEFAULT_PARAMS).compute_score
 doc2query_verifier_score_valid = Doc2QueryV3VerifierComputeScore(
     doc2query_verifier_parse_solution_fn, split="valid", args=DOC2QUERY_V3_VERIFIER_DEFAULT_PARAMS).compute_score
+
+
+# DOC2QUERY_V3_SOLVER_DEFAULT_PARAMS
+
+# doc2query_solver_score_train = Doc2QueryV3SolverComputeScore(
+#     criteria_rft_parse_solution_fn, split="train", args=DOC2QUERY_V3_SOLVER_DEFAULT_PARAMS).compute_score
+# doc2query_solver_score_valid = Doc2QueryV3SolverComputeScore(
+#     criteria_rft_parse_solution_fn, split="valid", args=DOC2QUERY_V3_SOLVER_DEFAULT_PARAMS).compute_score
+
+doc2query_solver_score_train = Doc2QueryV3SolverComputeScore(
+    lambda x: x, split="train", args=DOC2QUERY_V3_SOLVER_DEFAULT_PARAMS).compute_score
+doc2query_solver_score_valid = Doc2QueryV3SolverComputeScore(
+    lambda x: x, split="valid", args=DOC2QUERY_V3_SOLVER_DEFAULT_PARAMS).compute_score

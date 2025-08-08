@@ -7,10 +7,14 @@ set -euo pipefail
 # ------------------------------
 setup_env() {
     export WANDB_API_KEY="2e3700316fecb744b594dff815d1b11fbe514d24"
+    export WANDB_BASE_URL=https://api.bandw.top
+    
+    # export WANDB_MODE="offline"
     export VERL_PPO_LOGGING_LEVEL='DEBUG'
     export VLLM_ATTENTION_BACKEND="XFORMERS"
     export VLLM_USE_MODELSCOPE="False"
     export HOME="/cpfs01/shared/llm_ddd/tongjian"
+    export HYDRA_FULL_ERROR=1
 }
 setup_env
 
@@ -34,11 +38,10 @@ setup_proxy() {
 # Conda Environment Setup
 # ------------------------------
 activate_conda() {
-    # Hard Code: InternLM3-8B支持
-    source /cpfs01/shared/llm_ddd/guoxu/public/verl_env/verl_env/bin/activate /cpfs01/shared/llm_ddd/tongjian/verl
+    source /cpfs01/shared/llm_ddd/tongjian/.bashrc
+    conda activate /cpfs01/shared/llm_ddd/gaoxuan/anaconda3/envs/Verl
 }
 activate_conda
-
 
 # ------------------------------
 # Path Configuration
@@ -47,20 +50,27 @@ setup_path() {
     YYMMDD=$(date +%Y-%m-%d)
     HHMMSS=$(date +%H-%M-%S)
     
+    local num_gpus="${KUBERNETES_CONTAINER_RESOURCE_GPU:-8}"
+    local world_size="${WORLD_SIZE:-1}"
+    
+    ROLLOUT_N=16
+    TRAIN_BSZ=$((num_gpus * world_size))
+    KL_LOSS_COEF="0"
+    TEMPERATURE="1.0"
+    
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_enhance_0529"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/xml_cot/250528_train.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/xml_cot/aime_2024_2025.parquet"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-doc2query_v3_solver_short_cot_0806/checkpoint-54"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_solver_enhance_kcle.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_solver_enhance_kcle_test.parquet"
     
-    experiment_name="qwen2_5-32b_xml_cot-${YYMMDD}-${HHMMSS}"
-    project_name="xml_cot"
+    experiment_name="doc2query_v3_solver_32b_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}"
+    project_name="doc2query_v3_solver"
     
-    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/xml_cot/${experiment_name}/${YYMMDD}/${HHMMSS}"
+    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/doc2query_v3_solver/${experiment_name}/"
     mkdir -p "${OUTPUT_DIR}"
 }
 setup_path
-
 
 # ------------------------------
 # Install Package
@@ -69,7 +79,6 @@ setup_path
 #     pip3 install -U torchdata
 # }
 # setup_package
-
 
 # ------------------------------
 # Main Training Command
@@ -87,76 +96,86 @@ run_training() {
     # self.config.actor.ppo_mini_batch_size //= (self.device_mesh.size() // self.ulysses_sequence_parallel_size)
     # self.config.actor.ppo_micro_batch_size_per_gpu = self.config.actor.ppo_micro_batch_size
     
-    python3 -m verl.trainer.main_ppo \
-    custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/xml_cot.py" \
-    custom_reward_function.name=xml_cot_compute_score_train \
-    +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/xml_cot.py" \
-    +custom_valid_reward_function.name=xml_cot_compute_score_valid \
+    python3 -m recipe.dapo.main_dapo \
+    custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/criteria_rm.py" \
+    custom_reward_function.name=doc2query_solver_score_train \
+    +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/criteria_rm.py" \
+    +custom_valid_reward_function.name=doc2query_solver_score_valid \
     algorithm.adv_estimator="grpo" \
     data.train_files="${TRAIN_DATA}" \
     data.val_files="${VAL_DATA}" \
-    data.train_batch_size=64 \
-    data.max_prompt_length=2048 \
-    data.max_response_length=8192 \
+    data.train_batch_size=${TRAIN_BSZ} \
+    data.max_prompt_length=9216 \
+    data.max_response_length=15360 \
     data.filter_overlong_prompts=True \
     trainer.default_local_dir="${OUTPUT_DIR}" \
     actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
     actor_rollout_ref.actor.optim.lr=1e-6 \
+    actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
+    actor_rollout_ref.actor.optim.weight_decay=0.1 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.shuffle=True \
-    actor_rollout_ref.actor.ppo_mini_batch_size=64 \
-    actor_rollout_ref.actor.ppo_micro_batch_size=$((total_gpus)) \
-    actor_rollout_ref.actor.ulysses_sequence_parallel_size=4 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=${TRAIN_BSZ} \
+    actor_rollout_ref.actor.ppo_micro_batch_size=${TRAIN_BSZ} \
+    actor_rollout_ref.actor.ulysses_sequence_parallel_size=2 \
     actor_rollout_ref.actor.use_dynamic_bsz=True \
-    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=10240 \
+    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=24576 \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.kl_loss_coef=0.0 \
-    actor_rollout_ref.actor.entropy_coeff=0.001 \
-    actor_rollout_ref.actor.kl_loss_type="low_var_kl" \
+    actor_rollout_ref.actor.entropy_coeff=0.0 \
+    actor_rollout_ref.actor.grad_clip=1.0 \
+    actor_rollout_ref.actor.clip_ratio_low=0.2 \
+    actor_rollout_ref.actor.clip_ratio_high=0.28 \
+    actor_rollout_ref.actor.clip_ratio_c=10.0 \
+    reward_model.overlong_buffer.enable=True \
+    reward_model.overlong_buffer.len=$((1024 * 4)) \
+    reward_model.overlong_buffer.penalty_factor=1.0 \
+    algorithm.filter_groups.enable=False \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
-    +actor_rollout_ref.model.trust_remote_code=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=True \
-    actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
+    actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
     actor_rollout_ref.rollout.tensor_model_parallel_size=4 \
     actor_rollout_ref.rollout.name="vllm" \
     actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
-    actor_rollout_ref.rollout.temperature=0.9 \
-    actor_rollout_ref.rollout.n=16 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.75 \
+    actor_rollout_ref.rollout.temperature=${TEMPERATURE} \
+    actor_rollout_ref.rollout.n=${ROLLOUT_N} \
+    actor_rollout_ref.rollout.top_p=0.95 \
+    actor_rollout_ref.ref.ulysses_sequence_parallel_size=2 \
     +actor_rollout_ref.rollout.trust_remote_code=True \
-    actor_rollout_ref.rollout.log_prob_micro_batch_size=32 \
+    actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
     +actor_rollout_ref.rollout.n_val=1 \
-    algorithm.kl_ctrl.kl_coef=0.000 \
+    algorithm.kl_ctrl.kl_coef=${KL_LOSS_COEF} \
     algorithm.lam=0.95 \
+    reward_model.reward_manager=dapo_custom \
     trainer.logger='["console", "wandb"]' \
     trainer.project_name="${project_name}" \
     trainer.experiment_name="${experiment_name}" \
-    +trainer.val_before_train=True \
     trainer.n_gpus_per_node="${num_gpus}" \
     trainer.nnodes="${world_size}" \
-    trainer.save_freq=10 \
-    trainer.test_freq=5 \
+    trainer.save_freq=30 \
+    trainer.test_freq=30 \
     trainer.total_epochs=10000 \
-    reward_model.reward_manager="custom" "$@"
+    "$@"
     local training_status=$?
     
     # 显式传递训练状态
     if [ $training_status -ne 0 ]; then
         echo "Training failed with exit code $training_status"
-        exit $training_status  # 退出码传递给全局
+        exit $training_status # 退出码传递给全局
     fi
 }
 # run_training "$@"
-
 
 # ------------------------------
 # Ray Cluster Setup
 # ------------------------------
 setup_ray() {
     export MASTER_ADDR=${MASTER_ADDR:-"127.0.0.1"}
-    export MASTER_PORT=${MASTER_PORT:-$(shuf -i 20001-29999 -n 1)}
+    export MASTER_PORT=29905
     export WORLD_SIZE=${WORLD_SIZE:-1}
     export RANK=${RANK:-0}
+    # export no_proxy="localhost,127.0.0.1,*local,10.130.133.200"
     
     echo "Ray Cluster Configuration:"
     echo "MASTER_ADDR: $MASTER_ADDR"
@@ -172,7 +191,9 @@ setup_ray() {
             ray start --head \
             --node-ip-address="$MASTER_ADDR" \
             --port="$MASTER_PORT"
+            sleep 240
         else
+            sleep 10
             ray start --address "${MASTER_ADDR}:${MASTER_PORT}" \
             --block
         fi

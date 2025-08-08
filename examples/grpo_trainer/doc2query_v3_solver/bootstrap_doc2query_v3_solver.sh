@@ -2,7 +2,7 @@
 
 DLC_PATH="/cpfs01/shared/public/dlc"
 
-JOB_NAME="criteria_rm_rft"
+JOB_NAME="doc2query_v3_solver"
 PYARGS="${@:3}"
 
 NUM_PROCESSES="${NUM_PROCESSES:-4}"
@@ -22,7 +22,7 @@ WORKER_GPU="${WORKER_GPU:-"8"}"
 WORKER_CPU="${WORKER_CPU:-"64"}"
 WORKER_MEMORY="${WORKER_MEMORY:-"1024"}"
 WORKER_IMAGE="pjlab-shanghai-acr-registry-vpc.cn-shanghai.cr.aliyuncs.com/pjlab-eflops/lishuaibin:lishuaibin-xpuyu-trainrlhf"
-RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/criteria_rm/dapo_qwen2_5-32b_criteria_rft.sh"
+RUN_CMD="bash /cpfs01/shared/llm_ddd/tongjian/verl/examples/grpo_trainer/doc2query_v3_solver/dapo_qwen2_5-32b_doc2query_v3_solver.sh"
 
 dlcrun_cmd=$(
   cat <<EOF
