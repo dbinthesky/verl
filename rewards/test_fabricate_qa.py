@@ -35,15 +35,18 @@ from fabricate_qa import (
     DOC2QUERY_V2_DEV_PARAMS,
     DOC2QUERY_V3_DEFAULT_PARAMS,
     KG2QUERY_V1_DEFAULT_PARAMS,
+    DOC2QUERY_V3_FANOUT_DEFAULT_PARAMS,
     SALT_DEFAULT_PARAMS,
     SALT_DEV_PARAMS,
     RLVR_DEFAULT_PARAMS,
     Doc2QueryV3FormatVerify,
     Doc2QueryV3ComputeScore,
+    Doc2QueryV3FanOutComputeScore,
     RLVRVerify,
     RLVRComputeScore,
     fabricate_aio_compute_score_valid,
     xml_cot_fabricate_aio_compute_score_valid,
+    doc2query_v3_fanout_parse_solution_fn,
     rlvr_compute_score_valid,
     KG2QueryV1ComputeScore
 )
@@ -359,6 +362,18 @@ class TestDoc2QueryV3(unittest.TestCase):
             task_name="doc2query_v3", num=6)
         task = Doc2QueryV3ComputeScore(
             doc2query_v3_parse_solution_fn, split="train", args=DOC2QUERY_V3_DEFAULT_PARAMS)
+        print(task.compute_score(
+            [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        ))
+
+
+class TestDoc2QueryV3FanOut(unittest.TestCase):
+    def test_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="doc2query_v3", num=40)
+        task = Doc2QueryV3FanOutComputeScore(
+            doc2query_v3_fanout_parse_solution_fn, 
+            doc2query_v3_parse_solution_fn, split="train", args=DOC2QUERY_V3_FANOUT_DEFAULT_PARAMS)
         print(task.compute_score(
             [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth,
         ))

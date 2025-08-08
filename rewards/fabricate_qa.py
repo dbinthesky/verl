@@ -3895,7 +3895,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 
                 done_right = False
                 for sol_ans in ans_lists["quick_solve"][i]:
-                    if sol_ans[0] == answer:
+                    if len(sol_ans) and sol_ans[0] == answer:
                         done_right = True
                         break
 
@@ -4050,17 +4050,104 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         return [
             # 快速判断问题质量
             Process(name="QuickQuality",
-                    function=self.quick_question_eval, filter_only=False, non_skip=False),
+                    function=self.quick_question_eval, filter_only=True, non_skip=False),
             Process(name="StrictQuality",
-                    function=self.strict_question_eval, filter_only=False, non_skip=False),
+                    function=self.strict_question_eval, filter_only=True, non_skip=False),
             Process(name="QuickDifficultyFilter",
-                    function=self.quick_difficulty_filter, filter_only=False, non_skip=False),
+                    function=self.quick_difficulty_filter, filter_only=True, non_skip=False),
             # Process(name="QuickDifficulty",
             #         function=self.llm_judge_difficulty, filter_only=False, non_skip=False)
         ]
 
     def finegrain_process(self):
         return Process(name="Difficulty", function=self.get_difficulty_reward, filter_only=False, non_skip=False)
+
+
+def doc2query_v3_fanout_parse_solution_fn(solution_str: str):
+    solution_str = postprocess_solution(solution_str)
+    if not solution_str.startswith("<think>"):
+        solution_str = f'<think>\n{solution_str}'
+
+    solution_str = re.sub(r'<think>.*</think>', '', solution_str, re.DOTALL)
+
+    try:
+        questions = re.findall(r'<question>(.*)</question>',
+                               solution_str, re.DOTALL)
+    except Exception as err:
+        return None
+    return questions
+
+
+class Doc2QueryV3FanOutComputeScore(object):
+    def __init__(self,
+                 fanout_parse_solution_fn,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-2.0,
+                 max_fanout_num=5,
+                 ):
+
+        self.processor = Doc2QueryV3ComputeScore(
+            parse_solution_fn=parse_solution_fn,
+            split=split,
+            args=args,
+            min_reward=min_reward / max_fanout_num
+        )
+        self.min_reward = min_reward
+        self.max_fanout_num = max_fanout_num
+        self.fanout_parse_solution_fn = fanout_parse_solution_fn
+
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+        async def main():
+            return await self._compute_score(batch_data_sources, batch_solution_str, batch_ground_truth)
+        return aio.run(main())
+
+    def compute_score(self,
+                      batch_data_sources,
+                      batch_solution_str,
+                      batch_ground_truth,
+                      ):
+        index_mapper = defaultdict(list)
+        elements = []
+
+        for i, (source, sol, gt) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            mutliple_outputs = self.fanout_parse_solution_fn(sol)[
+                :self.max_fanout_num]
+            if len(mutliple_outputs) > 0:
+                for output in mutliple_outputs:
+                    mock_solution = f'<think>\n{output}\n</think>\n<question>\n{output}\n</question>'
+                    elements.append((source, mock_solution, gt))
+                    index_mapper[i].append(len(elements) - 1)
+
+        _batch_data_sources, _batch_solution_str, _batch_ground_truth = [], [], []
+        for source, sol, gt in elements:
+            _batch_data_sources.append(source)
+            _batch_solution_str.append(sol)
+            _batch_ground_truth.append(gt)
+
+        scores = self.processor.compute_score(
+            batch_data_sources=_batch_data_sources,
+            batch_solution_str=_batch_solution_str,
+            batch_ground_truth=_batch_ground_truth,
+        )
+
+        final_results = []
+        for i, (source, sol, gt) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            if random.random() < 0.05:
+                print(sol)
+            elem_indices = index_mapper[i]
+            if len(elem_indices) == 0:
+                final_results.append(self.min_reward)
+            else:
+                final_results.append(np.sum([scores[x] for x in elem_indices]))
+        print(f'[INFO] FanOut rewards={final_results}')
+        return final_results
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # DOC2QUERY V3
@@ -5019,6 +5106,120 @@ KG2QUERY_V1_DEFAULT_PARAMS = {
 }
 
 
+DOC2QUERY_V3_FANOUT_DEFAULT_PARAMS = {
+    "quick_solve_run_args": {
+        "quick_solve": {
+            "model": {
+                "model": "Qwen2.5-32B-Instruct",
+                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.6,
+                    "timeout": 360,
+                    "max_tokens": 2048,
+                },
+            },
+            "repeat": 1,
+            "fn": "quick_solve",
+            "desc": '快速做题',
+            "max_concurrent_requests": 512
+        }
+    },
+    "difficulty_run_args": {
+        "w/o_content": {
+            "model": {
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "repeat": 10,
+            "fn": "respond_wo_context",
+            "desc": 'w/o ctx',
+            "max_concurrent_requests": 512
+        },
+        "w_content": {
+            "model": {
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.8,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "repeat": 8,
+            "fn": "respond_w_context",
+            "desc": 'w ctx',
+            "max_concurrent_requests": 512
+        },
+    },
+    "difficulty_metric_args": {
+        "advantage": 'w_content',
+        "weakness": 'w/o_content',
+        "advantage_oversimplified_threshold": 8/8,
+        "weakness_oversimplified_threshold": 8/10,
+        "advantage_overcomplex_threshold": 1/8,
+        "weakness_overcomplex_threshold": 1/10,
+        "advantage_threshold": 1/4,
+        "advantage_weight": 0.0,
+        "weakness_weight": 1.0,
+        "anchor_weight": 1.5,
+        "confidence_bonus_threshold": 2/8,
+        "confidence_bonus_weight": 0.
+    },
+    "verify_agent": {
+        "model": {
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 1024,
+            },
+        },
+        "max_concurrent_requests": 512
+    },
+    "strict_qa_verify_agent": {
+        "model": {
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+            "request_kwargs": {
+                "temperature": 0.9,
+                "timeout": 360,
+                "max_tokens": 4096,
+            },
+        },
+        "max_concurrent_requests": 512,
+        "repeat": 5
+    },
+    "loose_qa_verify_agent": {
+        "model": {
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+            "request_kwargs": {
+                "temperature": 0.9,
+                "timeout": 360,
+                "max_tokens": 4096,
+            },
+        },
+        "repeat": 5,
+        "max_concurrent_requests": 512
+    },
+    "save_rollouts": {
+        "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
+    }
+}
+
+
 # LongCoT Response
 _default_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScore(
     doc2query_v2_parse_solution_fn, split="train", args=DOC2QUERY_V2_DEFAULT_PARAMS)
@@ -5218,3 +5419,11 @@ _kg2query_v1_compute_score_valid = KG2QueryV1ComputeScore(
     salt_parse_solution_fn, split="valid", args=KG2QUERY_V1_DEFAULT_PARAMS)
 kg2query_v1_compute_score_train = _kg2query_v1_compute_score_train.compute_score
 kg2query_v1_compute_score_valid = _kg2query_v1_compute_score_valid.compute_score
+
+
+_default_doc2query_v3_fanout_compute_score_train = Doc2QueryV3FanOutComputeScore(
+    doc2query_v3_fanout_parse_solution_fn, doc2query_v3_parse_solution_fn, split="train", args=DOC2QUERY_V3_FANOUT_DEFAULT_PARAMS)
+_default_doc2query_v3_fanout_compute_score_valid = Doc2QueryV3FanOutComputeScore(
+    doc2query_v3_fanout_parse_solution_fn, doc2query_v3_parse_solution_fn, split="valid", args=DOC2QUERY_V3_FANOUT_DEFAULT_PARAMS)
+doc2query_v3_fanout_compute_score_train = _default_doc2query_v3_fanout_compute_score_train.compute_score
+doc2query_v3_fanout_compute_score_valid = _default_doc2query_v3_fanout_compute_score_valid.compute_score
