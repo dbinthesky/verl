@@ -3538,6 +3538,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         self.init_weak_agent()
         self.init_adv_agent()
         self.init_verify_agent()
+        self.init_quick_solver_agent()
 
     def init_verify_agent(self):
         self.verify_agent = Agent(
@@ -3546,6 +3547,10 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             **self.args["strict_qa_verify_agent"]["model"])
         self.loose_qa_verify_agent = Agent(
             **self.args["loose_qa_verify_agent"]["model"])
+
+    def init_quick_solver_agent(self):
+        self.agents["quick_solve"] = Agent(
+            **self.args["quick_solve_run_args"]["quick_solve"]["model"])
 
     @classmethod
     def rule_based_penalties(cls):
@@ -3694,6 +3699,32 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             resp_postprocess_fn=self.response_postprocess
         )
 
+    @classmethod
+    def quick_solve(cls, result, gt):
+        ans_format = cls.get_answer_format(gt)
+        question, options = result[:2]
+        prompt = f'{ans_format}\n\n{cls._format_question(question=question, options=options, answer=None)}'
+        return prompt
+
+    async def quick_mock_respondent(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            skip_run=None
+    ):
+        verify_task = MultiChoiceQuestionExtractAnswerOptions()
+        return await self._simulate_respondent(
+            batch_data_sources=batch_data_sources,
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=batch_ground_truth,
+            skip_run=skip_run,
+            run_args=self.args["quick_solve_run_args"],
+            batch_verify_fn=partial(
+                self.batch_verify_results, verify_task=verify_task),
+            resp_postprocess_fn=self.response_postprocess
+        )
+
     async def llm_judge_difficulty(
         self,
         batch_data_sources,
@@ -3833,6 +3864,48 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             else:
                 final_scores[i] = min(score)
         return final_scores
+
+    async def quick_difficulty_filter(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        skip_run=None
+    ):
+        ans_lists = await self.quick_mock_respondent(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            skip_run=skip_run
+        )
+        penalties = []
+        for i in range(len(batch_solution_str)):
+            if i in list(ans_lists.values())[0]:
+                base_score = 0.0
+
+                result = self.parse_solution_fn(batch_solution_str[i])
+                if result is None:
+                    penalties.append(0.0)
+                    continue
+
+                question, options, answer = result
+                if len(options)+1 > len(self.MULTICHOICE_LETTER)-1:
+                    penalties.append(0.0)
+                    continue
+
+                done_right = False
+                for sol_ans in ans_lists["quick_solve"][i]:
+                    if sol_ans[0] == answer:
+                        done_right = True
+                        break
+
+                if done_right:
+                    penalties.append(-0.5)
+                else:
+                    penalties.append(0.0)
+            else:
+                penalties.append(0.0)
+        return penalties
 
     async def get_difficulty_reward(
         self,
@@ -3980,8 +4053,10 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                     function=self.quick_question_eval, filter_only=False, non_skip=False),
             Process(name="StrictQuality",
                     function=self.strict_question_eval, filter_only=False, non_skip=False),
-            Process(name="QuickDifficulty",
-                    function=self.llm_judge_difficulty, filter_only=False, non_skip=False)
+            Process(name="QuickDifficultyFilter",
+                    function=self.quick_difficulty_filter, filter_only=False, non_skip=False),
+            # Process(name="QuickDifficulty",
+            #         function=self.llm_judge_difficulty, filter_only=False, non_skip=False)
         ]
 
     def finegrain_process(self):
@@ -4713,6 +4788,24 @@ SALT_DEV_PARAMS = {
 }
 
 DOC2QUERY_V3_DEFAULT_PARAMS = {
+    "quick_solve_run_args": {
+        "quick_solve": {
+            "model": {
+                "model": "Qwen2.5-32B-Instruct",
+                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.9,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                },
+            },
+            "repeat": 1,
+            "fn": "quick_solve",
+            "desc": '快速做题',
+            "max_concurrent_requests": 256
+        }
+    },
     "difficulty_run_args": {
         "w/o_content": {
             "model": {
