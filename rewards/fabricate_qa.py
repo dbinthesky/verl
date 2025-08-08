@@ -4323,35 +4323,51 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": {
-                "model": "Qwen3-32B",
-                "base_url": "https://sd267fpa80c6ft26qcaa0.apigateway-cn-beijing.volceapi.com/v1",
-                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "model": "qwen3_30b_a3b",
+                "base_url": "http://10.130.0.220:21002/v1",
+                "api_keys": "EMPTY",
                 "request_kwargs": {
                     "temperature": 0.75,
                     "timeout": 1200,
                     "max_tokens": 32768,
                 }
+                # "model": "Qwen3-32B",
+                # "base_url": "https://sd267fpa80c6ft26qcaa0.apigateway-cn-beijing.volceapi.com/v1",
+                # "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                # "request_kwargs": {
+                #     "temperature": 0.75,
+                #     "timeout": 1200,
+                #     "max_tokens": 32768,
+                # }
             },
             "repeat": 5,
             "fn": "respond_wo_context",
             "desc": 'w/o ctx',
-            "max_concurrent_requests": 512
+            "max_concurrent_requests": 128
         },
         "w_content": {
             "model": {
-                "model": "Qwen3-32B",
-                "base_url": "https://sd267fpa80c6ft26qcaa0.apigateway-cn-beijing.volceapi.com/v1",
-                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "model": "qwen3_30b_a3b",
+                "base_url": "http://10.130.0.220:21002/v1",
+                "api_keys": "EMPTY",
                 "request_kwargs": {
                     "temperature": 0.75,
                     "timeout": 1200,
                     "max_tokens": 32768,
                 }
+                # "model": "Qwen3-32B",
+                # "base_url": "https://sd267fpa80c6ft26qcaa0.apigateway-cn-beijing.volceapi.com/v1",
+                # "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                # "request_kwargs": {
+                #     "temperature": 0.75,
+                #     "timeout": 1200,
+                #     "max_tokens": 32768,
+                # }
             },
             "repeat": 5,
             "fn": "respond_w_context",
             "desc": 'w ctx',
-            "max_concurrent_requests": 512
+            "max_concurrent_requests": 128
         },
     },
     "difficulty_metric_args": {
