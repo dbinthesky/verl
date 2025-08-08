@@ -2734,7 +2734,7 @@ class Doc2QueryV2ComputeScore(object):
             if quality is None:
                 pass
             else:
-                _score = 0.0 if quality else -0.5
+                _score = 0.0 if quality else -0.05
                 scores[index] = _score
         return scores
 
@@ -3804,7 +3804,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             if valid is None:
                 pass
             else:
-                _score = 0.0 if valid else -0.2
+                _score = 0.0 if valid else -0.05
                 scores[index].append(_score)
 
         final_scores = [0.0] * len(batch_solution_str)
@@ -4050,9 +4050,9 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         return [
             # 快速判断问题质量
             Process(name="QuickQuality",
-                    function=self.quick_question_eval, filter_only=True, non_skip=False),
+                    function=self.quick_question_eval, filter_only=False, non_skip=False),
             Process(name="StrictQuality",
-                    function=self.strict_question_eval, filter_only=True, non_skip=False),
+                    function=self.strict_question_eval, filter_only=False, non_skip=False),
             Process(name="QuickDifficultyFilter",
                     function=self.quick_difficulty_filter, filter_only=True, non_skip=False),
             # Process(name="QuickDifficulty",
@@ -4068,7 +4068,7 @@ def doc2query_v3_fanout_parse_solution_fn(solution_str: str):
     if not solution_str.startswith("<think>"):
         solution_str = f'<think>\n{solution_str}'
 
-    solution_str = re.sub(r'<think>.*</think>', '', solution_str, re.DOTALL)
+    solution_str = re.sub(r'<think>.*?</think>', '', solution_str, re.DOTALL)
 
     try:
         questions = re.findall(r'<question>(.*)</question>',
@@ -4085,7 +4085,7 @@ class Doc2QueryV3FanOutComputeScore(object):
                  split="train",
                  args=None,
                  min_reward=-2.0,
-                 max_fanout_num=5,
+                 max_fanout_num=10,
                  ):
 
         self.processor = Doc2QueryV3ComputeScore(
@@ -4138,8 +4138,9 @@ class Doc2QueryV3FanOutComputeScore(object):
 
         final_results = []
         for i, (source, sol, gt) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
-            if random.random() < 0.05:
+            if random.random() < 0.01:
                 print(sol)
+                print("="*80)
             elem_indices = index_mapper[i]
             if len(elem_indices) == 0:
                 final_results.append(self.min_reward)
@@ -5128,11 +5129,11 @@ DOC2QUERY_V3_FANOUT_DEFAULT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": {
-                "model": "DeepSeek-V3-0324",
-                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "Qwen2.5-32B-Instruct",
+                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
-                    "temperature": 0.8,
+                    "temperature": 0.9,
                     "timeout": 360,
                     "max_tokens": 4096,
                 }
@@ -5144,11 +5145,11 @@ DOC2QUERY_V3_FANOUT_DEFAULT_PARAMS = {
         },
         "w_content": {
             "model": {
-                "model": "DeepSeek-V3-0324",
-                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "Qwen2.5-32B-Instruct",
+                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
-                    "temperature": 0.8,
+                    "temperature": 0.9,
                     "timeout": 360,
                     "max_tokens": 4096,
                 }
