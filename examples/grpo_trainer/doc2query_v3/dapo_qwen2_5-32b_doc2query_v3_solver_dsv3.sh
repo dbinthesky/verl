@@ -60,14 +60,14 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v3_32b_2025-08-03_roll16_32_dapo_kl_coef_0_wo_entropy_t0.9_solver_dsv3_step_105"
     # TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_kcle_rl_8k_train.parquet"
     # VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/seed_discipline_250426_4k_test.parquet"
-    TRAIN_DATA='["/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_fanout_pdf_rl_8k_inputs/index0.parquet","/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_fanout_pdf_rl_8k_inputs/index1.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_fanout_pdf_rl_8k_inputs/index2.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_fanout_pdf_rl_8k_inputs/index3.parquet"]'
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_fanout_pdf_rl_8k_inputs_test.parquet"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v3_32b_2025-08-03_roll16_32_dapo_kl_coef_0_wo_entropy_t0.9_solver_dsv3_step_105"
+    TRAIN_DATA='["/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs/index0.parquet","/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs/index1.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs/index2.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs/index3.parquet"]'
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs_test.parquet"
 
-    experiment_name="doc2query_v3_fanout_32b_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_solver_qwen25_32b"
-    project_name="doc2query_v3_fanout"
+    experiment_name="doc2query_v3_32b_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_solver_qwen25_32b"
+    project_name="doc2query_v3"
 
     OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/doc2query_v3/${experiment_name}/"
     mkdir -p "${OUTPUT_DIR}"
@@ -100,15 +100,15 @@ run_training() {
 
     python3 -m recipe.dapo.main_dapo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        custom_reward_function.name=doc2query_v3_fanout_compute_score_train \
+        custom_reward_function.name=doc2query_v3_compute_score_train \
         +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        +custom_valid_reward_function.name=doc2query_v3_fanout_compute_score_valid \
+        +custom_valid_reward_function.name=doc2query_v3_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
         data.train_batch_size=${TRAIN_BSZ} \
-        data.max_prompt_length=9216 \
-        data.max_response_length=7168 \
+        data.max_prompt_length=10240 \
+        data.max_response_length=6144 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \

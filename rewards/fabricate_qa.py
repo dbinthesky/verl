@@ -162,6 +162,13 @@ MC_KNOWLEDGE_QUESTION_QUALITY_VALUE_TEMPLATE = """任务：基于下面的标准
 [结果] 需要改进
 ```
 
+[问题] 在一堂数学课上，老师正在详细分步骤讲解一个代数问题，而李明抬头凝视天花板，似乎心不在焉。当老师提问时，李明迅速给出了正确答案，但无法详细解释解题步骤。这种情况最可能表明李明属于哪种学习者？\n\nOptions:\nA) 视觉空间学习者\nB) 听觉顺序学习者\nC) 注意力缺陷型学习者\nD) 分析型学习者
+```
+[分析] 问题中的术语如“视觉空间学习者”“听觉顺序学习者”等表述清晰；聚焦于根据学习行为判断学习者类型，属于教育心理学核心知识，具有教育价值；提供了课堂情境、学生行为等必要背景信息，信息完整；表述单一明确，无歧义；语言精炼，无冗余信息，在简洁与完整间保持平衡。
+[违反原则]
+[结果] 无需修改
+```
+
 [问题] According to Epidemiological assessment of cassava mosaic disease in Central African Republic reveals the importance of mixed viral infection and poor health of plant cuttings，in  Fig. 1. B，what was the approximate percentage reduction in yield for cassava plants grown from cuttings of CMD severity class 5 compared to class 1?\n\nOptions:\nA) 20-30%\nB) 50-60%\nC) 60-70%\nD) 80-90%\nE) No significant reduction
 ```
 [分析] 问题要求根据特定文献的图1.B回答，属于考查琐碎的图表细节，而非学科核心知识，违反了相关性与教育价值原则；同时，若未提供该文献的图1.B作为参考材料，也违反了信息完整性原则。
@@ -169,11 +176,25 @@ MC_KNOWLEDGE_QUESTION_QUALITY_VALUE_TEMPLATE = """任务：基于下面的标准
 [结果] 需要改进
 ```
 
+[问题] 地质学家在分析某地区土壤变化时，观察到两种主要过程：一种是岩石表面的分解过程，称为术语A；另一种是土壤被风和水移除的过程，称为术语B。根据语言学的名词化规则，术语A和B分别对应以下哪个选项？\n\nOptions:\nA) erosion and weathering\nB) weathering and erosion\nC) decompose and erode\nD) weather and erode
+```
+[分析] 问题中的关键术语如“术语A”“术语B”通过描述性内容（岩石表面的分解过程、土壤被风和水移除的过程）进行了明确界定，表述清晰具体；聚焦于地质学过程与语言学名词化规则的结合考查，属于学科核心知识的应用，具有教育价值；提供了土壤变化的两种主要过程作为背景信息，信息完整；表述单一明确，无歧义；语言精炼，无冗余信息，在简洁与完整间保持平衡。
+[违反原则]
+[结果] 无需修改
+```
+
 [问题] 根据材料，影响全球山地林线高度分布的首要因素是？\n\nOptions:\nA) 山地海拔\nB) 光照强度\nC) 年平均气温\nD) 最热月平均气温
 ```
 [分析] 问题中“根据材料”属于无关背景，与核心问题无关，增加了阅读负担，属于冗余信息，违反了简洁性原则。虽然提到“根据材料”，但该表述对解题无实际意义，并非信息缺失导致的不完整，而是多余的表述。
 [违反原则] 简洁性
 [结果] 需要改进
+```
+
+[问题] 在一项员工满意度研究中，调查了四种企业社会责任（CSR）活动对其工作态度的影响。结果显示，当公司加强伦理相关的社会责任活动时，员工更倾向于感知组织为道德的，进而提升了工作满意度。相比之下，环境和社区活动虽然也有影响，但效果较弱。以下哪一项最能解释这一现象？\n\nOptions:\nA) 环境保护活动直接提升了员工的工作满意度\nB) 伦理CSR通过增强组织道德感知中介影响工作满意度\nC) 社区服务活动增强了员工的组织认同\nD) 财务管理透明度提高了员工信任度
+```
+[分析] 问题中的专业术语如“企业社会责任（CSR）”表述清晰；聚焦于不同CSR活动对员工工作态度影响差异的解释，属于组织行为学或管理学核心知识，具有教育价值；提供了研究背景、结果等必要信息，信息完整；表述单一明确，无歧义；语言精炼，无冗余信息，在简洁与完整间保持平衡。
+[违反原则]
+[结果] 无需修改
 ```
 
 [问题] question: Which species is inconsistently included in the sections of "The Ecology, Exploitation, and Conservation of River Turtles" by Don Moll and Edward O Moll?\n\nOptions:\nA) Diamondback terrapin\nB) Snapping turtle\nC) Sea turtle\nD) Red-eared slider
@@ -196,6 +217,13 @@ MC_KNOWLEDGE_QUESTION_QUALITY_VALUE_TEMPLATE = """任务：基于下面的标准
 [结果] 需要改进
 ```
 
+[问题] 在《在库尔的野天鹅》中，诗人通过天鹅的意象象征永恒，这一象征与以下哪项诗歌元素共同强化了时间流逝的主题？\n\nOptions:\nA) 使用反复的节奏模式\nB) 对比手法\nC) 拟人化的语言\nD) 自然景象的描述
+```
+[分析] 问题中的专业术语如“象征”“诗歌元素”等表述清晰；聚焦于诗歌意象与主题的关联分析，属于文学学科核心知识，具有教育价值；提供了诗歌名称、意象象征意义等必要背景信息，信息完整；表述单一明确，无歧义；语言精炼，无冗余信息，在简洁与完整间保持平衡。
+[违反原则]
+[结果] 无需修改
+```
+
 [问题] 在制造反光镜时，哪种设计通常需要额外的金属层来调节热膨胀系数以匹配面板的热膨胀系数？\n\nOptions:\nA) 全复合材料设计\nB) 混杂复合材料设计\nC) 金属反光镜设计\nD) 玻璃反光镜设计
 ```
 [分析] 问题表述中“制造反光镜”未明确精度要求，根据提示，添加“高精度”可使表述更严谨，原表述存在一定模糊性，违反了无歧义性原则。
@@ -216,13 +244,26 @@ MC_KNOWLEDGE_QUESTION_QUALITY_VALUE_TEMPLATE = """任务：基于下面的标准
 [结果] 需要改进
 ```
 
+[问题] 哪位教授因其对美国内战历史研究的贡献而被授予了组织美国历史家协会的Roy Rosenzweig杰出服务奖？\n\nOptions:\nA) Stephen Gross\nB) Michele Mitchell\nC) Linda Gordon\nD) Martha Hodes\nE) Yanni Kotsonis
+```
+[分析] 问题考查特定奖项的获得者，虽涉及具体奖项细节，但该奖项在学科领域具有重要性，有助于学生理解学科意义及科学家的重要工作，符合相关性与教育价值原则；问题中关键术语明确，信息完整，表述无歧义且简洁。
+[违反原则]
+[结果] 无需修改
+``` 
+
+[问题] 在非洲某些国家经历经济结构调整导致社会不安全感增加的情况下，五旬节运动的哪一特征最有助于其快速传播？\n\nOptions:\nA) 提供经济援助\nB) 传统宗教的衰退\nC) 提供解决社会经济问题的道德框架\nD) 政府的政治支持\nE) 西方传教士的直接推广
+```
+[分析] 问题中的专业术语表述清晰，聚焦于五旬节运动在特定社会背景下快速传播的特征分析，属于学科核心知识，具有教育价值；提供了经济结构调整导致社会不安全感增加的背景信息，信息完整；表述单一明确，无歧义；语言精炼，无冗余信息，在简洁与完整间保持平衡。
+[违反原则]
+[结果] 无需修改
+```
+
 [问题] Who authored the chapter on class number in Volume III of "History of the Theory of Numbers"?\n\nOptions:\nA) L. E. Dickson\nB) G. H. Creese\nC) L. J. Mordell\nD) E. T. Bell\nE) R. D. Carmichael
 ```
 [分析] 问题考查的是特定书籍某一卷中某一章节的作者，属于考查书籍中的琐碎细节，而非学科核心知识，违反了相关性与教育价值原则。
 [违反原则] 相关性与教育价值
 [结果] 需要改进
 ```
-
 
 """
 
@@ -3854,7 +3895,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             if valid is None:
                 pass
             else:
-                _score = 0.0 if valid else -0.5
+                _score = 0.0 if valid else -0.05
                 scores[index].append(_score)
 
         final_scores = [0.0] * len(batch_solution_str)
@@ -4891,17 +4932,17 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             "repeat": 1,
             "fn": "quick_solve",
             "desc": '快速做题',
-            "max_concurrent_requests": 256
+            "max_concurrent_requests": 512
         }
     },
     "difficulty_run_args": {
         "w/o_content": {
             "model": {
-                "model": "DeepSeek-V3-0324",
-                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "Qwen2.5-32B-Instruct",
+                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
-                    "temperature": 0.8,
+                    "temperature": 0.9,
                     "timeout": 360,
                     "max_tokens": 4096,
                 }
@@ -4909,15 +4950,15 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             "repeat": 10,
             "fn": "respond_wo_context",
             "desc": 'w/o ctx',
-            "max_concurrent_requests": 256
+            "max_concurrent_requests": 512
         },
         "w_content": {
             "model": {
-                "model": "DeepSeek-V3-0324",
-                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "Qwen2.5-32B-Instruct",
+                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
-                    "temperature": 0.8,
+                    "temperature": 0.9,
                     "timeout": 360,
                     "max_tokens": 4096,
                 }
@@ -4925,7 +4966,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             "repeat": 8,
             "fn": "respond_w_context",
             "desc": 'w ctx',
-            "max_concurrent_requests": 256
+            "max_concurrent_requests": 512
         },
     },
     "difficulty_metric_args": {
@@ -4953,12 +4994,12 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 "max_tokens": 1024,
             },
         },
-        "max_concurrent_requests": 64
+        "max_concurrent_requests": 512
     },
     "strict_qa_verify_agent": {
         "model": {
-            "model": "DeepSeek-V3-0324",
-            "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
                 "temperature": 0.9,
@@ -4967,7 +5008,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             }
         },
         "max_concurrent_requests": 512,
-        "repeat": 5
+        "repeat": 2
     },
     "loose_qa_verify_agent": {
         "model": {
@@ -4980,8 +5021,8 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 "max_tokens": 4096,
             },
         },
-        "repeat": 5,
-        "max_concurrent_requests": 128
+        "repeat": 2,
+        "max_concurrent_requests": 512
     },
     "save_rollouts": {
         "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
