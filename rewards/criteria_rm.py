@@ -279,6 +279,177 @@ CRITIQUE_RECALL_TEMPLATE = """
 #### 输出
 """
 
+LECTURE_NOTE_STYLE_JUDGE_FEWSHOTS = '''
+任务：对于下面一个任务的回答，你需要判断是否符合大学讲义式解题过程的特征？
+匹配度1-5分，5分是最高分，分数仅包含1、2、3、4、5不包含小数点。回答越符合大学讲义则分数越高
+
+#### 输出要求
+{分析内容}
+```json
+{
+    "匹配度": *** # int (1-5)
+}
+```
+
+下面是大学讲义风格的定义和要求
+# 大学讲义式解题过程的核心特征分析
+各位同学，今天我们来探讨一个兼具理论意义与实践价值的话题：如何将一道题目的解题过程以大学讲义的方式呈现。在高等教育阶段，解题过程的书写早已超越了“得出答案”的基本要求，它更是知识传递、思维训练与学术规范培养的重要载体。一份合格的大学讲义式解题过程，需要具备以下核心特征：
+
+
+## 一、目标明确的前置性说明
+大学讲义的首要特征是“让读者明确为何学、学什么”，体现在解题过程中需包含清晰的前置说明：
+1. **问题背景与意义**  
+   需简要阐述该问题所属的知识领域（如“本题属于微积分中的定积分应用模块”）、在学科体系中的地位（如“是理解曲线弧长计算的基础题型”），以及实际应用价值（如“在工程测量、物理运动分析中具有广泛应用”）。这一步能帮助读者建立知识关联，避免“为解题而解题”的机械思维。
+2. **核心目标与考察点**  
+   明确说明本题的解题目标（如“求解函数在给定区间上的最值”）以及考察的关键知识点（如“需综合运用导数的四则运算法则与极值判定定理”），让读者提前聚焦核心能力要求。
+3. **预备知识提示**  
+   列出解题所需的前置概念、公式或定理，并对关键符号进行定义，确保读者具备理解基础。
+
+
+## 二、逻辑严谨的过程展开
+大学阶段的解题强调“思维的可追溯性”，过程展开需体现严密的逻辑链条：
+1. **分步拆解与逻辑衔接**  
+   将复杂问题分解为若干子步骤（如“ Step 1：确定函数定义域；Step 2：求解一阶导数；Step 3：寻找驻点与不可导点……”），每个步骤需明确标注，并通过过渡语句（如“由 Step 1 可知函数定义域为$[0,2]$，因此接下来需在该区间内分析导数性质”）体现步骤间的因果关系，避免跳跃性推理。
+2. **原理支撑与依据标注**  
+   每一步运算或推理必须明确标注理论依据（如“根据极限的四则运算法则，$\lim\limits_{x\\to a}[f(x)+g(x)]=\lim\limits_{x\\to a}f(x)+\lim\limits_{x\\to a}g(x)$”“由题意可知，物体做匀加速直线运动，故适用公式$s=v_0t+\\frac{1}{2}at^2$”）。对于关键定理，需简要说明其适用条件（如“由于函数$f(x)$在$[1,3]$上连续且可导，满足罗尔定理的应用条件”），培养严谨的学术态度。
+3. **符号规范与定义清晰**  
+   所有使用的符号需遵循学科惯例（如用$x,y$表示变量，$a,b,c$表示常数，$\\theta$表示角度），并在首次出现时明确定义（如“设$t$为运动时间，单位为秒；$s(t)$为$t$时刻的位移，单位为米”）。对于易混淆的符号（如$\ln$表示自然对数，$\log$表示常用对数）需特别说明，避免歧义。
+
+
+## 三、深度融合的知识关联
+大学讲义的核心价值在于“构建知识网络”，解题过程需体现知识点的横向与纵向联系：
+1. **跨知识点整合说明**  
+   若题目涉及多个章节的知识（如“本题需结合线性代数中的矩阵运算与微分方程中的特征值解法”），需明确指出知识的交叉点，并解释整合逻辑（如“通过将微分方程转化为矩阵形式，可利用特征值简化求解过程”），帮助读者建立学科知识体系。
+2. **方法对比与选择依据**  
+   当存在多种解题方法时（如“本题可通过换元法或分部积分法求解”），需对比不同方法的适用场景（如“换元法更适用于根号内为一次函数的情况”），并说明选择当前方法的理由，培养“方法优化”意识。
+3. **易错点预警与原理分析**  
+   针对学生常犯的错误（如“忽略定义域对极值点的限制”“误用向量点积与叉积的运算规则”），需在相应步骤旁标注预警（如“【注意】此处需验证驻点是否在定义域内，否则会导致结果错误”），并从原理层面解释错误原因（如“极值点必须是函数定义域内的点，这是由极值的定义决定的”），实现“解题即学习”的效果。
+
+
+## 四、规范专业的表达形式
+大学讲义作为学术性文本，需遵循严格的表达规范：
+1. **术语准确与表述严谨**  
+   必须使用学科标准术语（如用“导数”而非“变化率”的口语化表达，用“偏微分方程”而非“多变量方程”），避免模糊表述。对于定理、公式的引用需准确无误（如“牛顿-莱布尼茨公式”不可简称为“微积分基本公式”而不加解释）。
+2. **数学符号与格式规范**  
+   数学公式需单独成行并编号（如“（1）$F(x)=\int_a^x f(t)dt$”），便于后续引用；变量、常量、函数符号需区分大小写（如“$F(x)$表示原函数，$f(x)$表示被积函数”）；运算符号需规范（如用“$\times$”表示数值乘法，“$\cdot$”表示向量点积，避免混淆）。
+3. **图文结合与可视化辅助**  
+   对于几何问题、物理过程等抽象内容，需配合示意图辅助说明（如“如图1所示，平面区域$D$由曲线$y=x^2$与$y=2x$围成”），图形需标注关键参数（坐标、长度、角度等），并在图注中说明图形与解题步骤的对应关系，实现“以图助解”。
+
+
+## 五、总结拓展的延伸性内容
+大学讲义不仅是“解题指南”，更是“思维拓展工具”，需包含总结与延伸部分：
+1. **解题思路回顾与方法提炼**  
+   在得出答案后，需提炼通用解题模型（如“本题的核心思路是：先将实际问题转化为数学模型，再通过求导分析函数性质，最后验证结果合理性”），总结可迁移的解题策略（如“对于最值问题，通常遵循‘求导→找临界点→判断单调性→确定最值’的步骤”）。
+2. **结果验证与合理性分析**  
+   需说明如何验证答案的正确性（如“通过代入特殊值检验”“利用对称性验证积分结果”），并分析结果的物理或数学意义（如“所求加速度为正值，表明物体做加速运动，与题意一致”），培养“结果反思”习惯。
+3. **拓展问题与研究方向**  
+   可提出相关延伸问题（如“若将本题中的区间改为无穷区间，解题方法会发生哪些变化？”）或前沿应用（如“本题的优化思想可拓展至机器学习中的损失函数最小化问题”），引导读者从“解题”走向“探究”。
+
+
+## 总结：大学讲义式解题的本质
+从上述特征可以看出，大学讲义式解题过程的核心本质是“**以解题为载体的知识传授与思维训练**”。它要求我们不仅“会解题”，更要“懂原理、明逻辑、能迁移”。这种书写方式看似繁琐，实则是培养学术严谨性、逻辑表达能力与知识整合能力的重要途径。
+
+
+
+
+
+下面是一些例子
+
+#### 提问
+```
+*单项选择题*关于浅感觉下列感觉是正确的\n\n- A、运动觉<sup>[1]</sup>\n\n- B、痛觉<sup>[2]</sup>\n\n- C、位置觉\n\n- D、实体觉\n\n- E、图形觉
+```
+
+#### 回答
+```
+### 逐步推理：\n\n1. **理解题目**：题目问的是“关于浅感觉下列感觉是正确的”，即需要从选项中找出属于“浅感觉”的感觉类型。\n\n2. **明确“浅感觉”和“深感觉”的定义**：\n   - **浅感觉**：指来自皮肤和黏膜的感觉，主要包括痛觉、温度觉和触觉（轻触觉）。这些感觉的感受器位于皮肤或黏膜中。\n   - **深感觉**：指来自肌肉、肌腱、关节和骨膜的感觉，主要包括运动觉（关节位置觉）、振动觉和压觉（深压觉）。\n   - **复合感觉（皮质感觉）**：是大脑皮质对浅感觉和深感觉整合后形成的更复杂的感觉，如实体觉、图形觉、两点辨别觉等。\n\n3. **分析选项**：\n   - A、运动觉：属于深感觉（关节位置觉），排除。\n   - B、痛觉：属于浅感觉（皮肤和黏膜的感觉），正确。\n   - C、位置觉：属于深感觉（关节位置觉），排除。\n   - D、实体觉：属于复合感觉（需要大脑皮质整合触觉和深感觉），排除。\n   - E、图形觉：属于复合感觉（需要大脑皮质整合触觉信息），排除。\n\n4. **验证**：\n   - 浅感觉主要包括痛觉、温度觉和触觉，因此痛觉（B）是唯一正确的选项。\n   - 其他选项要么是深感觉（A、C），要么是复合感觉（D、E）。\n\n### 最终答案：\n\\boxed{B}"
+```
+
+#### 评价
+对照大学讲义式解题过程的核心特征，该回答存在多处显著不足，具体如下：
+1. **目标明确的前置性说明缺失严重**  
+   - 无问题背景与意义：未说明题目所属知识领域（如“本题属于生理学中感觉系统模块”）、学科地位（如“是理解躯体感觉分类的基础题型”）及应用价值，完全缺乏知识关联引导。  
+   - 核心目标表述模糊：仅简单说明“找出属于浅感觉的选项”，未明确考察的关键能力（如“考察对不同感觉类型分类标准的掌握”）。  
+   - 预备知识不规范：虽提及感觉类型定义，但未以“预备知识提示”板块系统呈现，未明确概念间的层级关系，不符合讲义“前置知识清单”的要求。  
+2. **逻辑严谨的过程展开不达标**  
+   - 分步拆解不规范：步骤未标注“Step 1/2/3”等正式编号，仅以“1.2.3.4”简单罗列，缺乏学术化的步骤标识。  
+   - 原理支撑标注缺失：对感觉类型的判断仅依赖定义描述，未明确标注“根据浅感觉的核心定义：XXX”等规范依据，推理依据未显性化。  
+   - 无逻辑衔接强化：过渡语句口语化（如“明确……定义”“分析选项”），未使用“由上述定义可知”“基于分类标准”等学术化衔接语。  
+3. **深度融合的知识关联完全缺失**  
+   - 无跨知识点整合：未提及该知识点与其他章节的联系（如浅感觉与神经传导通路的关联）。  
+   - 无方法对比与选择：未说明是否存在其他解题思路（如通过“感受器位置”辅助判断），也未解释当前方法的唯一性或适用性。  
+   - 无易错点预警：未指出学生易混淆的误区（如“将实体觉误归为浅感觉”），未从原理层面解释错误原因，缺乏“解题即学习”的引导。  
+4. **规范专业的表达形式不达标**  
+   - 结构不规范：未采用“一、前置说明 二、解题步骤 三、总结拓展”等讲义式层级标题，仅以“逐步推理”“最终答案”简单划分，缺乏学术文本的结构化特征。  
+   - 无概念/定义编号：对“浅感觉”“深感觉”等核心概念未编号（如“定义1：浅感觉指……”），不便于后续引用，不符合讲义格式规范。  
+   - 表述口语化：如“分析选项”“验证”等表述过于简略，未使用“选项逐一辨析”“结果合理性验证”等学术化表述。  
+5. **总结拓展的延伸性内容几乎空白**  
+   - 无解题思路提炼：未总结“区分感觉类型”的通用步骤（如“先明确分类标准→再匹配选项特征→最后验证合理性”），缺乏方法迁移价值。  
+   - 结果验证薄弱：仅简单重复判断依据，未说明“如何通过反向排除法二次验证”等具体验证逻辑。  
+   - 无拓展问题：未提出延伸思考（如“若题目加入‘触觉’选项，判断逻辑是否变化”），未实现知识拓展目标。
+```json
+{
+    "匹配度": 2
+}
+```
+
+
+#### 提问
+```
+The main difference between digital currency and traditional currency lies in:\n- A. Value stability\n- B. Issuing authority\n- C. Transaction speed\n- D. Storage method
+```
+
+#### 回答
+```
+To determine the main difference between digital currency and traditional currency, let's analyze each option step by step:\n\n1. **Value stability (A)**: Both digital and traditional currencies can experience fluctuations in value. For example, cryptocurrencies like Bitcoin are highly volatile, but traditional currencies can also lose value due to inflation or economic instability. Therefore, this is not the *main* difference.\n\n2. **Issuing authority (B)**: This is a key distinction. Traditional currencies are issued and regulated by central authorities like governments or central banks (e.g., the Federal Reserve for the US dollar). Digital currencies, especially cryptocurrencies, are typically decentralized and not controlled by any single authority. This is a fundamental difference.\n\n3. **Transaction speed (C)**: While digital currencies often enable faster transactions (especially across borders), some traditional payment systems (like credit cards or digital banking) can also process transactions quickly. Thus, this is not the *primary* difference.\n\n4. **Storage method (D)**: Digital currencies are stored electronically (e.g., in digital wallets), while traditional currencies can be stored physically (cash) or digitally (bank accounts). However, this is more of a technical difference rather than a fundamental one.\n\n**Conclusion**: The most significant difference lies in the **issuing authority**, as digital currencies often operate without central control, unlike traditional currencies.\n\n\\boxed{B}
+```
+
+#### 评价
+对照大学讲义式解题过程的核心特征，该回答存在多处明显不足，具体如下：
+1. **目标明确的前置性说明缺失**  
+   - 无问题背景与意义：未说明题目所属知识领域（如“本题属于金融学中货币形态模块”）、学科地位（如“是理解现代货币体系演变的基础题型”）及应用价值，缺乏知识关联引导。  
+   - 核心目标表述简单：仅隐含“找出数字货币与传统货币的主要区别”，未明确考察的关键能力（如“考察对不同货币形态核心特征的辨析能力”）。  
+   - 预备知识提示缺失：未系统列出解题所需的核心概念（如“数字货币的定义”“传统货币的核心特征”），未对关键术语进行规范定义，不符合讲义“前置知识清单”要求。  
+2. **逻辑严谨的过程展开不规范**  
+   - 分步拆解无正式标识：步骤仅以“1.2.3.4”罗列，未标注“Step 1/2/3/4”等学术化编号，缺乏规范的步骤区分。  
+   - 原理支撑标注不足：对选项的判断仅依赖经验性描述（如“ cryptocurrencies like Bitcoin are highly volatile”），未明确标注“根据货币发行机制的核心定义：XXX”等规范依据，推理依据未显性化。  
+   - 逻辑衔接口语化：过渡语句简单（如“let's analyze each option step by step”“Therefore, this is not...”），未使用“基于货币本质特征可知”“从发行机制角度分析”等学术化衔接语。  
+3. **深度融合的知识关联匮乏**  
+   - 无跨知识点整合：未提及该知识点与其他章节的联系（如数字货币与金融监管、区块链技术的关联）。  
+   - 无方法对比与选择：未说明是否存在其他辨析思路（如从“货币职能实现方式”角度判断），也未解释当前选项分析方法的适用性。  
+   - 无易错点预警：未指出学生易混淆的误区（如“将‘存储方式’误视为核心区别”），未从原理层面解释错误原因，缺乏“解题即学习”的引导。  
+4. **规范专业的表达形式不达标**  
+   - 结构不完整：未采用“一、前置说明 二、解题步骤 三、总结拓展”等讲义式层级标题，仅以自然段落划分，缺乏学术文本的结构化特征。  
+   - 无概念编号与公式规范：对“数字货币”“传统货币”等核心概念未编号定义，未形成可引用的概念体系，不符合讲义格式规范。  
+   - 表述简洁但不严谨：如“this is a key distinction”“this is more of a technical difference”等表述缺乏学术化修饰，未使用“从货币本质属性来看，发行权归属具有决定性差异”等专业表述。  
+5. **总结拓展的延伸性内容空白**  
+   - 无解题思路提炼：未总结“辨析事物核心区别”的通用步骤（如“先明确比较维度→再分析各维度重要性→最后锁定核心差异”），缺乏方法迁移价值。  
+   - 结果验证缺失：未说明“如何通过货币职能理论二次验证发行权的核心地位”等验证逻辑，仅简单得出结论。  
+   - 无拓展问题：未提出延伸思考（如“若数字货币被央行发行并监管，其与传统货币的区别会发生哪些变化？”），未实现知识拓展目标。
+```json
+{
+    "匹配度": 2
+}
+```
+
+'''
+
+LECTURE_NOTE_STYLE_JUDGE_TEMPLATE = """
+现在你需要对下面的回答进行评价，是否符合大学课程讲义的行文风格。
+
+#### 提问
+```
+{question}
+```
+
+#### 评价
+```
+{response}
+```
+
+#### 输出
+"""
+
 DOC2QUERY_V3_CRITIQUE_RECALL_FEWSHOTS = """
 下面是对于同一道题目的两个来自不同方的质检见过，第一个是人类质检员，第二个是大模型质检员；二者的任务都是尝试对一道问题进行质检判断是否符合要求。
 
@@ -1167,6 +1338,39 @@ class Doc2QueryV3VerifierCritiqueRecall(CritiqueRecall):
 
             recall = re.findall(
                 r'\"一致性\": (\d+)', conclusion)[0]
+            if isinstance(recall, str):
+                recall = float(recall)
+            assert isinstance(recall, float)
+            assert recall in (0, 1, 2, 3, 4, 5)
+            return recall
+
+        except Exception as err:
+            raise PostprocessError(f'{err}')
+
+
+class Doc2QueryV3LectureNoteStyleJudge(CritiqueRecall):
+    def __init__(self):
+        super().__init__()
+
+    @classmethod
+    def task_desc(cls):
+        return "讲义风格评价"
+
+    def prompt_fn(self, example):
+        solver_response, gt = example
+        prompt = LECTURE_NOTE_STYLE_JUDGE_FEWSHOTS + "\n\n\n" + LECTURE_NOTE_STYLE_JUDGE_TEMPLATE.format(
+            question=gt["question"],
+            response=solver_response,
+        )
+        return prompt
+
+    def postprocess(self, response: str):
+        s = response
+        try:
+            conclusion = s.strip()
+
+            recall = re.findall(
+                r'\"匹配度\": (\d+)', conclusion)[0]
             if isinstance(recall, str):
                 recall = float(recall)
             assert isinstance(recall, float)
@@ -2457,6 +2661,31 @@ class Doc2QueryV3SolverComputeScore(CriteriaRMRecallComputeScore):
                 sol) == gt["ground_truth"] else 0.0)
         return acc
 
+    async def get_lecture_style_score(self, batch_solution_str, batch_ground_truth):
+        task = Doc2QueryV3LectureNoteStyleJudge()
+        indices = []
+        llm_critique = []
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            result = sol
+            if result is not None:
+                llm_critique.append((result.strip(), gt))
+                indices.append(i)
+            else:
+                continue
+
+        style_scores = await task.do_job(
+            agent=self.verify_agent,
+            batch_inputs=llm_critique,
+            max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
+        )
+        scores = [0.0] * len(batch_solution_str)
+        for style_score, index in zip(style_scores, indices):
+            if style_score is None:
+                pass
+            else:
+                scores[index] = style_score
+        return scores
+
     async def get_rationale_recall(self, batch_solution_str, batch_ground_truth):
         task = RationaleRecall()
         indices = []
@@ -2524,6 +2753,10 @@ class Doc2QueryV3SolverComputeScore(CriteriaRMRecallComputeScore):
             batch_solution_str,
             batch_ground_truth,
         )
+        style_score = await self.get_lecture_style_score(
+            batch_solution_str,
+            batch_ground_truth,
+        )
         acc = self.get_accuracy(
             batch_solution_str,
             batch_ground_truth,
@@ -2533,7 +2766,9 @@ class Doc2QueryV3SolverComputeScore(CriteriaRMRecallComputeScore):
         for i in range(len(batch_solution_str)):
             _reward = acc[i]
             if _reward > 0:
-                _reward += 0.2 * rationale_recall[i] + 0.1 * (1.0-leakage[i])
+                _reward += 0.2 * \
+                    rationale_recall[i] + 0.1 * \
+                    (1.0-leakage[i]) + 0.1 * style_score[i]
             final_results.append(_reward)
 
             if (_reward > 1.0 and random.random() < 0.03) or (self.split == "valid" and random.random() < 0.001) or (self.split == "train" and random.random() < 0.001):
@@ -2553,7 +2788,7 @@ class Doc2QueryV3SolverComputeScore(CriteriaRMRecallComputeScore):
                 print(
                     f'【Rationale】`{batch_ground_truth[i]["rationale"]}`')
                 print(
-                    f'[Final Reward]={_reward:.3f}|Leakage={leakage[i]}|Rationale={rationale_recall[i]}\n')
+                    f'[Final Reward]={_reward:.3f}|Leakage={leakage[i]}|Rationale={rationale_recall[i]}|Style={style_score[i]}\n')
                 print(
                     f'【Solution】')
                 print(batch_solution_str[i])
