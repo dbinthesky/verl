@@ -2536,14 +2536,13 @@ class Doc2QueryV3SolverComputeScore(CriteriaRMRecallComputeScore):
                 _reward += 0.2 * rationale_recall[i] + 0.1 * (1.0-leakage[i])
             final_results.append(_reward)
 
-            if (_reward > 1.0 and random.random() < 0.1) or (self.split == "valid" and random.random() < 0.01) or (self.split == "train" and random.random() < 0.001):
+            if (_reward > 1.0 and random.random() < 0.03) or (self.split == "valid" and random.random() < 0.001) or (self.split == "train" and random.random() < 0.001):
                 log = True
                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
             else:
                 log = False
                 log_flag = ""
 
-            log = True
             if log:
                 print(
                     f"--------------------------------{log_flag}--------------------------------")
