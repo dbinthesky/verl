@@ -71,7 +71,7 @@ def load_dataset(num=100, format="autope"):
     elif format == "doc2query_v3_verifier":
         filename = '/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3_verifier/doc2query_v3_critique_annotations.parquet'
     elif format == "doc2query_v3_solver":
-        filename = '/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_solver_enhance_kcle.parquet'
+        filename = '/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_solver_enhance_multi_sources.parquet'
 
     batch_solution_str, batch_ground_truth = [], []
     batch_data_sources = []

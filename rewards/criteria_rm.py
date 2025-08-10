@@ -2678,16 +2678,19 @@ DOC2QUERY_V3_VERIFIER_DEFAULT_PARAMS = {
 DOC2QUERY_V3_SOLVER_DEFAULT_PARAMS = {
     "verify_agent": {
         "model": {
-            "model": "DeepSeek-V3-0324",
-            "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+            # "model": "DeepSeek-V3-0324",
+            # "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+            # "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
                 "temperature": 0.6,
                 "timeout": 360,
                 "max_tokens": 2048,
             }
         },
-        "max_concurrent_requests": 256
+        "max_concurrent_requests": 512
     },
 }
 

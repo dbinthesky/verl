@@ -53,16 +53,14 @@ setup_path() {
     local num_gpus="${KUBERNETES_CONTAINER_RESOURCE_GPU:-8}"
     local world_size="${WORLD_SIZE:-1}"
 
-    ROLLOUT_N=8
-    TRAIN_BSZ=$((num_gpus * world_size))
+    ROLLOUT_N=10
+    TRAIN_BSZ=$((num_gpus * world_size * 4))
     KL_LOSS_COEF="0"
     TEMPERATURE="1.0"
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    # TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_kcle_rl_8k_train.parquet"
-    # VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/seed_discipline_250426_4k_test.parquet"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v3_32b_2025-08-03_roll16_32_dapo_kl_coef_0_wo_entropy_t0.9_solver_dsv3_step_105"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v3_32b_2025-08-09_roll8_64_dapo_kl_coef_0_wo_entropy_t1.0_solver_qwen25_32b_step_60"
     TRAIN_DATA='["/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs/index0.parquet","/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs/index1.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs/index2.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs/index3.parquet"]'
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs_test.parquet"
 
@@ -107,8 +105,8 @@ run_training() {
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
         data.train_batch_size=${TRAIN_BSZ} \
-        data.max_prompt_length=10240 \
-        data.max_response_length=6144 \
+        data.max_prompt_length=12288 \
+        data.max_response_length=8192 \
         data.filter_overlong_prompts=True \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
@@ -121,7 +119,7 @@ run_training() {
         actor_rollout_ref.actor.ppo_micro_batch_size=${TRAIN_BSZ} \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=2 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=16384 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=20480 \
         actor_rollout_ref.actor.use_kl_loss=False \
         actor_rollout_ref.actor.kl_loss_coef=${KL_LOSS_COEF} \
         actor_rollout_ref.actor.entropy_coeff=0.0 \
