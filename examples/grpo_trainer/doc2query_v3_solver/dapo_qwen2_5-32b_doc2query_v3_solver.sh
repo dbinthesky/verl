@@ -60,8 +60,8 @@ setup_path() {
     
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-doc2query_v3_solver_short_cot_0806/checkpoint-54"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_solver_enhance_kcle.parquet"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-doc2query_v3_solver_short_cot_0810/checkpoint-11"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_solver_enhance_multi_sources.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_solver_enhance_kcle_test.parquet"
     
     experiment_name="doc2query_v3_solver_32b_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}"
@@ -105,8 +105,8 @@ run_training() {
     data.train_files="${TRAIN_DATA}" \
     data.val_files="${VAL_DATA}" \
     data.train_batch_size=${TRAIN_BSZ} \
-    data.max_prompt_length=9216 \
-    data.max_response_length=15360 \
+    data.max_prompt_length=12288 \
+    data.max_response_length=12288 \
     data.filter_overlong_prompts=True \
     trainer.default_local_dir="${OUTPUT_DIR}" \
     actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
