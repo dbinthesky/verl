@@ -1689,8 +1689,9 @@ class NumericalSolutionVerify(BatchCallOpenAPI):
 
 
 class RLVRVerify(BatchCallOpenAPI):
-    def __init__(self):
-        pass
+    def __init__(self, prompt_field="prompt", answer_field="ground_truth"):
+        self.prompt_field = prompt_field
+        self.answer_field = answer_field
 
     @classmethod
     def task_desc(cls):
@@ -1699,9 +1700,9 @@ class RLVRVerify(BatchCallOpenAPI):
     def prompt_fn(self, example):
         solver_response, gt = example
         content = {
-            "题目": gt["prompt"],
+            "题目": gt[self.prompt_field],
             "用户回答": solver_response,
-            "标准答案": gt["ground_truth"],
+            "标准答案": gt[self.answer_field],
         }
         prompt = RLVR_VERIFY_FEWSHOTS + "\n\n\n" + RLVR_VERIFY_TEMPLATE.format(
             content=json.dumps(content, ensure_ascii=False, indent="  ")
@@ -2893,10 +2894,6 @@ class Doc2QueryV2ComputeScore(object):
                     score=cur_score,
                     extra=extra[i]
                 )
-
-            # Validation逻辑 —— 计算数据转化成功率
-            if self.split == "valid":
-                cur_score = 1.0 if _main_reward > 0.0 else 0.0
 
             final_results.append(cur_score)
 
@@ -4519,6 +4516,286 @@ class FabricateAIOComputeScore(object):
 # AIO
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# LEARNABLE COT
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+class GeneralizationRLVRVerify(RLVRVerify):
+    def __init__(self):
+        pass
+
+    @classmethod
+    def task_desc(cls):
+        return "RLVR验证"
+
+    def prompt_fn(self, example):
+        solver_response, extra, gt = example
+        content = {
+            "题目": extra[0],
+            "用户回答": solver_response,
+            "标准答案": extra[1],
+        }
+        prompt = RLVR_VERIFY_FEWSHOTS + "\n\n\n" + RLVR_VERIFY_TEMPLATE.format(
+            content=json.dumps(content, ensure_ascii=False, indent="  ")
+        )
+        return prompt
+
+    def postprocess(self, response: str):
+        s = response
+        try:
+            conclusion = s.strip()
+            judge = re.findall(
+                r'\"判断结果\": \"(.*)\"', conclusion)
+            if len(judge) > 0 and judge[0] in ("正确", "错误"):
+                return judge[0] == "正确"
+
+            conclusion = conclusion[conclusion.index(
+                "```json")+len("```json"):].strip()
+            conclusion = conclusion[:conclusion.index("```")].strip()
+            try:
+                conclusion = json.loads(conclusion)
+                if conclusion["判断结果"] not in ("正确", "错误"):
+                    raise PostprocessError(f'corrupt')
+                return conclusion["判断结果"] == "正确"
+            except Exception as err:
+                try:
+                    conclusion = re.findall(
+                        r'\"判断结果\": \"(.*)\"', conclusion)[0]
+                    if not conclusion in ("正确", "错误"):
+                        raise PostprocessError(f'corrupt')
+                    return conclusion == "正确"
+                except Exception as err:
+                    raise PostprocessError(f'{err}')
+        except Exception as err:
+            raise PostprocessError(f'{err}')
+
+
+class LearnableCoTComputeScore(SALTComputeScore):
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-2.0
+                 ):
+
+        super().__init__(
+            parse_solution_fn=parse_solution_fn, split=split,
+            args=args,
+            min_reward=min_reward
+        )
+        self.task_name = "LEARNABLE_COT"
+
+    def init_agent(self):
+        self.agents = {}
+        self.init_verify_agent()
+        self.init_auxiliary_agent()
+        self.init_student_agent()
+
+    def init_student_agent(self):
+        self.student_agent = Agent(
+            **self.args["learnable_run_args"]["student"]["model"])
+        self.agents["student"] = self.student_agent
+
+    @classmethod
+    def rule_based_penalties(cls):
+        return [
+            LanguageConsistency,
+        ]
+
+    async def get_generalization_reward(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            skip_run=None):
+
+        correctness = await self.simulate_respondent(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            skip_run=skip_run,
+        )
+
+        full_rewards = []
+        pass_rates = []
+
+        for i in range(len(batch_solution_str)):
+            if i in list(correctness.values())[0]:
+                base_score = 0.0
+                pass_rates.append({
+                    k: f'{np.sum(v[i])}/{len(v[i])}' for k, v in correctness.items()
+                })
+                scores = correctness["student"][i]
+                full_rewards.append(np.mean(scores))
+            else:
+                pass_rates.append({})
+                full_rewards.append(0.0)
+        return full_rewards, pass_rates
+
+    @classmethod
+    def generalize_on_testset(cls, result, gt):
+        result = result.strip()
+        if gt["lang_code"] == "en":
+            fewshot = f'### Question\n{gt["question"]}\n\n### Solution\n{result}'
+        else:
+            fewshot = f'### 问题\n{gt["question"]}\n\n### 回答\n{result}'
+
+        prompts, answers = [], []
+        for testset in gt["testsets"]:
+            if gt["lang_code"] == "en":
+                test = f'### Question\n{testset["prompt"]}\n\n### Solution\n'
+            else:
+                test = f'### 问题\n{testset["prompt"]}\n\n### 回答\n'
+            prompts.append(f'{fewshot}\n\n\n\n{test}')
+            answers.append((testset["prompt"], testset["answer"]))
+
+        return prompts, answers
+
+    async def _simulate_respondent(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            run_args,
+            batch_verify_fn,
+            resp_postprocess_fn,
+            skip_run=None,
+            prompt_contexts=None
+    ):
+        prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
+        extra = {}
+
+        if prompt_contexts is None:
+            prompt_contexts = [None] * len(batch_ground_truth)
+
+        for i, (solution_str, gt, extra_ctx) in enumerate(zip(batch_solution_str, batch_ground_truth, prompt_contexts)):
+            result = self.parse_solution_fn(solution_str)
+            if result is not None:
+                if skip_run is not None and i in skip_run:
+                    continue
+
+                skip = False
+                for module in self._penalties:
+                    cur_score = module.get_penalty_or_reward(
+                        solution_str, gt
+                    )
+                    if cur_score < 0.0:
+                        skip = True
+                        break
+                if skip:
+                    continue
+
+                for name, v in run_args.items():
+                    fn = getattr(self, v["fn"])
+                    if extra_ctx is None:
+                        _prompts, answers = fn(result, gt)
+                    else:
+                        _prompts, answers = fn(result, gt, extra_ctx)
+                    for _prompt, _answer in zip(_prompts, answers):
+                        prompt2index[name][_prompt].append(i)
+                        extra[_prompt] = _answer
+
+        tasks = []
+        task_names = []
+        for name, v in prompt2index.items():
+            prompts = list(v.keys()) * run_args[name]["repeat"]
+            tasks.append(self.agents[name].run(
+                prompts,
+                run_args[name]["max_concurrent_requests"],
+                desc=f'[{run_args[name]["desc"]} {run_args[name]["model"]["model"]} 解题]',
+                pbar=False,
+                postprocess_fns=[resp_postprocess_fn] * len(prompts)
+            ))
+            task_names.append(name)
+
+        respond_questions = await aio.gather(*tasks)
+
+        # 验证答案正确性
+        verify_queue = []
+        for name, results in zip(task_names, respond_questions):
+            for (p, r) in results:
+                for index in prompt2index[name][p]:
+                    verify_queue.append(VerifyInfo(
+                        index=index,
+                        tag=name,
+                        response=r,
+                        extra=extra[p],
+                        ground_truth=batch_ground_truth[index]))
+
+        correctness = await batch_verify_fn(
+            verify_queue=verify_queue,
+            max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
+            group_names=task_names
+        )
+        return correctness
+
+    async def simulate_respondent(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            skip_run=None
+    ):
+        verify_task = GeneralizationRLVRVerify()
+        return await self._simulate_respondent(
+            batch_data_sources=batch_data_sources,
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=batch_ground_truth,
+            skip_run=skip_run,
+            run_args=self.args["learnable_run_args"],
+            batch_verify_fn=partial(
+                self.batch_verify_results, verify_task=verify_task),
+            resp_postprocess_fn=self.response_postprocess
+        )
+
+    def coarse_process(self):
+        return [
+            Process(name="Acc",
+                    function=self.get_accuracy, filter_only=False, non_skip=False),
+        ]
+
+    def finegrain_process(self):
+        return Process(name="Generalization", function=self.get_generalization_reward, filter_only=False, non_skip=False)
+
+    async def get_accuracy(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth):
+
+        task = RLVRVerify(prompt_field="question", answer_field="answer")
+
+        indices = []
+        eval_inputs = []
+        result_index2queue_index = {}
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            result = self.parse_solution_fn(sol)
+            if result is not None:
+                eval_inputs.append((result, gt))
+                indices.append(i)
+                result_index2queue_index[len(
+                    eval_inputs)-1] = i
+            else:
+                continue
+
+        evaluations = await task.do_job(
+            agent=self.verify_agent,
+            batch_inputs=eval_inputs,
+            max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
+        )
+
+        full_rewards = [-1.0] * len(batch_solution_str)
+        for j, (eval_result, eval_input) in enumerate(zip(evaluations, eval_inputs)):
+            queue_index = result_index2queue_index[j]
+            if eval_result:
+                full_rewards[queue_index] = 1.0
+        return full_rewards
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# LEARNABLE COT
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # HParams
@@ -5255,6 +5532,76 @@ DOC2QUERY_V3_FANOUT_DEFAULT_PARAMS = {
         },
         "repeat": 5,
         "max_concurrent_requests": 512
+    },
+    "save_rollouts": {
+        "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
+    }
+}
+
+LEARNABLE_COT_DEFAULT_PARAMS = {
+    "learnable_run_args": {
+        "student": {
+            "model": {
+                "model": "Qwen2.5-32B-Instruct",
+                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.6,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                },
+            },
+            "repeat": 1,
+            "fn": "generalize_on_testset",
+            "desc": '泛化迁移',
+            "max_concurrent_requests": 512
+        },
+    },
+    "learnable_metric_args": {
+        "advantage": 'w_content',
+        "weakness": 'w/o_content',
+        "advantage_threshold": 2/8,
+        "difficulty_reduction_bonus_weight": 1.0
+    },
+    "similarity_run_args":  {
+        "threshold": {
+            4: -0.5,
+            5: -1.0
+        },
+        "weight": 1.0,
+    },
+    "hack_detection_run_args":  {
+        "threshold": {
+            3: -1.5,
+            4: -2.0
+        },
+        "weight": 1.0,
+    },
+    "verify_agent": {
+        "model": {
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 1024,
+            },
+        },
+        "max_concurrent_requests": 32
+    },
+    "auxiliary_agent": {
+        "model": {
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 4096,
+            },
+        },
+        "max_concurrent_requests": 32
     },
     "save_rollouts": {
         "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"

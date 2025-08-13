@@ -48,7 +48,10 @@ from fabricate_qa import (
     xml_cot_fabricate_aio_compute_score_valid,
     doc2query_v3_fanout_parse_solution_fn,
     rlvr_compute_score_valid,
-    KG2QueryV1ComputeScore
+    KG2QueryV1ComputeScore,
+    LEARNABLE_COT_DEFAULT_PARAMS,
+    LearnableCoTComputeScore,
+    rlvr_parse_solution_fn
 )
 
 UNITTEST_AGENT = Agent(**{
@@ -124,6 +127,8 @@ def load_dataset(task_name, num=100, xml_cot=False):
         filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/kg2query_v1_oc_v1_7_hard_problem_0623.parquet"
     elif task_name == "doc2query_v3":
         filename = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_kcle_rl_8k_train.parquet"
+    elif task_name == "learnable_cot":
+        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/learnale_cot/learnable_cot_kaoshi_buguake_xueersi_0812/index0.parquet"
 
     batch_solution_str, batch_ground_truth = [], []
     batch_data_sources = []
@@ -178,6 +183,10 @@ def load_dataset(task_name, num=100, xml_cot=False):
                 batch_solution_str.append(
                     f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n<conclusion>\n\n答案：{row["reward_model"]["ground_truth"]}\n</conclusion>\n```'
                 )
+        elif row["data_source"] == "learnable_cot":
+            batch_solution_str.append(
+                f'<think>\nUNITTEST_ONLY\n</think>\n\n{row["reward_model"]["answer"]}'
+            )
         batch_ground_truth.append(row["reward_model"])
         if len(batch_ground_truth) == num:
             break
@@ -558,18 +567,20 @@ class TestDoc2QueryV2(unittest.TestCase):
         aio.run(main())
 
 
-class TestCriteriaRM(unittest.TestCase):
-    def test_criteria_parse_solution_fn(self):
-        batch_solution_str, batch_ground_truth = load_criteria_rm_data()
-        print(criteria_parse_solution_fn(batch_solution_str[0]))
+class TestLearnableCoT(unittest.TestCase):
+    def test_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="learnable_cot", num=4)
+        task = LearnableCoTComputeScore(
+            rlvr_parse_solution_fn, split="train", args=LEARNABLE_COT_DEFAULT_PARAMS)
 
-    # def test_compute_score(self):
-    #     batch_solution_str, batch_ground_truth = load_criteria_rm_data()
-
-    #     criteria_rm_default_compute_score_valid(
-    #         [None] *
-    #         len(batch_solution_str), batch_solution_str, batch_ground_truth,
-    #     )
+        async def main():
+            results = await task._compute_score(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth,
+            )
+            print(results)
+        aio.run(main())
 
 
 class TestKG2QueryV1(unittest.TestCase):
