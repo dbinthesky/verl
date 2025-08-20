@@ -5,6 +5,7 @@ import json
 import uuid
 import copy
 import math
+import httpx
 import jieba
 import random
 import aiohttp
@@ -249,7 +250,7 @@ MC_KNOWLEDGE_QUESTION_QUALITY_VALUE_TEMPLATE = """任务：基于下面的标准
 [分析] 问题考查特定奖项的获得者，虽涉及具体奖项细节，但该奖项在学科领域具有重要性，有助于学生理解学科意义及科学家的重要工作，符合相关性与教育价值原则；问题中关键术语明确，信息完整，表述无歧义且简洁。
 [违反原则]
 [结果] 无需修改
-``` 
+```
 
 [问题] 在非洲某些国家经历经济结构调整导致社会不安全感增加的情况下，五旬节运动的哪一特征最有助于其快速传播？\n\nOptions:\nA) 提供经济援助\nB) 传统宗教的衰退\nC) 提供解决社会经济问题的道德框架\nD) 政府的政治支持\nE) 西方传教士的直接推广
 ```
@@ -273,27 +274,27 @@ DOC2QUERY_V3_CRITIQUE_INSTRUCT_ZH = """你是大模型问题质检专家，你�
 ## 问题要求说明
 1. 问题侧重考察知识、推理 > 计算，避免需要复杂计算的问题；题型为**单项**选择题。
 2. 关键术语的清晰度与具体性
-  - 检查点：题目中的专业术语、缩写、实验阶段、参数等是否明确定义或具体化？ 
-  - 问题迹象：  
-    - 缩写未解释（如“CCV”未扩写）。（ 注：此处需要结合上下文，如果通过题干已经明确问题领域，且缩写不会造成歧义，则建议不要扩写，因为缩写理解也是模型需要具备的能力之一）
-    - 概念笼统（如“稳定性”未说明具体条件）。   
-3. 相关性与教育价值
-  - 检查点：题目是否聚焦学科核心知识，避免琐碎或边缘内容？  
-    - 内容琐碎（如考查书籍章节作者等细节，而非核心概念）。  
-    - 与学科知识脱节（如问题不涉及原理、机制或应用）。  
-4. 信息完整性
-  - 检查点：题目要求独立作答，不依赖原文文档。需要你判断问题是否提供所有必要信息，包括背景、条件、数据来源或参考材料？  
+  - 检查点：题目中的专业术语、缩写、实验阶段、参数等是否明确定义或具体化？
   - 问题迹象：
-    - 关键条件缺失（如未提实验设置）。  
-    - 引用不存在的材料（如“根据材料”但无实际材料）。  
-    - 背景信息不足。  
+    - 缩写未解释（如“CCV”未扩写）。（ 注：此处需要结合上下文，如果通过题干已经明确问题领域，且缩写不会造成歧义，则建议不要扩写，因为缩写理解也是模型需要具备的能力之一）
+    - 概念笼统（如“稳定性”未说明具体条件）。
+3. 相关性与教育价值
+  - 检查点：题目是否聚焦学科核心知识，避免琐碎或边缘内容？
+    - 内容琐碎（如考查书籍章节作者等细节，而非核心概念）。
+    - 与学科知识脱节（如问题不涉及原理、机制或应用）。
+4. 信息完整性
+  - 检查点：题目要求独立作答，不依赖原文文档。需要你判断问题是否提供所有必要信息，包括背景、条件、数据来源或参考材料？
+  - 问题迹象：
+    - 关键条件缺失（如未提实验设置）。
+    - 引用不存在的材料（如“根据材料”但无实际材料）。
+    - 背景信息不足。
   - 评价依据：避免因信息缺失导致题目不严谨；通过添加背景改善完整性。
 5. 无歧义性
-  - 检查点：题目表述是否单一解释，避免歧义或多义？  
+  - 检查点：题目表述是否单一解释，避免歧义或多义？
   - 问题迹象：
-    - 用词模糊（如“影响”未指定正向/负向）。  
-    - 选项范围过大（如百分比区间过宽）。  
-    - 问题结构易引发误解。  
+    - 用词模糊（如“影响”未指定正向/负向）。
+    - 选项范围过大（如百分比区间过宽）。
+    - 问题结构易引发误解。
 6. 答案正确性
   - 检查点：给出的问题答案正确无误。
 7. 答案为多选题：
@@ -344,11 +345,11 @@ A researcher reports a separability probability of approximately 0.2424 for a bi
 <think>
 我现在需要处理用户提供的质检任务。首先，我要仔细阅读用户的问题要求和提示，确保自己理解所有的检查点。用户给了一个待质检的问题和答案，我的任务是判断这个问题是否合格。
 
-首先看问题本身：“A researcher reports a separability probability of approximately 0.2424 for a bipartite system, obtained by Monte Carlo sampling with 
-5×10 
+首先看问题本身：“A researcher reports a separability probability of approximately 0.2424 for a bipartite system, obtained by Monte Carlo sampling with
+5×10
 11
- 
- points. According to the conjecture formula in the study, which value of 
+
+ points. According to the conjecture formula in the study, which value of
 α
  corresponds to this probability? 选项是 A) 2，B) 3/2，C) 1，D) 1/2，答案是 C。”
 
@@ -823,7 +824,7 @@ The reaction product of the o-toluidine method for measuring blood glucose is ( 
 The question provided is unrelated to the given document about wastewater and sludge treatment technologies. The document discusses various studies on urban sewage treatment, sludge composting, landfill leachate treatment, and other environmental engineering topics, but it does not contain any information about the o-toluidine method for measuring blood glucose or its reaction products.
 
 Therefore, the correct answer is:
-**F) Cannot be determined** (from the given document). 
+**F) Cannot be determined** (from the given document).
 
 If you have a question related to the provided document, please feel free to ask!
 
@@ -1384,6 +1385,46 @@ class Agent:
                 return messages, result
             except Exception as err:
                 return messages, None
+
+
+class LabAgent(Agent):
+    def __init__(
+        self,
+        system: str | None = None,
+        model: str = "gpt-3.5-turbo",
+        base_url: str | None = None,
+        api_keys: str | list[str] | None = None,
+        request_kwargs: dict[str, Any] = None,
+    ):
+        super().__init__(
+            system=system,
+            model=model,
+            base_url=base_url,
+            api_keys=api_keys,
+            request_kwargs=request_kwargs,
+        )
+
+    async def run(self, messages, max_concurrent, desc, postprocess_fns, pbar=False):
+        semaphore = aio.Semaphore(max_concurrent)
+        async with AsyncOpenAI(api_key=self.api_keys, base_url=self.base_url, http_client=httpx.AsyncClient(verify=False)) as client:
+            results = []
+            tasks = [self.process_prompt(client, message, semaphore, postprocess_fn)
+                     for message, postprocess_fn in zip(messages, postprocess_fns)]
+
+            if desc is not None and pbar:
+                for f in tqdm.asyncio.tqdm.as_completed(tasks, dynamic_ncols=True, desc=desc):
+                    results.append(await f)
+            else:
+                try:
+                    print(
+                        f'{desc} (p={max_concurrent}) TOTAL {len(messages)} RUN...')
+                    results = await aio.gather(*tasks)
+                    print(
+                        f'{desc} (p={max_concurrent}) TOTAL {len(messages)} FINISHED...')
+                except Exception as err:
+                    print(f'[ERROR] asyncio.gather failed: {err}')
+                    return None
+            return results
 
 
 class PenaltyOrReward(object):
@@ -2235,10 +2276,11 @@ class Doc2QueryV2FormatVerify(PenaltyOrReward):
 
 
 class LanguageConsistency(PenaltyOrReward):
-    def __init__(self, parse_solution_fn, min_score, max_score, abbrev="Lang"):
+    def __init__(self, parse_solution_fn, min_score, max_score, abbrev="Lang", strict=False):
         super().__init__(
             parse_solution_fn=parse_solution_fn, min_score=min_score, max_score=max_score, abbrev=abbrev
         )
+        self.strict = strict
 
     def detect_zh(self, text, threshold=0.05):
         if text is None:
@@ -2275,9 +2317,15 @@ class LanguageConsistency(PenaltyOrReward):
         if solution_str is None:
             return 0.0
 
+        if len(solution_str) == 0:
+            return 0.0
+
         question = solution_str[0]
 
-        lang_code = ground_truth["lang_code"]
+        if "lang_code" not in ground_truth:
+            lang_code = "en"
+        else:
+            lang_code = ground_truth["lang_code"]
 
         base_score = self.min_score
 
@@ -2286,14 +2334,15 @@ class LanguageConsistency(PenaltyOrReward):
         elif lang_code == "zh" and (not contain_chinese(question)):
             return base_score
 
-        if lang_code == "en":
-            if contain_chinese(raw_solution_str):
-                return self.max_score
-        elif lang_code == "zh":
-            if not self.detect_zh(raw_solution_str, 0.75):
-                return self.max_score
-        else:
-            pass
+        if self.strict:
+            if lang_code == "en":
+                if contain_chinese(raw_solution_str):
+                    return self.max_score
+            elif lang_code == "zh":
+                if not self.detect_zh(raw_solution_str, 0.75):
+                    return self.max_score
+            else:
+                pass
         # 成功
         return 0.0
 
@@ -2350,7 +2399,9 @@ class Doc2QueryV2ComputeScore(object):
                  parse_solution_fn,
                  split="train",
                  args=None,
-                 min_reward=-2.0
+                 min_reward=-2.0,
+                 parse_thought_and_conclusion_fn=parse_question_solution_fn,
+                 thought_log_prob=0.05
                  ):
 
         self.split = split
@@ -2359,6 +2410,7 @@ class Doc2QueryV2ComputeScore(object):
         self.args = args
         self.task_name = "DOC2QUERY_V2"
         self.min_reward = min_reward
+        self.thought_log_prob = thought_log_prob
 
         # 初始化API Client
         self.init_agent()
@@ -2367,6 +2419,7 @@ class Doc2QueryV2ComputeScore(object):
         self.init_rule_based_penalties()
 
         self.initialized_save_rollout = False
+        self.parse_thought_and_conclusion_fn = parse_thought_and_conclusion_fn
 
     def init_save_rollouts(self):
         if self.initialized_save_rollout:
@@ -2908,7 +2961,6 @@ class Doc2QueryV2ComputeScore(object):
                 log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN CORRUPT RESPONSE]"
 
             source = batch_ground_truth[i]["source"]
-
             if log:
                 print(
                     f"--------------------------------{log_flag}--------------------------------")
@@ -2925,10 +2977,8 @@ class Doc2QueryV2ComputeScore(object):
                 print(
                     f'[Final Reward]={cur_score:.3f}({extra[i]})|{main_process.name}={str(_main_reward)}|{_minor_rewards_log}|{penalty_log_str}\n')
 
-                parsed = parse_question_solution_fn(batch_solution_str[i])
-
-                if parsed is not None and random.random() < 0.2:
-                    print(f'[Thought]\n{parsed[0]}')
+                if random.random() < self.thought_log_prob:
+                    print(f'[Thought]\n{batch_solution_str[i]}')
                     print()
 
         self.save_rollout_info()
@@ -3150,13 +3200,15 @@ class SALTComputeScore(Doc2QueryV2ComputeScore):
                  parse_solution_fn,
                  split="train",
                  args=None,
-                 min_reward=-2.0
+                 min_reward=-2.0,
+                 parse_thought_and_conclusion_fn=parse_question_solution_fn
                  ):
 
         super().__init__(
             parse_solution_fn=parse_solution_fn, split=split,
             args=args,
-            min_reward=min_reward
+            min_reward=min_reward,
+            parse_thought_and_conclusion_fn=parse_thought_and_conclusion_fn
         )
         self.task_name = "SALT"
 
@@ -3516,6 +3568,36 @@ def doc2query_v3_parse_solution_fn(solution_str: str, remove_option_letter=True,
         return None
 
 
+def multiturn_parse_question_solution_fn(solution_str: str):
+    if solution_str.count("</question>") > 1:
+        return None
+
+    solution_str = postprocess_solution(solution_str)
+    if not solution_str.startswith("<think>"):
+        solution_str = f'<think>\n{solution_str}'
+
+    if "<think>" not in solution_str or "</think>" not in solution_str:
+        return None
+
+    if "<question-draft>" not in solution_str or "</question-draft>" not in solution_str:
+        return None
+
+    if "<self-test>" not in solution_str or "</self-test>" not in solution_str:
+        return None
+
+    if "<correctness-check>" not in solution_str or "</correctness-check>" not in solution_str:
+        return None
+
+    try:
+        conclusion = re.findall(r'<question>(.*)</question>',
+                                solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+    if ("<question>" in conclusion) or ("</question>" in conclusion):
+        return None
+    return solution_str, conclusion
+
+
 class Doc2QueryV3FormatVerify(PenaltyOrReward):
     def __init__(self, parse_solution_fn, min_score, max_score, abbrev="Format"):
         super().__init__(
@@ -3561,13 +3643,15 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                  parse_solution_fn,
                  split="train",
                  args=None,
-                 min_reward=-2.0
+                 min_reward=-2.0,
+                 thought_log_prob=0.2
                  ):
 
         super().__init__(
             parse_solution_fn=parse_solution_fn, split=split,
             args=args,
-            min_reward=min_reward
+            min_reward=min_reward,
+            thought_log_prob=thought_log_prob
         )
         self.task_name = "DOC2QUERY_V3"
 
@@ -4188,6 +4272,22 @@ class Doc2QueryV3FanOutComputeScore(object):
         return final_results
 
 
+class Doc2QueryV3MultiTurnComputeScore(Doc2QueryV3ComputeScore):
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-2.0,
+                 thought_log_prob=0.2
+                 ):
+
+        super().__init__(
+            parse_solution_fn=parse_solution_fn, split=split,
+            args=args,
+            min_reward=min_reward,
+            thought_log_prob=thought_log_prob
+        )
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # DOC2QUERY V3
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -4197,7 +4297,23 @@ class Doc2QueryV3FanOutComputeScore(object):
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-def rlvr_parse_solution_fn(solution_str: str, remove_option_letter=True):
+def rlvr_longcot_parse_thought_and_conclusion_fn(solution_str: str, remove_option_letter=True):
+    solution_str = postprocess_solution(solution_str)
+
+    if not solution_str.startswith("<think>"):
+        solution_str = f'<think>\n{solution_str}'
+
+    try:
+        thought = re.findall(r'<think>.*</think>',
+                             solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None, None
+
+    solution_str = solution_str.replace(thought, "")
+    return thought, solution_str
+
+
+def rlvr_longcot_parse_solution_fn(solution_str: str, remove_option_letter=True):
     solution_str = postprocess_solution(solution_str)
 
     if not solution_str.startswith("<think>"):
@@ -4521,6 +4637,10 @@ class FabricateAIOComputeScore(object):
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
+def rlvr_shortcot_parse_solution_fn(solution_str: str):
+    return solution_str
+
+
 class GeneralizationRLVRVerify(RLVRVerify):
     def __init__(self):
         pass
@@ -4576,20 +4696,20 @@ class LearnableCoTComputeScore(SALTComputeScore):
                  parse_solution_fn,
                  split="train",
                  args=None,
-                 min_reward=-2.0
+                 min_reward=-2.0,
                  ):
 
         super().__init__(
             parse_solution_fn=parse_solution_fn, split=split,
             args=args,
-            min_reward=min_reward
+            min_reward=min_reward,
+            parse_thought_and_conclusion_fn=lambda x: (x, x)
         )
         self.task_name = "LEARNABLE_COT"
 
     def init_agent(self):
         self.agents = {}
         self.init_verify_agent()
-        self.init_auxiliary_agent()
         self.init_student_agent()
 
     def init_student_agent(self):
@@ -4688,10 +4808,11 @@ class LearnableCoTComputeScore(SALTComputeScore):
 
                 for name, v in run_args.items():
                     fn = getattr(self, v["fn"])
+                    # NOTICE: solution_str not result
                     if extra_ctx is None:
-                        _prompts, answers = fn(result, gt)
+                        _prompts, answers = fn(solution_str, gt)
                     else:
-                        _prompts, answers = fn(result, gt, extra_ctx)
+                        _prompts, answers = fn(solution_str, gt, extra_ctx)
                     for _prompt, _answer in zip(_prompts, answers):
                         prompt2index[name][_prompt].append(i)
                         extra[_prompt] = _answer
@@ -4757,6 +4878,12 @@ class LearnableCoTComputeScore(SALTComputeScore):
 
     def finegrain_process(self):
         return Process(name="Generalization", function=self.get_generalization_reward, filter_only=False, non_skip=False)
+
+    def log_solution(self, solution):
+        norm = self.parse_solution_fn(solution)
+        if norm is None:
+            return repr(self.clip_string(solution))
+        return repr(norm)
 
     async def get_accuracy(
             self,
@@ -5197,8 +5324,10 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     "quick_solve_run_args": {
         "quick_solve": {
             "model": {
-                "model": "Qwen2.5-32B-Instruct",
-                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "qwen2.5_32b_instruct",
+                "base_url": "http://10.130.1.4:21003/v1",
+                # "model": "Qwen2.5-32B-Instruct",
+                # "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.9,
@@ -5215,8 +5344,10 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": {
-                "model": "Qwen2.5-32B-Instruct",
-                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "qwen2.5_32b_instruct",
+                "base_url": "http://10.130.1.4:21003/v1",
+                # "model": "Qwen2.5-32B-Instruct",
+                # "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.9,
@@ -5231,8 +5362,10 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
         },
         "w_content": {
             "model": {
-                "model": "Qwen2.5-32B-Instruct",
-                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "qwen2.5_32b_instruct",
+                "base_url": "http://10.130.1.4:21003/v1",
+                # "model": "Qwen2.5-32B-Instruct",
+                # "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.9,
@@ -5262,8 +5395,10 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     },
     "verify_agent": {
         "model": {
-            "model": "Qwen2.5-32B-Instruct",
-            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "qwen2.5_32b_instruct",
+            "base_url": "http://10.130.1.4:21003/v1",
+            # "model": "Qwen2.5-32B-Instruct",
+            # "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
                 "temperature": 0.6,
@@ -5275,8 +5410,10 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     },
     "strict_qa_verify_agent": {
         "model": {
-            "model": "Qwen2.5-32B-Instruct",
-            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "qwen2.5_32b_instruct",
+            "base_url": "http://10.130.1.4:21003/v1",
+            # "model": "Qwen2.5-32B-Instruct",
+            # "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
                 "temperature": 0.9,
@@ -5289,8 +5426,10 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     },
     "loose_qa_verify_agent": {
         "model": {
-            "model": "Qwen2.5-32B-Instruct",
-            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "qwen2.5_32b_instruct",
+            "base_url": "http://10.130.1.4:21003/v1",
+            # "model": "Qwen2.5-32B-Instruct",
+            # "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
                 "temperature": 0.9,
@@ -5542,8 +5681,10 @@ LEARNABLE_COT_DEFAULT_PARAMS = {
     "learnable_run_args": {
         "student": {
             "model": {
-                "model": "Qwen2.5-32B-Instruct",
-                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "qwen2.5_32b_instruct",
+                "base_url": "http://10.130.1.4:21003/v1",
+                # "model": "Qwen2.5-32B-Instruct",
+                # "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.6,
@@ -5557,30 +5698,12 @@ LEARNABLE_COT_DEFAULT_PARAMS = {
             "max_concurrent_requests": 512
         },
     },
-    "learnable_metric_args": {
-        "advantage": 'w_content',
-        "weakness": 'w/o_content',
-        "advantage_threshold": 2/8,
-        "difficulty_reduction_bonus_weight": 1.0
-    },
-    "similarity_run_args":  {
-        "threshold": {
-            4: -0.5,
-            5: -1.0
-        },
-        "weight": 1.0,
-    },
-    "hack_detection_run_args":  {
-        "threshold": {
-            3: -1.5,
-            4: -2.0
-        },
-        "weight": 1.0,
-    },
     "verify_agent": {
         "model": {
-            "model": "Qwen2.5-32B-Instruct",
-            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "qwen2.5_32b_instruct",
+            "base_url": "http://10.130.1.4:21003/v1",
+            # "model": "Qwen2.5-32B-Instruct",
+            # "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
                 "temperature": 0.6,
@@ -5588,20 +5711,7 @@ LEARNABLE_COT_DEFAULT_PARAMS = {
                 "max_tokens": 1024,
             },
         },
-        "max_concurrent_requests": 32
-    },
-    "auxiliary_agent": {
-        "model": {
-            "model": "Qwen2.5-32B-Instruct",
-            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
-            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
-            "request_kwargs": {
-                "temperature": 0.6,
-                "timeout": 360,
-                "max_tokens": 4096,
-            },
-        },
-        "max_concurrent_requests": 32
+        "max_concurrent_requests": 512
     },
     "save_rollouts": {
         "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
@@ -5634,14 +5744,12 @@ salt_compute_score_train = _default_salt_compute_score_train.compute_score
 salt_compute_score_valid = _default_salt_compute_score_valid.compute_score
 
 
-_default_rlvr_compute_score_train = RLVRComputeScore(
-    rlvr_parse_solution_fn, split="train", args=RLVR_DEFAULT_PARAMS)
-_default_rlvr_compute_score_valid = RLVRComputeScore(
-    rlvr_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
-rlvr_compute_score_train = _default_rlvr_compute_score_train.compute_score
-rlvr_compute_score_valid = _default_rlvr_compute_score_valid.compute_score
-
-
+_default_rlvr_longcot_compute_score_train = RLVRComputeScore(
+    rlvr_longcot_parse_solution_fn, split="train", args=RLVR_DEFAULT_PARAMS)
+_default_rlvr_longcot_compute_score_valid = RLVRComputeScore(
+    rlvr_longcot_parse_solution_fn, split="valid", args=RLVR_DEFAULT_PARAMS)
+rlvr_longcot_compute_score_train = _default_rlvr_longcot_compute_score_train.compute_score
+rlvr_longcot_compute_score_valid = _default_rlvr_longcot_compute_score_valid.compute_score
 # XMLCoT Response
 
 
@@ -5770,17 +5878,17 @@ _fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
     "doc2query_v2": _default_doc2query_v2_compute_score_train,
     "salt": _default_salt_compute_score_train,
     "doc2query_v3": _default_doc2query_v3_compute_score_train,
-    "rlvr": _default_rlvr_compute_score_train,
-    "aime_2025": _default_rlvr_compute_score_valid,
-    "aime_2024": _default_rlvr_compute_score_valid,
+    "rlvr": _default_rlvr_longcot_compute_score_train,
+    "aime_2025": _default_rlvr_longcot_compute_score_valid,
+    "aime_2024": _default_rlvr_longcot_compute_score_valid,
 })
 _fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
     "doc2query_v2": _default_doc2query_v2_compute_score_valid,
     "salt": _default_salt_compute_score_valid,
     "doc2query_v3": _default_doc2query_v3_compute_score_valid,
-    "rlvr": _default_rlvr_compute_score_valid,
-    "aime_2025": _default_rlvr_compute_score_valid,
-    "aime_2024": _default_rlvr_compute_score_valid,
+    "rlvr": _default_rlvr_longcot_compute_score_valid,
+    "aime_2025": _default_rlvr_longcot_compute_score_valid,
+    "aime_2024": _default_rlvr_longcot_compute_score_valid,
 })
 fabricate_aio_compute_score_train = _fabricate_aio_compute_score_train.compute_score
 fabricate_aio_compute_score_valid = _fabricate_aio_compute_score_valid.compute_score
@@ -5816,3 +5924,31 @@ _default_doc2query_v3_fanout_compute_score_valid = Doc2QueryV3FanOutComputeScore
     doc2query_v3_fanout_parse_solution_fn, doc2query_v3_parse_solution_fn, split="valid", args=DOC2QUERY_V3_FANOUT_DEFAULT_PARAMS)
 doc2query_v3_fanout_compute_score_train = _default_doc2query_v3_fanout_compute_score_train.compute_score
 doc2query_v3_fanout_compute_score_valid = _default_doc2query_v3_fanout_compute_score_valid.compute_score
+
+
+_default_learnable_cot_compute_score_train = LearnableCoTComputeScore(
+    rlvr_longcot_parse_solution_fn, split="train", args=LEARNABLE_COT_DEFAULT_PARAMS)
+_default_learnable_cot_compute_score_valid = LearnableCoTComputeScore(
+    rlvr_longcot_parse_solution_fn, split="valid", args=LEARNABLE_COT_DEFAULT_PARAMS)
+learnable_cot_compute_score_train = _default_learnable_cot_compute_score_train.compute_score
+learnable_cot_compute_score_valid = _default_learnable_cot_compute_score_valid.compute_score
+
+
+_default_rlvr_shortcot_compute_score_train = RLVRComputeScore(
+    rlvr_shortcot_parse_solution_fn, split="train", args=RLVR_DEFAULT_PARAMS)
+_default_rlvr_shortcot_compute_score_valid = RLVRComputeScore(
+    rlvr_shortcot_parse_solution_fn, split="valid", args=RLVR_DEFAULT_PARAMS)
+rlvr_shortcot_compute_score_train = _default_rlvr_shortcot_compute_score_train.compute_score
+rlvr_shortcot_compute_score_valid = _default_rlvr_shortcot_compute_score_valid.compute_score
+
+
+_multiturn_doc2query_v3_compute_score_train = Doc2QueryV3MultiTurnComputeScore(
+    partial(doc2query_v3_parse_solution_fn,
+            extract_question_fn=multiturn_parse_question_solution_fn),
+    split="train", args=DOC2QUERY_V3_DEFAULT_PARAMS)
+_multiturn_doc2query_v3_compute_score_valid = Doc2QueryV3MultiTurnComputeScore(
+    partial(doc2query_v3_parse_solution_fn,
+            extract_question_fn=multiturn_parse_question_solution_fn),
+    split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
+multiturn_doc2query_v3_compute_score_train = _multiturn_doc2query_v3_compute_score_train.compute_score
+multiturn_doc2query_v3_compute_score_valid = _multiturn_doc2query_v3_compute_score_valid.compute_score

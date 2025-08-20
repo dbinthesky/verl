@@ -60,20 +60,23 @@ setup_path() {
     
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/DeepSeek-R1-Distill-Qwen-7B-fabricate_qa_v19/checkpoint-106"
-    TRAIN_DATA='["/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs/index0.parquet","/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs/index1.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs/index2.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs/index3.parquet"]'
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs_test.parquet"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/opencompass/models/hf_hub/models--Qwen--Qwen2.5-32B-Instruct/snapshots/5ede1c97bbab6ce5cda5812749b4c0bdf79b18dd"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/opencompass/models/hf_hub/models--Qwen--Qwen2.5-32B/snapshots/1818d35814b8319459f4bd55ed1ac8709630f003"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/opencompass/models/hf_hub/models--deepseek-ai--DeepSeek-R1-Distill-Qwen-32B_new/snapshots/2d78713b01ecefe27a89fafec248a5dfd731396f"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/learnable_cot_32b_2025-08-14_roll16_32_dapo_kl_coef_0_wo_entropy_t1.0_step_75"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/learnable_cot/dapo_math_17k_d2_train.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/learnable_cot/learnable_cot_kaoshi_buguake_xueersi_0812_test.parquet"
     
-    experiment_name="doc2query_v3_7b_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_solver_dsv3"
-    project_name="doc2query_v3"
+    experiment_name="learnable_cot_distill_32b_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_dapo"
+    project_name="learnable_cot"
     
-    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/doc2query_v3/${experiment_name}/"
+    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/learnable_cot/${experiment_name}/"
     mkdir -p "${OUTPUT_DIR}"
 }
 setup_path
 
 # ------------------------------
-
+# Install Package
 # ------------------------------
 # setup_package() {
 #     pip3 install -U torchdata
@@ -98,18 +101,18 @@ run_training() {
     
     python3 -m recipe.dapo.main_dapo \
     custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-    custom_reward_function.name=doc2query_v3_compute_score_train \
+    custom_reward_function.name=learnable_cot_compute_score_train \
     +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-    +custom_valid_reward_function.name=doc2query_v3_compute_score_valid \
+    +custom_valid_reward_function.name=learnable_cot_compute_score_valid \
     algorithm.adv_estimator="grpo" \
     data.train_files="${TRAIN_DATA}" \
     data.val_files="${VAL_DATA}" \
     data.train_batch_size=${TRAIN_BSZ} \
-    data.max_prompt_length=12288 \
-    data.max_response_length=10240 \
+    data.max_prompt_length=1024 \
+    data.max_response_length=9216 \
     data.filter_overlong_prompts=True \
-    data.filter_overlong_prompts_workers=256 \
     trainer.default_local_dir="${OUTPUT_DIR}" \
+    trainer.val_before_train=False \
     actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
@@ -118,9 +121,9 @@ run_training() {
     actor_rollout_ref.actor.shuffle=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=${TRAIN_BSZ} \
     actor_rollout_ref.actor.ppo_micro_batch_size=${TRAIN_BSZ} \
-    actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
+    actor_rollout_ref.actor.ulysses_sequence_parallel_size=2 \
     actor_rollout_ref.actor.use_dynamic_bsz=True \
-    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=22528 \
+    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=10240 \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.kl_loss_coef=0.0 \
     actor_rollout_ref.actor.entropy_coeff=0.0 \
@@ -142,7 +145,7 @@ run_training() {
     actor_rollout_ref.rollout.temperature=${TEMPERATURE} \
     actor_rollout_ref.rollout.n=${ROLLOUT_N} \
     actor_rollout_ref.rollout.top_p=0.95 \
-    actor_rollout_ref.ref.ulysses_sequence_parallel_size=1 \
+    actor_rollout_ref.ref.ulysses_sequence_parallel_size=2 \
     +actor_rollout_ref.rollout.trust_remote_code=True \
     actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
     +actor_rollout_ref.rollout.n_val=1 \
@@ -154,8 +157,8 @@ run_training() {
     trainer.experiment_name="${experiment_name}" \
     trainer.n_gpus_per_node="${num_gpus}" \
     trainer.nnodes="${world_size}" \
-    trainer.save_freq=20 \
-    trainer.test_freq=40 \
+    trainer.save_freq=25 \
+    trainer.test_freq=30 \
     trainer.total_epochs=10000 \
     "$@"
     local training_status=$?
