@@ -61,7 +61,7 @@ def load_dataset(num=100, format="autope"):
     if format == "autope":
         filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/autope_dapo_math_17k_bo32.parquet"
     elif format == "criteria_rm_recall":
-        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/ultra_feedback_test.parquet"
+        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/dapo_math_17k_bo32.parquet"
     elif format == "criteria_rm_rft":
         filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/ultra_feedback_rft_test.parquet"
     elif format == "xml_cot_rft":
@@ -90,8 +90,32 @@ def load_dataset(num=100, format="autope"):
                     f'<think>\nUNITTEST_ONLY\n</think>\n\n<prompt_engineering>\nQuestion: {prompt}\n\nThink step by step.\n</prompt_engineering>'
                 )
             elif format == "criteria_rm_recall":
+                mock_response = """
+```python
+import unittest
+
+class TestAnswerCorrectness(unittest.TestCase):
+    \"\"\"最简单的答案正确性判断测试类\"\"\"
+    
+    def __init__(self, methodName: str = "runTest"):
+        super().__init__(methodName)
+
+    def test_answer_correctness(self):
+        \"\"\"测试答案是否包含关键正确信息\"\"\"
+        self.answer = {answer}
+        self.question = {question}
+        
+
+    def test_entrance(self, answer: str):
+        \"\"\"主入口：接收答案并执行测试\"\"\"
+        self.set_answer(answer)
+        self.test_answer_correctness()
+        print("答案正确：包含必要的关键信息")
+```
+                """
+
                 batch_solution_str.append(
-                    f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\n# 评价标准\n有用性，真实性，安全性\n</conclusion>\n```xml'
+                    f'<think>\nUNITTEST_ONLY\n</think>\n\n{mock_response.format(answer=row["reward_model"]["answer"], question=row["reward_model"]["instruction"])}\n'
                 )
             elif format == "criteria_rm_rft":
                 batch_solution_str.append(

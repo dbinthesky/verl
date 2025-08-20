@@ -1860,25 +1860,9 @@ def criteria_parse_solution_fn(solution_str: str):
         solution_str = f'<think>\n{solution_str}'
 
     try:
-        root = xml_cot_parse_solution_fn(solution_str)
+        return re.findall(r'```python(.*?)```', solution_str, re.DOTALL)[0].strip()
     except Exception as err:
         return None
-
-    if root is not None:
-        try:
-            conclusion = [
-                child for child in root if child.tag == "conclusion"][0]
-
-            conclusion = conclusion.text.strip()
-        except Exception as err:
-            return None
-    else:
-        return None
-
-    if "# 评价标准" not in conclusion:
-        return None
-    conclusion = conclusion[conclusion.index("# 评价标准"):]
-    return conclusion
 
 
 class CriteriaRMRecallComputeScore(AutoPEComputeScore):
