@@ -1892,34 +1892,224 @@ class CriteriaRMRecallComputeScore(AutoPEComputeScore):
         self.agents["judge_agent"] = self.judge_agent
 
     def response_postprocess(self, s, debug=False):
-        if "</think>" in s:
-            s = s[s.index("</think>")+len("</think>"):].strip()
-
-        if "[分析开始]" in s and "[结论结束]" in s:
-            s = s[s.index("[分析开始]"):s.index("[结论结束]")+len("[结论结束]")].strip()
-        return s
+        try:
+            s = s[s.index("```json")+len("```json"):]
+            s = s[:s.index("```")].strip()
+            return re.findall(r'\"是否通过测试\": \"(.*)\"', s)[0] == "是"
+        except Exception as err:
+            raise PostprocessError(f'parse {s} failure')
 
     def judge_with_criteria(self, result, gt):
-        format_template = """
+        fewshots = """作为大模型响应评测专家，需按照以下流程对给定回答进行单元测试式评测，以判断其质量是否能通过单元测试：
 
-基于上面的评价标准对“[模型响应]”进行评价，找出回答的不足。
 
-你最终的回答部分需要包含**分析**和**结论**两部分
-- 分析：详细的分析与思考过程
-- 结论：对于模型响应的评价，给出全面的评价。
+要求：
+- **模拟代码运行步骤**：严格依据提供的测试类逻辑，逐步执行测试流程。
+- **详细评价响应**：针对测试类中的每一个检测项，逐一核查待评测响应是否满足要求，给出具体的分析过程。
+- **得出评测结论**：根据上述详细分析结果，在结尾处明确判定待模型响应是否通过全部的测试。结论格式如下
+```json
+{
+  "是否通过测试": "是/否",
+}
+```
 
-按照下面的格式
-[分析开始]
-... ...
-[分析结束]
 
-[结论开始]
-{得分}
-[结论结束]
+下面是一个具体的例子
+
+
+[类代码模拟评测]
+```python
+import unittest
+
+class TestSolidWasteSamplingAnswer(unittest.TestCase):
+    \"\"\"固体废弃物采样问题答案正确性测试类\"\"\"
+    
+    def __init__(self, methodName: str = "runTest"):
+        super().__init__(methodName)
+        self.question = "sampling of solid waste please explain in detail"  # 问题文本
+
+    def test_key_points_coverage(self):
+        \"\"\"测试答案是否覆盖固体废弃物采样的核心要点\"\"\"
+        self.assertIsNotNone(self.answer, "未设置答案内容")
+        
+        # 固体废弃物采样的关键核心要点（根据专业知识定义）
+        key_points = [
+            "representative",  # 代表性（核心原则）
+            "sampling method",  # 采样方法（如随机、系统等）
+            "purpose",  # 采样目的（如检测、分类等）
+            "steps",  # 采样步骤（准备、采集、保存等）
+            "waste type",  # 考虑废物类型（影响采样方式）
+            "quality control"  # 质量控制（确保数据可靠）
+        ]
+        
+        # 检查答案是否至少包含5个核心要点（确保覆盖主要内容）
+        covered_points = [point for point in key_points if point in self.answer]
+        self.assertGreaterEqual(len(covered_points), 5, 
+                              f"答案未覆盖关键要点，缺失：{{[p for p in key_points if p not in covered_points]}}")
+
+    def test_entrance(self, answer: str):
+        \"\"\"主入口：接收答案并执行测试\"\"\"
+        self.set_answer(answer)
+        self.test_key_points_coverage()
+        print("答案合格：覆盖了固体废弃物采样的主要核心要点")
+
+```
+
+
+[待评测响应]
+```
+Sure! Sampling of solid waste is the process of collecting and analyzing a portion of waste to represent the entire waste stream. The purpose of this activity is to characterize the waste and provide insights to better manage it. The process includes separating the waste into different materials, measuring the amount of each material, analyzing the quality of the waste materials and identifying any contaminants. This information is then used to determine the best disposal methods, regulatory requirements and to develop waste management plans.
+```
+
+
+[模拟执行评测逻辑]
+### 测试用例执行情况详情  
+**测试类**：TestSolidWasteSamplingAnswer  
+**测试用例**：test_key_points_coverage  
+
+
+#### 1. 执行步骤  
+1. 验证待评测响应是否非空（前置检查）：待评测响应为有效文本，通过前置检查。  
+2. 定义固体废弃物采样核心要点共6项：`["representative", "sampling method", "purpose", "steps", "waste type", "quality control"]`。  
+3. 核查响应中是否包含上述要点，统计覆盖数量。  
+4. 验证覆盖要点数量是否≥5（测试通过条件）。  
+
+
+#### 2. 检测项核查  
+| 核心要点         | 响应中是否包含 | 依据                                                                 |  
+|------------------|----------------|----------------------------------------------------------------------|  
+| representative   | 是             | 响应提到“to represent the entire waste stream”，体现代表性原则。     |  
+| sampling method  | 否             | 未提及随机、系统等具体采样方法。                                     |  
+| purpose          | 是             | 明确说明“The purpose of this activity is to characterize the waste...”，覆盖采样目的。 |  
+| steps            | 是             | 描述“The process includes separating... measuring... analyzing... identifying...”，覆盖采样步骤。 |  
+| waste type       | 否             | 未涉及不同废物类型对采样方式的影响。                                 |  
+| quality control  | 否             | 未提及确保数据可靠的质量控制措施（如样品保存、重复采样等）。         |  
+
+
+#### 3. 测试结果  
+**未通过**。  
+- 实际覆盖要点数量：3项（仅“representative”“purpose”“steps”）。  
+- 未达到测试通过条件（需≥5项），断言失败。  
+
+
+#### 4. 失败原因  
+响应缺失3项核心要点：`["sampling method", "waste type", "quality control"]`，覆盖范围不足。  
+
+
+
+```json
+{
+  "是否通过测试": "否"
+}
+```
+
+
+
+[类代码模拟评测]
+```python
+class TestMathResponseQuality(unittest.TestCase):
+    \"\"\"评估找到最小正整数k=19^n-5^m的回答质量\"\"\"
+    
+    question = "Find the smallest positive integer k which is representable in the form k=19^n-5^m for some positive integers m and n."
+    
+    def test_contains_answer(self, response: str):
+        \"\"\"测试回答是否包含正确答案14\"\"\"
+        self.assertIsNotNone(response, "没有待评估的回答内容")
+        
+        # 从回答中提取答案
+        match = re.search(r'Answer:\s*(\d+)', response)
+        self.assertIsNotNone(match, "回答中未找到'Answer:'标记或答案")
+        
+        answer = int(match.group(1))
+        self.assertEqual(answer, 14, f"答案不正确，预期为14，实际为{{answer}}")
+    
+    def test_has_explanation(self, response: str):
+        \"\"\"测试回答是否包含解题步骤说明\"\"\"
+        self.assertIsNotNone(response, "没有待评估的回答内容")
+        
+        # 检查是否有除了答案之外的解释内容
+        answer_part = re.search(r'Answer:\s*\d+', response)
+        self.assertIsNotNone(answer_part, "回答中未找到答案标记")
+        
+        explanation_part = response.replace(answer_part.group(0), '').strip()
+        self.assertGreater(len(explanation_part), 0, "回答缺乏必要的解题步骤说明")
+    
+    def test_entrance(self, response: str):
+        \"\"\"主入口函数：接收回答内容并执行全部质量测试\"\"\"
+        # 依次执行所有测试用例，均传入response参数
+        self.test_contains_answer(response)
+        self.test_has_explanation(response)
+```
+
+
+
+[待评测响应]
+```
+尝试不同正整数 n 和 m，当 n=1，m=1 时，19-5=14；n=1，m=2 时，19-25 为负；n=2，m=3 时，361-125=236，而 n=1，m=1 得到 14，经检验更小，故 k=14。
+Answer: 14
+```
+
+
+[模拟执行评测逻辑]
+### 测试用例执行情况详情  
+**测试类**：TestMathResponseQuality  
+**测试用例**：test_contains_answer、test_has_explanation  
+
+
+#### 1. 执行步骤  
+1. 执行test_contains_answer测试：  
+   - 验证待评测响应是否非空：响应为有效文本，通过前置检查。  
+   - 检查响应中是否包含“Answer:”标记及数字答案：响应末尾有“Answer: 14”，提取到答案14。  
+   - 验证答案是否为14：提取的答案与预期一致，通过该测试。  
+
+2. 执行test_has_explanation测试：  
+   - 验证待评测响应是否非空：响应为有效文本，通过前置检查。  
+   - 检查响应中是否有答案标记：存在“Answer: 14”，符合要求。  
+   - 移除答案部分后检查剩余内容是否为有效解释：剩余内容为“尝试不同正整数 n 和 m，当 n=1，m=1 时，19-5=14；n=1，m=2 时，19-25 为负；n=2，m=3 时，361-125=236，而 n=1，m=1 得到 14，经检验更小，故 k=14。”，长度大于0，通过该测试。  
+
+
+#### 2. 检测项核查  
+| 测试项              | 响应中是否满足 | 依据                                                                 |  
+|---------------------|----------------|----------------------------------------------------------------------|  
+| 包含正确答案14      | 是             | 响应明确包含“Answer: 14”，答案正确。                                |  
+| 包含解题步骤说明    | 是             | 响应详细说明了尝试不同n和m值的过程，对比计算结果后得出结论，解释充分。 |  
+
+
+#### 3. 测试结果  
+**通过**。  
+- 所有测试用例均满足要求，无断言失败情况。  
+
+
+```json
+{
+  "是否通过测试": "是"
+}
+```
 """
+        template = """
 
-        prompt = f'[用户指令]\n{gt["response"]}\n\n[模型响应]\n{gt["instruction"]}\n\n[评价标准]\n{result}\n\n\n' + format_template
-        return prompt
+现在你需要参考上面的例子完成下面的评测任务
+[类代码模拟评测]
+```python
+{unittest}
+```
+
+
+[待评测响应]
+```
+{response}
+```
+
+
+[模拟执行评测逻辑]
+"""
+        prompts, answers = [], []
+        for test_response in gt["responses"]:
+            prompts.append(fewshots+template.format(
+                unittest=result,
+                response=test_response
+            ))
+        return prompts
 
     async def simulate_respondent(
             self,
@@ -1928,8 +2118,6 @@ class CriteriaRMRecallComputeScore(AutoPEComputeScore):
             batch_ground_truth,
             skip_run=None
     ):
-        verify_task = CritiqueRecall()
-
         result = await self._simulate_respondent(
             batch_data_sources=batch_data_sources,
             batch_solution_str=batch_solution_str,
@@ -1937,11 +2125,72 @@ class CriteriaRMRecallComputeScore(AutoPEComputeScore):
             skip_run=skip_run,
             run_args={"judge_agent": self.args["judge_agent"]},
             batch_verify_fn=partial(
-                self.batch_verify_results, verify_task=verify_task),
+                self.batch_verify_results, verify_task=None),
             resp_postprocess_fn=self.response_postprocess,
-            prompt_contexts=None
         )
-        return result["judge_agent"]
+        return result
+
+    async def _simulate_respondent(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            run_args,
+            batch_verify_fn,
+            resp_postprocess_fn,
+            skip_run=None,
+    ):
+        prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
+
+        for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            result = self.parse_solution_fn(solution_str)
+            if result is not None:
+                if skip_run is not None and i in skip_run:
+                    continue
+
+                for name, v in run_args.items():
+                    fn = getattr(self, v["fn"])
+                    _prompts = fn(result, gt)
+                    for _prompt in _prompts:
+                        prompt2index[name][_prompt].append(i)
+
+        tasks = []
+        task_names = []
+        for name, v in prompt2index.items():
+            prompts = list(v.keys()) * run_args[name]["repeat"]
+            tasks.append(self.agents[name].run(
+                prompts,
+                run_args[name]["max_concurrent_requests"],
+                desc=f'[{run_args[name]["desc"]} {run_args[name]["model"]["model"]} 运用评测]',
+                pbar=False,
+                postprocess_fns=[resp_postprocess_fn] * len(prompts)
+            ))
+            task_names.append(name)
+
+        respond_questions = await aio.gather(*tasks)
+
+        # 验证答案正确性
+        verify_queue = defaultdict(list)
+        for name, results in zip(task_names, respond_questions):
+            for (p, r) in results:
+                for index in prompt2index[name][p]:
+                    if r is not None:
+                        verify_queue[index].append(1.0 if r else 0.0)
+
+        strictness = []
+
+        def calc_difficulty(scores, total_attempts):
+            return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
+
+        for i in range(len(batch_data_sources)):
+            score_dist = verify_queue[i]
+            if np.sum(score_dist) == 0:
+                strict = 0.0
+            else:
+                strict = calc_difficulty(np.sum(score_dist), len(score_dist))
+            strictness.append(strict)
+
+        return strictness
 
     def log_solution(self, solution):
         norm = self.parse_solution_fn(solution)
@@ -1964,10 +2213,7 @@ class CriteriaRMRecallComputeScore(AutoPEComputeScore):
 
         final_results = []
         for i in range(len(batch_solution_str)):
-            if i in recall:
-                _reward = np.mean(recall[i])
-            else:
-                _reward = 0.0
+            _reward = recall[i]
             final_results.append(_reward)
 
             # 保存Rollout信息
@@ -1978,11 +2224,14 @@ class CriteriaRMRecallComputeScore(AutoPEComputeScore):
                     score=_reward,
                 )
 
-            if _reward > 0.5 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+            if _reward > 0.8 or (self.split == "valid" and random.random() < 0.1) or (self.split == "train" and random.random() < 0.05):
                 log = True
                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
             else:
                 log = False
+                log_flag = "NO INFO"
+
+            log = True
 
             if log:
                 print(
@@ -1992,13 +2241,13 @@ class CriteriaRMRecallComputeScore(AutoPEComputeScore):
                 print(
                     f"【Critique LLM】`{self.log_solution(batch_solution_str[i])}`")
                 print(
-                    f'【Critique Human】`{repr(batch_ground_truth[i]["critique"])}`')
+                    f'【Answer】`{repr(batch_ground_truth[i]["answer"])}`')
                 print(
                     f'[Final Reward]={_reward:.3f}\n')
 
                 parsed = self.parse_solution_fn(batch_solution_str[i])
 
-                if parsed is not None and random.random() < 0.5:
+                if parsed is not None and random.random() < 0.1:
                     print(f'[Thought]\n{parsed}')
                     print()
 
@@ -2822,21 +3071,25 @@ AUTOPE_DEFAULT_PARAMS = {
 CRITERIA_RM_RECALL_DEFAULT_PARAMS = {
     "verify_agent": {
         "model": {
-            "model": "Qwen2.5-32B-Instruct",
-            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            # "model": "Qwen2.5-32B-Instruct",
+            # "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "qwen2.5_32b_instruct",
+            "base_url": "http://10.130.1.4:21003/v1",
             "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
                 "temperature": 0.7,
                 "timeout": 360,
-                "max_tokens": 512,
+                "max_tokens": 2048,
             },
         },
-        "max_concurrent_requests": 64
+        "max_concurrent_requests": 256
     },
     "judge_agent": {
         "model": {
-            "model": "Qwen2.5-32B-Instruct",
-            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            # "model": "Qwen2.5-32B-Instruct",
+            # "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "qwen2.5_32b_instruct",
+            "base_url": "http://10.130.1.4:21003/v1",
             "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
                 "temperature": 0.6,
@@ -2847,7 +3100,7 @@ CRITERIA_RM_RECALL_DEFAULT_PARAMS = {
         "repeat": 1,
         "fn": "judge_with_criteria",
         "desc": 'JUDGE W CRITERIA',
-        "max_concurrent_requests": 128
+        "max_concurrent_requests": 256
     },
     "save_rollouts": {
         "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/criteria_rm_recall"
