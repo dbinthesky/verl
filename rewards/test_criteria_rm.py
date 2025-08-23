@@ -61,7 +61,7 @@ def load_dataset(num=100, format="autope"):
     if format == "autope":
         filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/autope_dapo_math_17k_bo32.parquet"
     elif format == "criteria_rm_recall":
-        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/dapo_math_17k_bo32.parquet"
+        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/criteria_rm_recall_v2_dapo_math_17k_bo32.parquet"
     elif format == "criteria_rm_rft":
         filename = "/cpfs01/shared/llm_ddd/tongjian/rl/criteria_rm/ultra_feedback_rft_test.parquet"
     elif format == "xml_cot_rft":

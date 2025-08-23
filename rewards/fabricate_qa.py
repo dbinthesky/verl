@@ -3579,15 +3579,40 @@ def multiturn_parse_question_solution_fn(solution_str: str):
     if "<think>" not in solution_str or "</think>" not in solution_str:
         return None
 
-    if "<question-draft>" not in solution_str or "</question-draft>" not in solution_str:
-        return None
+    pattern = r'<([\w-]+)>(.*?)</\1>'
 
-    if "<self-test>" not in solution_str or "</self-test>" not in solution_str:
-        return None
+    # 使用re.DOTALL让.匹配包括换行符在内的所有字符
+    matches = re.findall(pattern, solution_str, re.DOTALL)
 
-    if "<correctness-check>" not in solution_str or "</correctness-check>" not in solution_str:
-        return None
+    # 转换为字典列表格式
+    result, tags = [], []
+    for tag, content in matches:
+        result.append({
+            'tag': tag,
+            'content': content.strip()  # 去除内容前后的空白字符
+        })
+        tags.append(tag)
 
+    valid_tags = {'think', 'draft', 'self-test', 'reflection', 'question'}
+    transitions = {
+        'think': ['draft'],
+        'draft': ['self-test'],
+        'self-test': ['reflection'],
+        'reflection': ['think', 'question'],
+        'question': []  # question之后不能有任何标签
+    }
+    # 检查是否包含无效标签
+    for index, tag in enumerate(tags):
+        if tag not in valid_tags:
+            return None
+
+     # 检查标签顺序转换是否合法
+    for i in range(len(tags) - 1):
+        current_tag = tags[i]
+        next_tag = tags[i+1]
+
+        if next_tag not in transitions[current_tag]:
+            return None
     try:
         conclusion = re.findall(r'<question>(.*)</question>',
                                 solution_str, re.DOTALL)[0]

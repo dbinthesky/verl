@@ -2107,9 +2107,10 @@ Answer: 14
         for test_response in gt["responses"]:
             prompts.append(fewshots+template.format(
                 unittest=result,
-                response=test_response
+                response=test_response["response"]
             ))
-        return prompts
+            answers.append(test_response["overall_score"])
+        return prompts, answers
 
     async def simulate_respondent(
             self,
@@ -2141,6 +2142,7 @@ Answer: 14
             skip_run=None,
     ):
         prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
+        extra = {}
 
         for i, (solution_str, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
             result = self.parse_solution_fn(solution_str)
@@ -2150,9 +2152,10 @@ Answer: 14
 
                 for name, v in run_args.items():
                     fn = getattr(self, v["fn"])
-                    _prompts = fn(result, gt)
-                    for _prompt in _prompts:
+                    _prompts, _answers = fn(result, gt)
+                    for _prompt, _answer in zip(_prompts, _answers):
                         prompt2index[name][_prompt].append(i)
+                        extra[_prompt] = _answer
 
         tasks = []
         task_names = []
@@ -2175,22 +2178,33 @@ Answer: 14
             for (p, r) in results:
                 for index in prompt2index[name][p]:
                     if r is not None:
-                        verify_queue[index].append(1.0 if r else 0.0)
+                        inst_meta = batch_ground_truth[index]
+                        correct_c, wrong_c = len([_ for _ in inst_meta["responses"] if _["overall_score"] == 1]), len(
+                            [_ for _ in inst_meta["responses"] if _["overall_score"] == 0])
 
-        strictness = []
+                        gold = extra[p]
+                        if gold == 1:
+                            weight = 0.5 * (1/correct_c)
+                        else:
+                            weight = 0.5 * (1/wrong_c)
+                        if gold:
+                            score = 1.0 if r else 0.0
+                        else:
+                            score = 1.0 if (not r) else 0.0
 
-        def calc_difficulty(scores, total_attempts):
-            return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
+                        verify_queue[index].append(score * weight)
+
+        acc = []
 
         for i in range(len(batch_data_sources)):
             score_dist = verify_queue[i]
             if np.sum(score_dist) == 0:
-                strict = 0.0
+                _acc = 0.0
             else:
-                strict = calc_difficulty(np.sum(score_dist), len(score_dist))
-            strictness.append(strict)
+                _acc = np.sum(score_dist)
+            acc.append(_acc)
 
-        return strictness
+        return acc
 
     def log_solution(self, solution):
         norm = self.parse_solution_fn(solution)
@@ -2229,9 +2243,6 @@ Answer: 14
                 log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
             else:
                 log = False
-                log_flag = "NO INFO"
-
-            log = True
 
             if log:
                 print(
@@ -3082,7 +3093,7 @@ CRITERIA_RM_RECALL_DEFAULT_PARAMS = {
                 "max_tokens": 2048,
             },
         },
-        "max_concurrent_requests": 256
+        "max_concurrent_requests": 512
     },
     "judge_agent": {
         "model": {
@@ -3100,7 +3111,7 @@ CRITERIA_RM_RECALL_DEFAULT_PARAMS = {
         "repeat": 1,
         "fn": "judge_with_criteria",
         "desc": 'JUDGE W CRITERIA',
-        "max_concurrent_requests": 256
+        "max_concurrent_requests": 512
     },
     "save_rollouts": {
         "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/criteria_rm_recall"
