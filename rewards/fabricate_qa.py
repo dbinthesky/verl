@@ -1854,14 +1854,17 @@ class MultiChoiceQuestionExtractAnswerOptions(SALTSelfTaughtSimpleSolutionVerify
                     response = response.split("\n\n")[0].strip()
                 ans_list = eval(response.strip())
             except Exception as err:
-                if "\n\n" in response and len(response.split("\n\n")) > 1:
-                    response = response.split("\n\n")[1].strip()
-                    ans_list = eval(response.strip())
+                if all(kw in response for kw in ("为空", "列表", "[]")):
+                    return []
                 else:
-                    if "**输出：**" in response:
-                        response = response[response.index(
-                            "**输出：**")+len("**输出：**"):].strip()
-                    ans_list = eval(response.strip())
+                    if "\n\n" in response and len(response.split("\n\n")) > 1:
+                        response = response.split("\n\n")[1].strip()
+                        ans_list = eval(response.strip())
+                    else:
+                        if "**输出：**" in response:
+                            response = response[response.index(
+                                "**输出：**")+len("**输出：**"):].strip()
+                        ans_list = eval(response.strip())
 
             if not isinstance(ans_list, list):
                 raise PostprocessError(f'Parse Python List Failed')
@@ -2950,36 +2953,35 @@ class Doc2QueryV2ComputeScore(object):
 
             final_results.append(cur_score)
 
-            if _main_reward > 0 or (self.split == "valid" and random.random() < 0.5) or (self.split == "train" and random.random() < 0.1):
+            log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+            if _main_reward > 0 or (self.split == "valid" and random.random() < self.thought_log_prob) or (self.split == "train" and random.random() < self.thought_log_prob):
                 log = True
-                log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
             else:
                 log = False
 
-            if cur_score == -2.0:
+            if cur_score == self.min_reward:
                 log = True
                 log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN CORRUPT RESPONSE]"
 
             source = batch_ground_truth[i]["source"]
+
+            print(
+                f"--------------------------------{log_flag}--------------------------------")
+            print(
+                f"【Solution{i}】({source})`{self.log_solution(batch_solution_str[i])}`")
+            print(
+                f"【Golden{i}】({source})`{self.log_ground_truth(batch_ground_truth[i])}`")
+            _minor_rewards_log = []
+            for process in self.coarse_process():
+                _minor_rewards_log.append(
+                    f'{process.name}={all_minor_rewards[process.name][i]}')
+            _minor_rewards_log = "|".join(_minor_rewards_log)
+            print(
+                f'[Final Reward]={cur_score:.3f}({extra[i]})|{main_process.name}={str(_main_reward)}|{_minor_rewards_log}|{penalty_log_str}\n')
+
             if log:
-                print(
-                    f"--------------------------------{log_flag}--------------------------------")
-                print(
-                    f"【Solution{i}】({source})`{self.log_solution(batch_solution_str[i])}`")
-                print(
-                    f"【Golden{i}】({source})`{self.log_ground_truth(batch_ground_truth[i])}`")
-
-                _minor_rewards_log = []
-                for process in self.coarse_process():
-                    _minor_rewards_log.append(
-                        f'{process.name}={all_minor_rewards[process.name][i]}')
-                _minor_rewards_log = "|".join(_minor_rewards_log)
-                print(
-                    f'[Final Reward]={cur_score:.3f}({extra[i]})|{main_process.name}={str(_main_reward)}|{_minor_rewards_log}|{penalty_log_str}\n')
-
-                if random.random() < self.thought_log_prob:
-                    print(f'[Thought]\n{batch_solution_str[i]}')
-                    print()
+                print(f'[Thought]\n{batch_solution_str[i]}')
+                print()
 
         self.save_rollout_info()
         return final_results
@@ -3649,7 +3651,7 @@ class Doc2QueryV3FormatVerify(PenaltyOrReward):
                 tokens = list(option.split(" "))
 
             # 答案长度过长
-            if len(tokens) > 20:
+            if len(tokens) > 100:
                 return self.min_score
 
             # 疑似判断题
@@ -3669,7 +3671,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                  split="train",
                  args=None,
                  min_reward=-2.0,
-                 thought_log_prob=0.2
+                 thought_log_prob=0.01
                  ):
 
         super().__init__(
@@ -3697,7 +3699,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 
     def init_quick_solver_agent(self):
         self.agents["quick_solve"] = Agent(
-            **self.args["quick_solve_run_args"]["quick_solve"]["model"])
+            **self.args["quick_solve_run_args"]["w/o_content"]["model"])
 
     @classmethod
     def rule_based_penalties(cls):
@@ -3853,12 +3855,20 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         prompt = f'{ans_format}\n\n{cls._format_question(question=question, options=options, answer=None)}'
         return prompt
 
+    @classmethod
+    def quick_solve_w_content(cls, result, gt):
+        ans_format = cls.get_answer_format(gt)
+        question, options = result[:2]
+        prompt = f'{ans_format}\n\n{cls._format_question(question=question, options=options, answer=None)}'
+        return f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n{prompt}'
+
     async def quick_mock_respondent(
             self,
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth,
-            skip_run=None
+            run_key,
+            skip_run=None,
     ):
         verify_task = MultiChoiceQuestionExtractAnswerOptions()
         return await self._simulate_respondent(
@@ -3866,7 +3876,8 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             batch_solution_str=batch_solution_str,
             batch_ground_truth=batch_ground_truth,
             skip_run=skip_run,
-            run_args=self.args["quick_solve_run_args"],
+            run_args={
+                k: v for k, v in self.args["quick_solve_run_args"].items() if k == run_key},
             batch_verify_fn=partial(
                 self.batch_verify_results, verify_task=verify_task),
             resp_postprocess_fn=self.response_postprocess
@@ -4012,22 +4023,24 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                 final_scores[i] = min(score)
         return final_scores
 
-    async def quick_difficulty_filter(
+    async def quick_correctness_filter(
         self,
         batch_data_sources,
         batch_solution_str,
         batch_ground_truth,
-        skip_run=None
+        run_key,
+        skip_run=None,
     ):
         ans_lists = await self.quick_mock_respondent(
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth,
-            skip_run=skip_run
+            skip_run=skip_run,
+            run_key=run_key,
         )
         penalties = []
         for i in range(len(batch_solution_str)):
-            if i in list(ans_lists.values())[0]:
+            if i in ans_lists[run_key]:
                 base_score = 0.0
 
                 result = self.parse_solution_fn(batch_solution_str[i])
@@ -4041,13 +4054,57 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                     continue
 
                 done_right = False
-                for sol_ans in ans_lists["quick_solve"][i]:
+                for sol_ans in ans_lists[run_key][i]:
                     if len(sol_ans) and sol_ans[0] == answer:
                         done_right = True
                         break
 
                 if done_right:
-                    penalties.append(-0.5)
+                    penalties.append(0.0)
+                else:
+                    penalties.append(-0.1)
+            else:
+                penalties.append(0.0)
+        return penalties
+
+    async def quick_difficulty_filter(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        run_key,
+        skip_run=None,
+    ):
+        ans_lists = await self.quick_mock_respondent(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            skip_run=skip_run,
+            run_key=run_key,
+        )
+        penalties = []
+        for i in range(len(batch_solution_str)):
+            if i in ans_lists[run_key]:
+                base_score = 0.0
+
+                result = self.parse_solution_fn(batch_solution_str[i])
+                if result is None:
+                    penalties.append(0.0)
+                    continue
+
+                question, options, answer = result
+                if len(options)+1 > len(self.MULTICHOICE_LETTER)-1:
+                    penalties.append(0.0)
+                    continue
+
+                done_right = False
+                for sol_ans in ans_lists[run_key][i]:
+                    if len(sol_ans) and sol_ans[0] == answer:
+                        done_right = True
+                        break
+
+                if done_right:
+                    penalties.append(-0.1)
                 else:
                     penalties.append(0.0)
             else:
@@ -4201,7 +4258,9 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             Process(name="StrictQuality",
                     function=self.strict_question_eval, filter_only=False, non_skip=False),
             Process(name="QuickDifficultyFilter",
-                    function=self.quick_difficulty_filter, filter_only=True, non_skip=False),
+                    function=partial(self.quick_difficulty_filter, run_key="w/o_content"), filter_only=True, non_skip=False),
+            Process(name="QuickCorrectnessFilter",
+                    function=partial(self.quick_correctness_filter, run_key="w_content"), filter_only=False, non_skip=False),
             # Process(name="QuickDifficulty",
             #         function=self.llm_judge_difficulty, filter_only=False, non_skip=False)
         ]
@@ -4303,7 +4362,7 @@ class Doc2QueryV3MultiTurnComputeScore(Doc2QueryV3ComputeScore):
                  split="train",
                  args=None,
                  min_reward=-2.0,
-                 thought_log_prob=0.2
+                 thought_log_prob=0.01
                  ):
 
         super().__init__(
@@ -5347,7 +5406,7 @@ SALT_DEV_PARAMS = {
 
 DOC2QUERY_V3_DEFAULT_PARAMS = {
     "quick_solve_run_args": {
-        "quick_solve": {
+        "w/o_content": {
             "model": {
                 "model": "qwen2.5_32b_instruct",
                 "base_url": "http://10.130.1.4:21003/v1",
@@ -5355,14 +5414,30 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 # "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
-                    "temperature": 0.9,
+                    "temperature": 0.6,
                     "timeout": 360,
                     "max_tokens": 4096,
                 },
             },
             "repeat": 1,
             "fn": "quick_solve",
-            "desc": '快速做题',
+            "desc": '快速做题(w/o文档)',
+            "max_concurrent_requests": 512
+        },
+        "w_content": {
+            "model": {
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.6,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                },
+            },
+            "repeat": 1,
+            "fn": "quick_solve_w_content",
+            "desc": '快速做题(w文档)',
             "max_concurrent_requests": 512
         }
     },
@@ -5413,7 +5488,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
         "weakness_overcomplex_threshold": 1/10,
         "advantage_threshold": 1/4,
         "advantage_weight": 0.0,
-        "weakness_weight": 1.0,
+        "weakness_weight": 2.0,
         "anchor_weight": 1.5,
         "confidence_bonus_threshold": 2/8,
         "confidence_bonus_weight": 0.
@@ -5591,7 +5666,7 @@ KG2QUERY_V1_DEFAULT_PARAMS = {
 
 DOC2QUERY_V3_FANOUT_DEFAULT_PARAMS = {
     "quick_solve_run_args": {
-        "quick_solve": {
+        "w/o_content": {
             "model": {
                 "model": "Qwen2.5-32B-Instruct",
                 "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
