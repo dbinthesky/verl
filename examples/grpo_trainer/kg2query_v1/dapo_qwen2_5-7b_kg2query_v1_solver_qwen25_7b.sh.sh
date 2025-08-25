@@ -61,14 +61,13 @@ setup_path() {
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-7B-fabricate_qa_v22/checkpoint-444"
-    TRAIN_DATA='["/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_multiturn_pdf_rl_8k_inputs_medium/index0.parquet","/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_multiturn_pdf_rl_8k_inputs_medium/index1.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_multiturn_pdf_rl_8k_inputs_medium/index2.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_multiturn_pdf_rl_8k_inputs_medium/index3.parquet"]'
-    # TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_multiturn_pdf_rl_8k_inputs_easy.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_multiturn_pdf_rl_8k_inputs_test.parquet"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/kg2query_v1_oc_v1_7_hard_problem_0803.parquet"
+    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/kg2query_v1_oc_v1_7_hard_problem_test_0623.parquet"
     
-    experiment_name="doc2query_v3_multiturn_7b_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_solver_dsv3"
-    project_name="doc2query_v3"
+    experiment_name="kg2query_v1_7b_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_solver_dsv3"
+    project_name="kg2query_v1"
     
-    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/doc2query_v3/${experiment_name}/"
+    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/kg2query_v1/${experiment_name}/"
     mkdir -p "${OUTPUT_DIR}"
 }
 setup_path
@@ -99,15 +98,15 @@ run_training() {
     
     python3 -m recipe.dapo.main_dapo \
     custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-    custom_reward_function.name=multiturn_doc2query_v3_compute_score_train \
+    custom_reward_function.name=kg2query_v1_compute_score_train \
     +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-    +custom_valid_reward_function.name=multiturn_doc2query_v3_compute_score_valid \
+    +custom_valid_reward_function.name=kg2query_v1_compute_score_valid \
     algorithm.adv_estimator="grpo" \
     data.train_files="${TRAIN_DATA}" \
     data.val_files="${VAL_DATA}" \
     data.train_batch_size=${TRAIN_BSZ} \
-    data.max_prompt_length=12288 \
-    data.max_response_length=12288 \
+    data.max_prompt_length=2048 \
+    data.max_response_length=14336 \
     data.filter_overlong_prompts=True \
     data.filter_overlong_prompts_workers=256 \
     trainer.default_local_dir="${OUTPUT_DIR}" \
@@ -121,7 +120,7 @@ run_training() {
     actor_rollout_ref.actor.ppo_micro_batch_size=${TRAIN_BSZ} \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
     actor_rollout_ref.actor.use_dynamic_bsz=True \
-    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=24576 \
+    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=16384 \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.kl_loss_coef=0.0 \
     actor_rollout_ref.actor.entropy_coeff=0.0 \

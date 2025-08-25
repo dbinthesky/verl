@@ -622,7 +622,7 @@ class TestKG2QueryV1(unittest.TestCase):
         batch_solution_str, batch_ground_truth = load_dataset(
             task_name="kg2query_v1", num=4)
         task = KG2QueryV1ComputeScore(
-            rlvr_shortcot_parse_solution_fn, split="valid", args=KG2QUERY_V1_DEFAULT_PARAMS)
+            salt_parse_solution_fn, split="valid", args=KG2QUERY_V1_DEFAULT_PARAMS)
         print(task.compute_score(
             [None] *
             len(batch_solution_str), batch_solution_str, batch_ground_truth,

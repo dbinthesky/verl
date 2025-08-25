@@ -54,7 +54,7 @@ setup_path() {
     local world_size="${WORLD_SIZE:-1}"
 
     ROLLOUT_N=10
-    TRAIN_BSZ=$((num_gpus * world_size * 4))
+    TRAIN_BSZ=$((num_gpus * world_size))
     KL_LOSS_COEF="0"
     TEMPERATURE="0.8"
 

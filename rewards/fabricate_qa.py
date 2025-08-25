@@ -4255,8 +4255,8 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             # 快速判断问题质量
             Process(name="QuickQuality",
                     function=self.quick_question_eval, filter_only=False, non_skip=False),
-            Process(name="StrictQuality",
-                    function=self.strict_question_eval, filter_only=False, non_skip=False),
+            # Process(name="StrictQuality",
+            #         function=self.strict_question_eval, filter_only=False, non_skip=False),
             Process(name="QuickDifficultyFilter",
                     function=partial(self.quick_difficulty_filter, run_key="w/o_content"), filter_only=True, non_skip=False),
             Process(name="QuickCorrectnessFilter",
@@ -5522,7 +5522,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             }
         },
         "max_concurrent_requests": 512,
-        "repeat": 2
+        "repeat": 1
     },
     "loose_qa_verify_agent": {
         "model": {
@@ -5537,7 +5537,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 "max_tokens": 4096,
             },
         },
-        "repeat": 2,
+        "repeat": 1,
         "max_concurrent_requests": 512
     },
     "save_rollouts": {
@@ -5565,6 +5565,105 @@ RLVR_DEFAULT_PARAMS = {
     }
 }
 
+# KG2QUERY_V1_DEFAULT_PARAMS = {
+#     "learnable_run_args": {
+#         "self_taught": {
+#             "model": {
+#                 "model": "DeepSeek-V3-0324",
+#                 "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+#                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+#                 "request_kwargs": {
+#                     "temperature": 0.8,
+#                     "timeout": 360,
+#                     "max_tokens": 4096,
+#                 }
+#             },
+#             "fn": "reject_sample",
+#             "repeat": 10,
+#             "desc": '拒绝采样',
+#             "max_concurrent_requests": 512
+#         },
+#         "w/o_content": {
+#             "model": {
+#                 "model": "DeepSeek-V3-0324",
+#                 "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+#                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+#                 "request_kwargs": {
+#                     "temperature": 0.8,
+#                     "timeout": 360,
+#                     "max_tokens": 4096,
+#                 }
+#             },
+#             "repeat": 8,
+#             "fn": "respond_wo_context",
+#             "desc": 'w/o ctx',
+#             "max_concurrent_requests": 256
+#         },
+#         "w_content": {
+#             "model": {
+#                 "model": "DeepSeek-V3-0324",
+#                 "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+#                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+#                 "request_kwargs": {
+#                     "temperature": 0.8,
+#                     "timeout": 360,
+#                     "max_tokens": 4096,
+#                 }
+#             },
+#             "repeat": 8,
+#             "fn": "respond_w_context",
+#             "desc": 'w ctx',
+#             "max_concurrent_requests": 256
+#         },
+#     },
+#     "learnable_metric_args": {
+#         "advantage": 'w_content',
+#         "weakness": 'w/o_content',
+#         "advantage_threshold": 2/8,
+#         "difficulty_reduction_bonus_weight": 1.0
+#     },
+#     "similarity_run_args":  {
+#         "threshold": {
+#             1: 0.001,
+#             2: 0.01,
+#             3: 0.1,
+#             4: 0.5,
+#             5: 1.0
+#         },
+#         "weight": 0.25,
+#     },
+#     "verify_agent": {
+#         "model": {
+#             "model": "Qwen2.5-32B-Instruct",
+#             "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+#             "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+#             "request_kwargs": {
+#                 "temperature": 0.6,
+#                 "timeout": 360,
+#                 "max_tokens": 1024,
+#             },
+#         },
+#         "max_concurrent_requests": 32
+#     },
+#     "auxiliary_agent": {
+#         "model": {
+#             "model": "Qwen2.5-32B-Instruct",
+#             "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+#             "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+#             "request_kwargs": {
+#                 "temperature": 0.6,
+#                 "timeout": 360,
+#                 "max_tokens": 4096,
+#             },
+#         },
+#         "max_concurrent_requests": 32
+#     },
+#     "save_rollouts": {
+#         "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
+#     }
+# }
+
+
 KG2QUERY_V1_DEFAULT_PARAMS = {
     "learnable_run_args": {
         "self_taught": {
@@ -5573,21 +5672,23 @@ KG2QUERY_V1_DEFAULT_PARAMS = {
                 "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
-                    "temperature": 0.8,
+                    "temperature": 0.9,
                     "timeout": 360,
                     "max_tokens": 4096,
                 }
             },
             "fn": "reject_sample",
-            "repeat": 10,
+            "repeat": 5,
             "desc": '拒绝采样',
             "max_concurrent_requests": 512
         },
         "w/o_content": {
             "model": {
-                "model": "DeepSeek-V3-0324",
-                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
-                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "model": "qwen2.5_32b_instruct",
+                "base_url": "http://10.130.1.4:21003/v1",
+                # "model": "DeepSeek-V3-0324",
+                # "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+                # "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
                     "timeout": 360,
@@ -5601,9 +5702,11 @@ KG2QUERY_V1_DEFAULT_PARAMS = {
         },
         "w_content": {
             "model": {
-                "model": "DeepSeek-V3-0324",
-                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
-                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "model": "qwen2.5_32b_instruct",
+                "base_url": "http://10.130.1.4:21003/v1",
+                # "model": "DeepSeek-V3-0324",
+                # "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+                # "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
                     "timeout": 360,
@@ -5634,35 +5737,32 @@ KG2QUERY_V1_DEFAULT_PARAMS = {
     },
     "verify_agent": {
         "model": {
-            "model": "Qwen2.5-32B-Instruct",
-            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
-            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+            "model": "qwen2.5_32b_instruct",
+            "base_url": "http://10.130.1.4:21003/v1",
             "request_kwargs": {
                 "temperature": 0.6,
                 "timeout": 360,
                 "max_tokens": 1024,
             },
         },
-        "max_concurrent_requests": 32
+        "max_concurrent_requests": 512
     },
     "auxiliary_agent": {
         "model": {
-            "model": "Qwen2.5-32B-Instruct",
-            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
-            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+            "model": "qwen2.5_32b_instruct",
+            "base_url": "http://10.130.1.4:21003/v1",
             "request_kwargs": {
                 "temperature": 0.6,
                 "timeout": 360,
                 "max_tokens": 4096,
             },
         },
-        "max_concurrent_requests": 32
+        "max_concurrent_requests": 512
     },
     "save_rollouts": {
         "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
     }
 }
-
 
 DOC2QUERY_V3_FANOUT_DEFAULT_PARAMS = {
     "quick_solve_run_args": {
