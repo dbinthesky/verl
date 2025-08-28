@@ -4,6 +4,7 @@ import sys
 import json
 import uuid
 import copy
+import time
 import math
 import httpx
 import jieba
@@ -187,21 +188,9 @@ class RewardModelAgent(object):
         return None
 
 
-RM_URLS = [
-    "http://10.130.0.94:34109",
-    "http://10.130.0.94:30838",
-    "http://10.130.0.94:28362",
-    'http://10.130.0.94:29126',
-    "http://10.130.0.94:27227",
-    "http://10.130.0.94:25021",
-    "http://10.130.0.94:31792",
-    "http://10.130.0.94:31097"
-]
-
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # PROMPTS
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
-
 ANSWER_VERIFY_FEWSHOTS = """### **基于标准答案判断回答是否正确**
 任务描述：请根据提供的**题目**、**用户回答**和**标准答案**，判断用户回答是否正确，并按照指定格式输出结果。需严格对比回答和标准答案，若用户回答与标准答案**不一致**，则判定为错误。
 
@@ -466,20 +455,16 @@ def postprocess_solution(solution_str):
 def parse_question_solution_fn(solution_str: str):
     if solution_str.count("</question>") > 1:
         return None
-
     if solution_str.count("</think>") > 1:
         return None
-
     solution_str = postprocess_solution(solution_str)
     if not solution_str.startswith("<think>"):
         solution_str = f'<think>\n{solution_str}'
-
     try:
         thought = re.findall(r'<think>.*</think>',
                              solution_str, re.DOTALL)[0]
     except Exception as err:
         return None
-
     solution_str = solution_str.replace(thought, "")
 
     try:
@@ -490,6 +475,16 @@ def parse_question_solution_fn(solution_str: str):
     if ("<question>" in conclusion) or ("</question>" in conclusion):
         return None
     return thought, conclusion
+
+
+def contain_chinese(string):
+    try:
+        pattern = re.compile(r'[\u4e00-\u9fa5]')
+        if re.search(pattern, string):
+            return True
+        return False
+    except Exception as err:
+        return False
 
 
 def kg2query_self_taught_parse_solution_fn(solution_str: str, extract_question_fn=parse_question_solution_fn):
@@ -614,13 +609,13 @@ class KG2QueryV1SelfTaughtComputeScore(object):
         self.min_reward = min_reward
         self.thought_log_prob = thought_log_prob
 
+        self.parse_thought_and_conclusion_fn = parse_thought_and_conclusion_fn
+
         # 初始化API Client
         self.init_agent()
 
         # 初始化规则奖励/惩罚
         self.init_rule_based_penalties()
-
-        self.parse_thought_and_conclusion_fn = parse_thought_and_conclusion_fn
 
     @classmethod
     def rule_based_penalties(cls):
@@ -642,10 +637,19 @@ class KG2QueryV1SelfTaughtComputeScore(object):
     def init_agent(self):
         self.agents = {}
         self.init_verify_agent()
+        self.init_rm_agent()
 
     def init_verify_agent(self):
         self.verify_agent = Agent(
             **self.args["verify_agent"]["model"])
+
+    def init_rm_agent(self):
+        self.rm_agent = RewardModelAgent(
+            urls=self.args["reward_model_args"]["urls"],
+            postprocess_solution_fn=lambda x: self.parse_thought_and_conclusion_fn(x)[
+                0],
+            parse_result_failure_score=self.min_reward
+        )
 
     async def question_similarity_reward(
         self,
@@ -718,6 +722,84 @@ class KG2QueryV1SelfTaughtComputeScore(object):
                 full_rewards[queue_index] = 1.0
         return full_rewards
 
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+        penalty = defaultdict(list)
+        for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            parsed = self.parse_solution_fn(solution_str)
+            if parsed is None:
+                penalty[i].append(-2.0)
+            else:
+                penalty[i].append(0.0)
+
+            for p in self._penalties:
+                penalty[i].append(p.get_penalty_or_reward(
+                    solution_str, ground_truth))
+
+        reward1 = await self.same_answer_reward(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
+        reward2 = await self.question_similarity_reward(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        )
+        reward3 = self.rm_agent.compute_rm_score(
+            batch_solution_str, batch_ground_truth, judge_prompt_key="rm_judge_prompt")
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            scores = copy.deepcopy(penalty[i])
+            penalties = ["Parse"]+[_.abbrev for _ in self._penalties]
+            penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
+                                        s in zip(penalties, scores)])
+
+            scores.append(reward1[i])
+            scores.append(reward2[i])
+            scores.append(reward3[i])
+
+            cur_score = np.sum(scores)
+            final_results.append(cur_score)
+
+            log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+            log = False
+            if cur_score <= self.min_reward:
+                log = True
+                log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN CORRUPT RESPONSE]"
+
+            if random.random() < self.thought_log_prob:
+                log = True
+
+            source = batch_ground_truth[i]["source"]
+
+            print(
+                f"--------------------------------{log_flag}--------------------------------")
+            print(
+                f"【Solution{i}】({source})`{self.log_solution(batch_solution_str[i])}`")
+            print(
+                f"【Golden{i}】({source})`{self.log_ground_truth(batch_ground_truth[i])}`")
+            print(
+                f'[Final Reward]={cur_score:.3f}(ans={reward1[i]:.3f};q={reward2[i]:.3f};rm={reward3[i]:.3f})|{penalty_log_str}\n')
+
+            if log:
+                print(f'[Thought]\n{batch_solution_str[i]}')
+                print()
+        return final_results
+
+    def log_solution(self, solution):
+        norm = self.parse_solution_fn(solution)
+        if norm is None:
+            return repr(self.clip_string(solution))
+        return norm[0]
+
+    def log_ground_truth(self, ground_truth):
+        return ground_truth["question"]
+
 
 KG2QUERY_V1_DEFAULT_PARAMS = {
     "verify_agent": {
@@ -743,4 +825,16 @@ KG2QUERY_V1_DEFAULT_PARAMS = {
         },
         "weight": 1.0,
     },
+    "reward_model_args": {
+        "urls": [
+            "http://10.130.0.94:34109",
+            "http://10.130.0.94:30838",
+            "http://10.130.0.94:28362",
+            'http://10.130.0.94:29126',
+            "http://10.130.0.94:27227",
+            "http://10.130.0.94:25021",
+            "http://10.130.0.94:31792",
+            "http://10.130.0.94:31097"
+        ]
+    }
 }

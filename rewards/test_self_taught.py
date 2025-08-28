@@ -13,7 +13,6 @@ from tqdm import tqdm
 from self_taught import (
     Agent,
     RewardModelAgent,
-    RM_URLS,
     JudgeTwoQuestionSimilarity,
     parse_question_solution_fn,
     kg2query_self_taught_parse_solution_fn,
@@ -55,12 +54,13 @@ def load_dataset(num=100, xml_cot=False):
 
 class TestSelfTaught(unittest.TestCase):
     def test_reward_model_agent(self):
-        agent = RewardModelAgent(
-            urls=RM_URLS,
-            postprocess_solution_fn=lambda x: x,
-            parse_result_failure_score=-2.0
+        task = KG2QueryV1SelfTaughtComputeScore(
+            parse_solution_fn=kg2query_self_taught_parse_solution_fn,
+            args=KG2QUERY_V1_DEFAULT_PARAMS
         )
-        batch_solution_str = ["今天天气怎么样？"]
+        agent = task.rm_agent
+        batch_solution_str = [
+            "<think>今天天气怎么样？</think><question>xxx</question>"]
         batch_ground_truth = [{"ground_truth": "今天天气怎么样？"}]
         for i, score in enumerate(agent.compute_rm_score(batch_solution_str, batch_ground_truth)):
             print(score)
@@ -87,7 +87,7 @@ class TestSelfTaught(unittest.TestCase):
         )
 
         async def main():
-            results = await task.same_answer_reward(
+            results = await task._compute_score(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
             )
