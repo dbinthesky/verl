@@ -56,12 +56,13 @@ setup_path() {
     ROLLOUT_N=16
     TRAIN_BSZ=$((num_gpus * world_size))
     KL_LOSS_COEF="0"
-    TEMPERATURE="0.85"
+    TEMPERATURE="0.6"
     
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-7B-fabricate_qa_v22/checkpoint-444"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/kg2query_v1_oc_v1_7_hard_problem_0803.parquet"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-7B-fabricate_qa_v22/checkpoint-444"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v3_multiturn_7b_2025-08-24_roll16_64_dapo_kl_coef_0_wo_entropy_t0.85_solver_dsv3_step_160"
+    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/kg2query_v1_oc_v1_7_hard_problem_0825.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/kg2query_v1_oc_v1_7_hard_problem_test_0623.parquet"
     
     experiment_name="kg2query_v1_7b_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_solver_dsv3"

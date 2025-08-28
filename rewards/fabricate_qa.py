@@ -4565,7 +4565,7 @@ class QuestionSimilarityReward(PenaltyOrReward):
             sl_tokens = " ".join(tokenize(question.lower(), "en"))
             bleu = sacrebleu.sentence_bleu(sl_tokens, [gt_tokens]).score
             similarity = bleu / 100
-            return similarity * (self.max_score - self.min_score)
+            return similarity * (self.max_score - self.min_score) * 0.1
         except Exception as err:
             return 0.0
 
@@ -5733,7 +5733,7 @@ KG2QUERY_V1_DEFAULT_PARAMS = {
             4: 0.5,
             5: 1.0
         },
-        "weight": 0.25,
+        "weight": 0.05,
     },
     "verify_agent": {
         "model": {
