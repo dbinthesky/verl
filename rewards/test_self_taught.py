@@ -15,9 +15,14 @@ from self_taught import (
     RewardModelAgent,
     JudgeTwoQuestionSimilarity,
     parse_question_solution_fn,
-    kg2query_self_taught_parse_solution_fn,
-    KG2QueryV1SelfTaughtComputeScore,
-    KG2QUERY_V1_DEFAULT_PARAMS
+    general_qa_parse_solution_fn,
+    Doc2QuerySelfTaughtComputeScore,
+    DOC2QUERY_ST_DEFAULT_PARAMS,
+    parse_doc_fn,
+    Query2DocComputeScore,
+    QUERY2DOC_DEFAULT_PARAMS,
+    parse_doc_fn,
+    LengthReward
 )
 
 UNITTEST_AGENT = Agent(**{
@@ -32,8 +37,8 @@ UNITTEST_AGENT = Agent(**{
 })
 
 
-def load_dataset(num=100, xml_cot=False):
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/kg2query_v1_self_taught/fabricate_qa_self_taught_enhance_rl_inputs_train/index0.parquet"
+def load_doc2query_st_dataset(num=100, xml_cot=False):
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_self_taught/doc2query_self_taught_enhance_rl_inputs_train.parquet"
 
     batch_solution_str, batch_ground_truth = [], []
     batch_data_sources = []
@@ -44,7 +49,27 @@ def load_dataset(num=100, xml_cot=False):
         row = row.to_dict()
         batch_data_sources.append(row["data_source"])
         batch_solution_str.append(
-            f'{row["reward_model"]["rm_judge_prompt"]}\n\n\n<question>\nQuestion: {row["reward_model"]["question"]}\n\nAnswer: {row["reward_model"]["answer"]}\n</question>'
+            f'{row["reward_model"]["references"][0]}\n\n\n<question>\nQuestion: {row["reward_model"]["question"]}\n\nAnswer: {row["reward_model"]["answer"]}\n</question>'
+        )
+        batch_ground_truth.append(row["reward_model"])
+        if len(batch_ground_truth) == num:
+            break
+    return batch_solution_str, batch_ground_truth
+
+
+def load_query2doc_dataset(num=100, xml_cot=False):
+    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/query2doc/query2doc_inputs_train/index0.parquet"
+
+    batch_solution_str, batch_ground_truth = [], []
+    batch_data_sources = []
+
+    df = pd.read_parquet(filename)
+    count = 0
+    for _, row in df.iterrows():
+        row = row.to_dict()
+        batch_data_sources.append(row["data_source"])
+        batch_solution_str.append(
+            f'<think>\n\n</think>\n\n\n[LECTURE]\nFUCK DOC\nQuestion: {row["reward_model"]["question"]}\n\nAnswer: {row["reward_model"]["answer"]}\n[/LECTURE]'
         )
         batch_ground_truth.append(row["reward_model"])
         if len(batch_ground_truth) == num:
@@ -53,10 +78,23 @@ def load_dataset(num=100, xml_cot=False):
 
 
 class TestSelfTaught(unittest.TestCase):
+
+    def test_thought_similarity(self):
+        task = Doc2QuerySelfTaughtComputeScore(
+            parse_solution_fn=general_qa_parse_solution_fn,
+            args=DOC2QUERY_ST_DEFAULT_PARAMS
+        )
+        batch_solution_str, batch_ground_truth = load_doc2query_st_dataset(
+            num=20)
+        print(task.thought_similarity_reward(
+            [None] *
+            len(batch_solution_str), batch_solution_str, batch_ground_truth,
+        ))
+
     def test_reward_model_agent(self):
-        task = KG2QueryV1SelfTaughtComputeScore(
-            parse_solution_fn=kg2query_self_taught_parse_solution_fn,
-            args=KG2QUERY_V1_DEFAULT_PARAMS
+        task = Doc2QuerySelfTaughtComputeScore(
+            parse_solution_fn=general_qa_parse_solution_fn,
+            args=DOC2QUERY_ST_DEFAULT_PARAMS
         )
         agent = task.rm_agent
         batch_solution_str = [
@@ -80,11 +118,39 @@ class TestSelfTaught(unittest.TestCase):
         aio.run(main())
 
     def test_compute_score(self):
-        batch_solution_str, batch_ground_truth = load_dataset(num=20)
-        task = KG2QueryV1SelfTaughtComputeScore(
-            parse_solution_fn=kg2query_self_taught_parse_solution_fn,
-            args=KG2QUERY_V1_DEFAULT_PARAMS
+        batch_solution_str, batch_ground_truth = load_doc2query_st_dataset(
+            num=20)
+        task = Doc2QuerySelfTaughtComputeScore(
+            parse_solution_fn=general_qa_parse_solution_fn,
+            args=DOC2QUERY_ST_DEFAULT_PARAMS
         )
+
+        async def main():
+            results = await task._compute_score(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth,
+            )
+            print(results)
+        aio.run(main())
+
+
+class TestQuery2Doc(unittest.TestCase):
+    def test_parse_doc_fn(self):
+        batch_solution_str, batch_ground_truth = load_query2doc_dataset(
+            num=20)
+        print(parse_doc_fn(batch_solution_str[0]))
+
+    def test_compute_score(self):
+        task = Query2DocComputeScore(
+            parse_solution_fn=parse_doc_fn,
+            args=QUERY2DOC_DEFAULT_PARAMS,
+            thought_log_prob=1.0
+        )
+        batch_solution_str, batch_ground_truth = load_query2doc_dataset(
+            num=20)
+        # agent = task.rm_agent
+        # for i, score in enumerate(agent.compute_rm_score(batch_solution_str, batch_ground_truth, judge_prompt_key="rm_judge_prompt")):
+        #     print(score)
 
         async def main():
             results = await task._compute_score(
