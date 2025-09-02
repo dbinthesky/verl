@@ -146,6 +146,7 @@ class RewardModelAgent(object):
 
     def compute_rm_score(
             self,
+            batch_data_sources,
             batch_solution_str,
             batch_ground_truth,
             judge_prompt_key="ground_truth"
@@ -1285,6 +1286,9 @@ class LengthReward(PenaltyOrReward):
         return min(len(tokens), self.max_token) / self.max_token * self.max_reward
 
 
+Process = namedtuple("Process", "name,function,is_async")
+
+
 class Doc2QuerySelfTaughtComputeScore(object):
     def __init__(self,
                  parse_solution_fn,
@@ -1478,6 +1482,18 @@ class Doc2QuerySelfTaughtComputeScore(object):
                 scores[index] = 2.0 * (_quality-1.0) / 4
         return scores
 
+    def get_processes(self):
+        return [
+            Process(name="ans_cons",
+                    function=self.same_answer_reward, is_async=True),
+            Process(name="q_cons",
+                    function=self.question_similarity_reward, is_async=True),
+            Process(name="rm", function=partial(self.rm_agent.compute_rm_score,
+                    judge_prompt_key="rm_judge_prompt"), is_async=False),
+            Process(name="hint_leakage",
+                    function=self.hint_leakage_reward, is_async=True),
+        ]
+
     async def _compute_score(self,
                              batch_data_sources,
                              batch_solution_str,
@@ -1495,23 +1511,21 @@ class Doc2QuerySelfTaughtComputeScore(object):
                 penalty[i].append(p.get_penalty_or_reward(
                     solution_str, ground_truth))
 
-        reward1 = await self.same_answer_reward(
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-        )
-        reward2 = await self.question_similarity_reward(
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-        )
-        reward3 = self.rm_agent.compute_rm_score(
-            batch_solution_str, batch_ground_truth, judge_prompt_key="rm_judge_prompt")
-        reward4 = await self.hint_leakage_reward(
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-        )
+        rewards_results = {}
+        for process in self.get_processes():
+            if process.is_async:
+                results = await process.function(
+                    batch_data_sources,
+                    batch_solution_str,
+                    batch_ground_truth,
+                )
+            else:
+                results = process.function(
+                    batch_data_sources,
+                    batch_solution_str,
+                    batch_ground_truth,
+                )
+            rewards_results[process.name] = results
 
         final_results = []
         for i in range(len(batch_solution_str)):
@@ -1520,10 +1534,12 @@ class Doc2QuerySelfTaughtComputeScore(object):
             penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
                                         s in zip(penalties, scores)])
 
-            scores.append(reward1[i])
-            scores.append(reward2[i])
-            scores.append(reward3[i])
-            scores.append(reward4[i])
+            reward_log_str = []
+            for k, v in rewards_results.items():
+                _reward = v[i]
+                scores.append(_reward)
+                reward_log_str.append(f'{k}={_reward:.3f}')
+            reward_log_str = "; ".join(reward_log_str)
 
             cur_score = np.sum(scores)
             final_results.append(cur_score)
@@ -1545,7 +1561,7 @@ class Doc2QuerySelfTaughtComputeScore(object):
             print(
                 f"【Golden{i}】({source})`{self.log_ground_truth(batch_ground_truth[i])}`")
             print(
-                f'[Final Reward]={cur_score:.3f}(ans={reward1[i]:.3f};q={reward2[i]:.3f};rm={reward3[i]:.3f};hint={reward4[i]:.3f})|{penalty_log_str}\n')
+                f'[Final Reward]={cur_score:.3f}({reward_log_str})|{penalty_log_str}\n')
 
             if log:
                 print(f'[Thought]\n{batch_solution_str[i]}')
