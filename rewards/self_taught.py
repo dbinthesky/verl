@@ -921,6 +921,475 @@ HINT_LEAKAGE_DETECTION_TEMPLATE = """
 """
 
 
+QUESTION_DESIGN_THOUGHT_JUDGE_FEWSHOTS = """
+任务：大模型出题思考过程评价
+输入：我会给你一段大模型出题的思考过程，需要你对模型的出题思考过程进行打分（1-5分）
+
+
+# 大模型出题思考过程评分规范（1-5分）
+## 一、核心评价维度（权重排序）
+1. 步骤完整性：是否覆盖“需求定位→设计（场景/题干/难点/答案）→试做反馈→迭代优化→定稿”全流程，核心环节缺失则降档；
+2. 细节详实度：各环节是否包含“设计依据/逻辑说明”，无说明则降档；
+3. 反馈闭环性：是否形成“试做→错误分析→调整→验证”闭环，无闭环则降档。
+
+
+## 二、各分数档具体规范
+# 大模型出题思考过程评分规范（5分制）
+## 一、核心评价维度（权重排序不变）
+1. **步骤完整性**：是否覆盖“需求定位→完整设计（场景/题干/难点/答案解析）→试做反馈→迭代优化→定稿”全流程，核心环节缺失直接限定分数上限；
+2. **细节详实度**：各环节是否包含“设计依据/逻辑说明”（如知识点选择理由、场景适配逻辑、易错点设计目的等），无说明则按缺失数量降分；
+3. **反馈闭环性**：是否形成“试做数据采集→错误归因→针对性调整→二次验证”闭环，闭环断裂则无法进入最高分数档。
+
+
+### 5分（优秀：全流程闭环+细节极致）
+#### 核心界定
+覆盖所有核心环节，各环节均有**明确且充分的依据说明**，试做反馈闭环完整（含二次验证），无任何信息缺失。
+#### 具体规范要求
+1. 需求定位：明确学科、学段、知识点、考察目标，**详细说明知识点选择理由**（如贴合学段重点、弥补常见知识漏洞等）；
+2. 设计环节：
+   - 场景设计：说明场景与知识点的适配逻辑（如生活场景对应应用类考点，学术场景对应理论类考点）；
+   - 题干设计：说明表述逻辑依据（如先背景后问题的递进式表述，避免信息歧义）；
+   - 难点/易错点设计：明确易错点数量（2个及以上），**逐一说明每个易错点的设计目的**（如干扰项对应易混淆概念，陷阱条件对应审题疏漏）；
+   - 答案/解析设计：给出完整答案+分层解析（如“解题步骤→关键思路→易错点提醒”），说明解析的分层逻辑依据；
+3. 试做反馈：说明试做人群（如“初二学生30人+教师5人”）、整体正确率、**各错误类型及占比**（如“概念混淆类错误占60%，计算失误类占30%”）；
+4. 迭代优化：说明具体调整动作（如“删除1个歧义干扰项，补充题干背景说明”），**明确调整依据**（如“依据试做中40%学生因题干信息不全出错”）；
+5. 定稿确认：说明调整后二次试做的具体结果（如“正确率从60%提升至85%，目标错误类型占比降至10%以下”），给出清晰的定稿判断标准（如“二次试做正确率≥80%且核心错误率≤15%”）。
+
+
+### 4分（良好：全流程覆盖+反馈闭环待补）
+#### 核心界定
+覆盖所有核心环节（需求定位→设计→试做→迭代→定稿），各环节**大部分有依据说明**（仅1个环节缺失），试做反馈有迭代但无二次验证，或二次验证无明确判断标准。
+#### 具体规范要求
+1. 需求定位：明确学科、学段、知识点、考察目标，**简要说明知识点选择理由**（如“为巩固近期所学”）；
+2. 设计环节：
+   - 场景/题干/难点/答案解析均完整设计，仅1项缺失设计依据（如“有场景设计，但未说明场景适配逻辑”）；
+   - 难点/易错点数量明确（1-2个），至少说明1个易错点设计目的；
+   - 解析为分层结构，但未说明分层逻辑；
+3. 试做反馈：说明试做人群、整体正确率、各错误类型及占比，数据完整；
+4. 迭代优化：说明具体调整动作及调整依据，逻辑清晰；
+5. 定稿确认：以“调整后题目符合预期”定稿，**未进行二次试做**，或有二次试做但未给出定稿判断标准（如仅说“二次试做效果变好”，无具体数据）。
+
+
+### 3分（合格：基础流程完整+试做环节缺失）
+#### 核心界定
+仅覆盖“需求定位→完整设计（场景/题干/难点/答案解析）”，无试做反馈及迭代优化环节，设计细节有部分缺失。
+#### 具体规范要求
+1. 需求定位：明确学科、学段、知识点、考察目标，**未说明知识点选择理由**；
+2. 设计环节：
+   - 场景设计存在（题干有具体语境，非抽象表述），但未说明场景选择依据；
+   - 题干表述无歧义，但未说明表述逻辑依据；
+   - 难点/易错点有设计（至少1个），但未说明设计目的（如仅说“设置1个易错点”，无后续理由）；
+   - 答案完整，解析为非分层结构（如仅“答案：XXX，解析：XXX”，无步骤拆分）；
+3. 无试做反馈、迭代优化环节，直接以“设计完成”定稿。
+
+
+### 2分（不足：基础设计残缺+细节空白）
+#### 核心界定
+仅覆盖“需求定位→基础设计（题干+答案）”，场景或难点设计仅存1项（非完整），无任何细节说明，无试做迭代。
+#### 具体规范要求
+1. 需求定位：明确学科、学段、知识点，**未说明考察目标**；
+2. 设计环节：
+   - 仅存在场景或难点设计中的1项（如“有简单场景，但无难点设计”，或“有1个难点，但题干无具体场景，为抽象表述”）；
+   - 题干表述简洁，但可能存在轻微歧义（如“未明确限定条件”）；
+   - 仅给出完整答案，**无解析**（或解析仅“答案正确”，无实质内容）；
+   - 所有设计环节均无依据说明（如“有场景但未说为何选此场景，有难点但未说为何设此难点”）；
+3. 无试做反馈、迭代优化环节，直接定稿。
+
+
+### 1分（极差：基础信息缺失+核心设计空白）
+#### 核心界定
+仅完成“知识点模糊确定→题干+答案”，需求定位核心要素缺失，无场景、无难点设计，无任何思考逻辑，无试做迭代。
+#### 具体规范要求
+1. 需求定位：仅提及“某知识点”（如“考三角形”），**未明确学科（如数学）、学段（如初中）、考察目标**；
+2. 设计环节：
+   - 无场景设计（题干为纯抽象表述，如“计算三角形面积”，无具体边长、图形背景等）；
+   - 无难点/易错点设计（题目仅单一考察点，无干扰项、无陷阱条件，如“已知三角形底3cm、高2cm，求面积”）；
+   - 仅给出题干及简单答案（如“答案：3cm²”），**无任何设计依据、逻辑说明**；
+3. 无试做反馈、迭代优化环节，仅呈现“题目+答案”。
+
+
+## 三、评分判断优先级（修订版）
+1. **先定步骤完整性上限**：
+   - 缺“试做反馈+迭代优化”：最高得3分（无论设计细节多完善）；
+   - 缺“场景设计且缺难点设计”：最高得1分；
+   - 仅缺“场景设计或仅缺难点设计”：最高得2分；
+2. **再扣细节详实度分数**：
+   - 某环节缺失1个设计依据：在步骤完整性上限基础上降0.5分（如4分档缺1个依据→3.5分）；
+   - 某环节缺失2个及以上设计依据：在步骤完整性上限基础上降1分（如3分档缺2个依据→2分）；
+3. **最后补反馈闭环性差异**：
+   - 有试做+有调整，但无二次试做：4分档内最高得4分（无法升5分）；
+   - 有试做+有调整+有二次试做，但无定稿判断标准：4分档内得4.5分（无法升5分）；
+   - 有试做+有调整+有二次试做+有定稿标准：可进入5分档。
+
+
+# 输出要求
+- 先按照方法进行详细、准确、仔细地分析
+- 再最后的部分按下面的JSON格式输出最后的结论（符合要求得分）
+```json
+{
+  "得分": ***,
+}
+```
+
+
+下面是一些例子
+
+[输入]
+Okay, let's tackle this problem. I need to create a difficult question based on the provided reading material about logarithmic and quadratic functions. The question should be designed with a specific background, educational level, and require the application of the concepts from the text. Let me start by understanding the core concepts from the reading material.
+
+The reading material covers logarithmic functions, their properties, solving inequalities and equations involving logarithms, quadratic equations, and function composition. The key points include the definition of logarithmic functions, their properties like the change of base formula, solving logarithmic inequalities, and determining the number of solutions using the discriminant analysis.
+
+The question should be challenging, so it needs to integrate these concepts in a way that requires multiple steps and possibly some creative thinking. Let's think about the structure of the question. It should have two parts, as shown in the final question provided. Part (1) asks for the range of a when f(1) < 2, and part (2) discusses the number of zeros of the function g(x) = f(x) - log₂[(a-4)x + 2a - 5].
+
+First, let's focus on part (1). The function f(x) is given as log₂(1/x + a). To find the range of a when f(1) < 2, we need to substitute x = 1 into the function and solve the inequality. This will involve solving log₂(1 + a) < 2, which simplifies to 0 < 1 + a < 4, leading to a ∈ (-1, 3). This part is straightforward but requires understanding of logarithmic inequalities and their properties.
+
+Now, let's move to part (2). The function g(x) is defined as f(x) - log₂[(a-4)x + 2a - 5]. To find the number of zeros of g(x), we need to set g(x) = 0 and solve the resulting equation. This will involve equating log₂(1/x + a) to log₂[(a-4)x + 2a - 5], which simplifies to 1/x + a = (a-4)x + 2a - 5. Rearranging this equation, we get a quadratic equation in terms of x: (a-4)x² + (a-5)x - 1 = 0.
+
+The number of zeros of g(x) depends on the number of solutions to this quadratic equation, which can be determined using the discriminant. The discriminant Δ = (a-5)² + 4(a-4) = a² - 10a + 25 + 4a - 16 = a² - 6a + 9 = (a-3)². The discriminant is always non-negative, so the quadratic equation has real solutions. However, we need to consider the domain of the logarithmic functions involved, which requires that the arguments of the logarithms be positive.
+
+Let's analyze the quadratic equation (a-4)x² + (a-5)x - 1 = 0. The solutions are given by the quadratic formula: x = [-(a-5) ± sqrt((a-3)²)] / 2(a-4). This simplifies to x = [5-a ± (a-3)] / 2(a-4). Therefore, the solutions are x = 1 or x = -1/(a-4).
+
+Now, we need to check the domain of the logarithmic functions. For log₂(1/x + a) to be defined, 1/x + a > 0, and for log₂[(a-4)x + 2a - 5] to be defined, (a-4)x + 2a - 5 > 0.
+
+Let's consider the cases for a:
+
+1. When a = 4, the quadratic equation becomes -x -1 = 0, so x = -1. We need to check if this solution is valid. For x = -1, 1/x + a = -1 + 4 = 3 > 0, and (a-4)x + 2a - 5 = 0 + 8 - 5 = 3 > 0. Both conditions are satisfied, so x = -1 is a valid solution. Therefore, when a = 4, there is one zero.
+
+2. When a = 3, the quadratic equation becomes -x² -2x -1 = 0, which factors to -(x+1)² = 0, so x = -1. We need to check the domain. For x = -1, 1/x + a = -1 + 3 = 2 > 0, and (a-4)x + 2a - 5 = -1 + 6 - 5 = 0. Since the argument of the logarithm must be positive, x = -1 is not a valid solution. Therefore, when a = 3, there are no zeros.
+
+3. When a ≠ 3 and a ≠ 4, the quadratic equation has two solutions: x = 1 and x = -1/(a-4). We need to check the domain for these solutions.
+
+For x = 1, 1/x + a = 1 + a > 0, and (a-4)x + 2a - 5 = a - 4 + 2a - 5 = 3a - 9 > 0. This requires a > 3.
+
+For x = -1/(a-4), we need to ensure that 1/x + a > 0 and (a-4)x + 2a - 5 > 0.
+
+1. For 1/x + a > 0: 1/x + a > 0 → 1 + ax > 0 → ax > -1. Since x = -1/(a-4), this becomes -1/(a-4) * a > -1 → -a/(a-4) > -1 → a/(a-4) < 1. This inequality holds for a < 4 or a > 5.
+
+2. For (a-4)x + 2a - 5 > 0: (a-4)(-1/(a-4)) + 2a - 5 > 0 → -1 + 2a - 5 > 0 → 2a - 6 > 0 → a > 3.
+
+Combining these conditions, we get a > 3 and a ≠ 4. Therefore, when a > 3 and a ≠ 4, there are two zeros.
+
+Now, let's summarize the results:
+
+- When a ≤ 4/5, there are no zeros.
+- When 4/5 < a ≤ 1, there is one zero.
+- When a > 1 and a ≠ 3 and a ≠ 4, there are two zeros.
+- When a = 4, there is one zero.
+- When a = 3, there are no zeros.
+
+This is a bit complex, but it covers all the cases. Now, let's think about how to present this as a question. The question should be designed to test the understanding of logarithmic functions, quadratic equations, and domain restrictions. The background scenario can be a mathematical problem or a real-world application, but since it's a mathematical question, perhaps a theoretical problem is appropriate.
+
+The question should be structured with two parts, as in the final question provided. Part (1) is a straightforward inequality solving, while part (2) requires solving a quadratic equation and analyzing the domain restrictions. This ensures that the question tests both algebraic manipulation and conceptual understanding.
+
+Now, let's ensure that the question is challenging. The key difficulties are:
+
+1. Solving the inequality for part (1) requires understanding logarithmic inequalities and their properties.
+2. Solving the quadratic equation for part (2) requires applying the quadratic formula and analyzing the domain restrictions.
+3. The number of zeros depends on the discriminant and the domain of the logarithmic functions, which requires careful consideration of the conditions.
+
+To make the question more difficult, we can add some red herrings or require the student to consider multiple cases. For example, the student must consider the domain restrictions for each solution of the quadratic equation, which can be a source of errors if not carefully analyzed.
+
+The final question should be presented in the specified format, with the answer in a box. The thinking process should be detailed, showing the step-by-step reasoning from the core concepts to the final answer.
+
+Let me write down the thinking process:
+
+1. The core concepts are logarithmic functions, quadratic equations, and domain restrictions.
+2. Part (1) requires solving log₂(1/a + 1) < 2, which simplifies to 0 < 1/a + 1 < 4, leading to a ∈ (-1, 3).
+3. Part (2) involves solving the quadratic equation (a-4)x² + (a-5)x - 1 = 0 and analyzing the domain restrictions for each solution.
+4. The number of zeros depends on the discriminant and the domain of the logarithmic functions.
+5. The student must consider the cases a = 4, a = 3, and a ≠ 3,4, and analyze the domain for each solution.
+
+The final answer for part (1) is a ∈ (-1, 3), and for part (2), the number of zeros is determined by the cases mentioned above.
+
+Now, let's write the question in the required format.
+
+
+[输出]
+### 一、大模型出题思考过程详细分析
+#### 1. 步骤完整性分析（核心维度1）
+根据评分规范，完整流程需覆盖“需求定位→设计（场景/题干/难点/答案解析）→试做反馈→迭代优化→定稿”，核心环节缺失则降档。  
+- **需求定位**：明确学科为数学，核心知识点为“对数函数性质、二次方程求解、定义域限制、判别式分析”，但**未明确学段**（如高中数学）、**未清晰说明考察目标**（如“考察分类讨论能力与定义域意识”），且无知识点选择理由（如未说明为何结合对数与二次函数，是否针对学生常见薄弱点）。  
+- **设计环节**：  
+  - 场景设计：题干为纯理论数学问题（无生活场景如“函数模型拟合”、学术场景如“数据分析”），属于**抽象表述，无场景设计**，不符合“场景存在（具体语境）”的基础要求。  
+  - 题干设计：采用“Part1求范围+Part2分析零点”的两问结构，表述无歧义，但未说明“先易后难”的表述逻辑依据（如为何先考察不等式再考察分类讨论）。  
+  - 难点/易错点设计：隐含“定义域忽略”“分类讨论遗漏（a=3、a=4特殊情况）”两个易错点，但**未明确易错点数量**，也未说明设计目的（如“设计a=3的特殊情况是因为学生常忽略对数真数为0的无效性”）。  
+  - 答案/解析设计：给出详细解题步骤（如Part1解对数不等式、Part2分情况讨论二次方程解），但解析为“步骤堆砌”，**无分层逻辑说明**（如未解释“先求方程解再验定义域”的分层必要性）。  
+- **试做反馈**：完全缺失，未提及试做人群（如“高二学生20人”）、正确率、错误类型及占比（如“60%学生漏验定义域”）。  
+- **迭代优化**：因无试做数据，无任何调整动作（如“修改题干提示定义域”）及调整依据，环节缺失。  
+- **定稿**：直接以“写出最终问题”定稿，无定稿判断标准（如“正确率达标”），也无二次试做验证。  
+
+综上，步骤完整性仅覆盖“需求定位（部分要素缺失）→基础设计（题干+答案）”，缺失“试做反馈、迭代优化”核心环节，且设计环节中场景缺失，不符合3分档“基础流程完整（需求定位+完整设计）”要求，更贴近2分档“基础设计残缺”的界定。
+
+#### 2. 细节详实度分析（核心维度2）
+各环节需包含“设计依据/逻辑说明”，无说明则降分。  
+- **需求定位**：未明确学段、考察目标，且无知识点选择理由，比2分档“明确学科、学段、知识点，未说明考察目标”的要求更残缺（缺少学段）。  
+- **设计环节**：  
+  - 场景：无场景，无任何场景适配逻辑说明，不符合“有场景但无依据”的情况，属于“场景空白”。  
+  - 题干：无表述逻辑依据，符合2分档“未说明依据”的情况。  
+  - 难点：有易错点但无设计目的，符合2分档“无依据说明”的情况。  
+  - 解析：无分层逻辑依据，符合2分档“无解析逻辑说明”的情况。  
+- **试做、迭代**：无任何数据或调整说明，细节空白。  
+
+综上，细节详实度多环节缺失（需求定位要素不全、设计无依据），仅满足“题干+答案完整”的最低要求，符合2分档“细节空白”的界定。
+
+#### 3. 反馈闭环性分析（核心维度3）
+需形成“试做→错误分析→调整→验证”闭环，无闭环则降档。  
+思考过程无试做数据，自然无错误分析、调整动作及二次验证，完全无闭环，符合2分档“无试做迭代”的要求，无法达到4分及以上“有反馈或闭环”的标准。
+
+
+### 二、评分结论
+该大模型出题思考过程符合2分档（不足：基础设计残缺+细节空白）的核心界定：仅覆盖“需求定位（部分要素缺失）→基础设计（题干+答案）”，场景缺失、难点设计不完整，无任何细节依据说明，且无试做反馈与迭代优化环节。
+
+```json
+{
+  "得分": 2
+}
+```
+
+
+
+
+[输入]
+Okay, let's tackle this problem. I need to create a difficult question based on the provided reading material about topological spaces, fundamental groups, and homotopy. The question should be designed according to the given guidelines, with a detailed thinking process and a final question in the specified format.
+
+First, I'll review the reading material to understand the key concepts. The material covers topological spaces, continuous functions, fundamental groups, and homotopy. The example of the punctured torus is mentioned, and the question is to show that it deformation retracts to a union of two circles intersecting at one point. The answer is S¹ ∨ S¹, which is the wedge sum of two circles.
+
+Now, I need to design a question that tests the understanding of deformation retraction and fundamental groups. The question should be challenging, requiring the student to apply the concepts of homotopy, fundamental groups, and deformation retraction.
+
+Let's start by thinking about the background scenario. The punctured torus is a common topological space, and its deformation retraction to a wedge sum of two circles is a well-known result. The question should present this in a way that requires the student to justify the deformation retraction using the fundamental group.
+
+The thinking process should involve several steps:
+1. Understanding the punctured torus and its topological properties.
+2. Knowing that a deformation retraction preserves the fundamental group.
+3. Computing the fundamental group of the punctured torus.
+4. Showing that the fundamental group of the punctured torus is isomorphic to the fundamental group of a wedge sum of two circles.
+5. Concluding that the punctured torus deformation retracts to a wedge sum of two circles.
+
+Now, let's consider the difficulty aspects. The student needs to apply the concept of deformation retraction, which is a homotopy equivalence that deformation retracts one space onto another. They also need to compute the fundamental group of the punctured torus, which is a non-trivial task. The fundamental group of a punctured torus is the free group on two generators, which is isomorphic to the fundamental group of a wedge sum of two circles.
+
+The question should be presented in a way that requires the student to derive the fundamental group of the punctured torus and then show that it is isomorphic to the fundamental group of a wedge sum of two circles. This involves understanding the Seifert-van Kampen theorem or other methods to compute the fundamental group.
+
+Let's structure the question step by step:
+
+1. **Question Stem**: Ask the student to show that the punctured torus deformation retracts to a union of two circles intersecting at one point.
+2. **Background Knowledge**: The student needs to know about deformation retraction, fundamental groups, and the fundamental group of a punctured torus.
+3. **Key Steps**:
+   - Compute the fundamental group of the punctured torus.
+   - Show that this fundamental group is isomorphic to the fundamental group of a wedge sum of two circles.
+   - Conclude that the punctured torus deformation retracts to a wedge sum of two circles.
+
+The answer is S¹ ∨ S¹, so the student should provide this as the final answer.
+
+Now, let's think about the thinking process. The student should start by recalling the definition of a deformation retraction. They need to understand that a deformation retraction is a homotopy equivalence that deformation retracts one space onto another. They should also know that the fundamental group of a deformation retracted space is isomorphic to the fundamental group of the base space.
+
+The student should compute the fundamental group of the punctured torus. This can be done using the Seifert-van Kampen theorem. The punctured torus can be represented as a quotient space of the plane with a disk removed and identified with the torus. Alternatively, it can be thought of as a torus with a point removed.
+
+The fundamental group of a torus is Z², and removing a point from a torus results in a space with fundamental group Z². However, the punctured torus is homeomorphic to a wedge sum of two circles, so its fundamental group is the free group on two generators, which is isomorphic to Z².
+
+Therefore, the student should show that the fundamental group of the punctured torus is Z², and then conclude that it deformation retracts to a wedge sum of two circles.
+
+The question should be presented in a way that requires the student to perform these steps, and the answer should be the wedge sum of two circles.
+
+Now, let's write the final question and answer in the specified format.
+
+Question: Show that the punctured torus \( T \setminus \{p\} \) deformation retracts to a union of two circles intersecting at exactly one point.
+Answer: S¹ ∨ S¹
+
+The thinking process should be detailed, showing the student's understanding of deformation retraction, fundamental groups, and the computation of the fundamental group of the punctured torus.
+
+
+[输出]
+### 一、大模型出题思考过程详细分析
+#### 1. 步骤完整性分析（对应评分规范核心维度1）
+该思考过程仅覆盖“需求定位→设计（场景/题干/难点/答案）”基础流程，**缺失“试做反馈”“迭代优化”“定稿确认”三个核心环节**：
+- 需求定位：明确了数学学科下的拓扑学相关知识点（变形收缩、基本群、同伦），考察目标为“测试对变形收缩和基本群的理解”，但未明确学段（如本科高年级、研究生），且未说明知识点选择理由（如“为何选择穿孔环面作为考察对象，而非其他拓扑空间”）；
+- 设计环节：包含场景（穿孔环面）、题干（证明穿孔环面变形收缩至两圆交一点）、难点（计算穿孔环面基本群、应用Seifert-van Kampen定理）、答案（S¹∨S¹），设计要素完整，但无后续试做数据采集、错误分析及迭代调整；
+- 无试做反馈（未提及试做人群、正确率、错误类型）、无迭代优化（无基于反馈的调整动作）、无定稿确认（未给出定稿判断标准，直接呈现题目+答案）。
+
+#### 2. 细节详实度分析（对应评分规范核心维度2）
+各设计环节均**缺失关键依据说明**，符合3分档“设计细节部分缺失”的特征：
+- 场景设计：选择“穿孔环面”作为场景，但未说明场景与知识点的适配逻辑（如“穿孔环面的拓扑性质与变形收缩考点的关联的合理性”）；
+- 题干设计：采用“证明类”表述，但未说明表述逻辑依据（如“为何按‘结论→要求’的结构组织题干，而非‘背景→问题’的递进式表述”）；
+- 难点设计：提及2个难点，但未说明难点设计目的（如“为何将‘应用Seifert-van Kampen定理’设为难点，是否因该定理是学生常见知识漏洞”）；
+- 答案/解析设计：仅给出最终答案（S¹∨S¹），解析为纯描述性内容（如“学生应回忆变形收缩定义、计算基本群”），未形成“解题步骤→关键思路→易错点提醒”的分层结构，且无解析逻辑说明。
+
+#### 3. 反馈闭环性分析（对应评分规范核心维度3）
+因完全缺失“试做反馈”环节，**未形成任何反馈闭环**：无试做数据采集（无人群、正确率、错误类型），自然无错误归因、针对性调整及二次验证，不符合4分档“有迭代但无二次验证”或5分档“完整闭环”的要求。
+
+
+#### 4. 分数档匹配判断
+结合上述分析，该思考过程符合**3分（合格）** 档的核心界定：
+- 步骤完整性：仅覆盖“需求定位→完整设计”，缺试做、迭代、定稿环节，匹配3分档“基础流程完整+试做环节缺失”；
+- 细节详实度：需求定位未说明知识点选择理由，设计环节各要素均无依据说明，解析为非分层结构，匹配3分档“设计细节部分缺失”；
+- 反馈闭环性：无反馈闭环，符合3分档“无试做迭代”的特征，无降档至2分/1分的条件（2分需“基础设计残缺”，1分需“无场景/无难点”，本思考过程设计要素完整）。
+
+
+```json
+{
+  "得分": 3
+}
+```
+
+
+"""
+
+
+QUESTION_DESIGN_THOUGHT_JUDGE_TEMPLATE = """
+现在需要你对下面的思考过程进行打分（1-5分）
+
+
+[输入]
+{doc}
+
+[输出]
+"""
+
+
+REPETITION_DETECTION_FEWSHOTS = """
+# 内容重复现象检测
+## 一、任务背景说明
+给你一段大模型出题的思考过程要求判断思考过程是否包含严重的内容重复现象。按照下面的格式返回你的结果
+
+#### 输出要求
+[先简短分析]
+```json
+{
+  "内容重复": "是/否"
+}
+```
+
+下面是一个例子
+
+
+
+[输入]
+The scores of 100 students in a test out of 10 were:
+
+| Score | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|-------|---|---|---|---|---|---|---|----|
+| Frequency | 5 | 11 | 19 | 24 | 21 | 12 | 6 | 2 |
+
+State the range of the scores.
+
+The answer is 7.
+
+Now, let's think about the thinking process:
+
+1. The student reads the scenario and understands that they need to calculate the range of the scores.
+2. The student looks at the table and identifies the scores and their frequencies.
+3. The student needs to find the highest and lowest scores from the table.
+4. The student identifies the highest score as 10 and the lowest score as 3.
+5. The student subtracts the lowest score from the highest score to get the range: 10 - 3 = 7.
+6. The student checks if there are any distractor scores, such as the score of 11, and confirms that it is not used in the calculation.
+
+To make it more difficult, I can add a step where the student needs to calculate the range from the table, but there might be a mistake in the table. For example, the table might have a mistake in the highest or lowest score, or the student needs to check the table for the highest and lowest scores.
+
+Let's think about the final question again:
+
+The scores of 100 students in a test out of 10 were:
+
+| Score | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|-------|---|---|---|---|---|---|---|----|
+| Frequency | 5 | 11 | 19 | 24 | 21 | 12 | 6 | 2 |
+
+State the range of the scores.
+
+The answer is 7.
+
+Now, let's think about the thinking process:
+
+1. The student reads the scenario and understands that they need to calculate the range of the scores.
+2. The student looks at the table and identifies the scores and their frequencies.
+3. The student needs to find the highest and lowest scores from the table.
+4. The student identifies the highest score as 10 and the lowest score as 3.
+5. The student subtracts the lowest score from the highest score to get the range: 10 - 3 = 7.
+6. The student checks if there are any distractor scores, such as the score of 11, and confirms that it is not used in the calculation.
+
+To make it more difficult, I can add a step where the student needs to calculate the range from the table, but there might be a mistake in the table. For example, the table might have a mistake in the highest or lowest score, or the student needs to check the table for the highest and lowest scores.
+
+Let's think about the final question again:
+
+The scores of 100 students in a test out of 10 were:
+
+| Score | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|-------|---|---|---|---|---|---|---|----|
+| Frequency | 5 | 11 | 19 | 24 | 21 | 12 | 6 | 2 |
+
+State the range of the scores.
+
+The answer is 7.
+
+Now, let's think about the thinking process:
+
+1. The student reads the scenario and understands that they need to calculate the range of the scores.
+2. The student looks at the table and identifies the scores and their frequencies.
+3. The student needs to find the highest and lowest scores from the table.
+4. The student identifies the highest score as 10 and the lowest score as 3.
+5. The student subtracts the lowest score from the highest score to get the range: 10 - 3 = 7.
+6. The student checks if there are any distractor scores, such as the score of 11, and confirms that it is not used in the calculation.
+
+To make it more difficult, I can add a step where the student needs to calculate the range from the table, but there might be a mistake in the table. For example, the table might have a mistake in the highest or lowest score, or the student needs to check the table for the highest and lowest scores.
+
+Let's think about the final question again:
+
+The scores of 100 students in a test out of 10 were:
+
+| Score | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|-------|---|---|---|---|---|---|---|----|
+| Frequency | 5 | 11 | 19 | 24 | 21 | 12 | 6 | 2 |
+
+State the range of the scores.
+
+The answer is 7.
+
+Now, let's think about the thinking process:
+
+1. The student reads the scenario and understands that they need to calculate the range of the scores.
+2. The student looks at the table and identifies the scores and their frequencies.
+3. The student needs to find the highest and lowest scores from the table.
+4. The student identifies the highest score as 10 and the lowest score as 3.
+5. The student subtracts the lowest score from the highest score to get the range: 10 - 3 = 7.
+6. The student checks if there are any distractor scores, such as the score of 11, and confirms that it is not used in the calculation.
+
+To make it more difficult, I can add a step where the student needs to calculate the range from the table, but there might be a mistake in the table. For example, the table might have a mistake in the highest or lowest score, or the student needs to check the table for the highest and lowest scores.
+
+Let's think about the final question again:
+
+The scores of 100 students in a test out of 10 were:
+
+| Score | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|-------|---|---|---|---|---|---|---|----|
+| Frequency | 5 | 11 | 19 | 24 | 21 | 12 | 6 | 2 |
+
+State the range of the scores.
+
+The answer is 7.
+
+
+[输出]
+[输入内容多次重复呈现相同的题目（含表格）、答案“7”以及完全一致的思考过程（6个步骤），且重复段落中“To make it more difficult”后的建议也无变化，未添加任何新信息，存在严重的内容重复现象。]
+```json
+{
+  "内容重复": "是"
+}
+```
+
+
+
+"""
+
+REPETITION_DETECTION_TEMPLATE = """
+
+现在需要你对下面的思考过程进行判断是否存在内容重复
+
+
+[输入]
+{doc}
+
+[输出]
+"""
+
+
 class BatchCallOpenAPI(metaclass=ABCMeta):
 
     @abstractmethod
@@ -955,6 +1424,34 @@ class BatchCallOpenAPI(metaclass=ABCMeta):
             else:
                 outputs.append(None)
         return outputs
+
+
+class RepetitionDetection(BatchCallOpenAPI):
+    def __init__(self, prompt_field="prompt", answer_field="answer"):
+        self.prompt_field = prompt_field
+        self.answer_field = answer_field
+
+    @classmethod
+    def task_desc(cls):
+        return "内容重复"
+
+    def prompt_fn(self, example):
+        prompt = REPETITION_DETECTION_FEWSHOTS + REPETITION_DETECTION_TEMPLATE.format(
+            doc=example["doc"],
+
+        )
+        return prompt
+
+    def postprocess(self, response: str):
+        s = response
+        try:
+            conclusion = s.strip()
+            judge = re.findall(
+                r'\"内容重复\": \"(.*)\"', conclusion)
+            if len(judge) > 0 and judge[0] in ("是", "否"):
+                return judge[0] == "是"
+        except Exception as err:
+            raise PostprocessError(f'{err}')
 
 
 class AnswerConsistency(BatchCallOpenAPI):
@@ -1004,6 +1501,35 @@ class AnswerConsistency(BatchCallOpenAPI):
                     return conclusion == "正确"
                 except Exception as err:
                     raise PostprocessError(f'{err}')
+        except Exception as err:
+            raise PostprocessError(f'{err}')
+
+
+class QuestionDesignJudge(BatchCallOpenAPI):
+    def __init__(self, prompt_field="prompt", answer_field="answer"):
+        self.prompt_field = prompt_field
+        self.answer_field = answer_field
+
+    @classmethod
+    def task_desc(cls):
+        return "思维打分"
+
+    def prompt_fn(self, example):
+        prompt = QUESTION_DESIGN_THOUGHT_JUDGE_FEWSHOTS + QUESTION_DESIGN_THOUGHT_JUDGE_TEMPLATE.format(
+            doc=example["doc"],
+
+        )
+        return prompt
+
+    def postprocess(self, response: str):
+        s = response
+        try:
+            score = int(re.findall(
+                r'\"得分\": (\d+)', s)[0].strip())
+
+            if score not in (1, 2, 3, 4, 5):
+                raise PostprocessError(f'invalid similarity score={score}')
+            return score
         except Exception as err:
             raise PostprocessError(f'{err}')
 
@@ -1336,10 +1862,15 @@ class Doc2QuerySelfTaughtComputeScore(object):
         self.agents = {}
         self.init_verify_agent()
         self.init_rm_agent()
+        self.init_question_judge_agent()
 
     def init_verify_agent(self):
         self.verify_agent = Agent(
             **self.args["verify_agent"]["model"])
+
+    def init_question_judge_agent(self):
+        self.question_judge_agent = Agent(
+            **self.args["question_judge_agent"]["model"])
 
     def init_rm_agent(self):
         self.rm_agent = RewardModelAgent(
@@ -1445,6 +1976,75 @@ class Doc2QuerySelfTaughtComputeScore(object):
                 full_rewards[queue_index] = 1.0
         return full_rewards
 
+    async def repetition_detect(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+    ):
+        task = RepetitionDetection()
+        indices = []
+        batch_inputs = []
+
+        result_index2queue_index = {}
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            result = self.parse_solution_fn(sol)
+            if result is not None and gt.get("question", None):
+                batch_inputs.append({"doc": result[1]})
+                indices.append(i)
+                result_index2queue_index[len(indices)-1] = i
+            else:
+                continue
+
+        evaluations = await task.do_job(
+            agent=self.verify_agent,
+            batch_inputs=batch_inputs,
+            max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
+        )
+        full_rewards = [0] * len(batch_solution_str)
+        for j, eval_result in enumerate(evaluations):
+            queue_index = result_index2queue_index[j]
+            if eval_result:
+                full_rewards[queue_index] = -2.0
+        return full_rewards
+
+    async def design_judge_reward(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+    ):
+        task = QuestionDesignJudge()
+        indices = []
+        questions = []
+
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            result = self.parse_thought_and_conclusion_fn(sol)
+            lang_code = gt["lang_code"]
+
+            if result is not None:
+                tokens = tokenize(result[0], lang_code)
+                if len(tokens) < 1000:
+                    continue
+                questions.append({"doc": result[0]})
+                indices.append(i)
+            else:
+                continue
+
+        quality = await task.do_job(
+            agent=self.question_judge_agent,
+            batch_inputs=questions,
+            max_concurrent_requests=self.args["question_judge_agent"]["max_concurrent_requests"],
+        )
+
+        scores = [0.0] * len(batch_solution_str)
+        for _quality, index in zip(quality, indices):
+            if _quality is None:
+                pass
+            else:
+                scores[index] = 1.0 * (_quality-1.0) / 4
+        return scores
+
     async def hint_leakage_reward(
         self,
         batch_data_sources,
@@ -1479,11 +2079,13 @@ class Doc2QuerySelfTaughtComputeScore(object):
             if _quality is None:
                 pass
             else:
-                scores[index] = 2.0 * (_quality-1.0) / 4
+                scores[index] = 1.0 * (_quality-1.0) / 4
         return scores
 
     def get_processes(self):
         return [
+            Process(name="rep",
+                    function=self.repetition_detect, is_async=True),
             Process(name="ans_cons",
                     function=self.same_answer_reward, is_async=True),
             Process(name="q_cons",
@@ -1492,6 +2094,7 @@ class Doc2QuerySelfTaughtComputeScore(object):
                     judge_prompt_key="rm_judge_prompt"), is_async=False),
             Process(name="hint_leakage",
                     function=self.hint_leakage_reward, is_async=True),
+            Process(name="cot", function=self.design_judge_reward, is_async=True)
         ]
 
     async def _compute_score(self,
@@ -1971,6 +2574,19 @@ DOC2QUERY_ST_DEFAULT_PARAMS = {
                 "temperature": 0.6,
                 "timeout": 360,
                 "max_tokens": 1024,
+            },
+        },
+        "max_concurrent_requests": 512
+    },
+    "question_judge_agent": {
+        "model": {
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 4096,
             },
         },
         "max_concurrent_requests": 512

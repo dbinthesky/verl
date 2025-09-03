@@ -56,15 +56,11 @@ setup_path() {
     ROLLOUT_N=16
     TRAIN_BSZ=$((num_gpus * world_size))
     KL_LOSS_COEF="0"
-    TEMPERATURE="1.0"
+    TEMPERATURE="1.0"   
     
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_st_7b_2025-09-01_roll16_32_dapo_kl_coef_0_wo_entropy_t0.4_step_20"
-    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/guoxu/hf_hub/models/models--deepseek-ai--DeepSeek-R1-Distill-Qwen-7B/snapshots/6602cadec947dbb53e64f3d8d6425320b2197247"
-    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-7B-fabricate_qa_v22/checkpoint-444"
-    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v3_multiturn_7b_2025-08-24_roll16_64_dapo_kl_coef_0_wo_entropy_t0.85_solver_dsv3_step_160"
-    # TRAIN_DATA='["/cpfs01/shared/llm_ddd/tongjian/rl/kg2query_v1_self_taught/fabricate_qa_self_taught_enhance_rl_inputs_train/index0.parquet","/cpfs01/shared/llm_ddd/tongjian/rl/kg2query_v1_self_taught/fabricate_qa_self_taught_enhance_rl_inputs_train/index1.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/kg2query_v1_self_taught/fabricate_qa_self_taught_enhance_rl_inputs_train/index2.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/kg2query_v1_self_taught/fabricate_qa_self_taught_enhance_rl_inputs_train/index3.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/kg2query_v1_self_taught/fabricate_qa_self_taught_enhance_rl_inputs_train/index4.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/kg2query_v1_self_taught/fabricate_qa_self_taught_enhance_rl_inputs_train/index5.parquet"]'
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_st_7b_2025-09-02_roll16_32_dapo_kl_coef_0_wo_entropy_t1.0_step_60"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_self_taught/doc2query_self_taught_enhance_rl_inputs_train.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_self_taught/doc2query_self_taught_enhance_rl_inputs_test.parquet"
     
