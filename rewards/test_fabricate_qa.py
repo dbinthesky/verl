@@ -14,7 +14,7 @@ from collections import defaultdict
 from fabricate_qa import (
     Agent,
     JudgeTwoQuestionSimilarity,
-    MultichoiceKnowledgeQuestionQualityEval,
+    Doc2QueryV3LooseQuestionEval,
     QuestionRefineHack,
     QuestionDifficultyEval,
     LRUCache,
@@ -203,7 +203,7 @@ def load_dataset(task_name, num=100, xml_cot=False):
 class TestUtils(unittest.TestCase):
     def test_batch_call_open_api(self):
         # task = JudgeTwoQuestionSimilarity()
-        # task = MultichoiceKnowledgeQuestionQualityEval()
+        # task = Doc2QueryV3LooseQuestionEval()
         # task = QuestionRefineHack()
         task = QuestionDifficultyEval()
 

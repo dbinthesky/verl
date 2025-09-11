@@ -102,51 +102,29 @@ SIMILARITY=4
 
 """
 
-MC_KNOWLEDGE_QUESTION_QUALITY_VALUE_TEMPLATE = """任务：基于下面的标准对一个学科问题进行判断是否满足条件需要修改
+DOC2QUERY_V3_Q_EVAL_LOOSE_TEMPLATE = """任务：基于下面的标准与方法对一道出题质量进行评价，判断是否需要改进
+
+你需要判断问题是否是可以有效作答的？聚焦“价值”与“功能”的双重缺陷，涵盖两类相互关联的题目失效场景： 
+下面是两种场景，问题无法被有效作答
+
+   - 场景一（核心偏离+细节障碍）：题目相关性与教育价值不足，常见情况是题目脱离学科核心知识（原理、机制、应用），仅考查极冷门的非必要细节、琐碎或边缘内容（如某教材非重点章节的具体页码、某学术论文的次要署名作者），这类信息超出正常学习范畴，即使掌握学科核心能力也无法作答（如非教材编撰研究者难以记住冷门章节页码）；
+   - 场景二（题干信息缺失）：题目未提供作答必需的关键背景/条件（如考查“某实验的次要数据”，却未说明实验对象、操作步骤），导致题目无法独立作答，不可解，需要依赖特定文献或文档材料才能作答，题目信息完备性不符合要求，完全无法实现“以题检验知识”的目标。
+
+### 判断方法
+#### 维度1：教育价值有效性——排查“场景一（核心偏离+细节障碍）”
+核心是判断“题目考查的内容是否有必要、是否匹配核心能力”，避免“考冷门琐碎信息而非核心知识”。需依次验证3个关键问题：
+1. 核心知识关联度（是否脱离核心知识）
+2. 细节必要性（是否属于“非必要冷门细节”）
+3. 核心能力可答性（假设答题者已掌握该领域的核心知识/能力，能否独立作答？）
+
+#### 维度2：题干信息完备性——排查“场景二（题干信息缺失）”
+核心是判断“题干是否提供了‘独立作答必需的所有关键信息’”，避免“依赖外部特定材料才能答题”。需依次验证3个关键问题：
+1. 关键信息识别（梳理“作答必须的关键信息”（如背景、条件、数据来源、前提假设等）——缺了就无法推导答案）
+2. 题干信息完整性（题干是否完整包含上述“关键信息”？）
+3. 作答独立性（不依赖任何外部材料（如特定教材、某篇论文、某本小说原文），仅靠题干信息+核心知识，能否作答？）
 
 
-学科知识出题评价标准总结
-1. **关键术语的清晰度与具体性**
-   - **检查点**：题目中的专业术语、缩写、实验阶段、参数等是否明确定义或具体化？
-   - **问题迹象**：
-     - 术语模糊（如“验证实验”未指定具体阶段）。
-     - 缩写未解释（如“CCV”未扩写）。
-     - 概念笼统（如“稳定性”未说明具体条件）。
-   - **评价依据**：未定义的术语会导致答案不唯一或理解困难。好题目应避免抽象表述，必要时补充细节。
-
-2. **相关性与教育价值**
-   - **检查点**：题目是否聚焦学科核心知识，避免琐碎或边缘内容？
-     - 内容琐碎（如考查书籍章节作者等细节，而非核心概念）。
-     - 与学科知识脱节（如问题不涉及原理、机制或应用）。
-     - 选项包含“无法确定”等模糊项，但题目未提供判断依据。
-  - **评价依据**：好题目应强调理解、分析或应用，而非记忆孤立事实。
-
-3. **信息完整性**
-   - **检查点**：题目是否提供所有必要信息，包括背景、条件、数据来源或参考材料？
-   - **问题迹象**：
-     - 关键条件缺失（如未提实验设置）。
-     - 引用不存在的材料（如“根据材料”但无实际材料）。
-     - 背景信息不足。
-   - **评价依据**：避免因信息缺失导致题目不严谨；通过添加背景改善完整性。
-
-4. **无歧义性**
-   - **检查点**：题目表述是否单一解释，避免歧义或多义？
-   - **问题迹象**：
-     - 用词模糊（如“影响”未指定正向/负向）。
-     - 选项范围过大（如百分比区间过宽）。
-     - 问题结构易引发误解。
-   - **评价依据**：好题目应确保语言精准。
-
-5. **简洁性**
-   - **检查点**：题目表述是否精炼，无冗余信息，同时保留必要内容？
-   - **问题迹象**：
-     - 冗余修饰（如重复解释同一概念、添加与问题无关的形容词）。
-     - 无关背景（如引入与核心问题无关的细节，增加阅读负担）。
-     - 结构冗长（如使用复杂从句、绕弯表述，导致核心问题被掩盖）。
-   - **评价依据**：好题目应在“简洁”与“完整”间平衡，剔除无效信息但不牺牲必要条件。
-
-
-输出要求：
+### 输出要求：
 满足全部要求输出“无需修改”，否则输出“需要改进”。
 按下面的格式输出结果 （如果无需修改，[违反原则]不用填写）
 ```
@@ -156,115 +134,67 @@ MC_KNOWLEDGE_QUESTION_QUALITY_VALUE_TEMPLATE = """任务：基于下面的标准
 ```
 
 下面是一些例子
-[问题] 在验证实验中，THBS2和CA19-9联合检测用于诊断胰腺导管腺癌的AUC值达到多少？\n\nOptions:\nA) 0.845\nB) 0.867\nC) 0.956\nD) 0.97
-```
-[分析] 问题中的“验证实验”未指定具体阶段，属于术语模糊，违反了关键术语的清晰度与具体性原则。
-[违反原则] 关键术语的清晰度与具体性
-[结果] 需要改进
-```
 
-[问题] 在一堂数学课上，老师正在详细分步骤讲解一个代数问题，而李明抬头凝视天花板，似乎心不在焉。当老师提问时，李明迅速给出了正确答案，但无法详细解释解题步骤。这种情况最可能表明李明属于哪种学习者？\n\nOptions:\nA) 视觉空间学习者\nB) 听觉顺序学习者\nC) 注意力缺陷型学习者\nD) 分析型学习者
-```
-[分析] 问题中的术语如“视觉空间学习者”“听觉顺序学习者”等表述清晰；聚焦于根据学习行为判断学习者类型，属于教育心理学核心知识，具有教育价值；提供了课堂情境、学生行为等必要背景信息，信息完整；表述单一明确，无歧义；语言精炼，无冗余信息，在简洁与完整间保持平衡。
-[违反原则]
-[结果] 无需修改
-```
 
 [问题] According to Epidemiological assessment of cassava mosaic disease in Central African Republic reveals the importance of mixed viral infection and poor health of plant cuttings，in  Fig. 1. B，what was the approximate percentage reduction in yield for cassava plants grown from cuttings of CMD severity class 5 compared to class 1?\n\nOptions:\nA) 20-30%\nB) 50-60%\nC) 60-70%\nD) 80-90%\nE) No significant reduction
 ```
-[分析] 问题要求根据特定文献的图1.B回答，属于考查琐碎的图表细节，而非学科核心知识，违反了相关性与教育价值原则；同时，若未提供该文献的图1.B作为参考材料，也违反了信息完整性原则。
-[违反原则] 相关性与教育价值、信息完整性
+[分析] 1. 从维度1“教育价值有效性”判断：①核心知识关联度：题目考查的是某篇特定论文中“Fig.1.B”内CMD严重度5级与1级插条木薯产量减少的具体百分比，该内容并非木薯花叶病流行病学的核心知识（如病害传播机制、防控原理、病毒混合感染的核心影响等），脱离学科核心知识；②细节必要性：该信息属于特定论文某幅图的具体数据，是极冷门的非必要细节，不属于该领域正常学习需掌握的内容；③核心能力可答性：即使答题者掌握木薯花叶病相关核心知识与能力，也无法仅凭核心能力记住某篇特定论文某幅图的具体数据，无法独立作答，符合“场景一（核心偏离+细节障碍）”。2. 从维度2“题干信息完备性”判断：①关键信息识别：作答需“Fig.1.B中CMD严重度5级与1级插条木薯产量数据”这一关键信息，缺失则无法推导答案；②题干信息完整性：题干仅提及论文标题和图号，未提供图中核心数据，信息不完整；③作答独立性：必须依赖查阅该特定论文的“Fig.1.B”才能获取数据，不依赖外部材料无法作答，符合“场景二（题干信息缺失）”。
+[违反原则] 场景一（核心偏离+细节障碍）、场景二（题干信息缺失）
 [结果] 需要改进
 ```
 
-[问题] 地质学家在分析某地区土壤变化时，观察到两种主要过程：一种是岩石表面的分解过程，称为术语A；另一种是土壤被风和水移除的过程，称为术语B。根据语言学的名词化规则，术语A和B分别对应以下哪个选项？\n\nOptions:\nA) erosion and weathering\nB) weathering and erosion\nC) decompose and erode\nD) weather and erode
+
+[问题] When estimating daily average net radiation using satellite data, a researcher found a significant discrepancy between their estimate and ground measurements. Which of the following is most likely the cause of this error?\n\nA) Incorrect application of the black-sky albedo value instead of the white-sky albedo.\nB) Miscalculation of the satellite overpass time affecting the sinusoidal model's accuracy.\nC) Using land surface temperature instead of air temperature for calculating downward longwave radiation.\nD) Errors in the aerosol optical depth affecting the albedo interpolation.
 ```
-[分析] 问题中的关键术语如“术语A”“术语B”通过描述性内容（岩石表面的分解过程、土壤被风和水移除的过程）进行了明确界定，表述清晰具体；聚焦于地质学过程与语言学名词化规则的结合考查，属于学科核心知识的应用，具有教育价值；提供了土壤变化的两种主要过程作为背景信息，信息完整；表述单一明确，无歧义；语言精炼，无冗余信息，在简洁与完整间保持平衡。
-[违反原则]
+[分析] 1. 教育价值有效性分析（排查场景一）：
+- 核心知识关联度：题目围绕“利用卫星数据估算日平均净辐射时的误差原因”展开，涉及净辐射估算的关键参数（如黑空反照率、白空反照率、地表温度/气温、气溶胶光学厚度）与模型应用（正弦模型），属于遥感气象学或地表能量平衡领域的核心知识，未脱离学科核心。
+- 细节必要性：选项中提及的“黑空反照率与白空反照率的应用差异”“卫星过境时间对正弦模型的影响”“下行长波辐射计算的温度选择”“气溶胶光学厚度对反照率插值的影响”，均为理解该领域误差来源的必要细节，并非冷门琐碎信息，是掌握核心能力需覆盖的内容。
+- 核心能力可答性：假设答题者掌握地表净辐射估算的核心原理（各辐射分量计算方法、卫星数据应用关键影响因素），可通过分析各选项对估算结果的影响独立判断误差原因，具备可答性。
+
+2. 题干信息完备性分析（排查场景二）：
+- 关键信息识别：作答需明确“卫星数据估算日平均净辐射”的背景、“估算值与地面测量值存在显著差异”的问题情境，以及各选项的误差场景，这些均为关键信息。
+- 题干信息完整性：题干清晰提供了估算方法（卫星数据）、问题现象（估算值与地面值 discrepancy），各选项完整列出可能误差原因，关键背景与情境信息无缺失。
+- 作答独立性：仅需结合地表净辐射估算的核心知识，无需依赖特定教材、论文等外部材料，即可分析判断答案，满足独立作答要求。
+[违反原则] 
 [结果] 无需修改
 ```
 
-[问题] 根据材料，影响全球山地林线高度分布的首要因素是？\n\nOptions:\nA) 山地海拔\nB) 光照强度\nC) 年平均气温\nD) 最热月平均气温
-```
-[分析] 问题中“根据材料”属于无关背景，与核心问题无关，增加了阅读负担，属于冗余信息，违反了简洁性原则。虽然提到“根据材料”，但该表述对解题无实际意义，并非信息缺失导致的不完整，而是多余的表述。
-[违反原则] 简洁性
-[结果] 需要改进
-```
-
-[问题] 在一项员工满意度研究中，调查了四种企业社会责任（CSR）活动对其工作态度的影响。结果显示，当公司加强伦理相关的社会责任活动时，员工更倾向于感知组织为道德的，进而提升了工作满意度。相比之下，环境和社区活动虽然也有影响，但效果较弱。以下哪一项最能解释这一现象？\n\nOptions:\nA) 环境保护活动直接提升了员工的工作满意度\nB) 伦理CSR通过增强组织道德感知中介影响工作满意度\nC) 社区服务活动增强了员工的组织认同\nD) 财务管理透明度提高了员工信任度
-```
-[分析] 问题中的专业术语如“企业社会责任（CSR）”表述清晰；聚焦于不同CSR活动对员工工作态度影响差异的解释，属于组织行为学或管理学核心知识，具有教育价值；提供了研究背景、结果等必要信息，信息完整；表述单一明确，无歧义；语言精炼，无冗余信息，在简洁与完整间保持平衡。
-[违反原则]
-[结果] 无需修改
-```
 
 [问题] question: Which species is inconsistently included in the sections of "The Ecology, Exploitation, and Conservation of River Turtles" by Don Moll and Edward O Moll?\n\nOptions:\nA) Diamondback terrapin\nB) Snapping turtle\nC) Sea turtle\nD) Red-eared slider
 ```
-[分析] 问题考查的是特定书籍中某一物种是否被一致纳入章节，属于考查书籍中的琐碎细节，而非学科核心知识，违反了相关性与教育价值原则。
-[违反原则] 相关性与教育价值
+[分析] 1. 维度1（教育价值有效性）排查：①核心知识关联度：该问题考查《数论史》第三卷中“类数”章节的作者，数论学科的核心知识是类数相关的原理、定理、证明方法及应用等，具体书籍某章节的作者不属于数论核心知识，存在核心偏离；②细节必要性：“某书籍特定卷次特定章节的作者”属于极冷门的非必要细节，并非学习数论必须掌握的内容，不符合细节必要性要求；③核心能力可答性：即使答题者掌握数论核心知识与能力（如理解类数概念、掌握相关定理），也无法凭借这些核心能力独立作答，需专门记忆冷门作者信息，不满足核心能力可答性。2. 维度2（题干信息完备性）排查：题干虽明确书籍名称、卷次、章节主题，但问题的核心缺陷在于教育价值不足，而非题干信息缺失。综上，题目符合场景一（核心偏离+细节障碍）的失效场景。
+[违反原则] 场景一（核心偏离+细节障碍）：题目脱离数论学科核心知识，仅考查极冷门的“特定书籍章节作者”这一非必要细节，即使掌握数论核心能力也无法独立作答。
 [结果] 需要改进
 ```
 
-[问题] 在微机械制造中，哪种技术可以加工出比其他方法更微小的结构？\n\nOptions:\nA) 集成电路制造技术\nB) LIGA技术\nC) SPM技术\nD) 传统机械加工方法
+
+[问题] 
+In constructing the differential calculus for the quantum group SO₅(ℂ), a researcher must choose the correct sequence of parameters λ₁ to λ₅ and corresponding σ values (σ₁ to σ₅) for the R-matrix. Which of the following options correctly specifies these parameters according to the standard definition?\n\nA) λ = (1, 0, -1, -2, -3); σ = (+1, +1, +1, +1, +1)\nB) λ = (2, 1, 0, -1, -2); σ = (+1, +1, -1, -1, -1)\nC) λ = (3/2, 1/2, 0, -1/2, -3/2); σ = (+1, +1, -1, -1, -1)\nD) λ = (3/2, 1/2, 0, -1/2, -3/2); σ = (+1, +1, +1, +1, +1)\nE) λ = (2, 1, 0, -1, -2); σ = (+1, +1, +1, +1, +1)
 ```
-[分析] 问题中的专业术语如“微机械制造”“集成电路制造技术”“LIGA技术”“SPM技术”等均为该领域明确概念，表述清晰；聚焦于不同技术加工微小结构的能力比较，属于学科核心知识，具有教育价值；信息完整，无关键条件缺失；表述单一明确，无歧义；语言精炼，无冗余信息，在简洁与完整间保持平衡。
+[分析] 1. 维度1（教育价值有效性）排查：①核心知识关联度：题目考查量子群SO₅(ℂ)微分演算中R-矩阵的具体参数λ₁-λ₅和σ₁-σ₅序列，该内容并非量子群领域的核心知识（核心知识应是量子群的定义、结构、R-矩阵的作用机制等原理性内容），脱离核心知识；②细节必要性：具体参数的数值（如λ为(3/2,1/2,0,-1/2,-3/2)还是(2,1,0,-1,-2)）与符号组合（如σ的“+1”“-1”排列）属于非必要冷门细节，超出正常学习范畴；③核心能力可答性：即使答题者掌握量子群核心知识，若未专门记忆该特定量子群R-矩阵的参数序列，也无法独立作答，不符合核心能力可答性要求。
+2. 维度2（题干信息完备性）排查：①关键信息识别：作答需明确“量子群SO₅(ℂ)微分演算中R-矩阵参数的标准定义”来源（如特定文献、教材），此为必需关键信息；②题干信息完整性：题干仅提及“根据标准定义”，未明确“标准定义”的具体来源，缺失关键信息；③作答独立性：因“标准定义”来源不明，仅靠题干信息+量子群核心知识无法确定正确参数，需依赖外部特定材料，不符合作答独立性要求。
+[违反原则] 1. 违反场景一（核心偏离+细节障碍）：题目脱离量子群学科核心知识，考查非必要冷门的R-矩阵具体参数细节，掌握核心能力仍无法作答；2. 违反场景二（题干信息缺失）：题干未提供“标准定义”来源这一作答必需的关键信息，需依赖外部材料，无法独立作答，无法实现“以题检验知识”的目标。
+[结果] 需要改进
+```
+
+
+[问题] The West Bengal government's failure to regulate prices, provide adequate housing infrastructure, and effectively combat corruption has led to a loss of public confidence. This situation is best described as a failure in which key government function?\n\nA) Anti-corruption enforcement\nB) Economic policy-making\nC) Public service delivery\nD) Press regulation\nE) Maintaining public trust
+```
+[分析] 1. 教育价值有效性维度：①核心知识关联度：题目考查政府关键职能分类，属于政治学/公共管理领域核心知识，涉及政府在经济调控、公共服务、反腐败等方面的职能界定，未脱离核心知识；②细节必要性：考查的是政府主要职能的理解与区分，非冷门琐碎信息，是该领域必要基础知识点；③核心能力可答性：若答题者掌握政府核心职能知识，能区分各选项对应职能（如明确“Anti-corruption enforcement”“Economic policy-making”“Public service delivery”等职能内涵），即可结合题干中“价格监管、住房基础设施、反腐败”等情境独立判断答案，符合核心能力可答性要求。2. 题干信息完备性维度：①关键信息识别：作答需题干描述的政府行为（未监管价格、未提供充足住房基础设施、未有效反腐败）及选项对应的政府职能，均为必需关键信息；②题干信息完整性：题干完整包含上述关键信息，无缺失；③作答独立性：无需依赖外部材料，仅靠题干信息+政府核心职能知识即可作答，满足独立性要求。
+[违反原则] 
 [结果] 无需修改
 ```
 
-[问题] Which indicator is defined as the product of the calibration coefficient of compacted materials and the second harmonic component of the effective acoustic wave spectrum?\n\nOptions:\nA) CCV\nB) CV\nC) SCV\nD) AICV\nE) RMV
-```
-[分析] 问题中的缩写“CCV”“CV”“SCV”“AICV”“RMV”均未扩写解释，属于缩写未解释，违反了关键术语的清晰度与具体性原则。
-[违反原则] 关键术语的清晰度与具体性
-[结果] 需要改进
-```
 
-[问题] 在《在库尔的野天鹅》中，诗人通过天鹅的意象象征永恒，这一象征与以下哪项诗歌元素共同强化了时间流逝的主题？\n\nOptions:\nA) 使用反复的节奏模式\nB) 对比手法\nC) 拟人化的语言\nD) 自然景象的描述
+[问题] 
+A coastal engineer in Newcastle needs to schedule a tidal crossing for a bridge construction. On July 16, 1829, high water was observed at 4:24 PM. Given the moon's age is 16 days and its meridian passage time that day was 1:04 PM, with a required correction of 1 hour 7 minutes to be subtracted from the passage time, what is the expected high water time at the next full moon?\n\nA) 3:20 PM\nB) 2:13 PM\nC) 3:17 PM\nD) 4:27 PM
 ```
-[分析] 问题中的专业术语如“象征”“诗歌元素”等表述清晰；聚焦于诗歌意象与主题的关联分析，属于文学学科核心知识，具有教育价值；提供了诗歌名称、意象象征意义等必要背景信息，信息完整；表述单一明确，无歧义；语言精炼，无冗余信息，在简洁与完整间保持平衡。
+[分析] 1. 教育价值有效性（排查场景一）：①核心知识关联度：题目考查海岸工程中潮汐时间计算，涉及月球年龄、子午圈 passage 时间、修正值等潮汐预测相关原理与应用，属于该领域核心知识，未脱离核心；②细节必要性：题干中月球年龄（16天）、子午圈 passage 时间（1:04 PM）、1小时7分钟修正值及已知高潮时间（7月16日4:24 PM），均为潮汐时间计算必需参数，非“非必要冷门细节”；③核心能力可答性：假设答题者掌握潮汐计算核心方法（如利用月球参数与修正值推导高潮时间的原理），结合题干数据可独立计算，无需依赖冷门信息。2. 题干信息完备性（排查场景二）：①关键信息识别：作答需已知高潮时间、月球相关参数、修正值及“下一个满月”的时间关联，其中满月周期（约29.5天）属天文核心常识；②题干信息完整性：题干已完整提供计算所需具体参数（已知高潮时间、月球年龄、passage时间、修正值），满月周期为核心知识无需额外补充；③作答独立性：仅靠题干信息+潮汐计算核心知识+满月周期常识，无需依赖外部特定材料即可作答，具备独立性。
 [违反原则]
 [结果] 无需修改
 ```
 
-[问题] 在制造反光镜时，哪种设计通常需要额外的金属层来调节热膨胀系数以匹配面板的热膨胀系数？\n\nOptions:\nA) 全复合材料设计\nB) 混杂复合材料设计\nC) 金属反光镜设计\nD) 玻璃反光镜设计
-```
-[分析] 问题表述中“制造反光镜”未明确精度要求，根据提示，添加“高精度”可使表述更严谨，原表述存在一定模糊性，违反了无歧义性原则。
-[违反原则] 无歧义性
-[结果] 需要改进
-```
 
-[问题] 对于一位表现为文氏现象的患者，若同时存在左束支传导阻滞，其房室传导阻滞的阻滞部位最可能位于何处？\n\nOptions:\nA) 房室结\nB) 希氏束以下\nC) 右束支\nD) 窦房结
-```
-[分析] 问题中的专业术语如“文氏现象”“左束支传导阻滞”“房室传导阻滞”等均为医学领域明确的概念，表述清晰具体；聚焦于房室传导阻滞阻滞部位的判断，属于学科核心知识，具有教育价值；提供了患者的症状等必要信息，信息完整；表述单一明确，无歧义；语言精炼，无冗余信息，在简洁与完整间保持了平衡。
-[结果] 无需修改
-```
-
-[问题] 据相变诱发塑性钢的稳定性研究，提高贝氏体等温温度会对残余奥氏体的稳定性产生什么影响？
-```
-[分析] 问题中未明确“稳定性”的具体衡量标准，如未说明是从残余奥氏体的含量、形态还是其他方面来衡量稳定性，属于概念笼统，违反了关键术语的清晰度与具体性原则。
-[违反原则] 关键术语的清晰度与具体性
-[结果] 需要改进
-```
-
-[问题] 哪位教授因其对美国内战历史研究的贡献而被授予了组织美国历史家协会的Roy Rosenzweig杰出服务奖？\n\nOptions:\nA) Stephen Gross\nB) Michele Mitchell\nC) Linda Gordon\nD) Martha Hodes\nE) Yanni Kotsonis
-```
-[分析] 问题考查特定奖项的获得者，虽涉及具体奖项细节，但该奖项在学科领域具有重要性，有助于学生理解学科意义及科学家的重要工作，符合相关性与教育价值原则；问题中关键术语明确，信息完整，表述无歧义且简洁。
-[违反原则]
-[结果] 无需修改
-```
-
-[问题] 在非洲某些国家经历经济结构调整导致社会不安全感增加的情况下，五旬节运动的哪一特征最有助于其快速传播？\n\nOptions:\nA) 提供经济援助\nB) 传统宗教的衰退\nC) 提供解决社会经济问题的道德框架\nD) 政府的政治支持\nE) 西方传教士的直接推广
-```
-[分析] 问题中的专业术语表述清晰，聚焦于五旬节运动在特定社会背景下快速传播的特征分析，属于学科核心知识，具有教育价值；提供了经济结构调整导致社会不安全感增加的背景信息，信息完整；表述单一明确，无歧义；语言精炼，无冗余信息，在简洁与完整间保持平衡。
-[违反原则]
-[结果] 无需修改
-```
-
-[问题] Who authored the chapter on class number in Volume III of "History of the Theory of Numbers"?\n\nOptions:\nA) L. E. Dickson\nB) G. H. Creese\nC) L. J. Mordell\nD) E. T. Bell\nE) R. D. Carmichael
-```
-[分析] 问题考查的是特定书籍某一卷中某一章节的作者，属于考查书籍中的琐碎细节，而非学科核心知识，违反了相关性与教育价值原则。
-[违反原则] 相关性与教育价值
-[结果] 需要改进
-```
 
 """
 
@@ -1537,15 +1467,15 @@ class JudgeTwoQuestionSimilarity(BatchCallOpenAPI):
             raise PostprocessError(f'{err}')
 
 
-class MultichoiceKnowledgeQuestionQualityEval(BatchCallOpenAPI):
-    _TEMPLATE = MC_KNOWLEDGE_QUESTION_QUALITY_VALUE_TEMPLATE
+class Doc2QueryV3LooseQuestionEval(BatchCallOpenAPI):
+    _TEMPLATE = DOC2QUERY_V3_Q_EVAL_LOOSE_TEMPLATE
 
     def __init__(self):
         pass
 
     @classmethod
     def task_desc(cls):
-        return "知识型选择题质量评价"
+        return "问题质量评价（宽松）"
 
     def postprocess(self, response: str):
         s = response
@@ -1560,7 +1490,7 @@ class MultichoiceKnowledgeQuestionQualityEval(BatchCallOpenAPI):
 
     def prompt_fn(self, example):
         prompt = self._TEMPLATE + \
-            f'\n\n\n现在需要你对下面的学科问题分析是否需要修改。\n\n[问题]\n{example}\n'
+            f'\n\n\n现在需要你对下面的问题分析是否符合要求并判断是否需要修改。\n\n[问题]\n{example}\n'
         return prompt
 
 
@@ -1597,7 +1527,7 @@ class Doc2QueryV3QAVerify(BatchCallOpenAPI):
         return prompt
 
 
-class ReasonQuestionQualityEval(MultichoiceKnowledgeQuestionQualityEval):
+class ReasonQuestionQualityEval(Doc2QueryV3LooseQuestionEval):
     _TEMPLATE = REASON_QUESTION_QUALITY_VALUE_TEMPLATE
 
     def __init__(self):
@@ -3974,13 +3904,13 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 
         return final_scores
 
-    async def quick_question_eval(
+    async def loose_question_eval(
         self,
         batch_data_sources,
         batch_solution_str,
         batch_ground_truth,
     ):
-        task = MultichoiceKnowledgeQuestionQualityEval()
+        task = Doc2QueryV3LooseQuestionEval()
         indices = []
         questions = []
 
@@ -4253,8 +4183,8 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
     def coarse_process(self):
         return [
             # 快速判断问题质量
-            Process(name="QuickQuality",
-                    function=self.quick_question_eval, filter_only=False, non_skip=False),
+            Process(name="LooseQEval",
+                    function=self.loose_question_eval, filter_only=False, non_skip=False),
             # Process(name="StrictQuality",
             #         function=self.strict_question_eval, filter_only=False, non_skip=False),
             Process(name="QuickDifficultyFilter",
@@ -5408,10 +5338,8 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     "quick_solve_run_args": {
         "w/o_content": {
             "model": {
-                "model": "qwen2.5_32b_instruct",
-                "base_url": "http://10.130.1.4:21003/v1",
-                # "model": "Qwen2.5-32B-Instruct",
-                # "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "Qwen2.5-32B-Instruct",
+                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.6,
@@ -5444,10 +5372,8 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": {
-                "model": "qwen2.5_32b_instruct",
-                "base_url": "http://10.130.1.4:21003/v1",
-                # "model": "Qwen2.5-32B-Instruct",
-                # "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "Qwen2.5-32B-Instruct",
+                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.9,
@@ -5462,10 +5388,10 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
         },
         "w_content": {
             "model": {
-                "model": "qwen2.5_32b_instruct",
-                "base_url": "http://10.130.1.4:21003/v1",
-                # "model": "Qwen2.5-32B-Instruct",
-                # "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+                # "model": "qwen2.5_32b_instruct",
+                # "base_url": "http://10.130.1.4:21003/v1",
+                "model": "Qwen2.5-32B-Instruct",
+                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.9,
@@ -5495,10 +5421,8 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     },
     "verify_agent": {
         "model": {
-            "model": "qwen2.5_32b_instruct",
-            "base_url": "http://10.130.1.4:21003/v1",
-            # "model": "Qwen2.5-32B-Instruct",
-            # "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
                 "temperature": 0.6,
@@ -5510,10 +5434,8 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     },
     "strict_qa_verify_agent": {
         "model": {
-            "model": "qwen2.5_32b_instruct",
-            "base_url": "http://10.130.1.4:21003/v1",
-            # "model": "Qwen2.5-32B-Instruct",
-            # "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
                 "temperature": 0.9,
@@ -5526,19 +5448,17 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     },
     "loose_qa_verify_agent": {
         "model": {
-            "model": "qwen2.5_32b_instruct",
-            "base_url": "http://10.130.1.4:21003/v1",
-            # "model": "Qwen2.5-32B-Instruct",
-            # "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
             "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
             "request_kwargs": {
-                "temperature": 0.9,
+                "temperature": 0.7,
                 "timeout": 360,
                 "max_tokens": 4096,
             },
         },
-        "repeat": 1,
-        "max_concurrent_requests": 512
+        "repeat": 2,
+        "max_concurrent_requests": 128
     },
     "save_rollouts": {
         "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
@@ -5917,6 +5837,27 @@ LEARNABLE_COT_DEFAULT_PARAMS = {
         "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
     }
 }
+
+
+class Doc2QueryV3ProComputeScore(Doc2QueryV3ComputeScore):
+    MULTICHOICE_LETTER = ('A', 'B', 'C', 'D', 'E', 'F', 'G',
+                          'H', 'I', 'J', 'K', 'L')
+
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-2.0,
+                 thought_log_prob=0.01
+                 ):
+
+        super().__init__(
+            parse_solution_fn=parse_solution_fn, split=split,
+            args=args,
+            min_reward=min_reward,
+            thought_log_prob=thought_log_prob
+        )
+        self.task_name = "DOC2QUERY_V3_PRO"
 
 
 # LongCoT Response
