@@ -3544,11 +3544,22 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 
     @classmethod
     def quick_solve_w_content(cls, result, gt):
+        """
+        目标: 快速过滤掉劣质问题（验证答案正确性）
+        因此希望暂时降低问题难度，降低强模型做错的概率 => 模型做对，问题保留
+        反之，问题难度已经降低很多，仍然做错，可能说明题目出题时给到的不正确
+        - 策略一：告诉模型答案只有一个
+        """
         ans_format = cls.get_answer_format(gt)
         question, options = result[:2]
+
+        lang_code = gt["lang_code"]
+        if lang_code == "zh":
+            ans_format = '回答下面的单项项选择题（选出下面选项中正确的一项）。'
+        else:
+            ans_format = 'Answer the following single-choice question (select the correct option from the choices below).'
+
         prompt = f'{ans_format}\n\n{cls._format_question(question=question, options=options, answer=None)}'
-        print(prompt)
-        raise NotImplementedError
         return f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n{prompt}'
 
     async def quick_mock_respondent(
