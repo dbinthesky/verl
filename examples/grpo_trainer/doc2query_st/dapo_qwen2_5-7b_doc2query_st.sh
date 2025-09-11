@@ -60,7 +60,7 @@ setup_path() {
     
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_st_7b_2025-09-02_roll16_32_dapo_kl_coef_0_wo_entropy_t1.0_step_60"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_st_7b_2025-09-02_roll16_32_dapo_kl_coef_0_wo_entropy_t1.0_step_120"
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_self_taught/doc2query_self_taught_enhance_rl_inputs_train.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_self_taught/doc2query_self_taught_enhance_rl_inputs_test.parquet"
     

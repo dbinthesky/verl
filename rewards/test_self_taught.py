@@ -49,7 +49,7 @@ def load_doc2query_st_dataset(num=100, xml_cot=False):
         row = row.to_dict()
         batch_data_sources.append(row["data_source"])
         batch_solution_str.append(
-            f'{row["reward_model"]["references"][0]}\n\n\n<question>\nQuestion: {row["reward_model"]["question"]}\n\nAnswer: {row["reward_model"]["answer"]}\n</question>'
+            f'<think>\nkakakkaka\n</think>\n\n\n<question>\nQuestion: {row["reward_model"]["question"]}\n\nAnswer: {row["reward_model"]["answer"]}\n</question>'
         )
         batch_ground_truth.append(row["reward_model"])
         if len(batch_ground_truth) == num:

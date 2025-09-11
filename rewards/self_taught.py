@@ -1880,31 +1880,6 @@ class Doc2QuerySelfTaughtComputeScore(object):
             parse_result_failure_score=self.min_reward
         )
 
-    def thought_similarity_reward(
-        self,
-        batch_data_sources,
-        batch_solution_str,
-        batch_ground_truth,
-    ):
-        rewards = []
-        for solution_str, gt in zip(batch_solution_str, batch_ground_truth):
-            solution_str = self.parse_thought_and_conclusion_fn(solution_str)
-
-            if solution_str is None:
-                rewards.append(0.0)
-            try:
-                thought = solution_str[0]
-                lang_code = gt["lang_code"]
-                gt_tokens = [" ".join(tokenize(ref.lower(), lang_code))
-                             for ref in gt["references"]]
-                sl_tokens = " ".join(tokenize(thought.lower(), lang_code))
-                bleu = sacrebleu.sentence_bleu(sl_tokens, gt_tokens).score
-                similarity = bleu / 100
-            except Exception as err:
-                similarity = 0.0
-            rewards.append(similarity)
-        return rewards
-
     async def question_similarity_reward(
         self,
         batch_data_sources,
@@ -1988,9 +1963,9 @@ class Doc2QuerySelfTaughtComputeScore(object):
 
         result_index2queue_index = {}
         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-            result = self.parse_solution_fn(sol)
-            if result is not None and gt.get("question", None):
-                batch_inputs.append({"doc": result[1]})
+            result = self.parse_thought_and_conclusion_fn(sol)
+            if result is not None:
+                batch_inputs.append({"doc": result[0]})
                 indices.append(i)
                 result_index2queue_index[len(indices)-1] = i
             else:
@@ -2024,7 +1999,7 @@ class Doc2QuerySelfTaughtComputeScore(object):
 
             if result is not None:
                 tokens = tokenize(result[0], lang_code)
-                if len(tokens) < 1000:
+                if len(tokens) < 1500:
                     continue
                 questions.append({"doc": result[0]})
                 indices.append(i)
@@ -2042,7 +2017,7 @@ class Doc2QuerySelfTaughtComputeScore(object):
             if _quality is None:
                 pass
             else:
-                scores[index] = 1.0 * (_quality-1.0) / 4
+                scores[index] = 1.5 * (_quality-1.0) / 4
         return scores
 
     async def hint_leakage_reward(
@@ -2061,7 +2036,7 @@ class Doc2QuerySelfTaughtComputeScore(object):
 
             if result is not None:
                 tokens = tokenize(result[0], lang_code)
-                if len(tokens) < 800:
+                if len(tokens) < 1500:
                     continue
                 questions.append({"doc": result[0]})
                 indices.append(i)
@@ -2079,7 +2054,7 @@ class Doc2QuerySelfTaughtComputeScore(object):
             if _quality is None:
                 pass
             else:
-                scores[index] = 1.0 * (_quality-1.0) / 4
+                scores[index] = 1.5 * (_quality-1.0) / 4
         return scores
 
     def get_processes(self):
