@@ -450,11 +450,13 @@ NUMERICAL_SOLUTION_VERIFY_TEMPLATE = """
 #### **输出：**
 """
 
-MULTICHOICE_EXTRACT_ANSWER_FEWSHOTS = """### 按列表格式把用户回答的答案选项提取出来。如果用户没有给出最终答案，则返回空列表[]
+MULTICHOICE_EXTRACT_ANSWER_FEWSHOTS = """### 按列表格式把用户回答的答案选项提取出来。如果回答表述无明确答案，则返回空列表[]
+
+**注意**：在"**输出**"后你需要直接输出可以被Python代码解析的列表，不要增加其他自然语言表述。
 
 
 下面是一些例子
-#### **输入：**
+#### **输入**
 ##### 题目
 ```
 If the depositor has died, but the holder of the deposit certificate does not inform the savings institution about the inheritance process, nor presents a judgment from the local court where the deposit is held, and directly goes to the savings institution to withdraw or transfer the deceased depositor's funds, the savings institution will consider it ( ). Any disputes over the inheritance of the deposit that arise later ( ). ( ) (From the \"Savings Management Regulations,\" Order No. 107 of the State Council of the People's Republic of China)\nA. Normal withdrawal or transfer\nB. Abnormal withdrawal or transfer\nC. The savings institution is not responsible\nD. The savings institution is partially responsible
@@ -463,11 +465,11 @@ If the depositor has died, but the holder of the deposit certificate does not in
 ##### 用户回答（答案部分）
 According to Article 40 of the \"Savings Management Regulations\" (Order No. 107 of the State Council of the People's Republic of China), if the depositor has died, but the holder of the deposit certificate does not inform the savings institution about the inheritance process nor presents a judgment from the local court where the deposit is held, and directly attempts to withdraw or transfer the funds, the savings institution will consider it a normal withdrawal or transfer. Furthermore, any disputes over the inheritance of the deposit that arise later are not the responsibility of the savings institution.\n\nThus, for the first blank, the correct option is A: \"Normal withdrawal or transfer.\" For the second blank, the correct option is C: \"The savings institution is not responsible.\"\n\n\\boxed{\\text{A, C}}
 
-#### **输出：**
+#### **输出**
 ['A', 'C']
 
 
-#### **输入：**
+#### **输入**
 ##### 题目
 ```
 Pyogenic meningitis | Tuberculous meningitis | Viral meningitis\nA. Significant increase in IgM\nB. Significant increase in IgA\nC. Significant decrease in IgA\nD. Significant decrease in IgM\nE. No significant changes in IgA and IgM
@@ -476,11 +478,11 @@ Pyogenic meningitis | Tuberculous meningitis | Viral meningitis\nA. Significant 
 ##### 用户回答（答案部分）
 Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOptions C (Significant decrease in IgA) and D (Significant decrease in IgM) are not characteristic of these infections, as decreases in immunoglobulins are more associated with immunodeficiencies rather than meningeal inflammation.\n\n\\boxed{\\text{A for Pyogenic, B for Tuberculous, E for Viral}}
 
-#### **输出：**
+#### **输出**
 ['A', 'B', 'E']
 
 
-#### **输入：**
+#### **输入**
 ##### 题目
 ```
 不定项选择题)(每题 2.00 分) 根据《中华人民共和国水污染防治法》在饮用水水源保护区内设置排污口的,()\nA. 由县级以上地方人民政府环境保护主管部门责令限期拆除,处二万元以上十万元以下的罚款\nB. 由县级以上地方人民政府责f限期拆除,处十万元以上五十万元以下的罚款\nC. 逾期不拆除的,强制拆除,所需费用由违法者承担,处十万元以上五十万元以下的罚款情节严重的,可以责令停产整治\nD. 逾期不拆除的,强制拆除,所需费用由违法者承担,处五十万元以上一百万元以下的罚款,并可以责令停产整治
@@ -489,12 +491,12 @@ Thus, it corresponds to option E (No significant changes in IgA and IgM).\n\nOpt
 ##### 用户回答（答案部分）
 根据《中华人民共和国水污染防治法》的相关规定，我们可以逐步分析题目中的选项：\n\n1. **设置排污口的处罚**：\n   - 在饮用水水源保护区内设置排污口的行为，由**县级以上地方人民政府**（而非环境保护主管部门）责令限期拆除，并处以**十万元以上五十万元以下的罚款**。因此，**选项A错误**，**选项B正确**。\n\n2. **逾期不拆除的处罚**：\n   - 如果逾期不拆除排污口，将**强制拆除**，所需费用由违法者承担，并处以**五十万元以上一百万元以下的罚款**，同时**可以责令停产整治**。因此，**选项C错误**（罚款金额不正确），**选项D正确**。\n\n综上，正确答案是 **B** 和 **D**。\n\n最终答案为：\\boxed{B, D}
 
-#### **输出：**
+#### **输出**
 ['B', 'D']
 
 
 
-#### **输入：**
+#### **输入**
 ##### 题目
 ```
 The reaction product of the o-toluidine method for measuring blood glucose is ( ).
@@ -508,12 +510,26 @@ Therefore, the correct answer is:
 
 If you have a question related to the provided document, please feel free to ask!
 
-#### **输出：**
+#### **输出**
 ['F']
+
+
+
+#### **输入**
+##### 题目
+```
+According to Epidemiological assessment of cassava mosaic disease in Central African Republic reveals the importance of mixed viral infection and poor health of plant cuttings，in  Fig. 1. B，what was the approximate percentage reduction in yield for cassava plants grown from cuttings of CMD severity class 5 compared to class 1?\n\nOptions:\nA) 20-30%\nB) 50-60%\nC) 60-70%\nD) 80-90%\nE) No significant reduction
+```
+
+##### 用户回答（答案部分）
+Since I don't have direct access to the content of the figure (Fig. 1. B) in the paper "Epidemiological assessment of cassava mosaic disease in Central African Republic reveals the importance of mixed viral infection and poor health of plant cuttings", I cannot accurately determine the approximate percentage reduction in yield for cassava plants grown from cuttings of CMD severity class 5 compared to class 1. To answer this question correctly, you need to refer to the specific data or trend shown in Fig. 1. B of the mentioned paper, which typically presents yield comparison data across different CMD severity classes.
+
+#### **输出**
+[]
 """
 
 MULTICHOICE_EXTRACT_ANSWER_TEMPLATE = """现在对下面的用户回答提按格式提取出答案（参考上面的例子，输出后面直接输出提取出的列表）
-#### **输入：**
+#### **输入**
 ##### 题目
 ```
 {question}
@@ -522,7 +538,7 @@ MULTICHOICE_EXTRACT_ANSWER_TEMPLATE = """现在对下面的用户回答提按格
 ##### 用户回答（答案部分）
 {conclusion}
 
-#### **输出：**
+#### **输出**
 """
 
 
@@ -1485,8 +1501,7 @@ class MultiChoiceQuestionExtractAnswerOptions(SALTSelfTaughtSimpleSolutionVerify
 
     def prompt_fn(self, example):
         solver_response, extra, _ = example
-        question = extra[0
-                         ]
+        question = extra[0]
         prompt = MULTICHOICE_EXTRACT_ANSWER_FEWSHOTS + "\n\n\n" + MULTICHOICE_EXTRACT_ANSWER_TEMPLATE.format(
             question=question,
             conclusion=solver_response,
@@ -1508,9 +1523,9 @@ class MultiChoiceQuestionExtractAnswerOptions(SALTSelfTaughtSimpleSolutionVerify
                         response = response.split("\n\n")[1].strip()
                         ans_list = eval(response.strip())
                     else:
-                        if "**输出：**" in response:
+                        if "**输出**" in response:
                             response = response[response.index(
-                                "**输出：**")+len("**输出：**"):].strip()
+                                "**输出**")+len("**输出**"):].strip()
                         ans_list = eval(response.strip())
 
             if not isinstance(ans_list, list):
@@ -3495,11 +3510,36 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             resp_postprocess_fn=self.response_postprocess
         )
 
+    # @classmethod
+    # def get_answer_format(cls, gt):
+    #     lang_code = gt["lang_code"]
+    #     if lang_code == "zh":
+    #         return '回答下面的不定项选择题。'
+    #     else:
+    #         return 'Answer the following multiple-choice questions with one or more correct answers.'
+
     @classmethod
-    def quick_solve(cls, result, gt):
+    def quick_solve_wo_content(cls, result, gt):
+        """
+        目标: 快速过滤掉劣质问题（高精准、低召回）
+        因此希望暂时提高问题难度，降低弱模型做对的概率 => 模型没做对，问题保留
+        反之，问题难度已经提升很多，仍然可以被轻易做对，说明问题过于简单
+        - 策略一：增加干扰选项
+        - 策略二：让模型不思考直接回答
+        """
         ans_format = cls.get_answer_format(gt)
         question, options = result[:2]
-        prompt = f'{ans_format}\n\n{cls._format_question(question=question, options=options, answer=None)}'
+
+        # 增加干扰选项
+        options_w_distractor = cls.add_distractor_options(options, gt)
+
+        lang_code = gt["lang_code"]
+        if lang_code == "zh":
+            ans_format = '直接回答下面的不定项选择题，不要给出思考过程。'
+        else:
+            ans_format = 'Answer the following multiple-select questions directly without providing the thinking process.'
+
+        prompt = f'{ans_format}\n\n{cls._format_question(question=question, options=options_w_distractor, answer=None)}'
         return prompt
 
     @classmethod
@@ -3507,6 +3547,8 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         ans_format = cls.get_answer_format(gt)
         question, options = result[:2]
         prompt = f'{ans_format}\n\n{cls._format_question(question=question, options=options, answer=None)}'
+        print(prompt)
+        raise NotImplementedError
         return f'[LECTURE]\n{gt["document"]}\n[/LECTURE]\n\n{prompt}'
 
     async def quick_mock_respondent(
@@ -3529,46 +3571,6 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                 self.batch_verify_results, verify_task=verify_task),
             resp_postprocess_fn=self.response_postprocess
         )
-
-    async def llm_judge_difficulty(
-        self,
-        batch_data_sources,
-        batch_solution_str,
-        batch_ground_truth,
-    ):
-        task = QuestionDifficultyEval()
-        indices = []
-        questions = []
-        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
-            result = self.parse_solution_fn(sol)
-            if result is not None:
-                questions.append((self._format_question(
-                    result[0], result[1], None
-                ), sol))
-                indices.append(i)
-            else:
-                continue
-
-        difficulties = await task.do_job(
-            agent=self.loose_qa_verify_agent,
-            batch_inputs=questions,
-            max_concurrent_requests=self.args["loose_qa_verify_agent"]["max_concurrent_requests"],
-        )
-
-        # 1.5 is the average score
-        scores = [1.5] * len(batch_solution_str)
-        for difficulty, index in zip(difficulties, indices):
-            if difficulty is not None and len(difficulty) > 1:
-                difficulty = difficulty[1:]  # 第一项是计算复杂度,不考虑
-            if difficulty is None or len(difficulty) == 0:
-                pass
-            else:
-                _score = np.mean(difficulty)
-                scores[index] = _score
-
-        weight = 0.25
-        # 五分制
-        return [_ * weight / 5.0 for _ in scores]
 
     async def loose_question_eval(
         self,
@@ -3695,10 +3697,12 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 
                 done_right = False
                 for sol_ans in ans_lists[run_key][i]:
-                    if len(sol_ans) and sol_ans[0] == answer:
+                    # 回答正确
+                    if len(sol_ans) and (tuple(sol_ans) == tuple([answer])):
                         done_right = True
                         break
 
+                # 问题过于简单
                 if done_right:
                     penalties.append(-0.1)
                 else:
@@ -3855,8 +3859,6 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                     function=partial(self.quick_difficulty_filter, run_key="w/o_content"), filter_only=True, non_skip=False),
             Process(name="QuickCorrectnessFilter",
                     function=partial(self.quick_correctness_filter, run_key="w_content"), filter_only=False, non_skip=False),
-            # Process(name="QuickDifficulty",
-            #         function=self.llm_judge_difficulty, filter_only=False, non_skip=False)
         ]
 
     def finegrain_process(self):
@@ -5012,9 +5014,9 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 },
             },
             "repeat": 1,
-            "fn": "quick_solve",
+            "fn": "quick_solve_wo_content",
             "desc": '快速做题(w/o文档)',
-            "max_concurrent_requests": 512
+            "max_concurrent_requests": 256
         },
         "w_content": {
             "model": {
