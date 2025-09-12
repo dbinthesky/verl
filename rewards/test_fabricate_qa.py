@@ -13,6 +13,7 @@ from tqdm import tqdm
 from collections import defaultdict
 from fabricate_qa import (
     Agent,
+    RewardModelAgent,
     JudgeTwoQuestionSimilarity,
     Doc2QueryV3LooseQuestionEval,
     QuestionRefineHack,
@@ -332,6 +333,16 @@ class TestRLVR(unittest.TestCase):
 
 
 class TestDoc2QueryV3(unittest.TestCase):
+    def test_reward_model_agent(self):
+        task = Doc2QueryV3ComputeScore(
+            doc2query_v3_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
+        agent = task.rm_agent
+        batch_solution_str = [
+            "<think>今天天气怎么样？</think><question>xxx</question>"]
+        batch_ground_truth = [{"ground_truth": "今天天气怎么样？"}]
+        for i, score in enumerate(agent.compute_rm_score([None]*len(batch_solution_str), batch_solution_str, batch_ground_truth)):
+            print(score)
+
     def test_doc2query_v3_format_verify(self):
         scorer = Doc2QueryV3FormatVerify(
             doc2query_v2_parse_solution_fn, -1.25, -0.75)
@@ -378,6 +389,26 @@ class TestDoc2QueryV3(unittest.TestCase):
         print(task.compute_score(
             [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth,
         ))
+        # print(task.suspect_question_can_not_be_determined(
+        #     [['D'], ['D'], ['D'], ['D'], ['D'], ['D'], ['D'], ['D']],
+        #     [
+        #         [
+        #             "B"
+        #         ],
+        #         [
+        #             "D"
+        #         ],
+        #         [
+        #             "G"
+        #         ],
+        #         [
+        #             "F"
+        #         ],
+        #         [
+        #             "G"
+        #         ]
+        #     ], ["F", "G"], "D"
+        # ))
 
 
 class TestDoc2QueryV3FanOut(unittest.TestCase):

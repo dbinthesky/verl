@@ -452,7 +452,9 @@ NUMERICAL_SOLUTION_VERIFY_TEMPLATE = """
 
 MULTICHOICE_EXTRACT_ANSWER_FEWSHOTS = """### 按列表格式把用户回答的答案选项提取出来。如果回答表述无明确答案，则返回空列表[]
 
-**注意**：在"**输出**"后你需要直接输出可以被Python代码解析的列表，不要增加其他自然语言表述。
+**注意**：
+1. 在"**输出**"后你需要直接输出可以被Python代码解析的列表，不要增加其他自然语言表述。
+2. 回答包含多选的情况下，选项排列按照字母顺序，如ABCDEF....
 
 
 下面是一些例子
@@ -1083,6 +1085,75 @@ class Agent:
                 return messages, None
 
 
+class RewardModelAgent(object):
+    def __init__(self, urls, postprocess_solution_fn, parse_result_failure_score):
+        self.RM_URLS = urls
+        self.postprocess_solution_fn = postprocess_solution_fn
+        self.parse_result_failure_score = parse_result_failure_score
+
+    def compute_rm_score(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            judge_prompt_key="ground_truth"
+    ):
+        input_datas = []
+        rewards = {}
+
+        for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            try:
+                solution_str = self.postprocess_solution_fn(solution_str)
+            except Exception as err:
+                rewards[i] = self.parse_result_failure_score
+                continue
+
+            if solution_str is None:
+                rewards[i] = self.parse_result_failure_score
+                continue
+            if ground_truth is None:
+                rewards[i] = self.parse_result_failure_score
+                continue
+
+            input_data = {
+                "prompt": ground_truth[judge_prompt_key], "response": solution_str, "id": i
+            }
+            input_datas.append(input_data)
+
+        if len(input_datas) > 0:
+            url = random.choice(self.RM_URLS)
+            for batch in tqdm_nonasync(batchify(input_datas, n=128), desc=f'[RM][{url}] batchify inference (batch=128)'):
+                output_datas = self.post_with_retry(batch, url)
+                for _ in output_datas['reward']:
+                    _id = int(_["id"])
+                    rewards[_id] = _["rm_score"]
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            if i in rewards:
+                final_results.append(rewards[i])
+            else:
+                final_results.append(0.)
+        return final_results
+
+    def post_with_retry(self, data, url, max_retries=3, retry_delay=1, suffix="/reward"):
+        retries = 0
+        while retries < max_retries:
+            try:
+                response = requests.post(
+                    f'{url}{suffix}', json=data, timeout=600)
+                response.raise_for_status()  # 如果状态码不是 200，抛出异常
+                return response.json()
+            except requests.RequestException as e:
+                print(
+                    f"请求(数据总量={len(data)})失败，错误信息: {e}，重试第 {retries + 1} 次...")
+                retries += 1
+                if retries < max_retries:
+                    time.sleep(retry_delay)
+        print("达到最大重试次数，请求失败。")
+        return None
+
+
 class LabAgent(Agent):
     def __init__(
         self,
@@ -1558,7 +1629,7 @@ def parse_question_solution_fn(solution_str: str):
 
     try:
         conclusion = re.findall(r'<question>(.*)</question>',
-                                solution_str, re.DOTALL)[0]
+                                solution_str, re.DOTALL)[0].strip()
     except Exception as err:
         return None
     if ("<question>" in conclusion) or ("</question>" in conclusion):
@@ -3333,9 +3404,9 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                  split="train",
                  args=None,
                  min_reward=-2.0,
-                 thought_log_prob=0.01
+                 thought_log_prob=0.01,
                  ):
-
+        # FIXME
         super().__init__(
             parse_solution_fn=parse_solution_fn, split=split,
             args=args,
@@ -3350,12 +3421,20 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         self.init_adv_agent()
         self.init_verify_agent()
         self.init_quick_solver_agent()
+        self.init_rm_agent()
+
+    def init_rm_agent(self):
+        if "reward_model_args" in self.args:
+            self.rm_agent = RewardModelAgent(
+                urls=self.args["reward_model_args"]["urls"],
+                postprocess_solution_fn=lambda x: self.parse_thought_and_conclusion_fn(x)[
+                    0],
+                parse_result_failure_score=self.min_reward
+            )
 
     def init_verify_agent(self):
         self.verify_agent = Agent(
             **self.args["verify_agent"]["model"])
-        self.strict_qa_verify_agent = Agent(
-            **self.args["strict_qa_verify_agent"]["model"])
         self.loose_qa_verify_agent = Agent(
             **self.args["loose_qa_verify_agent"]["model"])
 
@@ -3373,29 +3452,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
     def response_postprocess(self, s):
         if "</think>" in s:
             s = s[s.index("</think>")+len("</think>"):]
-
-        if "**Final Answer**" in s:
-            s = s[s.index("**Final Answer**")+len("**Final Answer**"):]
-        if "**Final Solution**" in s:
-            s = s[s.index("**Final Solution**")+len("**Final Solution**"):]
-
-        try:
-            s = s.strip()
-            conclusion = s
-            if "最终答案是" in conclusion:
-                conclusion = conclusion[conclusion.rindex(
-                    "最终答案是")+len("最终答案是"):].strip()
-                return conclusion
-            else:
-                conclusion = conclusion[conclusion.rindex(
-                    "final answer is")+len("final answer is"):].strip()
-                return conclusion
-        except Exception as err:
-            try:
-                s = s.strip()
-                return s
-            except Exception as err:
-                raise PostprocessError(f'parse conclusion failure')
+        return s
 
     @classmethod
     def respond_wo_context(cls, result, gt):
@@ -3722,6 +3779,52 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                 penalties.append(0.0)
         return penalties
 
+    def suspect_question_can_not_be_determined(self, w_ctx, wo_ctx, distractors, answer):
+        """
+        判断问题是否大概率无法回答
+          - w ctx多数投票的结果包含干扰项，判定0分；
+          - wo ctx多数投票的结果包含干扰项，同时正确答案不在wo ctx预测中
+        """
+        w_ctx_votes = defaultdict(int)
+        for _ in w_ctx:
+            w_ctx_votes[tuple(_)] += 1
+        w_ctx_max_vote_count = max(list(w_ctx_votes.values()))
+
+        for _, count in w_ctx_votes.items():
+            if count == w_ctx_max_vote_count:
+                # 多数投票的结果包含干扰项
+                if any(distractor in _ for distractor in distractors):
+                    return True
+
+        wo_ctx_votes = defaultdict(int)
+        for _ in wo_ctx:
+            wo_ctx_votes[tuple(_)] += 1
+        wo_ctx_max_vote_count = max(list(wo_ctx_votes.values()))
+
+        for _, count in wo_ctx_votes.items():
+            if count == wo_ctx_max_vote_count:
+                if any(distractor in _ for distractor in distractors) and (tuple(list(answer)) not in wo_ctx_votes):
+                    return True
+        return False
+
+    def suspect_question_has_multiple_answers(self, w_ctx, wo_ctx):
+        """
+        判断问题是否大概率是多项选择题
+          - w/o ctx多数投票是多选，且结果在w ctx也出现，则判定为是
+        """
+        w_ctx_uniq = set([tuple(_) for _ in w_ctx])
+        wo_ctx_votes = defaultdict(int)
+        for _ in wo_ctx:
+            wo_ctx_votes[tuple(_)] += 1
+        max_vote_count = max(list(wo_ctx_votes.values()))
+
+        for _, count in wo_ctx_votes.items():
+            if count == max_vote_count:
+                # 多数投票的结果是多选
+                if len(_) > 1 and _ in w_ctx_uniq:
+                    return True
+        return False
+
     async def get_difficulty_reward(
         self,
         batch_data_sources,
@@ -3729,13 +3832,23 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         batch_ground_truth,
         skip_run=None
     ):
+        """
+        计算问题难度
+
+        策略版本修改
+        1. 前一版策略
+         part1 - w、w/o任意回答中返回列表（模型认为有多个正确答案）判定0分 => adv/weak每一项分数都是0分
+         part2 - w、w/o任意回答中任意包含distractor选项，判定0分
+        2. 当前策略
+         part1 - w/o ctx多数投票是多选，且结果在w ctx也出现，则判定为0分
+         part2 - w ctx多数投票的结果包含干扰项，判定0分；
+        """
         ans_lists = await self.simulate_respondent(
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth,
             skip_run=skip_run
         )
-
         full_rewards = []
         pass_rates = []
         run_args = self.run_args()
@@ -3764,24 +3877,29 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                 _adv, _weak = ans_lists[adv_name][i], ans_lists[weak_name][i]
 
                 ill_form_question = False
-                for _ans in _adv+_weak:
-                    if not isinstance(_ans, list):
-                        ill_form_question = True
-                        break
+                # Part1 检测可疑问题有多个答案
+                if self.suspect_question_has_multiple_answers(
+                    w_ctx=_adv,
+                    wo_ctx=_weak
+                ):
+                    ill_form_question = True
 
-                if not ill_form_question:
-                    if any([(not isinstance(_ans, list)) or len(_ans) > 1 for _ans in _adv+_weak]):
-                        ill_form_question = True
+                # Part2 检测可疑问题无法回答
+                if self.suspect_question_can_not_be_determined(
+                    w_ctx=_adv,
+                    wo_ctx=_weak, distractors=distractors, answer=answer
+                ):
+                    ill_form_question = True
 
-                    if any([any(x in distractors for x in _ans) for _ans in _adv+_weak]):
-                        ill_form_question = True
+                if any([(not isinstance(_ans, list)) for _ans in _adv+_weak]):
+                    ill_form_question = True
 
                 adv, weak = [], []
                 for a in _adv:
                     if ill_form_question:
                         adv.append(0.0)
                     else:
-                        if len(a) > 0 and a[0] == answer:
+                        if len(a) > 0 and tuple(a) == tuple([answer]):
                             adv.append(1.0)
                         else:
                             adv.append(0.0)
@@ -3790,7 +3908,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                     if ill_form_question:
                         weak.append(0.0)
                     else:
-                        if len(w) > 0 and w[0] == answer:
+                        if len(w) > 0 and tuple(w) == tuple([answer]):
                             weak.append(1.0)
                         else:
                             weak.append(0.0)
@@ -3820,23 +3938,21 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                     full_rewards.append(base_score)
                     continue
 
-                # # 但是也不能好的太多
-                # if np.mean(adv) - np.mean(weak) > metric_args["advantage_threshold_limit"]:
-                #     full_rewards.append(base_score)
-                #     continue
-
                 # 增加限制：带参考回答Majority Vote必须和答案一致
                 majority_votes = defaultdict(int)
                 for adv_attempt in _adv:
-                    if isinstance(adv_attempt, list) and len(adv_attempt) == 1:
-                        majority_votes[adv_attempt[0]] += 1
+                    if isinstance(adv_attempt, list):
+                        majority_votes[tuple(adv_attempt)] += 1
 
                 success = True
                 for k, v in majority_votes.items():
-                    if k != answer:
-                        if v >= majority_votes[answer]:
+                    if k != tuple([answer]):
+                        if v >= majority_votes.get(tuple([answer]), 0):
                             success = False
+                            print(
+                                f"[WARN] w ctx ({_adv}) majority vote not match answer ({answer})")
                             break
+
                 if not success:
                     full_rewards.append(base_score)
                     continue
@@ -3848,12 +3964,9 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                 # 两部分构成
                 in_context_difficulty = metric_args["weakness_weight"] * \
                     calc_difficulty(weak, run_args[weak_name]["repeat"])
-                # output_context_difficulty = metric_args["anchor_weight"] * (calc_difficulty(
-                #     anchor, run_args[anchor_name]["repeat"]) - calc_difficulty(adv, run_args[adv_name]["repeat"]))
 
                 base_score = [
                     in_context_difficulty,
-                    # output_context_difficulty
                 ]
                 full_rewards.append(base_score)
             else:
@@ -5031,19 +5144,27 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
         },
         "w_content": {
             "model": {
-                "model": "DeepSeek-V3-0324",
-                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
-                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                # "model": "DeepSeek-V3-0324",
+                # "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+                # "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                # "request_kwargs": {
+                #     "temperature": 0.6,
+                #     "timeout": 360,
+                #     "max_tokens": 4096,
+                # },
+                "model": "qwen3_30b_a3b",
+                "base_url": "http://10.130.0.21:21003/v1",
+                "api_keys": "EMPTY",
                 "request_kwargs": {
                     "temperature": 0.6,
-                    "timeout": 360,
-                    "max_tokens": 4096,
-                },
+                    "timeout": 1200,
+                    "max_tokens": 16384,
+                }
             },
             "repeat": 1,
             "fn": "quick_solve_w_content",
             "desc": '快速做题(w文档)',
-            "max_concurrent_requests": 512
+            "max_concurrent_requests": 256
         }
     },
     "difficulty_run_args": {
@@ -5060,36 +5181,42 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             },
             "repeat": 10,
             "fn": "respond_wo_context",
-            "desc": 'w/o ctx',
-            "max_concurrent_requests": 512
+            "desc": 'w/o文档',
+            "max_concurrent_requests": 256
         },
         "w_content": {
             "model": {
-                # "model": "qwen2.5_32b_instruct",
-                # "base_url": "http://10.130.1.4:21003/v1",
-                "model": "Qwen2.5-32B-Instruct",
-                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
-                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                # "model": "DeepSeek-V3-0324",
+                # "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+                # "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                # "request_kwargs": {
+                #     "temperature": 0.6,
+                #     "timeout": 360,
+                #     "max_tokens": 4096,
+                # },
+                "model": "qwen3_30b_a3b",
+                "base_url": "http://10.130.0.21:21003/v1",
+                "api_keys": "EMPTY",
                 "request_kwargs": {
-                    "temperature": 0.9,
-                    "timeout": 360,
-                    "max_tokens": 4096,
+                    "temperature": 0.8,
+                    "timeout": 1200,
+                    "max_tokens": 16384,
                 }
             },
-            "repeat": 8,
+            "repeat": 5,
             "fn": "respond_w_context",
-            "desc": 'w ctx',
-            "max_concurrent_requests": 512
+            "desc": 'w文档',
+            "max_concurrent_requests": 256
         },
     },
     "difficulty_metric_args": {
         "advantage": 'w_content',
         "weakness": 'w/o_content',
-        "advantage_oversimplified_threshold": 8/8,
+        "advantage_oversimplified_threshold": 5/5,
         "weakness_oversimplified_threshold": 8/10,
-        "advantage_overcomplex_threshold": 1/8,
+        "advantage_overcomplex_threshold": 2/5,
         "weakness_overcomplex_threshold": 1/10,
-        "advantage_threshold": 1/4,
+        "advantage_threshold": 1/10,
         "advantage_weight": 0.0,
         "weakness_weight": 2.0,
         "anchor_weight": 1.5,
@@ -5109,20 +5236,6 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
         },
         "max_concurrent_requests": 512
     },
-    "strict_qa_verify_agent": {
-        "model": {
-            "model": "Qwen2.5-32B-Instruct",
-            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
-            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
-            "request_kwargs": {
-                "temperature": 0.9,
-                "timeout": 360,
-                "max_tokens": 2048,
-            }
-        },
-        "max_concurrent_requests": 512,
-        "repeat": 1
-    },
     "loose_qa_verify_agent": {
         "model": {
             "model": "Qwen2.5-32B-Instruct",
@@ -5135,7 +5248,19 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             },
         },
         "repeat": 2,
-        "max_concurrent_requests": 128
+        "max_concurrent_requests": 256
+    },
+    "reward_model_args": {
+        "urls": [
+            "http://10.130.1.220:31131",
+            "http://10.130.1.220:26099",
+            "http://10.130.1.220:29314",
+            'http://10.130.1.220:33996',
+            "http://10.130.1.220:29905",
+            "http://10.130.1.220:27818",
+            "http://10.130.1.220:29557",
+            "http://10.130.1.220:31827"
+        ]
     },
     "save_rollouts": {
         "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
