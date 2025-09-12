@@ -1207,7 +1207,7 @@ class RewardModelAgent(object):
         self.postprocess_solution_fn = postprocess_solution_fn
         self.parse_result_failure_score = parse_result_failure_score
 
-    def compute_rm_score(
+    async def compute_rm_score(
             self,
             batch_data_sources,
             batch_solution_str,
@@ -3689,14 +3689,6 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
             resp_postprocess_fn=self.response_postprocess
         )
 
-    # @classmethod
-    # def get_answer_format(cls, gt):
-    #     lang_code = gt["lang_code"]
-    #     if lang_code == "zh":
-    #         return '回答下面的不定项选择题。'
-    #     else:
-    #         return 'Answer the following multiple-choice questions with one or more correct answers.'
-
     @classmethod
     def quick_solve_wo_content(cls, result, gt):
         """
@@ -4105,6 +4097,8 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                     function=partial(self.quick_difficulty_filter, run_key="w/o_content"), filter_only=True, non_skip=False),
             Process(name="QuickCorrectnessFilter",
                     function=partial(self.quick_correctness_filter, run_key="w_content"), filter_only=False, non_skip=False),
+            Process(name="Reward", function=self.rm_agent.compute_rm_score,
+                    filter_only=False, non_skip=True)
         ]
 
     def finegrain_process(self):

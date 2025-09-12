@@ -339,8 +339,13 @@ class TestDoc2QueryV3(unittest.TestCase):
         agent = task.rm_agent
         batch_solution_str, batch_ground_truth = load_dataset(
             task_name="doc2query_v3", num=6)
-        for i, score in enumerate(agent.compute_rm_score([None]*len(batch_solution_str), batch_solution_str, batch_ground_truth)):
-            print(score)
+
+        async def main():
+            results = await agent.compute_rm_score(
+                [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth)
+            for i, score in enumerate(results):
+                print(score)
+        aio.run(main())
 
     def test_doc2query_v3_format_verify(self):
         scorer = Doc2QueryV3FormatVerify(
