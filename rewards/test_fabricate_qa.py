@@ -337,9 +337,8 @@ class TestDoc2QueryV3(unittest.TestCase):
         task = Doc2QueryV3ComputeScore(
             doc2query_v3_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
         agent = task.rm_agent
-        batch_solution_str = [
-            "<think>今天天气怎么样？</think><question>xxx</question>"]
-        batch_ground_truth = [{"ground_truth": "今天天气怎么样？"}]
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="doc2query_v3", num=6)
         for i, score in enumerate(agent.compute_rm_score([None]*len(batch_solution_str), batch_solution_str, batch_ground_truth)):
             print(score)
 
