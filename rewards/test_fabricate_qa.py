@@ -45,7 +45,6 @@ from fabricate_qa import (
     RLVRVerify,
     RLVRComputeScore,
     fabricate_aio_compute_score_valid,
-    xml_cot_fabricate_aio_compute_score_valid,
     doc2query_v3_fanout_parse_solution_fn,
     rlvr_shortcot_compute_score_valid,
     KG2QueryV1ComputeScore,
@@ -53,7 +52,10 @@ from fabricate_qa import (
     LearnableCoTComputeScore,
     rlvr_shortcot_parse_solution_fn,
     _multiturn_doc2query_v3_compute_score_train,
-    multiturn_parse_question_solution_fn
+    multiturn_parse_question_solution_fn,
+    DOC2QUERY_V4_DEFAULT_PARAMS,
+    Doc2QueryV4ComputeScore,
+    doc2query_v4_parse_solution_fn
 )
 
 UNITTEST_AGENT = Agent(**{
@@ -129,6 +131,8 @@ def load_dataset(task_name, num=100, xml_cot=False):
         filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/kg2query_v1_oc_v1_7_hard_problem_0623.parquet"
     elif task_name == "doc2query_v3":
         filename = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_kcle_rl_8k_train.parquet"
+    elif task_name == "doc2query_v4":
+        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/pretrain_general_doc_8k_rl_inputs_train/index0.parquet"
     elif task_name == "learnable_cot":
         filename = "/cpfs01/shared/llm_ddd/tongjian/rl/learnable_cot/dapo_math_17k_train.parquet"
     elif task_name == "rlvr":
@@ -147,47 +151,31 @@ def load_dataset(task_name, num=100, xml_cot=False):
         batch_data_sources.append(row["data_source"])
         if row["data_source"] == "doc2query_v2":
             sample = random.choice(_doc2query_v2_qas)
-            if not xml_cot:
-                batch_solution_str.append(
-                    f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: {sample[0]}\n\nAnswer: {sample[1]}\n\nAnswer Type: {sample[2]}\n</question>'
-                )
-            else:
-                batch_solution_str.append(
-                    f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\n\nxxxxx\n<question>\nQuestion: {sample[0]}\n\nAnswer: {sample[1]}\n\nAnswer Type: {sample[2]}\n</question>\nsdfdsfs\n</conclusion>\n```'
-                )
+            batch_solution_str.append(
+                f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: {sample[0]}\n\nAnswer: {sample[1]}\n\nAnswer Type: {sample[2]}\n</question>'
+            )
         elif row["data_source"] == "salt" or row["data_source"] == "kg2query_v1":
             sample = random.choice(_salt_qas)
-            if not xml_cot:
-                batch_solution_str.append(
-                    f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nAnswer: [SYNTHETIC] {sample[1]}\n</question>'
-                )
-            else:
-                batch_solution_str.append(
-                    f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\nxxxxx\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nAnswer: [SYNTHETIC] {sample[1]}\n</question>\n\nxxxxx\n</conclusion>\n```'
-                )
+            batch_solution_str.append(
+                f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nAnswer: [SYNTHETIC] {sample[1]}\n</question>'
+            )
         elif row["data_source"] == "doc2query_v3":
             if row["reward_model"]["lang_code"] != "zh":
                 continue
             sample = random.choice(_doc2query_v3_qas)
             o = "\n".join([f'{c}) {_o}' for c, _o in zip(
                 ["A", "B", "C", "D"], sample[1])])
-            if not xml_cot:
-                batch_solution_str.append(
-                    f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nOptions: {o}\n\nAnswer: {sample[2]}\n</question>'
-                )
-            else:
-                batch_solution_str.append(
-                    f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n\n<conclusion>\nxxxxx\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nOptions: {o}\n\nAnswer: {sample[2]}\n</question>\nyyyyyy\n</conclusion>\n```'
-                )
+            batch_solution_str.append(
+                f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nOptions: {o}\n\nAnswer: {sample[2]}\n</question>'
+            )
+        elif row["data_source"] == "doc2query_v4":
+            batch_solution_str.append(
+                f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion:\n帮我写一篇文章\n\nReference:\n{row["reward_model"]["document"]}\n</question>'
+            )
         elif row["data_source"] == "rlvr" or row["data_source"] in ("aime_2024", "aime_2025"):
-            if not xml_cot:
-                batch_solution_str.append(
-                    f'<think>\nUNITTEST_ONLY\n</think>\n\n答案：{row["reward_model"]["ground_truth"]}'
-                )
-            else:
-                batch_solution_str.append(
-                    f'```xml\n<think>\nUNITTEST_ONLY\n</think>\n<conclusion>\n\n答案：{row["reward_model"]["ground_truth"]}\n</conclusion>\n```'
-                )
+            batch_solution_str.append(
+                f'<think>\nUNITTEST_ONLY\n</think>\n\n答案：{row["reward_model"]["ground_truth"]}'
+            )
         elif row["data_source"] == "learnable_cot":
             batch_solution_str.append(
                 f'<think>\nUNITTEST_ONLY\n</think>\n\n{row["reward_model"]["answer"]}'
@@ -294,14 +282,9 @@ class TestSALT(unittest.TestCase):
 
 class TestFabricateAIO(unittest.TestCase):
     def test_compute_score(self):
-        # batch_data_sources, batch_solution_str, batch_ground_truth = load_dataset(
-        #     task_name=None, num=100,)
-        # fabricate_aio_compute_score_valid(
-        #     batch_data_sources, batch_solution_str, batch_ground_truth
-        # )
         batch_data_sources, batch_solution_str, batch_ground_truth = load_dataset(
-            task_name=None, num=100, xml_cot=True)
-        xml_cot_fabricate_aio_compute_score_valid(
+            task_name=None, num=100,)
+        fabricate_aio_compute_score_valid(
             batch_data_sources, batch_solution_str, batch_ground_truth
         )
 
@@ -692,6 +675,22 @@ class TestDoc2QueryV3Multiturn(unittest.TestCase):
         print(task.compute_score(
             [None]*len(batch_solution_str), batch_solution_str, batch_ground_truth,
         ))
+
+
+class TestDoc2QueryV4(unittest.TestCase):
+    def test_evaluate_reference(self):
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="doc2query_v4", num=4)
+        task = Doc2QueryV4ComputeScore(
+            doc2query_v4_parse_solution_fn, split="valid", args=DOC2QUERY_V4_DEFAULT_PARAMS)
+
+        async def main():
+            results = await task.eval_reference(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth,
+            )
+            print(results)
+        aio.run(main())
 
 
 if __name__ == '__main__':

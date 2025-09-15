@@ -2604,6 +2604,9 @@ class Doc2QueryV2ComputeScore(object):
             task_names.append(name)
 
         respond_questions = await aio.gather(*tasks)
+        # FIXME: TTTT
+        for _ in respond_questions:
+            print(_)
 
         # 验证答案正确性
         verify_queue = []
@@ -4843,6 +4846,91 @@ class LearnableCoTComputeScore(SALTComputeScore):
 # LEARNABLE COT
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# DOC2QUERY V4
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+def doc2query_v4_parse_solution_fn(solution_str: str, remove_option_letter=True, extract_question_fn=parse_question_solution_fn):
+    parsed = extract_question_fn(solution_str)
+    if parsed is None:
+        return None
+
+    thought, conclusion = parsed
+
+    try:
+        results = re.findall(
+            r'Question:(.*)\n\nReference:(.*)', conclusion, re.DOTALL)[0]
+        question, reference = results
+        question, reference = question.strip(), reference.strip()
+
+        return question, reference
+    except Exception as err:
+        return None
+
+
+class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
+
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-2.0,
+                 thought_log_prob=0.01,
+                 ):
+        super().__init__(
+            parse_solution_fn=parse_solution_fn, split=split,
+            args=args,
+            min_reward=min_reward,
+            thought_log_prob=thought_log_prob
+        )
+        self.task_name = "DOC2QUERY_V4"
+
+    def init_agent(self):
+        self.agents = {}
+        self.init_verify_agent()
+
+    def init_verify_agent(self):
+        self.verify_agent = Agent(
+            **self.args["verify_agent"]["model"])
+        self.ref_eval_agent = Agent(
+            **self.args["eval_reference_run_args"]["llm_as_judge"]["model"]
+        )
+
+    @classmethod
+    def rule_based_penalties(cls):
+        return []
+
+    async def eval_reference(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             skip_run=None):
+        correctness = await self._simulate_respondent(
+            batch_data_sources=batch_data_sources,
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=batch_ground_truth,
+            skip_run=skip_run,
+            run_args={
+                "eval_reference_run_args": self.args["eval_reference_run_args"]["llm_as_judge"]},
+            batch_verify_fn=partial(
+                self.batch_verify_results, verify_task=None, return_input_response=True),
+            resp_postprocess_fn=None
+        )
+        raise NotImplementedError
+        # self_taught_rationale = [None] * len(batch_solution_str)
+        # correctness = correctness["self_taught"]
+        # for i in range(len(batch_solution_str)):
+        #     if i in correctness.keys():
+        #         for rationale in correctness[i]:
+        #             if rationale[0] == 1.0:
+        #                 self_taught_rationale[i] = rationale[1]
+        # return self_taught_rationale
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# DOC2QUERY V4
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # HParams
@@ -5390,6 +5478,157 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     }
 }
 
+
+DOC2QUERY_V4_DEFAULT_PARAMS = {
+    "eval_reference_run_args": {
+        "llm_as_judge": {
+            "model": {
+                "model": "Qwen2.5-32B-Instruct",
+                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.6,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                },
+            },
+            "repeat": 1,
+            "fn": "quick_solve_wo_content",
+            "desc": '参考答案验证',
+            "max_concurrent_requests": 512
+        },
+        #     "w_content": {
+        #         "model": {
+        #             # "model": "DeepSeek-V3-0324",
+        #             # "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+        #             # "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+        #             # "request_kwargs": {
+        #             #     "temperature": 0.6,
+        #             #     "timeout": 360,
+        #             #     "max_tokens": 4096,
+        #             # },
+        #             "model": "qwen3_30b_a3b",
+        #             "base_url": "http://10.130.0.21:21003/v1",
+        #             "api_keys": "EMPTY",
+        #             "request_kwargs": {
+        #                 "temperature": 0.6,
+        #                 "timeout": 1200,
+        #                 "max_tokens": 16384,
+        #             }
+        #         },
+        #         "repeat": 1,
+        #         "fn": "quick_solve_w_content",
+        #         "desc": '快速做题(w文档)',
+        #         "max_concurrent_requests": 256
+        #     }
+    },
+    # "difficulty_run_args": {
+    #     "w/o_content": {
+    #         "model": {
+    #             "model": "Qwen2.5-32B-Instruct",
+    #             "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+    #             "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+    #             "request_kwargs": {
+    #                 "temperature": 0.9,
+    #                 "timeout": 360,
+    #                 "max_tokens": 4096,
+    #             }
+    #         },
+    #         "repeat": 10,
+    #         "fn": "respond_wo_context",
+    #         "desc": 'w/o文档',
+    #         "max_concurrent_requests": 512
+    #     },
+    #     "w_content": {
+    #         "model": {
+    #             # "model": "DeepSeek-V3-0324",
+    #             # "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+    #             # "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+    #             # "request_kwargs": {
+    #             #     "temperature": 0.6,
+    #             #     "timeout": 360,
+    #             #     "max_tokens": 4096,
+    #             # },
+    #             "model": "qwen3_30b_a3b",
+    #             "base_url": "http://10.130.0.21:21003/v1",
+    #             "api_keys": "EMPTY",
+    #             "request_kwargs": {
+    #                 "temperature": 0.8,
+    #                 "timeout": 1200,
+    #                 "max_tokens": 16384,
+    #             }
+    #         },
+    #         "repeat": 5,
+    #         "fn": "respond_w_context",
+    #         "desc": 'w文档',
+    #         "max_concurrent_requests": 512
+    #     },
+    # },
+    # "difficulty_metric_args": {
+    #     "advantage": 'w_content',
+    #     "weakness": 'w/o_content',
+    #     "advantage_oversimplified_threshold": 5/5,
+    #     "weakness_oversimplified_threshold": 8/10,
+    #     "advantage_overcomplex_threshold": 2/5,
+    #     "weakness_overcomplex_threshold": 1/10,
+    #     "advantage_threshold": 1/10,
+    #     "advantage_weight": 0.0,
+    #     "weakness_weight": 2.0,
+    #     "anchor_weight": 1.5,
+    #     "confidence_bonus_threshold": 2/8,
+    #     "confidence_bonus_weight": 0.
+    # },
+    "verify_agent": {
+        "model": {
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 1024,
+            },
+        },
+        "max_concurrent_requests": 512
+    },
+    # "loose_qa_verify_agent": {
+    #     "model": {
+    #         "model": "Qwen2.5-32B-Instruct",
+    #         "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+    #         "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+    #         "request_kwargs": {
+    #             "temperature": 0.7,
+    #             "timeout": 360,
+    #             "max_tokens": 4096,
+    #         },
+    #     },
+    #     "repeat": 2,
+    #     "max_concurrent_requests": 512
+    # },
+    # "reward_model_args": {
+    #     "urls": [
+    #         # "http://10.130.1.220:31131",
+    #         # "http://10.130.1.220:26099",
+    #         # "http://10.130.1.220:29314",
+    #         # 'http://10.130.1.220:33996',
+    #         # "http://10.130.1.220:29905",
+    #         # "http://10.130.1.220:27818",
+    #         # "http://10.130.1.220:29557",
+    #         # "http://10.130.1.220:31827",
+    #         "http://10.130.0.244:31498",
+    #         "http://10.130.0.244:28177",
+    #         "http://10.130.0.244:29607",
+    #         "http://10.130.0.244:34734",
+    #         "http://10.130.0.244:26892",
+    #         "http://10.130.0.244:32782",
+    #         "http://10.130.0.244:26290"
+    #     ]
+    # },
+    "save_rollouts": {
+        "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
+    }
+}
+
 RLVR_DEFAULT_PARAMS = {
     "verify_agent": {
         "model": {
@@ -5764,27 +6003,6 @@ LEARNABLE_COT_DEFAULT_PARAMS = {
 }
 
 
-class Doc2QueryV3ProComputeScore(Doc2QueryV3ComputeScore):
-    MULTICHOICE_LETTER = ('A', 'B', 'C', 'D', 'E', 'F', 'G',
-                          'H', 'I', 'J', 'K', 'L')
-
-    def __init__(self,
-                 parse_solution_fn,
-                 split="train",
-                 args=None,
-                 min_reward=-2.0,
-                 thought_log_prob=0.01
-                 ):
-
-        super().__init__(
-            parse_solution_fn=parse_solution_fn, split=split,
-            args=args,
-            min_reward=min_reward,
-            thought_log_prob=thought_log_prob
-        )
-        self.task_name = "DOC2QUERY_V3_PRO"
-
-
 # LongCoT Response
 _default_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScore(
     doc2query_v2_parse_solution_fn, split="train", args=DOC2QUERY_V2_DEFAULT_PARAMS)
@@ -5816,128 +6034,6 @@ _default_rlvr_longcot_compute_score_valid = RLVRComputeScore(
     rlvr_longcot_parse_solution_fn, split="valid", args=RLVR_DEFAULT_PARAMS)
 rlvr_longcot_compute_score_train = _default_rlvr_longcot_compute_score_train.compute_score
 rlvr_longcot_compute_score_valid = _default_rlvr_longcot_compute_score_valid.compute_score
-# XMLCoT Response
-
-
-def xml_cot_parse_solution_fn(solution_str):
-    def get_thought(solution_str: str):
-        thought = re.findall(r'```xml.*```', solution_str, re.DOTALL)[0]
-        return thought
-
-    def get_conclusion(solution_str: str):
-        thought = get_thought(solution_str)
-        return solution_str[solution_str.index(thought)+len(thought):].strip()
-
-    try:
-        thought = get_thought(solution_str)
-    except Exception as err:
-        return None
-    try:
-        conclusion = get_conclusion(solution_str).strip()
-    except Exception as err:
-        return None
-    if any(_ in conclusion for _ in ("```xml", "<think>", "</think>", "<conclusion>", "</conclusion>")):
-        return None
-    try:
-        thought_content = re.findall(r'```xml(.*)```', thought, re.DOTALL)[0]
-    except Exception as err:
-        return None
-    thought_content = f'<doc> {thought_content} </doc>'
-    try:
-        root = ET.fromstring(thought_content)
-    except Exception as err:
-        return None
-    if not all(tag in [child.tag for child in root]
-               for tag in ("think", "conclusion")):
-        return None
-    return root
-
-
-def xml_cot_parse_question_solution_fn(solution_str: str):
-    solution_str = postprocess_solution(solution_str)
-    if not solution_str.startswith("<think>"):
-        solution_str = f'<think>\n{solution_str}'
-
-    try:
-        root = xml_cot_parse_solution_fn(solution_str)
-    except Exception as err:
-        return None
-
-    if root is not None:
-        try:
-            think = [
-                child for child in root if child.tag == "think"][0]
-            think = think.text.strip()
-
-            try:
-                conclusion = re.findall(r'<question>(.*)</question>',
-                                        solution_str, re.DOTALL)[0]
-            except Exception as err:
-                return None
-
-        except Exception as err:
-            return None
-    else:
-        return None
-    if ("<question>" in conclusion) or ("</question>" in conclusion):
-        return None
-
-    return think, conclusion
-
-
-def xml_cot_rlvr_parse_solution_fn(solution_str: str, remove_option_letter=True):
-    solution_str = postprocess_solution(solution_str)
-    if not solution_str.startswith("<think>"):
-        solution_str = f'<think>\n{solution_str}'
-
-    try:
-        root = xml_cot_parse_solution_fn(solution_str)
-    except Exception as err:
-        return None
-
-    if root is not None:
-        try:
-            conclusion = [
-                child for child in root if child.tag == "conclusion"][0]
-
-            conclusion = conclusion.text.strip()
-        except Exception as err:
-            return None
-    else:
-        return None
-    return conclusion
-
-
-_xml_cot_doc2query_v2_compute_score_train = Doc2QueryV2ComputeScore(
-    partial(doc2query_v2_parse_solution_fn, extract_question_fn=xml_cot_parse_question_solution_fn), split="train", args=DOC2QUERY_V2_DEFAULT_PARAMS)
-_xml_cot_doc2query_v2_compute_score_valid = Doc2QueryV2ComputeScore(
-    partial(doc2query_v2_parse_solution_fn, extract_question_fn=xml_cot_parse_question_solution_fn), split="valid", args=DOC2QUERY_V2_DEFAULT_PARAMS)
-xml_cot_doc2query_v2_compute_score_train = _xml_cot_doc2query_v2_compute_score_train.compute_score
-xml_cot_doc2query_v2_compute_score_valid = _xml_cot_doc2query_v2_compute_score_valid.compute_score
-
-
-_xml_cot_doc2query_v3_compute_score_train = Doc2QueryV3ComputeScore(
-    partial(doc2query_v3_parse_solution_fn, extract_question_fn=xml_cot_parse_question_solution_fn), split="train", args=DOC2QUERY_V3_DEFAULT_PARAMS)
-_xml_cot_doc2query_v3_compute_score_valid = Doc2QueryV3ComputeScore(
-    partial(doc2query_v3_parse_solution_fn, extract_question_fn=xml_cot_parse_question_solution_fn), split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
-xml_cot_doc2query_v3_compute_score_train = _xml_cot_doc2query_v3_compute_score_train.compute_score
-xml_cot_doc2query_v3_compute_score_valid = _xml_cot_doc2query_v3_compute_score_valid.compute_score
-
-
-_xml_cot_salt_compute_score_train = SALTComputeScore(
-    partial(salt_parse_solution_fn, extract_question_fn=xml_cot_parse_question_solution_fn), split="train", args=SALT_DEFAULT_PARAMS)
-_xml_cot_salt_compute_score_valid = SALTComputeScore(
-    partial(salt_parse_solution_fn, extract_question_fn=xml_cot_parse_question_solution_fn), split="valid", args=SALT_DEFAULT_PARAMS)
-xml_cot_salt_compute_score_train = _xml_cot_salt_compute_score_train.compute_score
-xml_cot_salt_compute_score_valid = _xml_cot_salt_compute_score_valid.compute_score
-
-
-_xml_cot_rlvr_compute_score_train = RLVRComputeScore(
-    xml_cot_rlvr_parse_solution_fn, split="train", args=RLVR_DEFAULT_PARAMS)
-_xml_cot_rlvr_compute_score_valid = RLVRComputeScore(
-    xml_cot_rlvr_parse_solution_fn, split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
-xml_cot_rlvr_compute_score_train = _xml_cot_rlvr_compute_score_train.compute_score
-xml_cot_rlvr_compute_score_valid = _xml_cot_rlvr_compute_score_valid.compute_score
 
 
 _fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
@@ -5958,22 +6054,6 @@ _fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
 })
 fabricate_aio_compute_score_train = _fabricate_aio_compute_score_train.compute_score
 fabricate_aio_compute_score_valid = _fabricate_aio_compute_score_valid.compute_score
-
-
-_xml_cot_fabricate_aio_compute_score_train = FabricateAIOComputeScore(processors={
-    "doc2query_v2": _xml_cot_doc2query_v2_compute_score_train,
-    "salt": _xml_cot_salt_compute_score_train,
-    "doc2query_v3": _xml_cot_doc2query_v3_compute_score_train,
-    "rlvr": _xml_cot_rlvr_compute_score_train,
-})
-_xml_cot_fabricate_aio_compute_score_valid = FabricateAIOComputeScore(processors={
-    "doc2query_v2": _xml_cot_doc2query_v2_compute_score_valid,
-    "salt": _xml_cot_salt_compute_score_valid,
-    "doc2query_v3": _xml_cot_doc2query_v3_compute_score_valid,
-    "rlvr": _xml_cot_rlvr_compute_score_valid,
-})
-xml_cot_fabricate_aio_compute_score_train = _xml_cot_fabricate_aio_compute_score_train.compute_score
-xml_cot_fabricate_aio_compute_score_valid = _xml_cot_fabricate_aio_compute_score_valid.compute_score
 
 
 _kg2query_v1_compute_score_train = KG2QueryV1ComputeScore(
