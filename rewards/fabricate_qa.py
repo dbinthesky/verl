@@ -5256,7 +5256,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             "repeat": 1,
             "fn": "quick_solve_wo_content",
             "desc": '快速做题(w/o文档)',
-            "max_concurrent_requests": 256
+            "max_concurrent_requests": 512
         },
         "w_content": {
             "model": {
@@ -5298,7 +5298,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             "repeat": 10,
             "fn": "respond_wo_context",
             "desc": 'w/o文档',
-            "max_concurrent_requests": 256
+            "max_concurrent_requests": 512
         },
         "w_content": {
             "model": {
@@ -5322,7 +5322,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             "repeat": 5,
             "fn": "respond_w_context",
             "desc": 'w文档',
-            "max_concurrent_requests": 256
+            "max_concurrent_requests": 512
         },
     },
     "difficulty_metric_args": {
@@ -5364,18 +5364,25 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             },
         },
         "repeat": 2,
-        "max_concurrent_requests": 256
+        "max_concurrent_requests": 512
     },
     "reward_model_args": {
         "urls": [
-            "http://10.130.1.220:31131",
-            "http://10.130.1.220:26099",
-            "http://10.130.1.220:29314",
-            'http://10.130.1.220:33996',
-            "http://10.130.1.220:29905",
-            "http://10.130.1.220:27818",
-            "http://10.130.1.220:29557",
-            "http://10.130.1.220:31827"
+            # "http://10.130.1.220:31131",
+            # "http://10.130.1.220:26099",
+            # "http://10.130.1.220:29314",
+            # 'http://10.130.1.220:33996',
+            # "http://10.130.1.220:29905",
+            # "http://10.130.1.220:27818",
+            # "http://10.130.1.220:29557",
+            # "http://10.130.1.220:31827",
+            "http://10.130.0.244:31498",
+            "http://10.130.0.244:28177",
+            "http://10.130.0.244:29607",
+            "http://10.130.0.244:34734",
+            "http://10.130.0.244:26892",
+            "http://10.130.0.244:32782",
+            "http://10.130.0.244:26290"
         ]
     },
     "save_rollouts": {
