@@ -683,11 +683,15 @@ class TestDoc2QueryV4(unittest.TestCase):
             doc2query_v4_parse_solution_fn, split="valid", args=DOC2QUERY_V4_DEFAULT_PARAMS)
 
         async def main():
-            results = await task.eval_reference(
+            await task.polar_agent.compute_rm_score(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
             )
-            print(results)
+            # results = await task.eval_reference(
+            #     [None] *
+            #     len(batch_solution_str), batch_solution_str, batch_ground_truth,
+            # )
+            # print(results)
         aio.run(main())
 
 

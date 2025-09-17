@@ -17,6 +17,7 @@ import tqdm.asyncio
 import asyncio as aio
 from functools import partial
 from asyncio import Semaphore
+from xtuner.utils import RewardModelClient
 from abc import abstractmethod, abstractclassmethod, ABCMeta
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, Callable, List
@@ -1234,6 +1235,68 @@ class Agent:
                 return messages, None
 
 
+class PolarAgent(object):
+    def __init__(self, url, postprocess_solution_fn, parse_result_failure_score):
+        self.url = url
+        self.postprocess_solution_fn = postprocess_solution_fn
+        self.parse_result_failure_score = parse_result_failure_score
+        self.client = RewardModelClient("/cpfs01/shared/llm_ddd/tongjian/ckpts/POLAR-7B",
+                                        server_type="sglang",
+                                        server_address=self.url)
+
+    # async def compute_rm_score(
+    #         self,
+    #         batch_data_sources,
+    #         batch_solution_str,
+    #         batch_ground_truth,
+    #         judge_prompt_key="ground_truth"
+    # ):
+    #     input_datas = []
+    #     rewards = {}
+
+    #     for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+    #         try:
+    #             solution_str = self.postprocess_solution_fn(solution_str)
+    #         except Exception as err:
+    #             rewards[i] = self.parse_result_failure_score
+    #             continue
+
+    #         if solution_str is None:
+    #             rewards[i] = self.parse_result_failure_score
+    #             continue
+    #         if ground_truth is None:
+    #             rewards[i] = self.parse_result_failure_score
+    #             continue
+
+    #         print(solution_str)
+        #     if ground_truth["lang_code"] == "zh":
+        #         _prompt = DOC2QUERY_V3_RM_TEMPLATE_ZH.format(
+        #             context=ground_truth["document"])
+        #     else:
+        #         _prompt = DOC2QUERY_V3_RM_TEMPLATE_EN.format(
+        #             context=ground_truth["document"])
+        #     input_data = {
+        #         "prompt": _prompt, "response": solution_str, "id": i
+        #     }
+        #     input_datas.append(input_data)
+
+        # if len(input_datas) > 0:
+        #     url = random.choice(self.RM_URLS)
+        #     for batch in tqdm_nonasync(batchify(input_datas, n=128), desc=f'[RM][{url}] batchify inference (batch=128)'):
+        #         output_datas = self.post_with_retry(batch, url)
+        #         for _ in output_datas['reward']:
+        #             _id = int(_["id"])
+        #             rewards[_id] = _["rm_score"]
+
+        # final_results = []
+        # for i in range(len(batch_solution_str)):
+        #     if i in rewards:
+        #         final_results.append(rewards[i])
+        #     else:
+        #         final_results.append(0.)
+        # return final_results
+
+
 class RewardModelAgent(object):
     def __init__(self, urls, postprocess_solution_fn, parse_result_failure_score):
         self.RM_URLS = urls
@@ -1467,7 +1530,7 @@ class PairwiseJudge(BatchCallOpenAPI):
 
     @classmethod
     def task_desc(cls):
-        return "对比评价"
+        return "对比基线"
 
     def prompt_fn(self, example):
         outputs = []
@@ -4994,6 +5057,10 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
     def init_agent(self):
         self.agents = {}
         self.init_verify_agent()
+        self.polar_agent = PolarAgent(
+            url=self.args["eval_reference_run_args"],
+            postprocess_solution_fn=self.parse_solution_fn,
+            parse_result_failure_score=self.min_reward)
 
     def init_verify_agent(self):
         self.verify_agent = Agent(
@@ -5006,87 +5073,6 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
     @classmethod
     def rule_based_penalties(cls):
         return []
-
-    # async def _simulate_respondent(
-    #         self,
-    #         batch_data_sources,
-    #         batch_solution_str,
-    #         batch_ground_truth,
-    #         run_args,
-    #         batch_verify_fn,
-    #         resp_postprocess_fn,
-    #         skip_run=None,
-    #         prompt_contexts=None
-    # ):
-    #     prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
-    #     extra = {}
-
-    #     if prompt_contexts is None:
-    #         prompt_contexts = [None] * len(batch_ground_truth)
-
-    #     for i, (solution_str, gt, extra_ctx) in enumerate(zip(batch_solution_str, batch_ground_truth, prompt_contexts)):
-    #         result = self.parse_solution_fn(solution_str)
-    #         if result is not None:
-    #             if skip_run is not None and i in skip_run:
-    #                 continue
-
-    #             skip = False
-    #             for module in self._penalties:
-    #                 cur_score = module.get_penalty_or_reward(
-    #                     solution_str, gt
-    #                 )
-    #                 if cur_score < 0.0:
-    #                     skip = True
-    #                     break
-    #             if skip:
-    #                 continue
-
-    #             for name, v in run_args.items():
-    #                 fn = getattr(self, v["fn"])
-    #                 # NOTICE: solution_str not result
-    #                 if extra_ctx is None:
-    #                     _prompts, answers = fn(solution_str, gt)
-    #                 else:
-    #                     _prompts, answers = fn(solution_str, gt, extra_ctx)
-    #                 for _prompt, _answer in zip(_prompts, answers):
-    #                     prompt2index[name][_prompt].append(i)
-    #                     extra[_prompt] = _answer
-
-    #     tasks = []
-    #     task_names = []
-    #     for name, v in prompt2index.items():
-    #         prompts = list(v.keys()) * run_args[name]["repeat"]
-    #         tasks.append(self.agents[name].run(
-    #             prompts,
-    #             run_args[name]["max_concurrent_requests"],
-    #             desc=f'[{run_args[name]["desc"]} {run_args[name]["model"]["model"]} 解题]',
-    #             pbar=False,
-    #             postprocess_fns=[resp_postprocess_fn] * len(prompts)
-    #         ))
-    #         task_names.append(name)
-
-    #     respond_questions = await aio.gather(*tasks)
-    #     print(respond_questions)
-    #     raise NotImplementedError
-
-    #     # 验证答案正确性
-    #     verify_queue = []
-    #     for name, results in zip(task_names, respond_questions):
-    #         for (p, r) in results:
-    #             for index in prompt2index[name][p]:
-    #                 verify_queue.append(VerifyInfo(
-    #                     index=index,
-    #                     tag=name,
-    #                     response=r,
-    #                     extra=extra[p],
-    #                     ground_truth=batch_ground_truth[index]))
-
-    #     correctness = await batch_verify_fn(
-    #         verify_queue=verify_queue,
-    #         max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
-    #         group_names=task_names
-    #     )
-    #     return correctness
 
     async def eval_reference(self,
                              batch_data_sources,
@@ -5694,7 +5680,7 @@ DOC2QUERY_V4_DEFAULT_PARAMS = {
             },
             "repeat": 1,
             "fn": "respond",
-            "desc": 'Anchor模型',
+            "desc": '基线模型',
             "max_concurrent_requests": 512
         },
         #     "w_content": {
@@ -5805,25 +5791,9 @@ DOC2QUERY_V4_DEFAULT_PARAMS = {
     #     "repeat": 2,
     #     "max_concurrent_requests": 512
     # },
-    # "reward_model_args": {
-    #     "urls": [
-    #         # "http://10.130.1.220:31131",
-    #         # "http://10.130.1.220:26099",
-    #         # "http://10.130.1.220:29314",
-    #         # 'http://10.130.1.220:33996',
-    #         # "http://10.130.1.220:29905",
-    #         # "http://10.130.1.220:27818",
-    #         # "http://10.130.1.220:29557",
-    #         # "http://10.130.1.220:31827",
-    #         "http://10.130.0.244:31498",
-    #         "http://10.130.0.244:28177",
-    #         "http://10.130.0.244:29607",
-    #         "http://10.130.0.244:34734",
-    #         "http://10.130.0.244:26892",
-    #         "http://10.130.0.244:32782",
-    #         "http://10.130.0.244:26290"
-    #     ]
-    # },
+    "polar_args": {
+        "url": "10.130.0.79:30000"
+    },
     "save_rollouts": {
         "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
     }
