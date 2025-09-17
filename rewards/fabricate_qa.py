@@ -5661,22 +5661,6 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
         },
         "w_content": {
             "model": {
-                # "model": "DeepSeek-V3-0324",
-                # "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
-                # "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
-                # "request_kwargs": {
-                #     "temperature": 0.6,
-                #     "timeout": 360,
-                #     "max_tokens": 4096,
-                # },
-                # "model": "qwen3_30b_a3b",
-                # "base_url": "http://10.130.0.21:21003/v1",
-                # "api_keys": "EMPTY",
-                # "request_kwargs": {
-                #     "temperature": 0.6,
-                #     "timeout": 1200,
-                #     "max_tokens": 16384,
-                # }
                 "model": "DeepSeek-V3-0324",
                 "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
@@ -5695,38 +5679,22 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     "difficulty_run_args": {
         "w/o_content": {
             "model": {
-                "model": "Qwen2.5-32B-Instruct",
-                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.9,
                     "timeout": 360,
                     "max_tokens": 4096,
-                }
+                },
             },
-            "repeat": 10,
+            "repeat": 5,
             "fn": "respond_wo_context",
             "desc": 'w/o文档',
             "max_concurrent_requests": 512
         },
         "w_content": {
             "model": {
-                # "model": "DeepSeek-V3-0324",
-                # "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
-                # "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
-                # "request_kwargs": {
-                #     "temperature": 0.6,
-                #     "timeout": 360,
-                #     "max_tokens": 4096,
-                # },
-                # "model": "qwen3_30b_a3b",
-                # "base_url": "http://10.130.0.21:21003/v1",
-                # "api_keys": "EMPTY",
-                # "request_kwargs": {
-                #     "temperature": 0.8,
-                #     "timeout": 1200,
-                #     "max_tokens": 16384,
-                # }
                 "model": "DeepSeek-V3-0324",
                 "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
