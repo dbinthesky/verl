@@ -1235,68 +1235,6 @@ class Agent:
                 return messages, None
 
 
-class PolarAgent(object):
-    def __init__(self, url, postprocess_solution_fn, parse_result_failure_score):
-        self.url = url
-        self.postprocess_solution_fn = postprocess_solution_fn
-        self.parse_result_failure_score = parse_result_failure_score
-        self.client = RewardModelClient("/cpfs01/shared/llm_ddd/tongjian/ckpts/POLAR-7B",
-                                        server_type="sglang",
-                                        server_address=self.url)
-
-    # async def compute_rm_score(
-    #         self,
-    #         batch_data_sources,
-    #         batch_solution_str,
-    #         batch_ground_truth,
-    #         judge_prompt_key="ground_truth"
-    # ):
-    #     input_datas = []
-    #     rewards = {}
-
-    #     for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-    #         try:
-    #             solution_str = self.postprocess_solution_fn(solution_str)
-    #         except Exception as err:
-    #             rewards[i] = self.parse_result_failure_score
-    #             continue
-
-    #         if solution_str is None:
-    #             rewards[i] = self.parse_result_failure_score
-    #             continue
-    #         if ground_truth is None:
-    #             rewards[i] = self.parse_result_failure_score
-    #             continue
-
-    #         print(solution_str)
-        #     if ground_truth["lang_code"] == "zh":
-        #         _prompt = DOC2QUERY_V3_RM_TEMPLATE_ZH.format(
-        #             context=ground_truth["document"])
-        #     else:
-        #         _prompt = DOC2QUERY_V3_RM_TEMPLATE_EN.format(
-        #             context=ground_truth["document"])
-        #     input_data = {
-        #         "prompt": _prompt, "response": solution_str, "id": i
-        #     }
-        #     input_datas.append(input_data)
-
-        # if len(input_datas) > 0:
-        #     url = random.choice(self.RM_URLS)
-        #     for batch in tqdm_nonasync(batchify(input_datas, n=128), desc=f'[RM][{url}] batchify inference (batch=128)'):
-        #         output_datas = self.post_with_retry(batch, url)
-        #         for _ in output_datas['reward']:
-        #             _id = int(_["id"])
-        #             rewards[_id] = _["rm_score"]
-
-        # final_results = []
-        # for i in range(len(batch_solution_str)):
-        #     if i in rewards:
-        #         final_results.append(rewards[i])
-        #     else:
-        #         final_results.append(0.)
-        # return final_results
-
-
 class RewardModelAgent(object):
     def __init__(self, urls, postprocess_solution_fn, parse_result_failure_score):
         self.RM_URLS = urls
@@ -1489,6 +1427,39 @@ class BatchCallOpenAPI(metaclass=ABCMeta):
             else:
                 outputs.append(None)
         return outputs
+
+
+class PolarAgent(BatchCallOpenAPI):
+    def __init__(self, url, postprocess_solution_fn, parse_result_failure_score):
+        self.url = url
+        self.postprocess_solution_fn = postprocess_solution_fn
+        self.parse_result_failure_score = parse_result_failure_score
+        self.client = RewardModelClient("/cpfs01/shared/llm_ddd/tongjian/ckpts/POLAR-7B",
+                                        server_type="sglang",
+                                        server_address=self.url)
+
+    def prompt_fn(self, example):
+        return {
+            "prompt": [{"role": "user", "content": example[1][0]}],
+            "reference": [{"role": "assistant", "content": example[1][1]}],
+            "output": [{"role": "assistant", "content": example[0]}]
+        }
+
+    def postprocess(self, response: str):
+        raise NotImplementedError
+
+    def task_desc(self):
+        return "POLAR"
+
+    async def do_job(self, agent, batch_inputs, max_concurrent_requests):
+        prompts = []
+        for example in batch_inputs:
+            prompt = self.prompt_fn(example)
+            prompts.append(prompt)
+
+        encoded_data = self.client.encode(prompts)
+        rewards = self.client.sglang_request_reward(encoded_data)
+        return rewards
 
 
 class JudgeTwoQuestionSimilarity(BatchCallOpenAPI):
@@ -4810,9 +4781,7 @@ class LearnableCoTComputeScore(SALTComputeScore):
 
     @classmethod
     def rule_based_penalties(cls):
-        return [
-            LanguageConsistency,
-        ]
+        return [LanguageConsistency]
 
     async def get_generalization_reward(
             self,
@@ -5058,9 +5027,12 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         self.agents = {}
         self.init_verify_agent()
         self.polar_agent = PolarAgent(
-            url=self.args["eval_reference_run_args"],
+            url=self.args["polar_args"]["url"],
             postprocess_solution_fn=self.parse_solution_fn,
             parse_result_failure_score=self.min_reward)
+        self.test_agent = Agent(
+            **self.args["difficulty_run_args"]["tester"]["model"])
+        self.agents["difficulty_run_args"] = self.test_agent
 
     def init_verify_agent(self):
         self.verify_agent = Agent(
@@ -5073,6 +5045,38 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
     @classmethod
     def rule_based_penalties(cls):
         return []
+
+    async def get_difficulty(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             skip_run=None):
+        verify_task = self.polar_agent
+
+        correctness = await self._simulate_respondent(
+            batch_data_sources=batch_data_sources,
+            batch_solution_str=batch_solution_str,
+            batch_ground_truth=batch_ground_truth,
+            skip_run=skip_run,
+            run_args={
+                "difficulty_run_args": self.args["difficulty_run_args"]["tester"]},
+            batch_verify_fn=partial(
+                self.batch_verify_results, verify_task=verify_task, return_input_response=True),
+            resp_postprocess_fn=lambda x: x.strip()
+        )
+
+        rm_std = [0.0] * len(batch_solution_str)
+        correctness = correctness["difficulty_run_args"]
+        for i in range(len(batch_solution_str)):
+            if i in correctness.keys():
+                rm_std[i] = np.std([_[0] for _ in correctness[i]])
+        return rm_std, {}
+
+    def log_solution(self, solution):
+        norm = self.parse_solution_fn(solution)
+        if norm is None:
+            return repr(self.clip_string(solution))
+        return f'[Q]\n{norm[0]}\n\n[A]\n{norm[1]}'
 
     async def eval_reference(self,
                              batch_data_sources,
@@ -5100,9 +5104,150 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         return outputs
 
     @classmethod
+    def rule_based_penalties(cls):
+        return [
+            LanguageConsistency,
+        ]
+
+    def coarse_process(self):
+        return [
+            # 快速判断问题质量
+            Process(name="RefQuality",
+                    function=self.eval_reference, filter_only=True, non_skip=False),
+        ]
+
+    def finegrain_process(self):
+        return Process(name="Difficulty", function=self.get_difficulty, filter_only=False, non_skip=False)
+
+    @classmethod
     def respond(cls, result, gt):
         return result[0]
 
+    async def _compute_score(self,
+                             batch_data_sources,
+                             batch_solution_str,
+                             batch_ground_truth,
+                             ):
+        self.init_save_rollouts()
+
+        penalty = defaultdict(list)
+        for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
+            parsed = self.parse_solution_fn(solution_str)
+            if parsed is None:
+                penalty[i].append(-2.0)
+            else:
+                penalty[i].append(0.0)
+
+            for p in self._penalties:
+                penalty[i].append(p.get_penalty_or_reward(
+                    solution_str, ground_truth))
+
+        all_skip_next_action = []
+
+        minor_rewards = OrderedDict()
+        all_minor_rewards = OrderedDict()
+
+        for process in self.coarse_process():
+            process_eval = await process.function(
+                batch_data_sources,
+                batch_solution_str,
+                batch_ground_truth,
+            )
+            # do skipping
+            if not process.non_skip:
+                skip_next_action = [
+                    i for i, v in enumerate(process_eval) if v < 0.0]
+                all_skip_next_action.extend(skip_next_action)
+
+            if not process.filter_only:
+                minor_rewards[process.name] = process_eval
+            all_minor_rewards[process.name] = process_eval
+
+        all_skip_next_action = sorted(list(set(all_skip_next_action)))
+        all_skip_next_action = tuple(all_skip_next_action)
+
+        # 难度奖励
+        main_process = self.finegrain_process()
+        main_rewards, extra = await main_process.function(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            skip_run=all_skip_next_action,
+        )
+        final_results = []
+
+        # TODO
+        main_reward_pos = None  # 记录主奖励位置
+        for i in range(len(batch_solution_str)):
+            scores = copy.deepcopy(penalty[i])
+            penalties = ["Parse"]+[_.abbrev for _ in self._penalties]
+            penalty_log_str = "/".join([f'{p}={s:.3f}' for p,
+                                        s in zip(penalties, scores)])
+
+            _main_reward = main_rewards[i]
+            _main_reward = np.sum(_main_reward) if isinstance(
+                _main_reward, list) else _main_reward
+            scores.append(_main_reward)
+
+            main_reward_pos = len(scores) - 1
+
+            for name, v in minor_rewards.items():
+                scores.append(v[i])
+
+            cur_score = 0
+
+            for j, _score in enumerate(scores):
+                if _score < 0:
+                    if j < main_reward_pos:
+                        cur_score = _score
+                        break
+                    else:
+                        cur_score += _score
+                else:
+                    cur_score += _score
+
+            # 保存Rollout信息
+            if self.split == "train":
+                self.update_rollout_info(
+                    solution_str=batch_solution_str[i],
+                    ground_truth=batch_ground_truth[i],
+                    score=cur_score,
+                    extra=extra[i]
+                )
+
+            final_results.append(cur_score)
+
+            log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
+            if _main_reward > 0 or (self.split == "valid" and random.random() < self.thought_log_prob) or (self.split == "train" and random.random() < self.thought_log_prob):
+                log = True
+            else:
+                log = False
+
+            if cur_score == self.min_reward:
+                log = True
+                log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN CORRUPT RESPONSE]"
+
+            source = batch_ground_truth[i]["source"]
+
+            print(
+                f"--------------------------------{log_flag}--------------------------------")
+            print(
+                f"【Solution{i}】({source})`{self.log_solution(batch_solution_str[i])}`")
+            print(
+                f"【Golden{i}】({source})`{self.log_ground_truth(batch_ground_truth[i])}`")
+            _minor_rewards_log = []
+            for process in self.coarse_process():
+                _minor_rewards_log.append(
+                    f'{process.name}={all_minor_rewards[process.name][i]}')
+            _minor_rewards_log = "|".join(_minor_rewards_log)
+            print(
+                f'[Final Reward]={cur_score:.3f}|{main_process.name}={str(_main_reward)}|{_minor_rewards_log}|{penalty_log_str}\n')
+
+            if log:
+                print(f'[Thought]\n{batch_solution_str[i]}')
+                print()
+
+        return final_results
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # DOC2QUERY V4
@@ -5669,101 +5814,39 @@ DOC2QUERY_V4_DEFAULT_PARAMS = {
     "eval_reference_run_args": {
         "adv": {
             "model": {
-                "model": "Qwen2.5-32B-Instruct",
-                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.6,
                     "timeout": 360,
                     "max_tokens": 4096,
-                },
+                }
             },
             "repeat": 1,
             "fn": "respond",
             "desc": '基线模型',
             "max_concurrent_requests": 512
         },
-        #     "w_content": {
-        #         "model": {
-        #             # "model": "DeepSeek-V3-0324",
-        #             # "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
-        #             # "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
-        #             # "request_kwargs": {
-        #             #     "temperature": 0.6,
-        #             #     "timeout": 360,
-        #             #     "max_tokens": 4096,
-        #             # },
-        #             "model": "qwen3_30b_a3b",
-        #             "base_url": "http://10.130.0.21:21003/v1",
-        #             "api_keys": "EMPTY",
-        #             "request_kwargs": {
-        #                 "temperature": 0.6,
-        #                 "timeout": 1200,
-        #                 "max_tokens": 16384,
-        #             }
-        #         },
-        #         "repeat": 1,
-        #         "fn": "quick_solve_w_content",
-        #         "desc": '快速做题(w文档)',
-        #         "max_concurrent_requests": 256
-        #     }
     },
-    # "difficulty_run_args": {
-    #     "w/o_content": {
-    #         "model": {
-    #             "model": "Qwen2.5-32B-Instruct",
-    #             "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
-    #             "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
-    #             "request_kwargs": {
-    #                 "temperature": 0.9,
-    #                 "timeout": 360,
-    #                 "max_tokens": 4096,
-    #             }
-    #         },
-    #         "repeat": 10,
-    #         "fn": "respond_wo_context",
-    #         "desc": 'w/o文档',
-    #         "max_concurrent_requests": 512
-    #     },
-    #     "w_content": {
-    #         "model": {
-    #             # "model": "DeepSeek-V3-0324",
-    #             # "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
-    #             # "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
-    #             # "request_kwargs": {
-    #             #     "temperature": 0.6,
-    #             #     "timeout": 360,
-    #             #     "max_tokens": 4096,
-    #             # },
-    #             "model": "qwen3_30b_a3b",
-    #             "base_url": "http://10.130.0.21:21003/v1",
-    #             "api_keys": "EMPTY",
-    #             "request_kwargs": {
-    #                 "temperature": 0.8,
-    #                 "timeout": 1200,
-    #                 "max_tokens": 16384,
-    #             }
-    #         },
-    #         "repeat": 5,
-    #         "fn": "respond_w_context",
-    #         "desc": 'w文档',
-    #         "max_concurrent_requests": 512
-    #     },
-    # },
-    # "difficulty_metric_args": {
-    #     "advantage": 'w_content',
-    #     "weakness": 'w/o_content',
-    #     "advantage_oversimplified_threshold": 5/5,
-    #     "weakness_oversimplified_threshold": 8/10,
-    #     "advantage_overcomplex_threshold": 2/5,
-    #     "weakness_overcomplex_threshold": 1/10,
-    #     "advantage_threshold": 1/10,
-    #     "advantage_weight": 0.0,
-    #     "weakness_weight": 2.0,
-    #     "anchor_weight": 1.5,
-    #     "confidence_bonus_threshold": 2/8,
-    #     "confidence_bonus_weight": 0.
-    # },
+    "difficulty_run_args": {
+        "tester": {
+            "model": {
+                "model": "Qwen2.5-32B-Instruct",
+                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+                "request_kwargs": {
+                    "temperature": 0.9,
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                }
+            },
+            "repeat": 10,
+            "fn": "respond",
+            "desc": 'reward std',
+            "max_concurrent_requests": 256
+        },
+    },
     "verify_agent": {
         "model": {
             "model": "Qwen2.5-32B-Instruct",
@@ -5777,20 +5860,6 @@ DOC2QUERY_V4_DEFAULT_PARAMS = {
         },
         "max_concurrent_requests": 512
     },
-    # "loose_qa_verify_agent": {
-    #     "model": {
-    #         "model": "Qwen2.5-32B-Instruct",
-    #         "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
-    #         "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
-    #         "request_kwargs": {
-    #             "temperature": 0.7,
-    #             "timeout": 360,
-    #             "max_tokens": 4096,
-    #         },
-    #     },
-    #     "repeat": 2,
-    #     "max_concurrent_requests": 512
-    # },
     "polar_args": {
         "url": "10.130.0.79:30000"
     },

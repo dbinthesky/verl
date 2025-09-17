@@ -169,7 +169,9 @@ def load_dataset(task_name, num=100, xml_cot=False):
         elif row["data_source"] == "doc2query_v4":
             batch_solution_str.append(
                 f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion:\n写篇网页风格的文章，内容无限制，内容需要包含写小错误；因为网页内容质量不会很高。\n\nReference:\n{row["reward_model"]["document"]}\n</question>'
+                f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion:\n写篇网页风格的文章，内容无限制，内容需要包含写小错误；因为网页内容质量不会很高。\n\nReference:\n{row["reward_model"]["document"]}\n</question>'
             )
+            row["reward_model"]["lang_code"] = "zh"
         elif row["data_source"] == "rlvr" or row["data_source"] in ("aime_2024", "aime_2025"):
             batch_solution_str.append(
                 f'<think>\nUNITTEST_ONLY\n</think>\n\n答案：{row["reward_model"]["ground_truth"]}'
@@ -683,15 +685,10 @@ class TestDoc2QueryV4(unittest.TestCase):
             doc2query_v4_parse_solution_fn, split="valid", args=DOC2QUERY_V4_DEFAULT_PARAMS)
 
         async def main():
-            await task.polar_agent.compute_rm_score(
+            await task._compute_score(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
             )
-            # results = await task.eval_reference(
-            #     [None] *
-            #     len(batch_solution_str), batch_solution_str, batch_ground_truth,
-            # )
-            # print(results)
         aio.run(main())
 
 
