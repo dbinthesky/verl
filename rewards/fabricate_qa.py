@@ -1681,6 +1681,7 @@ class SALTAuthenticQuestionSolutionVerify(SALTSelfTaughtSimpleSolutionVerify):
         return prompt
 
 
+# FIXME
 class MultiChoiceQuestionExtractAnswerOptions(SALTSelfTaughtSimpleSolutionVerify):
     MULTICHOICE_LETTER = ('A', 'B', 'C', 'D', 'E', 'F',
                           'G', 'H', 'I', 'J', 'K', 'L')
@@ -2604,9 +2605,6 @@ class Doc2QueryV2ComputeScore(object):
             task_names.append(name)
 
         respond_questions = await aio.gather(*tasks)
-        # FIXME: TTTT
-        for _ in respond_questions:
-            print(_)
 
         # 验证答案正确性
         verify_queue = []
@@ -3531,7 +3529,6 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                  min_reward=-2.0,
                  thought_log_prob=0.01,
                  ):
-        # FIXME
         super().__init__(
             parse_solution_fn=parse_solution_fn, split=split,
             args=args,
@@ -3646,7 +3643,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         for queue_index, example in enumerate(verify_queue):
             solver_response = example.response
             if solver_response is None:
-                correctness[example.tag][example.index].append(0.0)
+                correctness[example.tag][example.index].append([])
             else:
                 batch_eval_inputs.append(
                     (solver_response, example.extra, example.ground_truth))
@@ -3838,7 +3835,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 
                 done_right = False
                 for sol_ans in ans_lists[run_key][i]:
-                    if len(sol_ans) and sol_ans[0] == answer:
+                    if isinstance(sol_ans, list) and len(sol_ans) and sol_ans[0] == answer:
                         done_right = True
                         break
 
@@ -3994,22 +3991,22 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                 _adv, _weak = ans_lists[adv_name][i], ans_lists[weak_name][i]
 
                 ill_form_question = False
-                # Part1 检测可疑问题有多个答案
-                if self.suspect_question_has_multiple_answers(
-                    w_ctx=_adv,
-                    wo_ctx=_weak
-                ):
-                    ill_form_question = True
-
-                # Part2 检测可疑问题无法回答
-                if self.suspect_question_can_not_be_determined(
-                    w_ctx=_adv,
-                    wo_ctx=_weak, distractors=distractors, answer=answer
-                ):
-                    ill_form_question = True
-
                 if any([(not isinstance(_ans, list)) for _ans in _adv+_weak]):
                     ill_form_question = True
+                else:
+                    # Part1 检测可疑问题有多个答案
+                    if self.suspect_question_has_multiple_answers(
+                        w_ctx=_adv,
+                        wo_ctx=_weak
+                    ):
+                        ill_form_question = True
+
+                    # Part2 检测可疑问题无法回答
+                    if self.suspect_question_can_not_be_determined(
+                        w_ctx=_adv,
+                        wo_ctx=_weak, distractors=distractors, answer=answer
+                    ):
+                        ill_form_question = True
 
                 adv, weak = [], []
                 for a in _adv:
@@ -5344,7 +5341,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             "repeat": 1,
             "fn": "quick_solve_wo_content",
             "desc": '快速做题(w/o文档)',
-            "max_concurrent_requests": 512
+            "max_concurrent_requests": 256
         },
         "w_content": {
             "model": {
@@ -5356,14 +5353,22 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 #     "timeout": 360,
                 #     "max_tokens": 4096,
                 # },
-                "model": "qwen3_30b_a3b",
-                "base_url": "http://10.130.0.21:21003/v1",
-                "api_keys": "EMPTY",
+                # "model": "qwen3_30b_a3b",
+                # "base_url": "http://10.130.0.21:21003/v1",
+                # "api_keys": "EMPTY",
+                # "request_kwargs": {
+                #     "temperature": 0.6,
+                #     "timeout": 1200,
+                #     "max_tokens": 16384,
+                # }
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.6,
-                    "timeout": 1200,
-                    "max_tokens": 16384,
-                }
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                },
             },
             "repeat": 1,
             "fn": "quick_solve_w_content",
@@ -5398,19 +5403,27 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 #     "timeout": 360,
                 #     "max_tokens": 4096,
                 # },
-                "model": "qwen3_30b_a3b",
-                "base_url": "http://10.130.0.21:21003/v1",
-                "api_keys": "EMPTY",
+                # "model": "qwen3_30b_a3b",
+                # "base_url": "http://10.130.0.21:21003/v1",
+                # "api_keys": "EMPTY",
+                # "request_kwargs": {
+                #     "temperature": 0.8,
+                #     "timeout": 1200,
+                #     "max_tokens": 16384,
+                # }
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
-                    "timeout": 1200,
-                    "max_tokens": 16384,
-                }
+                    "timeout": 360,
+                    "max_tokens": 4096,
+                },
             },
             "repeat": 5,
             "fn": "respond_w_context",
             "desc": 'w文档',
-            "max_concurrent_requests": 512
+            "max_concurrent_requests": 256
         },
     },
     "difficulty_metric_args": {
@@ -5456,21 +5469,14 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     },
     "reward_model_args": {
         "urls": [
-            # "http://10.130.1.220:31131",
-            # "http://10.130.1.220:26099",
-            # "http://10.130.1.220:29314",
-            # 'http://10.130.1.220:33996',
-            # "http://10.130.1.220:29905",
-            # "http://10.130.1.220:27818",
-            # "http://10.130.1.220:29557",
-            # "http://10.130.1.220:31827",
-            "http://10.130.0.244:31498",
-            "http://10.130.0.244:28177",
-            "http://10.130.0.244:29607",
-            "http://10.130.0.244:34734",
-            "http://10.130.0.244:26892",
-            "http://10.130.0.244:32782",
-            "http://10.130.0.244:26290"
+            "http://10.130.1.220:32945",
+            "http://10.130.1.220:27533",
+            "http://10.130.1.220:30858",
+            "http://10.130.1.220:28198",
+            "http://10.130.1.220:29984",
+            "http://10.130.1.220:34232",
+            "http://10.130.1.220:25421",
+            "http://10.130.1.220:31737"
         ]
     },
     "save_rollouts": {

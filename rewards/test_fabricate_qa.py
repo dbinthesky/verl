@@ -130,7 +130,7 @@ def load_dataset(task_name, num=100, xml_cot=False):
     if task_name == "kg2query_v1":
         filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/kg2query_v1_oc_v1_7_hard_problem_0623.parquet"
     elif task_name == "doc2query_v3":
-        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_kcle_rl_8k_train.parquet"
+        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_rl_inputs_diamond.parquet"
     elif task_name == "doc2query_v4":
         filename = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/pretrain_general_doc_8k_rl_inputs_train/index0.parquet"
     elif task_name == "learnable_cot":
@@ -160,8 +160,6 @@ def load_dataset(task_name, num=100, xml_cot=False):
                 f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion: [SYNTHETIC] {sample[0]}\n\nAnswer: [SYNTHETIC] {sample[1]}\n</question>'
             )
         elif row["data_source"] == "doc2query_v3":
-            if row["reward_model"]["lang_code"] != "zh":
-                continue
             sample = random.choice(_doc2query_v3_qas)
             o = "\n".join([f'{c}) {_o}' for c, _o in zip(
                 ["A", "B", "C", "D"], sample[1])])
