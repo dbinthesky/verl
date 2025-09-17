@@ -5206,15 +5206,6 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
                 else:
                     cur_score += _score
 
-            # 保存Rollout信息
-            if self.split == "train":
-                self.update_rollout_info(
-                    solution_str=batch_solution_str[i],
-                    ground_truth=batch_ground_truth[i],
-                    score=cur_score,
-                    extra=extra[i]
-                )
-
             final_results.append(cur_score)
 
             log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
@@ -6337,3 +6328,11 @@ _multiturn_doc2query_v3_compute_score_valid = Doc2QueryV3MultiTurnComputeScore(
     split="valid", args=DOC2QUERY_V3_DEFAULT_PARAMS)
 multiturn_doc2query_v3_compute_score_train = _multiturn_doc2query_v3_compute_score_train.compute_score
 multiturn_doc2query_v3_compute_score_valid = _multiturn_doc2query_v3_compute_score_valid.compute_score
+
+
+_default_doc2query_v4_compute_score_train = Doc2QueryV4ComputeScore(
+    doc2query_v4_parse_solution_fn, split="train", args=DOC2QUERY_V4_DEFAULT_PARAMS)
+_default_doc2query_v4_compute_score_valid = Doc2QueryV4ComputeScore(
+    doc2query_v4_parse_solution_fn, split="valid", args=DOC2QUERY_V4_DEFAULT_PARAMS)
+doc2query_v4_compute_score_train = _default_doc2query_v4_compute_score_train.compute_score
+doc2query_v4_compute_score_valid = _default_doc2query_v4_compute_score_valid.compute_score
