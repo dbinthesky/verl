@@ -1037,6 +1037,39 @@ Excessively high difficulty is a "value-level matching defect": the question its
 # Final Severity Ranking: 2 (Incorrect Answer) ＞ 1 (Inability to Effectively Answer) ＞ 3 (Wrong Question Type Attribute) ＞ 4 (Excessively Low Difficulty) ＞ 5 (Excessively High Difficulty)
 """
 
+PAIRWISE_JUDGE_TEMPLATE = """
+任务：考虑下面的用户指令和对应的两个不同的回答，判断哪一个回答更好？
+
+## 用户指令
+{question}
+
+
+## 回答一:
+```
+{solution1}
+```
+
+## 回答二:
+```
+{solution2}
+```
+
+
+判断哪个回答更好？你需要先仔细分析（<think>...</think>），然后再得出最终结论。你的响应按照下面的格式返回
+<think>
+[思考过程]
+</think>
+```json
+{{
+    "reason": "***",
+    "better": "回答一/回答二/无法判断"
+}}
+```
+`better`对应的内容为“回答一”、“回答二”、“无法判断”三个其中之一。其中“无法判断表示无法判断两个回答哪个更好”
+
+## 输出
+"""
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1426,6 +1459,82 @@ class JudgeTwoQuestionSimilarity(BatchCallOpenAPI):
             raise PostprocessError(f'{err}')
 
 
+class PairwiseJudge(BatchCallOpenAPI):
+    _TEMPLATE = PAIRWISE_JUDGE_TEMPLATE
+
+    def __init__(self):
+        pass
+
+    @classmethod
+    def task_desc(cls):
+        return "对比评价"
+
+    def prompt_fn(self, example):
+        outputs = []
+        outputs.append((
+            PAIRWISE_JUDGE_TEMPLATE.format(
+                question=example[1][0],
+                solution1=example[0],
+                solution2=example[1][1],
+            ), "REF_AS_SECOND"
+        ))
+        outputs.append((
+            PAIRWISE_JUDGE_TEMPLATE.format(
+                question=example[1][0],
+                solution2=example[0],
+                solution1=example[1][1],
+            ), "REF_AS_FIRST"
+        ))
+        return outputs
+
+    async def do_job(self, agent, batch_inputs, max_concurrent_requests):
+        prompts = defaultdict(list)
+        rtypes = {}
+        for index, example in enumerate(batch_inputs):
+            _prompts = self.prompt_fn(example)
+            for prompt, rtype in _prompts:
+                rtypes[prompt] = rtype
+                prompts[prompt].append(index)
+
+        results = await agent.run(list(prompts.keys()), max_concurrent_requests, desc=f"[{self.task_desc()} {agent.model}={max_concurrent_requests}]", postprocess_fns=[self.postprocess]*len(list(prompts.keys())))
+
+        results_mapper = defaultdict(list)
+        for (k, v) in results:
+            for _ in prompts[k]:
+                results_mapper[_].append((v, rtypes[k]))
+
+        outputs = []
+        for i, _ in enumerate(batch_inputs):
+            if i in results_mapper and results_mapper[i] is not None:
+                score = []
+                for _rank in results_mapper[i]:
+                    if (_rank[0] == 1 and _rank[1] == "REF_AS_FIRST") or (_rank[0] == 2 and _rank[1] == "REF_AS_SECOND"):
+                        score.append(True)
+                    else:
+                        score.append(False)
+                outputs.append(1.0 if all(score) else 0.0)
+            else:
+                outputs.append(None)
+        return outputs
+
+    def postprocess(self, response: str):
+        s = response
+        try:
+            better = re.findall(r'\"better\": \"(.*)\"', s)
+
+            if len(better) > 0:
+                better = better[0]
+                if better == "回答一":
+                    return 1
+                elif better == "回答二":
+                    return 2
+                return 0
+            else:
+                return 0
+        except Exception as err:
+            raise PostprocessError(f'{err}')
+
+
 class Doc2QueryV3LooseQuestionEval(BatchCallOpenAPI):
     _TEMPLATE = DOC2QUERY_V3_Q_EVAL_LOOSE_TEMPLATE
 
@@ -1681,7 +1790,6 @@ class SALTAuthenticQuestionSolutionVerify(SALTSelfTaughtSimpleSolutionVerify):
         return prompt
 
 
-# FIXME
 class MultiChoiceQuestionExtractAnswerOptions(SALTSelfTaughtSimpleSolutionVerify):
     MULTICHOICE_LETTER = ('A', 'B', 'C', 'D', 'E', 'F',
                           'G', 'H', 'I', 'J', 'K', 'L')
@@ -4890,39 +4998,125 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
     def init_verify_agent(self):
         self.verify_agent = Agent(
             **self.args["verify_agent"]["model"])
-        self.ref_eval_agent = Agent(
-            **self.args["eval_reference_run_args"]["llm_as_judge"]["model"]
+        self.anchor_agent = Agent(
+            **self.args["eval_reference_run_args"]["adv"]["model"]
         )
+        self.agents["eval_reference_run_args"] = self.anchor_agent
 
     @classmethod
     def rule_based_penalties(cls):
         return []
+
+    # async def _simulate_respondent(
+    #         self,
+    #         batch_data_sources,
+    #         batch_solution_str,
+    #         batch_ground_truth,
+    #         run_args,
+    #         batch_verify_fn,
+    #         resp_postprocess_fn,
+    #         skip_run=None,
+    #         prompt_contexts=None
+    # ):
+    #     prompt2index = {_: defaultdict(list) for _ in run_args.keys()}
+    #     extra = {}
+
+    #     if prompt_contexts is None:
+    #         prompt_contexts = [None] * len(batch_ground_truth)
+
+    #     for i, (solution_str, gt, extra_ctx) in enumerate(zip(batch_solution_str, batch_ground_truth, prompt_contexts)):
+    #         result = self.parse_solution_fn(solution_str)
+    #         if result is not None:
+    #             if skip_run is not None and i in skip_run:
+    #                 continue
+
+    #             skip = False
+    #             for module in self._penalties:
+    #                 cur_score = module.get_penalty_or_reward(
+    #                     solution_str, gt
+    #                 )
+    #                 if cur_score < 0.0:
+    #                     skip = True
+    #                     break
+    #             if skip:
+    #                 continue
+
+    #             for name, v in run_args.items():
+    #                 fn = getattr(self, v["fn"])
+    #                 # NOTICE: solution_str not result
+    #                 if extra_ctx is None:
+    #                     _prompts, answers = fn(solution_str, gt)
+    #                 else:
+    #                     _prompts, answers = fn(solution_str, gt, extra_ctx)
+    #                 for _prompt, _answer in zip(_prompts, answers):
+    #                     prompt2index[name][_prompt].append(i)
+    #                     extra[_prompt] = _answer
+
+    #     tasks = []
+    #     task_names = []
+    #     for name, v in prompt2index.items():
+    #         prompts = list(v.keys()) * run_args[name]["repeat"]
+    #         tasks.append(self.agents[name].run(
+    #             prompts,
+    #             run_args[name]["max_concurrent_requests"],
+    #             desc=f'[{run_args[name]["desc"]} {run_args[name]["model"]["model"]} 解题]',
+    #             pbar=False,
+    #             postprocess_fns=[resp_postprocess_fn] * len(prompts)
+    #         ))
+    #         task_names.append(name)
+
+    #     respond_questions = await aio.gather(*tasks)
+    #     print(respond_questions)
+    #     raise NotImplementedError
+
+    #     # 验证答案正确性
+    #     verify_queue = []
+    #     for name, results in zip(task_names, respond_questions):
+    #         for (p, r) in results:
+    #             for index in prompt2index[name][p]:
+    #                 verify_queue.append(VerifyInfo(
+    #                     index=index,
+    #                     tag=name,
+    #                     response=r,
+    #                     extra=extra[p],
+    #                     ground_truth=batch_ground_truth[index]))
+
+    #     correctness = await batch_verify_fn(
+    #         verify_queue=verify_queue,
+    #         max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
+    #         group_names=task_names
+    #     )
+    #     return correctness
 
     async def eval_reference(self,
                              batch_data_sources,
                              batch_solution_str,
                              batch_ground_truth,
                              skip_run=None):
+        verify_task = PairwiseJudge()
         correctness = await self._simulate_respondent(
             batch_data_sources=batch_data_sources,
             batch_solution_str=batch_solution_str,
             batch_ground_truth=batch_ground_truth,
             skip_run=skip_run,
             run_args={
-                "eval_reference_run_args": self.args["eval_reference_run_args"]["llm_as_judge"]},
+                "eval_reference_run_args": self.args["eval_reference_run_args"]["adv"]},
             batch_verify_fn=partial(
-                self.batch_verify_results, verify_task=None, return_input_response=True),
-            resp_postprocess_fn=None
+                self.batch_verify_results, verify_task=verify_task, return_input_response=True),
+            resp_postprocess_fn=lambda x: x.strip()
         )
-        raise NotImplementedError
-        # self_taught_rationale = [None] * len(batch_solution_str)
-        # correctness = correctness["self_taught"]
-        # for i in range(len(batch_solution_str)):
-        #     if i in correctness.keys():
-        #         for rationale in correctness[i]:
-        #             if rationale[0] == 1.0:
-        #                 self_taught_rationale[i] = rationale[1]
-        # return self_taught_rationale
+        outputs = [-1.0] * len(batch_solution_str)
+        correctness = correctness["eval_reference_run_args"]
+        for i in range(len(batch_solution_str)):
+            if i in correctness.keys():
+                if correctness[i][0] == 1.0:
+                    outputs[i] = 1.0
+        return outputs
+
+    @classmethod
+    def respond(cls, result, gt):
+        return result[0]
+
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # DOC2QUERY V4
@@ -5487,7 +5681,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
 
 DOC2QUERY_V4_DEFAULT_PARAMS = {
     "eval_reference_run_args": {
-        "llm_as_judge": {
+        "adv": {
             "model": {
                 "model": "Qwen2.5-32B-Instruct",
                 "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
@@ -5499,8 +5693,8 @@ DOC2QUERY_V4_DEFAULT_PARAMS = {
                 },
             },
             "repeat": 1,
-            "fn": "quick_solve_wo_content",
-            "desc": '参考答案验证',
+            "fn": "respond",
+            "desc": 'Anchor模型',
             "max_concurrent_requests": 512
         },
         #     "w_content": {

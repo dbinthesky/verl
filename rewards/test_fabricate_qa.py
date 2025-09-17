@@ -168,7 +168,7 @@ def load_dataset(task_name, num=100, xml_cot=False):
             )
         elif row["data_source"] == "doc2query_v4":
             batch_solution_str.append(
-                f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion:\n帮我写一篇文章\n\nReference:\n{row["reward_model"]["document"]}\n</question>'
+                f'<think>\nUNITTEST_ONLY\n</think>\n\n<question>\nQuestion:\n写篇网页风格的文章，内容无限制，内容需要包含写小错误；因为网页内容质量不会很高。\n\nReference:\n{row["reward_model"]["document"]}\n</question>'
             )
         elif row["data_source"] == "rlvr" or row["data_source"] in ("aime_2024", "aime_2025"):
             batch_solution_str.append(
