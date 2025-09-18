@@ -5234,7 +5234,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
             else:
                 log = False
 
-            if cur_score == self.min_reward:
+            if cur_score == self.min_reward and random.random() < self.thought_log_prob:
                 log = True
                 log_flag = f"[{self.task_name} VALID CORRUPT RESPONSE]" if self.split == "valid" else f"[{self.task_name} TRAIN CORRUPT RESPONSE]"
 
