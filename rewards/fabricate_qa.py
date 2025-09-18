@@ -3984,7 +3984,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                 if done_right:
                     penalties.append(0.0)
                 else:
-                    penalties.append(-0.1)
+                    penalties.append(-0.5)
             else:
                 penalties.append(0.0)
         return penalties
@@ -4035,50 +4035,41 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                 penalties.append(0.0)
         return penalties
 
-    def suspect_question_can_not_be_determined(self, w_ctx, wo_ctx, distractors, answer):
+    def suspect_question_can_not_be_determined(self, w_ctx, wo_ctx, distractors, answer, threshold=0.2):
         """
         判断问题是否大概率无法回答
-          - w ctx多数投票的结果包含干扰项，判定0分；
-          - wo ctx多数投票的结果包含干扰项，同时正确答案不在wo ctx预测中
+          - w ctx不允许出现干扰项，判定0分；
+          - wo ctx干扰项次数不允许超过threshold
         """
-        w_ctx_votes = defaultdict(int)
         for _ in w_ctx:
-            w_ctx_votes[tuple(_)] += 1
-        w_ctx_max_vote_count = max(list(w_ctx_votes.values()))
+            if any(distractor in _ for distractor in distractors):
+                return True
 
-        for _, count in w_ctx_votes.items():
-            if count == w_ctx_max_vote_count:
-                # 多数投票的结果包含干扰项
-                if any(distractor in _ for distractor in distractors):
-                    return True
-
-        wo_ctx_votes = defaultdict(int)
+        match_distractor = defaultdict(int)
         for _ in wo_ctx:
-            wo_ctx_votes[tuple(_)] += 1
-        wo_ctx_max_vote_count = max(list(wo_ctx_votes.values()))
+            for distractor in distractors:
+                if distractor in _:
+                    match_distractor[distractor] += 1
 
-        for _, count in wo_ctx_votes.items():
-            if count == wo_ctx_max_vote_count:
-                if any(distractor in _ for distractor in distractors) and (tuple(list(answer)) not in wo_ctx_votes):
-                    return True
+        total_count = 0
+        for k, v in match_distractor.items():
+            total_count += v
+        if total_count > threshold * len(wo_ctx):
+            return True
+
         return False
 
-    def suspect_question_has_multiple_answers(self, w_ctx, wo_ctx):
+    def suspect_question_has_multiple_answers(self, w_ctx, wo_ctx, threshold=0.2):
         """
         判断问题是否大概率是多项选择题
-          - w/o ctx多数投票是多选，且结果在w ctx也出现，则判定为是
+          - w/o ctx出现多选超过threshold
         """
-        w_ctx_uniq = set([tuple(_) for _ in w_ctx])
-        wo_ctx_votes = defaultdict(int)
+        multi = 0
         for _ in wo_ctx:
-            wo_ctx_votes[tuple(_)] += 1
-        max_vote_count = max(list(wo_ctx_votes.values()))
-
-        for _, count in wo_ctx_votes.items():
-            if count == max_vote_count:
-                # 多数投票的结果是多选
-                if len(_) > 1 and _ in w_ctx_uniq:
-                    return True
+            if len(_) > 1:
+                multi += 1
+        if multi > threshold * len(wo_ctx):
+            return True
         return False
 
     async def get_difficulty_reward(
@@ -4133,6 +4124,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                 _adv, _weak = ans_lists[adv_name][i], ans_lists[weak_name][i]
 
                 ill_form_question = False
+
                 if any([(not isinstance(_ans, list)) for _ans in _adv+_weak]):
                     ill_form_question = True
                 else:
@@ -4142,6 +4134,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                         wo_ctx=_weak
                     ):
                         ill_form_question = True
+                        base_score = -0.2
 
                     # Part2 检测可疑问题无法回答
                     if self.suspect_question_can_not_be_determined(
@@ -4149,6 +4142,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                         wo_ctx=_weak, distractors=distractors, answer=answer
                     ):
                         ill_form_question = True
+                        base_score = -0.4
 
                 adv, weak = [], []
                 for a in _adv:
@@ -4176,22 +4170,26 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                 pass_rates.append(_pass_rate)
 
                 if len(weak) == 0 or len(adv) == 0:
+                    full_rewards.append(0.0)
+                    continue
+
+                if ill_form_question:
                     full_rewards.append(base_score)
                     continue
 
-                # 题目过难
-                if np.mean(weak) < metric_args["weakness_overcomplex_threshold"] or np.mean(adv) < metric_args["advantage_overcomplex_threshold"]:
-                    full_rewards.append(base_score)
+                # 题目过难(无参考BoN都做不对 or 有参考答案准确率过低) => 题目大概率错误
+                if (np.mean(weak) < metric_args["weakness_overcomplex_threshold"]) or (np.mean(adv) < metric_args["advantage_overcomplex_threshold"]):
+                    full_rewards.append(-0.45)
                     continue
 
                 # 题目过易
                 if np.mean(weak) > metric_args["weakness_oversimplified_threshold"] or np.mean(adv) > metric_args["advantage_oversimplified_threshold"]:
-                    full_rewards.append(base_score)
+                    full_rewards.append(-0.1)
                     continue
 
-                # adv 应该比 weakness 显著好
+                # adv 应该比 weakness 显著好 => 题目大概率错误
                 if not (np.mean(adv) >= min(np.mean(weak) + metric_args["advantage_threshold"], 1.0)):
-                    full_rewards.append(base_score)
+                    full_rewards.append(-0.5)
                     continue
 
                 # 增加限制：带参考回答Majority Vote必须和答案一致
@@ -4210,12 +4208,13 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                             break
 
                 if not success:
-                    full_rewards.append(base_score)
+                    full_rewards.append(-0.5)
                     continue
 
-                # 难度奖励
+                # 难度奖励(固定奖励)
                 def calc_difficulty(scores, total_attempts):
-                    return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
+                    return 1.0
+                    # return (1.0-math.log2(1+np.sum(scores))/math.log2(1+total_attempts))
 
                 # 两部分构成
                 in_context_difficulty = metric_args["weakness_weight"] * \
@@ -4231,12 +4230,16 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         return full_rewards, pass_rates
 
     def coarse_process(self):
+        """
+        难度过低 -0.1
+        正确性错误 -0.5
+        """
         return [
             # 快速判断问题质量
             Process(name="LooseQEval",
                     function=self.loose_question_eval, filter_only=False, non_skip=False),
             Process(name="QuickDifficultyFilter",
-                    function=partial(self.quick_difficulty_filter, run_key="w/o_content"), filter_only=True, non_skip=False),
+                    function=partial(self.quick_difficulty_filter, run_key="w/o_content"), filter_only=False, non_skip=False),
             Process(name="QuickCorrectnessFilter",
                     function=partial(self.quick_correctness_filter, run_key="w_content"), filter_only=False, non_skip=False),
             Process(name="Reward", function=self.rm_agent.compute_rm_score,
@@ -4997,7 +5000,7 @@ def doc2query_v4_parse_solution_fn(solution_str: str, remove_option_letter=True,
 
     try:
         results = re.findall(
-            r'Question:(.*)\n\nReference:(.*)', conclusion, re.DOTALL)[0]
+            r'Question:(.*)\n+Answer:(.*)', conclusion, re.DOTALL)[0]
         question, reference = results
         question, reference = question.strip(), reference.strip()
 
@@ -5303,8 +5306,8 @@ DOC2QUERY_V2_DEFAULT_PARAMS = {
         "advantage": 'w_content',
         "weakness": 'w/o_content',
         "advantage_oversimplified_threshold": 5/5,
-        "weakness_oversimplified_threshold": 5/5,
-        "advantage_overcomplex_threshold": 1/5,
+        "weakness_oversimplified_threshold": 4/5,
+        "advantage_overcomplex_threshold": 3/5,
         "weakness_overcomplex_threshold": 1/5,
         "advantage_threshold": 1/5,
         "advantage_weight": 0.0,
@@ -5688,10 +5691,10 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                     "max_tokens": 4096,
                 },
             },
-            "repeat": 5,
+            "repeat": 8,
             "fn": "respond_wo_context",
             "desc": 'w/o文档',
-            "max_concurrent_requests": 512
+            "max_concurrent_requests": 256
         },
         "w_content": {
             "model": {
@@ -5714,9 +5717,9 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
         "advantage": 'w_content',
         "weakness": 'w/o_content',
         "advantage_oversimplified_threshold": 5/5,
-        "weakness_oversimplified_threshold": 8/10,
-        "advantage_overcomplex_threshold": 2/5,
-        "weakness_overcomplex_threshold": 1/10,
+        "weakness_oversimplified_threshold": 6/8,
+        "advantage_overcomplex_threshold": 3/5,
+        "weakness_overcomplex_threshold": 1/8,
         "advantage_threshold": 1/10,
         "advantage_weight": 0.0,
         "weakness_weight": 2.0,
@@ -5773,8 +5776,8 @@ DOC2QUERY_V4_DEFAULT_PARAMS = {
     "eval_reference_run_args": {
         "adv": {
             "model": {
-                "model": "DeepSeek-V3-0324",
-                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "Qwen2.5-32B-Instruct",
+                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.6,
@@ -5814,13 +5817,13 @@ DOC2QUERY_V4_DEFAULT_PARAMS = {
             "request_kwargs": {
                 "temperature": 0.6,
                 "timeout": 360,
-                "max_tokens": 1024,
-            },
+                "max_tokens": 4096,
+            }
         },
-        "max_concurrent_requests": 512
+        "max_concurrent_requests": 128
     },
     "polar_args": {
-        "url": "10.130.0.79:30000"
+        "url": "10.130.1.189:30000"
     },
     "save_rollouts": {
         "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
