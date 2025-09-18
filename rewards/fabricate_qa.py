@@ -5014,6 +5014,17 @@ def doc2query_v4_parse_solution_fn(solution_str: str, remove_option_letter=True,
         return None
 
 
+class Doc2QueryV4LanguageConsistency(LanguageConsistency):
+    def __init__(self, parse_solution_fn, min_score, max_score, abbrev="Lang", strict=False):
+        super().__init__(
+            parse_solution_fn=parse_solution_fn, min_score=min_score, max_score=max_score, abbrev=abbrev
+        )
+        self.strict = strict
+
+    def get_penalty_or_reward(self, solution_str, ground_truth):
+        return self.max_score
+
+
 class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
 
     def __init__(self,
@@ -5052,7 +5063,9 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
 
     @classmethod
     def rule_based_penalties(cls):
-        return []
+        return [
+            Doc2QueryV4LanguageConsistency
+        ]
 
     async def get_difficulty(self,
                              batch_data_sources,
