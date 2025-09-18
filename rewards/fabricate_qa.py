@@ -1496,8 +1496,8 @@ class JudgeTwoQuestionSimilarity(BatchCallOpenAPI):
 class PairwiseJudge(BatchCallOpenAPI):
     _TEMPLATE = PAIRWISE_JUDGE_TEMPLATE
 
-    def __init__(self):
-        pass
+    def __init__(self, repeat=2):
+        self.repeat = repeat
 
     @classmethod
     def task_desc(cls):
@@ -1530,7 +1530,9 @@ class PairwiseJudge(BatchCallOpenAPI):
                 rtypes[prompt] = rtype
                 prompts[prompt].append(index)
 
-        results = await agent.run(list(prompts.keys()), max_concurrent_requests, desc=f"[{self.task_desc()} {agent.model}={max_concurrent_requests}]", postprocess_fns=[self.postprocess]*len(list(prompts.keys())))
+        _prompts = list(prompts.keys())
+        _prompts = _prompts * self.repeat
+        results = await agent.run(_prompts, max_concurrent_requests, desc=f"[{self.task_desc()} {agent.model}={max_concurrent_requests}]", postprocess_fns=[self.postprocess]*len(_prompts))
 
         results_mapper = defaultdict(list)
         for (k, v) in results:
@@ -1545,7 +1547,7 @@ class PairwiseJudge(BatchCallOpenAPI):
                     if (_rank[0] == 1 and _rank[1] == "REF_AS_FIRST") or (_rank[0] == 2 and _rank[1] == "REF_AS_SECOND"):
                         score.append(1.0)
                     elif (_rank[0] == 1 and _rank[1] == "REF_AS_SECOND") or (_rank[0] == 2 and _rank[1] == "REF_AS_FIRST"):
-                        score.append(-1.0)
+                        score.append(-1.5)
                     else:
                         score.append(-0.5)
                 outputs.append(np.mean(score))
@@ -5072,10 +5074,11 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         )
 
         rm_std = [0.0] * len(batch_solution_str)
-        correctness = correctness["difficulty_run_args"]
-        for i in range(len(batch_solution_str)):
-            if i in correctness.keys():
-                rm_std[i] = np.std([_[0] for _ in correctness[i]])
+        # TODO: 第一阶段不引入Reward Std
+        # correctness = correctness["difficulty_run_args"]
+        # for i in range(len(batch_solution_str)):
+        #     if i in correctness.keys():
+        #         rm_std[i] = np.std([_[0] for _ in correctness[i]])
         return rm_std, {}
 
     def log_solution(self, solution):
@@ -5181,7 +5184,6 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         )
         final_results = []
 
-        # TODO
         main_reward_pos = None  # 记录主奖励位置
         for i in range(len(batch_solution_str)):
             scores = copy.deepcopy(penalty[i])
