@@ -1543,12 +1543,15 @@ class PairwiseJudge(BatchCallOpenAPI):
                 score = []
                 for _rank in results_mapper[i]:
                     if (_rank[0] == 1 and _rank[1] == "REF_AS_FIRST") or (_rank[0] == 2 and _rank[1] == "REF_AS_SECOND"):
-                        score.append(True)
+                        score.append(1.0)
+                    elif (_rank[0] == 1 and _rank[1] == "REF_AS_SECOND") or (_rank[0] == 2 and _rank[1] == "REF_AS_FIRST"):
+                        score.append(-1.0)
                     else:
-                        score.append(False)
-                outputs.append(1.0 if all(score) else 0.0)
+                        score.append(-0.5)
+                outputs.append(np.mean(score))
             else:
                 outputs.append(None)
+
         return outputs
 
     def postprocess(self, response: str):
@@ -5102,8 +5105,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         correctness = correctness["eval_reference_run_args"]
         for i in range(len(batch_solution_str)):
             if i in correctness.keys():
-                if correctness[i][0] == 1.0:
-                    outputs[i] = 1.0
+                outputs[i] = correctness[i][0][0]
         return outputs
 
     @classmethod
@@ -5116,7 +5118,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         return [
             # 快速判断问题质量
             Process(name="RefQuality",
-                    function=self.eval_reference, filter_only=True, non_skip=False),
+                    function=self.eval_reference, filter_only=False, non_skip=False),
         ]
 
     def finegrain_process(self):
