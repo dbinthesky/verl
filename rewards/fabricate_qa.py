@@ -1071,6 +1071,111 @@ PAIRWISE_JUDGE_TEMPLATE = """
 ## 输出
 """
 
+DOC2QUERY_V4_Q_EVAL_LOOSE_TEMPLATE = """任务：基于下面的标准与方法对一道用户提问进行评价，判断是否需要改进
+
+你需要判断问题的信息可获取性边界，判断问题是否存在缺陷： 
+信息可获取性边界说明
+  - 不依赖特定未公开文档：问题需明确说明所有必要数据或背景，避免出现 “基于某篇文章” 但未提供具体内容的情况。若需引用外部材料，应直接嵌入关键信息。
+  - 可通过公开资源验证：涉及事实性数据时，应确保信息可通过联网搜索获取。
+  - 不要求专业领域未公开知识：问题应基于普遍认知或可检索的专业常识，避免依赖企业内部数据、未发表研究等
+  - 具备完整性：提问包含可回答的最小信息量，必要信息应直接嵌入在提问中。
+
+### 判断方法
+这里的关键是对内容信息的“有效域”进行判定，从三个类别进行区分；
+   - [1] 非长尾信息，目标回答者不依赖外部工具可回答
+   - [2] 长尾信息，但目标回答者可以通过公开资源验证获取或互联网搜索获取
+   - [3] 长尾信息，但内容信息仅局限于特定文档中，无法通过公开资源搜索获取
+
+需要确保提问回答不包含第三类信息
+
+
+### 输出要求：
+满足全部要求输出“无需修改”，否则输出“需要改进”。
+按下面的格式输出结果 （如果无需修改，[违反原则]不用填写）
+```
+[分析] ...
+[违反原则]
+[结果]
+```
+
+下面是一些例子
+
+
+[问题] Extract and present the main key point of the input text in one very short sentence, including essential details like dates or locations if necessary.
+```
+[分析] 该提问要求提取输入文本的核心要点，但未在问题中提供具体的“input text”内容，属于依赖特定未公开文档（未嵌入关键的输入文本信息），且不具备可回答的最小信息量（缺少核心分析对象“输入文本”），无法判断其有效域类别，不符合信息可获取性边界中“不依赖特定未公开文档”和“具备完整性”的要求。
+[违反原则] 1. 依赖特定未公开文档（未提供“input text”具体内容）；2. 不具备完整性（缺少可回答的最小信息量“输入文本”）
+[结果] 需要改进
+```
+
+
+[问题] A hiker is planning a 3-day trip in the mountains, expecting rain and needing to carry water and snacks. They require a daypack that is lightweight (under 20 oz), water-resistant, has a hydration compartment, and is easy to pack away when not in use. The pack must also be comfortable for long hikes and suitable for both day hikes and travel. Which of the following daypacks is the most suitable for this scenario?
+Options:
+A) Osprey Talon 22
+B) REI Co-op Flash 22
+C) Black Diamond Distance 15
+D) Hyperlite Mountain Tools Morning time
+```
+[分析] 该提问明确嵌入了徒步者的行程需求（3天山地旅行、需防雨、携带水和零食）、背包的具体要求（轻量化＜20 oz、防水、有储水舱、易收纳、舒适、适配单日徒步与旅行）及四个具体背包选项，未依赖特定未公开文档；涉及的各背包参数（重量、材质、结构等）属于可通过联网搜索获取的公开信息，不依赖专业领域未公开知识；且包含了判断背包适用性的最小必要信息量，满足信息可获取性边界要求。从有效域看，属于[2]长尾信息，可通过公开资源验证获取。
+[违反原则]
+[结果] 无需修改
+```
+
+
+[问题] First, answer the following question. Then, write a training document in markdown format based on the article provided, ensuring that the content is self-contained, does not directly reference the prompt, and follows the guidelines for creating high-quality questions. The document should include two sections, 'horses 1-5' and 'horses 6-10', each detailing the horse's name, win percentage, race details, and rationale for being a top pick. Use the article's information to inform your analysis
+```
+[分析] 该问题提及“based on the article provided”，但未嵌入该文章的关键信息，也未提供文章具体内容，导致回答所需的核心信息仅局限于这一未公开的特定文档中。从判断方法来看，其涉及的信息属于[3]类长尾信息，无法通过公开资源搜索获取，不满足“不依赖特定未公开文档”的信息可获取性边界要求，且缺乏可回答的最小信息量（文章关键信息）。
+[违反原则] 1. 依赖特定未公开文档（未提供“文章”具体内容，也未嵌入关键信息）；2. 不具备完整性（缺少回答所需的文章关键信息，未包含可回答的最小信息量）；3. 内容信息仅局限于特定文档中，属于需避免的第三类信息。
+[结果] 需要改进
+```
+
+
+[问题] 好学校对学生的影响主要体现在哪些方面？请分析好学校如何通过努力、视野和改变世界三个方面影响学生。
+```
+[分析] 该问题不依赖特定未公开文档，未提及需引用外部未提供内容的材料，关键概念（好学校、努力、视野、改变世界）为普遍认知；涉及的“好学校对学生影响”相关分析属于教育领域常见讨论，可通过公开资源验证，无需专业领域未公开知识；提问明确指定了“努力、视野和改变世界”三个分析维度，包含可回答的最小信息量，具备完整性。从有效域判定，属于[1]非长尾信息，目标回答者不依赖外部工具可回答。
+[违反原则] 
+[结果] 无需修改
+```
+
+
+[问题] Based on the analysis provided in the article, which horse is most likely to win the 151st Belmont Stakes, and why? Consider factors such as pedigree, past performances, jockey changes, and current training status.
+```
+[分析] 问题中提到 “基于文章中的分析”，但未提供该文章的具体内容或关键信息，导致必要数据依赖未公开文档。根据搜索结果，2025 年贝尔蒙特赛马的参赛马匹、赔率等信息可通过公开资源获取，但问题要求结合特定文章的分析，而该文章未被引用或嵌入，属于第三类信息（仅局限于特定文档无法公开获取）。此外，问题未包含血统、过往表现等具体数据，需依赖外部未公开材料，违反 “不依赖特定未公开文档” 和 “具备完整性” 原则。
+[违反原则] 不依赖特定未公开文档、具备完整性
+[结果] 需要改进
+```
+
+
+[问题] Your answer must contain exactly 3 bullet points. Use the markdown bullet points such as: * This is point 1. Answer the following question: Analyze the differences in terrorism before and after the Second World War, considering historical factors, media reporting, and current trends. How do these factors influence the perception and prevalence of terrorism in non-conflict and conflict countries?
+```
+[分析] 该问题要求分析二战前后恐怖主义在历史因素、媒体报道、当前趋势方面的差异，及这些因素对冲突与非冲突国家恐怖主义认知和发生率的影响。从信息可获取性边界看，问题未依赖特定未公开文档，无“基于某篇文章”却不提供内容的情况；涉及的二战前后历史背景、恐怖主义发展脉络、媒体报道演变等事实性信息，可通过公开学术资料、历史记录等联网搜索获取，不依赖专业领域未公开知识（如企业内部数据、未发表研究）；且提问明确了分析维度（历史因素、媒体报道、当前趋势）和影响对象（非冲突与冲突国家），包含可回答的最小信息量，具备完整性。从有效域判定，属于[2]长尾信息，但目标回答者可通过公开资源验证获取，不包含[3]类信息。
+[违反原则]
+[结果]无需修改
+```
+
+
+[问题] Summarize the key points of the following article into two paragraphs, each at least 8 lines long. Ensure each paragraph has a title wrapped in double square brackets, i.e. [[title]].
+```
+[分析] 该问题要求总结某篇文章的要点，但未在提问中提供该文章的具体内容，也未嵌入文章关键信息。根据信息可获取性边界说明，问题需明确说明所有必要数据或背景，避免依赖特定未公开文档；同时需具备完整性，包含可回答的最小信息量。从判断方法来看，文章内容属于仅局限于特定文档中的长尾信息，无法通过公开资源搜索获取，符合[3]类信息，不符合提问要求。
+[违反原则] 1. 依赖特定未公开文档（未提供需总结的文章内容及关键信息）；2. 不具备完整性（缺少可回答总结任务的最小信息量——文章内容）
+[结果] 需要改进
+```
+
+
+[问题] 在杜琪峰的电影《黑社会2:以和为贵》中，黑社会的权力斗争反映了香港社会的哪些变化？请分析其生存逻辑、政治隐喻，以及对社会的影响。
+```
+[分析] 问题围绕公开上映的电影《黑社会2:以和为贵》展开，明确指定了分析对象（电影）与分析维度（黑社会权力斗争反映的香港社会变化、生存逻辑、政治隐喻、社会影响）。电影内容及相关公开解读均属于可通过公开资源验证的信息，不依赖特定未公开文档、企业内部数据或未发表研究，且包含了可回答的最小信息量，符合信息可获取性边界的所有要求。从“有效域”判定，该问题涉及的电影主题分析属于非长尾信息，目标回答者不依赖外部工具可回答，或可通过公开影评、影视分析等公开资源补充，不属于仅局限于特定文档的第三类信息。
+[违反原则]
+[结果] 无需修改
+```
+
+
+[问题] 在《权力的游戏》第八季第三集中，雪诺一方在异鬼战役中失败的主要战术原因是什么？请分析兵种搭配、战术部署、情报获取等因素。
+[分析] 该问题聚焦于《权力的游戏》第八季第三集的公开剧情，未涉及特定未公开文档。通过搜索结果可见，剧评、分集剧情及战术分析均来自豆瓣、网易等公开平台，涵盖兵种搭配（如多斯拉克骑兵冲锋）、战术部署（如布兰作为诱饵）、情报获取（如梅丽珊卓的预言）等要素。这些内容可通过公开资源验证，且无需专业领域未公开知识。问题包含具体集数与分析维度，具备完整性，符合第二类信息（长尾信息但可通过公开资源获取）的判定标准。
+[违反原则]
+[结果] 无需修改
+"""
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1576,6 +1681,33 @@ class PairwiseJudge(BatchCallOpenAPI):
 
 class Doc2QueryV3LooseQuestionEval(BatchCallOpenAPI):
     _TEMPLATE = DOC2QUERY_V3_Q_EVAL_LOOSE_TEMPLATE
+
+    def __init__(self):
+        pass
+
+    @classmethod
+    def task_desc(cls):
+        return "问题质量评价（宽松）"
+
+    def postprocess(self, response: str):
+        s = response
+        try:
+            conclusion = s[s.index(
+                "[结果]")+len("[结果]"):].strip()
+            if "无需修改" in conclusion:
+                return True
+            return False
+        except Exception as err:
+            raise PostprocessError(f'{err}')
+
+    def prompt_fn(self, example):
+        prompt = self._TEMPLATE + \
+            f'\n\n\n现在需要你对下面的问题分析是否符合要求并判断是否需要修改。\n\n[问题]\n{example}\n'
+        return prompt
+
+
+class Doc2QueryV4LooseQuestionEval(Doc2QueryV3LooseQuestionEval):
+    _TEMPLATE = DOC2QUERY_V4_Q_EVAL_LOOSE_TEMPLATE
 
     def __init__(self):
         pass
@@ -5004,8 +5136,12 @@ def doc2query_v4_parse_solution_fn(solution_str: str, remove_option_letter=True,
     thought, conclusion = parsed
 
     try:
-        results = re.findall(
-            r'Question:(.*)\n+Answer:(.*)', conclusion, re.DOTALL)[0]
+        try:
+            results = re.findall(
+                r'Question:(.*)\n+Answer:(.*)', conclusion, re.DOTALL)[0]
+        except Exception as err:
+            results = re.findall(
+                r'Question:(.*)\n+Solution:(.*)', conclusion, re.DOTALL)[0]
         question, reference = results
         question, reference = question.strip(), reference.strip()
 
@@ -5066,6 +5202,51 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         return [
             Doc2QueryV4LanguageConsistency
         ]
+
+    async def loose_question_eval(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+    ):
+        task = Doc2QueryV4LooseQuestionEval()
+        indices = []
+        questions = []
+
+        for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
+            result = self.parse_solution_fn(sol)
+            if result is not None:
+                questions.append(result[0])
+                indices.append(i)
+            else:
+                continue
+
+        repeat_questions = questions
+        repeat_indices = indices
+
+        qualities = await task.do_job(
+            agent=self.verify_agent,
+            batch_inputs=repeat_questions,
+            max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
+        )
+
+        scores = []
+        for i in range(len(batch_solution_str)):
+            scores.append([])
+        for valid, index in zip(qualities, repeat_indices):
+            if valid is None:
+                pass
+            else:
+                _score = 0.0 if valid else -1.75
+                scores[index].append(_score)
+
+        final_scores = [0.0] * len(batch_solution_str)
+        for i, score in enumerate(scores):
+            if len(score) == 0:
+                final_scores[i] = 0.0
+            else:
+                final_scores[i] = min(score)
+        return final_scores
 
     async def get_difficulty(self,
                              batch_data_sources,
@@ -5132,13 +5313,14 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
 
     def coarse_process(self):
         return [
-            # 快速判断问题质量
-            Process(name="RefQuality",
-                    function=self.eval_reference, filter_only=False, non_skip=False),
+            Process(name="LooseQEval",
+                    function=self.loose_question_eval, filter_only=False, non_skip=False),
         ]
 
     def finegrain_process(self):
-        return Process(name="Difficulty", function=self.get_difficulty, filter_only=False, non_skip=False)
+        return Process(name="RefQuality",
+                       function=self.eval_reference, filter_only=False, non_skip=False)
+        # return Process(name="Difficulty", function=self.get_difficulty, filter_only=False, non_skip=False)
 
     @classmethod
     def respond(cls, result, gt):
@@ -5187,9 +5369,8 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         all_skip_next_action = sorted(list(set(all_skip_next_action)))
         all_skip_next_action = tuple(all_skip_next_action)
 
-        # 难度奖励
         main_process = self.finegrain_process()
-        main_rewards, extra = await main_process.function(
+        main_rewards = await main_process.function(
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth,
