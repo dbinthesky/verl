@@ -56,13 +56,14 @@ setup_path() {
     local world_size="${WORLD_SIZE:-1}"
 
     ROLLOUT_N=16
-    TRAIN_BSZ=$((num_gpus * world_size * 4))
+    TRAIN_BSZ=$((num_gpus * world_size))
     KL_LOSS_COEF="0"
     TEMPERATURE="1.0"
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_fabricate_qa_self_taught_250829_sft_doc2query_v3_if_enhance_0911/20250911173649/hf-738"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_fabricate_qa_self_taught_250829_sft_doc2query_v3_if_enhance_0911/20250911173649/hf-738"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v3_30b_a3_2025-09-17_roll16_128_dapo_kl_coef_0_wo_entropy_t1.0_solver_dsv3_step_50"
     # TRAIN_DATA='["/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs_learned/index0.parquet","/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs_learned/index1.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs_learned/index2.parquet"]'
     TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_rl_inputs_diamond.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs_test.parquet"

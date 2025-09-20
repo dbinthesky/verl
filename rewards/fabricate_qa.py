@@ -1063,10 +1063,13 @@ PAIRWISE_JUDGE_TEMPLATE = """
 ```json
 {{
     "reason": "***",
-    "better": "回答一/回答二/无法判断"
+    "better": "回答一/回答二/平局/无法判断"
 }}
 ```
-`better`对应的内容为“回答一”、“回答二”、“无法判断”三个其中之一。其中“无法判断表示无法判断两个回答哪个更好”
+`better`对应的内容为“回答一”、“回答二”、“平局”、“无法判断”三个其中之一。其中“无法判断表示无法判断两个回答哪个更好”
+其中“平局”与“无法判断”核心判定依据不同：
+1. “平局”是在**有明确判断维度和充分信息**的前提下，经过对比后确定“回答一”与“回答二”质量相当（如完整性、准确性、逻辑性均无明显差异），属于“能得出明确结论（两者一样好）”的情况；“无法判断”是因**缺乏关键信息或判断标准不清晰**（如回答内容残缺、未明确评判维度），导致无法对两个回答的优劣或是否相当做出任何有效判定，属于“无足够依据得出结论”的情况。
+2. 场景示例差异：若两个回答均完整覆盖问题要点、逻辑严谨，仅表述风格不同，判定为“平局”；若一个回答关键数据缺失，另一个回答未说明核心逻辑，且无明确标准衡量“数据缺失”与“逻辑模糊”的影响，判定为“无法判断”。
 
 ## 输出
 """
@@ -1174,6 +1177,105 @@ D) Hyperlite Mountain Tools Morning time
 [分析] 该问题聚焦于《权力的游戏》第八季第三集的公开剧情，未涉及特定未公开文档。通过搜索结果可见，剧评、分集剧情及战术分析均来自豆瓣、网易等公开平台，涵盖兵种搭配（如多斯拉克骑兵冲锋）、战术部署（如布兰作为诱饵）、情报获取（如梅丽珊卓的预言）等要素。这些内容可通过公开资源验证，且无需专业领域未公开知识。问题包含具体集数与分析维度，具备完整性，符合第二类信息（长尾信息但可通过公开资源获取）的判定标准。
 [违反原则]
 [结果] 无需修改
+"""
+
+DOC2QUERY_V4_Q_EVAL_STRICT_TEMPLATE = """任务：基于下面的标准与方法对一道用户提问进行评价，判断是否需要改进
+
+你需要判断问题是否符合“最少必要约束”的设计原则，判断问题是否存在缺陷： 
+
+内嵌约束说明
+内嵌约束是在提问中隐性或显性植入的 “关键限定条件”，作用是锚定回答的核心方向、范围与输出标准，既避免模型回答过度发散或偏离核心需求，又为能力考察划定明确维度；
+其本质是通过 “最小信息干预”，让模型在约束框架内展现 “理解 - 应用 - 推导” 能力，而非无边界自由创作。
+
+例如：
+1. 创作类（诗歌 / 文案）- 形式约束（结构 / 字数）、风格约束（语气 / 情感）、内容约束（核心意象 / 主题）等
+2. 技术类（操作 / 方案）- 逻辑约束（步骤顺序 / 因果链）；结果约束（目标效果 / 指标）；场景约束（适用环境 / 工具）等
+3. 分析类（报告 / 论证）- 1. 维度约束（分析角度）2. 证据约束（支撑数据 / 案例）3. 结论约束（推导方向）等
+
+
+“最少必要约束” 的设计原则与原因（隐藏提问的提示信息）
+1. 设计原则​
+“最少必要” 指仅保留 “确保回答不跑偏、能力可考察” 的核心约束，剔除冗余限定（如非关键格式、无关背景），平衡 “边界明确性” 与 “能力发挥空间”。判断标准为：移除该约束后，回答会出现 “方向偏离” 或 “能力考察点缺失”，则该约束为必要约束。
+
+2. 核心原因​
+1. 精准区分能力层级：最少必要约束下，模型需要完成 “理解约束、补充合理细节、优化输出” 等行为，尤其是从用户语气、表述、场景中深层推理隐含意图的能力会大幅减弱，最少必要约束可直接反映不同模型其能力差异（如优秀模型会主动补充 “情感递进逻辑”，基础模型仅满足 “柔和风格 + 短诗”）
+2. 还原真实提问场景：现实中用户提问多为 “核心需求 + 少量约束”（如 “写一首关于星空的柔和风格短诗”），过多约束不符合真实交互逻辑，导致 QA 数据脱离实际应用场景。​
+3. 避免过度限制模型能力：若约束过多（如 “写诗歌需包含‘星、月、风’3 个意象，每句 5 字，押韵方式为‘平仄平’”），模型仅需机械满足条件，无法体现 “意象构建、情感递进” 等核心能力，失去 QA 数据的考察价值。​
+
+你现在需要对提问进行判断是否满足“最少必要约束” 的设计原则
+
+
+### 输出要求：
+满足全部要求输出“无需修改”，否则输出“需要改进”。
+按下面的格式输出结果 （如果无需修改，[违反原则]不用填写）
+```
+[分析] ...
+[违反原则]
+[结果]
+```
+
+下面是一些例子
+
+
+[问题] 作为一名旅游规划师，你被委托设计一个为期一周的永城文化旅游项目，旨在向游客展示永城丰富的文化遗产、自然风光和地方特色，同时促进当地经济和文化的可持续发展。请根据永城的综合信息，设计一个旅游项目，包括旅游线路、特色活动、文化体验、地方美食和住宿建议。在设计时，需考虑以下几点：
+1. 旅游线路应覆盖永城的主要文化遗产和自然景观，如芒砀山、汉梁王墓群、崇法寺塔、日月湖等。
+2. 特色活动应体现永城的地方特色，如参与永城大铙、柳琴戏、书法体验等。
+3. 文化体验需让游客深入了解永城的历史和文化，如参观永城文保单位、体验永城方言俚语、参与民俗活动等。
+4. 地方美食和住宿建议需考虑游客的多样需求，如品尝薛湖牛肉水煎包、永城豆粥、酂城糟鱼等地方美食，推荐具有永城特色的住宿地点。
+5. 分析该项目对永城经济和文化可持续发展的影响，包括对当地经济的促进作用、对文化遗产的保护和传承、对自然环境的影响等。
+```
+[分析] 该提问的核心需求是设计为期一周的永城文化旅游项目，以展示当地文化遗产、自然风光、地方特色并促进可持续发展，此核心需求明确。但提问中列举了过多具体细节（如芒砀山、汉梁王墓群、薛湖牛肉水煎包等），这些信息按提示本应从阅读材料中获取，属于冗余限定。移除这些具体细节后，回答仍能围绕“永城一周文化旅游项目设计及可持续发展影响分析”的核心方向展开，不会出现方向偏离或能力考察点缺失，因此这些具体细节不符合“最少必要约束”中“剔除冗余限定”的设计原则。
+[违反原则] 包含过多本应从阅读材料中获取的具体细节（如具体景点、美食名称），属于冗余限定，超出“最少必要约束”的范围。
+[结果] 需要改进
+```
+
+
+[问题] 设计一个流体艺术创作项目，项目应包括以下部分：
+1. 项目背景：选择一位历史上的流体艺术家作为灵感来源，简述其艺术风格和对你的影响。
+2. 所需材料：列出你将使用的所有材料，包括但不限于画布、颜料、媒介、工具等，并说明选择这些材料的原因。
+3. 创作步骤：详细描述从准备工作室到完成作品的每一步骤，包括技巧应用和预期效果。
+4. 预期结果：描述你期望的作品外观，包括颜色、纹理和设计元素。
+5. 安全措施：列出在创作过程中应采取的安全措施，确保创作环境的安全。
+```
+[分析] 该提问要求设计流体艺术创作项目，虽明确了项目需包含的核心模块（背景、材料、步骤、结果、安全措施），符合“确保回答不跑偏、能力可考察”的核心需求，但存在冗余限定。在“所需材料”部分，明确指定“包括但不限于画布、颜料、媒介、工具等”，此类具体材料名称属于非关键限定，移除后模型仍可围绕流体艺术创作合理列出所需材料及选择原因，不会导致回答方向偏离；在“创作步骤”部分，“从准备工作室到完成作品的每一步骤”这一表述过于详细，核心约束只需“描述创作步骤（含技巧应用和预期效果）”即可，过度限定步骤范围属于冗余内容，不符合“最少必要约束”中“剔除冗余限定，平衡边界明确性与能力发挥空间”的原则。
+[违反原则] 存在冗余限定（具体材料名称、过度详细的步骤范围），未严格遵循“最少必要约束”中剔除冗余限定的设计原则。
+[结果] 需要改进
+```
+
+
+[问题] Imagine you are a small business owner looking to set up an eCommerce platform. You already have an existing website and need a solution that integrates seamlessly with it. You prefer a platform that requires minimal design knowledge and offers affordable pricing with basic features. Additionally, you want to be able to sell on social media and marketplaces without significant technical hurdles. Which eCommerce platform is more suitable for your needs, and why?
+```
+[分析] 该问题包含的约束条件（现有网站整合、设计门槛低、价格亲民、基础功能、多渠道销售）均为判定电商平台适用性的核心维度，移除任意一项均会导致回答方向偏离或能力考察点缺失。例如，若缺少“整合现有网站”的约束，可能推荐独立建站方案而非插件式平台；若缺少“多渠道销售”的约束，回答将无法体现平台对社交媒体和市场places的支持能力。所有约束均符合“最少必要”原则，未包含冗余信息（如非关键格式要求），且与真实小商家提问场景高度契合。
+[违反原则]
+[结果] 无需修改
+```
+
+
+[问题] 分析Saarbrücken在中世纪、文艺复兴、工业革命和二战后四个关键历史时期的行政中心变迁，并解释变迁的原因。请详细描述每个时期的行政中心位置、重要建筑的变迁，以及导致这些变迁的历史事件。在你的回答中，确保包括以下信息：每个时期行政中心的具体位置、重要建筑的名称和功能，以及变迁的历史背景。
+```
+[分析] 该问题的核心需求是分析Saarbrücken在四个关键历史时期的行政中心变迁及原因，核心约束应为“四个历史时期（中世纪、文艺复兴、工业革命、二战后）”“行政中心变迁”“变迁原因”。但问题中先要求“详细描述每个时期的行政中心位置、重要建筑的变迁，以及导致这些变迁的历史事件”，后又重复强调“确保包括以下信息：每个时期行政中心的具体位置、重要建筑的名称和功能，以及变迁的历史背景”，两处约束内容高度重合，存在冗余限定，超出“最少必要”范畴。
+[违反原则] 存在重复冗余的约束，未剔除非必要的重复限定，不符合“最少必要约束”中“剔除冗余限定，仅保留核心约束”的设计原则。
+[结果] 需要改进
+```
+
+
+[问题] A small business owner is launching an eCommerce store and needs to choose between Shopify and Ecwid. The requirements are: 1. A free plan with basic features including website integration and social media posting. 2. Integration with Facebook and Instagram for social commerce. 3. Simple stock management system. 4. Customizable themes for website design. 5. Support for multiple selling channels including physical stores and marketplaces. Which platform is more suitable, and why? Provide a detailed comparison based on their features and pricing models.
+```
+[分析] 该提问的核心需求是帮助小企业主在Shopify和Ecwid两个电商平台中做出选择，核心约束应为“小企业主”“电商平台选择”“免费计划”“社交媒体集成”“简单库存管理”“可定制主题”“多销售渠道支持”等。这些约束条件明确了回答的方向和范围，确保回答围绕平台的相关功能和特点展开，以帮助用户做出决策。移除任何一个约束，都可能导致回答不完整或偏离用户的核心需求，例如移除“免费计划”这一约束，回答可能会忽略平台的价格因素，无法满足用户对成本的考量；移除“社交媒体集成”这一约束，回答可能不会涉及平台在社交电商方面的能力，从而影响用户对平台功能全面性的了解。因此，该问题的约束条件是最少必要的，符合“最少必要约束”的设计原则。
+[违反原则] 无
+[结果] 无需修改
+```
+
+
+[问题] 根据魏书卷十一帝纪第十一的记载，分析以下问题：
+1. 概述前废帝广陵王的政绩和官职变动，包括他在位期间的军事行动、赦免令、官职调整等。
+2. 分析齐献武王的军事行动及其对北魏政局的影响，包括他如何通过军事行动影响了北魏的政局稳定。
+3. 评估官职变动对北魏政局稳定的作用，包括官职变动如何影响了北魏的政局稳定和军事行动的成效。
+```
+[分析] 该提问的核心需求是依据《魏书卷十一帝纪第十一》分析前废帝广陵王、齐献武王相关情况及北魏官职变动的影响，核心约束应为“基于指定史料”“分析三个具体问题方向”。但在每个问题中均加入了过度具体的解题思路提示（如分析前废帝政绩时明确“包括军事行动、赦免令、官职调整等”，分析齐献武王时明确“包括如何通过军事行动影响政局稳定”），这些提示超出了“确保回答不跑偏、能力可考察”的必要范围。移除这些具体提示后，模型仍能围绕三个核心问题方向，基于史料进行分析，不会出现方向偏离或能力考察点缺失，此类提示属于冗余限定，不符合“最少必要约束”原则。
+[违反原则] 在每个分析问题中均包含过度具体的解题思路提示，属于冗余限定，降低了对模型基于史料自主挖掘关键信息、展开分析能力的考察，不符合“最少必要约束”中“剔除冗余限定，仅保留核心约束”的设计原则。
+[结果] 需要改进
+```
 """
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1544,10 +1646,15 @@ class PolarAgent(BatchCallOpenAPI):
                                         server_address=self.url)
 
     def prompt_fn(self, example):
+        # return {
+        #     "prompt": [{"role": "user", "content": example[1][0]}],
+        #     "reference": [{"role": "assistant", "content": example[1][1]}],
+        #     "output": [{"role": "assistant", "content": example[0]}]
+        # }
         return {
             "prompt": [{"role": "user", "content": example[1][0]}],
-            "reference": [{"role": "assistant", "content": example[1][1]}],
-            "output": [{"role": "assistant", "content": example[0]}]
+            "reference": [{"role": "assistant", "content": example[0]}],
+            "output": [{"role": "assistant", "content": example[1][1]}],
         }
 
     def postprocess(self, response: str):
@@ -1601,7 +1708,7 @@ class JudgeTwoQuestionSimilarity(BatchCallOpenAPI):
 class PairwiseJudge(BatchCallOpenAPI):
     _TEMPLATE = PAIRWISE_JUDGE_TEMPLATE
 
-    def __init__(self, repeat=2):
+    def __init__(self, repeat=3):
         self.repeat = repeat
 
     @classmethod
@@ -1629,6 +1736,7 @@ class PairwiseJudge(BatchCallOpenAPI):
     async def do_job(self, agent, batch_inputs, max_concurrent_requests):
         prompts = defaultdict(list)
         rtypes = {}
+
         for index, example in enumerate(batch_inputs):
             _prompts = self.prompt_fn(example)
             for prompt, rtype in _prompts:
@@ -1649,16 +1757,23 @@ class PairwiseJudge(BatchCallOpenAPI):
             if i in results_mapper and results_mapper[i] is not None:
                 score = []
                 for _rank in results_mapper[i]:
+                    # WIN
                     if (_rank[0] == 1 and _rank[1] == "REF_AS_FIRST") or (_rank[0] == 2 and _rank[1] == "REF_AS_SECOND"):
                         score.append(1.0)
+                    # LOSE
                     elif (_rank[0] == 1 and _rank[1] == "REF_AS_SECOND") or (_rank[0] == 2 and _rank[1] == "REF_AS_FIRST"):
-                        score.append(-1.5)
-                    else:
+                        score.append(-1.0)
+                    # TIE
+                    elif _rank[0] == 0:
+                        score.append(0)
+                    # Can not be determined
+                    elif _rank[0] == -1:
                         score.append(-0.5)
+                    else:
+                        score.append(0)
                 outputs.append(np.mean(score))
             else:
                 outputs.append(None)
-
         return outputs
 
     def postprocess(self, response: str):
@@ -1672,6 +1787,10 @@ class PairwiseJudge(BatchCallOpenAPI):
                     return 1
                 elif better == "回答二":
                     return 2
+                elif better == "平局":
+                    return 0
+                elif better == "无法判断":
+                    return -1
                 return 0
             else:
                 return 0
@@ -1715,6 +1834,33 @@ class Doc2QueryV4LooseQuestionEval(Doc2QueryV3LooseQuestionEval):
     @classmethod
     def task_desc(cls):
         return "问题质量评价（宽松）"
+
+    def postprocess(self, response: str):
+        s = response
+        try:
+            conclusion = s[s.index(
+                "[结果]")+len("[结果]"):].strip()
+            if "无需修改" in conclusion:
+                return True
+            return False
+        except Exception as err:
+            raise PostprocessError(f'{err}')
+
+    def prompt_fn(self, example):
+        prompt = self._TEMPLATE + \
+            f'\n\n\n现在需要你对下面的问题分析是否符合要求并判断是否需要修改。\n\n[问题]\n{example}\n'
+        return prompt
+
+
+class Doc2QueryV4StrictQuestionEval(Doc2QueryV4LooseQuestionEval):
+    _TEMPLATE = DOC2QUERY_V4_Q_EVAL_STRICT_TEMPLATE
+
+    def __init__(self):
+        pass
+
+    @classmethod
+    def task_desc(cls):
+        return "问题质量评价（严格）"
 
     def postprocess(self, response: str):
         s = response
@@ -5129,25 +5275,30 @@ class LearnableCoTComputeScore(SALTComputeScore):
 
 
 def doc2query_v4_parse_solution_fn(solution_str: str, remove_option_letter=True, extract_question_fn=parse_question_solution_fn):
-    parsed = extract_question_fn(solution_str)
-    if parsed is None:
-        return None
+    for kw in ("</question>", "</think>", "</doc>"):
+        if solution_str.count(kw) > 1:
+            return None
 
-    thought, conclusion = parsed
+    solution_str = postprocess_solution(solution_str)
+    if not solution_str.startswith("<think>"):
+        solution_str = f'<think>\n{solution_str}'
 
     try:
-        try:
-            results = re.findall(
-                r'Question:(.*)\n+Answer:(.*)', conclusion, re.DOTALL)[0]
-        except Exception as err:
-            results = re.findall(
-                r'Question:(.*)\n+Solution:(.*)', conclusion, re.DOTALL)[0]
-        question, reference = results
-        question, reference = question.strip(), reference.strip()
-
-        return question, reference
+        thought = re.findall(r'<think>.*</think>',
+                             solution_str, re.DOTALL)[0]
     except Exception as err:
         return None
+
+    solution_str = solution_str.replace(thought, "")
+
+    try:
+        conclusion = re.findall(r'<question>(.*)</question>\n+<doc>(.*)</doc>',
+                                solution_str, re.DOTALL)[0]
+        prompt, doc = conclusion
+        prompt, doc = prompt.strip(), doc.strip()
+    except Exception as err:
+        return None
+    return prompt, doc
 
 
 class Doc2QueryV4LanguageConsistency(LanguageConsistency):
@@ -5167,7 +5318,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
                  parse_solution_fn,
                  split="train",
                  args=None,
-                 min_reward=-2.0,
+                 min_reward=-5.0,
                  thought_log_prob=0.01,
                  ):
         super().__init__(
@@ -5192,6 +5343,8 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
     def init_verify_agent(self):
         self.verify_agent = Agent(
             **self.args["verify_agent"]["model"])
+        self.judge_agent = Agent(
+            **self.args["judge_agent"]["model"])
         self.anchor_agent = Agent(
             **self.args["eval_reference_run_args"]["adv"]["model"]
         )
@@ -5203,13 +5356,15 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
             Doc2QueryV4LanguageConsistency
         ]
 
-    async def loose_question_eval(
+    async def _question_eval(
         self,
         batch_data_sources,
         batch_solution_str,
         batch_ground_truth,
+        eval_task,
+        set_value,
     ):
-        task = Doc2QueryV4LooseQuestionEval()
+        task = eval_task
         indices = []
         questions = []
 
@@ -5225,9 +5380,9 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         repeat_indices = indices
 
         qualities = await task.do_job(
-            agent=self.verify_agent,
+            agent=self.judge_agent,
             batch_inputs=repeat_questions,
-            max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
+            max_concurrent_requests=self.args["judge_agent"]["max_concurrent_requests"],
         )
 
         scores = []
@@ -5237,7 +5392,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
             if valid is None:
                 pass
             else:
-                _score = 0.0 if valid else -1.75
+                _score = 0.0 if valid else set_value
                 scores[index].append(_score)
 
         final_scores = [0.0] * len(batch_solution_str)
@@ -5247,6 +5402,34 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
             else:
                 final_scores[i] = min(score)
         return final_scores
+
+    async def loose_question_eval(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+    ):
+        return await self._question_eval(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            eval_task=Doc2QueryV4LooseQuestionEval(),
+            set_value=-1.75,
+        )
+
+    async def strict_question_eval(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+    ):
+        return await self._question_eval(
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            eval_task=Doc2QueryV4StrictQuestionEval(),
+            set_value=-0.5,
+        )
 
     async def get_difficulty(self,
                              batch_data_sources,
@@ -5267,12 +5450,8 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
             resp_postprocess_fn=lambda x: x.strip()
         )
 
-        rm_std = [0.0] * len(batch_solution_str)
         # TODO: 第一阶段不引入Reward Std
-        # correctness = correctness["difficulty_run_args"]
-        # for i in range(len(batch_solution_str)):
-        #     if i in correctness.keys():
-        #         rm_std[i] = np.std([_[0] for _ in correctness[i]])
+        rm_std = [0.0] * len(batch_solution_str)
         return rm_std, {}
 
     def log_solution(self, solution):
@@ -5303,6 +5482,19 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         for i in range(len(batch_solution_str)):
             if i in correctness.keys():
                 outputs[i] = correctness[i][0][0]
+
+        for i, (sol, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            parsed = self.parse_solution_fn(sol)
+
+            if parsed is not None:
+                hyp, ref = parsed[1], gt["document"]
+                lang_code = "zh" if contain_chinese(hyp) else "en"
+
+                hyp_tokens = " ".join(tokenize(hyp.lower(), lang_code))
+                ref_tokens = " ".join(tokenize(ref.lower(), lang_code))
+                bleu = sacrebleu.sentence_bleu(hyp_tokens, [ref_tokens]).score
+                similarity = bleu / 100
+                outputs[i] += similarity
         return outputs
 
     @classmethod
@@ -5315,12 +5507,13 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         return [
             Process(name="LooseQEval",
                     function=self.loose_question_eval, filter_only=False, non_skip=False),
+            Process(name="StrictQEval",
+                    function=self.strict_question_eval, filter_only=False, non_skip=False),
         ]
 
     def finegrain_process(self):
         return Process(name="RefQuality",
                        function=self.eval_reference, filter_only=False, non_skip=False)
-        # return Process(name="Difficulty", function=self.get_difficulty, filter_only=False, non_skip=False)
 
     @classmethod
     def respond(cls, result, gt):
@@ -5337,7 +5530,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
             parsed = self.parse_solution_fn(solution_str)
             if parsed is None:
-                penalty[i].append(-2.0)
+                penalty[i].append(self.min_reward)
             else:
                 penalty[i].append(0.0)
 
@@ -5954,14 +6147,14 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
     },
     "reward_model_args": {
         "urls": [
-            "http://10.130.1.220:32945",
-            "http://10.130.1.220:27533",
-            "http://10.130.1.220:30858",
-            "http://10.130.1.220:28198",
-            "http://10.130.1.220:29984",
-            "http://10.130.1.220:34232",
-            "http://10.130.1.220:25421",
-            "http://10.130.1.220:31737"
+            "http://10.130.1.226:28206",
+            "http://10.130.1.226:25843",
+            "http://10.130.1.226:31854",
+            "http://10.130.1.226:30058",
+            "http://10.130.1.226:31877",
+            "http://10.130.1.226:26327",
+            "http://10.130.1.226:31225",
+            "http://10.130.1.226:26126"
         ]
     },
     "save_rollouts": {
@@ -6006,6 +6199,19 @@ DOC2QUERY_V4_DEFAULT_PARAMS = {
             "desc": 'reward std',
             "max_concurrent_requests": 256
         },
+    },
+    "judge_agent": {
+        "model": {
+            "model": "Qwen2.5-32B-Instruct",
+            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+            "request_kwargs": {
+                "temperature": 0.8,
+                "timeout": 360,
+                "max_tokens": 4096,
+            }
+        },
+        "max_concurrent_requests": 128
     },
     "verify_agent": {
         "model": {
