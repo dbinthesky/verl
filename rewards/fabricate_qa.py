@@ -5477,8 +5477,8 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         batch_solution_str,
         batch_ground_truth,
         skip_run=None,
-        info_leakage_threshold=0.2,
-        info_gain_threshold=0.4
+        info_leakage_threshold=0.3,
+        info_gain_threshold=0.6
     ):
         outputs = [0.0] * len(batch_solution_str)
         for i, (sol, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
