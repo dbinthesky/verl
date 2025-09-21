@@ -1735,13 +1735,21 @@ class PairwiseJudge(BatchCallOpenAPI):
 
     async def do_job(self, agent, batch_inputs, max_concurrent_requests):
         prompts = defaultdict(list)
-        rtypes = {}
+        rtypes, sim = {}, {}
 
         for index, example in enumerate(batch_inputs):
             _prompts = self.prompt_fn(example)
             for prompt, rtype in _prompts:
                 rtypes[prompt] = rtype
                 prompts[prompt].append(index)
+
+                ref, hyp = example[1][1], example[0]
+                lang_code = "zh" if contain_chinese(hyp) else "en"
+                hyp_tokens = " ".join(tokenize(hyp.lower(), lang_code))
+                ref_tokens = " ".join(tokenize(ref.lower(), lang_code))
+                sim_score = sacrebleu.sentence_bleu(
+                    ref_tokens, [hyp_tokens]).score / 100
+                sim[prompt] = sim_score
 
         _prompts = list(prompts.keys())
         _prompts = _prompts * self.repeat
@@ -1750,12 +1758,13 @@ class PairwiseJudge(BatchCallOpenAPI):
         results_mapper = defaultdict(list)
         for (k, v) in results:
             for _ in prompts[k]:
-                results_mapper[_].append((v, rtypes[k]))
+                results_mapper[_].append((v, rtypes[k], sim[k]))
 
         outputs = []
+        print(len(batch_inputs))
         for i, _ in enumerate(batch_inputs):
             if i in results_mapper and results_mapper[i] is not None:
-                score = []
+                score, sims = [], []
                 for _rank in results_mapper[i]:
                     # WIN
                     if (_rank[0] == 1 and _rank[1] == "REF_AS_FIRST") or (_rank[0] == 2 and _rank[1] == "REF_AS_SECOND"):
@@ -1771,7 +1780,9 @@ class PairwiseJudge(BatchCallOpenAPI):
                         score.append(-0.5)
                     else:
                         score.append(0)
-                outputs.append(np.mean(score))
+                    sims.append(_rank[2])
+
+                outputs.append(np.mean(score)+np.mean(sims))
             else:
                 outputs.append(None)
         return outputs
@@ -5460,6 +5471,43 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
             return repr(self.clip_string(solution))
         return f'[Q]\n{norm[0]}\n\n[A]\n{norm[1]}'
 
+    async def rule_based_eval_reference(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        skip_run=None,
+        info_leakage_threshold=0.2,
+        info_gain_threshold=0.4
+    ):
+        outputs = [0.0] * len(batch_solution_str)
+        for i, (sol, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            parsed = self.parse_solution_fn(sol)
+
+            if parsed is not None:
+                question, hyp, ref = parsed[0], parsed[1], gt["document"]
+                lang_code = "zh" if contain_chinese(hyp) else "en"
+
+                q_tokens = " ".join(tokenize(question.lower(), lang_code))
+                hyp_tokens = " ".join(tokenize(hyp.lower(), lang_code))
+                ref_tokens = " ".join(tokenize(ref.lower(), lang_code))
+
+                # 问题泄漏
+                info_leak = sacrebleu.sentence_bleu(
+                    hyp_tokens, [q_tokens]).score / 100
+                if info_leak > info_leakage_threshold:
+                    outputs[i] += -2.0
+                    continue
+
+                # 信息留存奖励
+                similarity = sacrebleu.sentence_bleu(
+                    hyp_tokens, [ref_tokens]).score / 100
+                if similarity > info_gain_threshold:
+                    similarity = 1
+                outputs[i] += similarity
+
+        return outputs
+
     async def eval_reference(self,
                              batch_data_sources,
                              batch_solution_str,
@@ -5483,18 +5531,6 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
             if i in correctness.keys():
                 outputs[i] = correctness[i][0][0]
 
-        for i, (sol, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
-            parsed = self.parse_solution_fn(sol)
-
-            if parsed is not None:
-                hyp, ref = parsed[1], gt["document"]
-                lang_code = "zh" if contain_chinese(hyp) else "en"
-
-                hyp_tokens = " ".join(tokenize(hyp.lower(), lang_code))
-                ref_tokens = " ".join(tokenize(ref.lower(), lang_code))
-                bleu = sacrebleu.sentence_bleu(hyp_tokens, [ref_tokens]).score
-                similarity = bleu / 100
-                outputs[i] += similarity
         return outputs
 
     @classmethod
@@ -5509,6 +5545,8 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
                     function=self.loose_question_eval, filter_only=False, non_skip=False),
             Process(name="StrictQEval",
                     function=self.strict_question_eval, filter_only=False, non_skip=False),
+            Process(name="RuleRefQuality",
+                    function=self.rule_based_eval_reference, filter_only=False, non_skip=True),
         ]
 
     def finegrain_process(self):
