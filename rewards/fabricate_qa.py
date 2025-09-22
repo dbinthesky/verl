@@ -1761,7 +1761,6 @@ class PairwiseJudge(BatchCallOpenAPI):
                 results_mapper[_].append((v, rtypes[k], sim[k]))
 
         outputs = []
-        print(len(batch_inputs))
         for i, _ in enumerate(batch_inputs):
             if i in results_mapper and results_mapper[i] is not None:
                 score, sims = [], []
@@ -1782,7 +1781,8 @@ class PairwiseJudge(BatchCallOpenAPI):
                         score.append(0)
                     sims.append(_rank[2])
 
-                outputs.append(np.mean(score)+np.mean(sims))
+                bias = 1.0
+                outputs.append(np.mean(score) + bias)
             else:
                 outputs.append(None)
         return outputs
@@ -3266,10 +3266,10 @@ class Doc2QueryV2ComputeScore(object):
             _minor_rewards_log = []
             for process in self.coarse_process():
                 _minor_rewards_log.append(
-                    f'{process.name}={all_minor_rewards[process.name][i]}')
+                    f'{process.name}={all_minor_rewards[process.name][i]}:.3f')
             _minor_rewards_log = "|".join(_minor_rewards_log)
             print(
-                f'[Final Reward]={cur_score:.3f}({extra[i]})|{main_process.name}={str(_main_reward)}|{_minor_rewards_log}|{penalty_log_str}\n')
+                f'[Final Reward]={cur_score:.3f}({extra[i]})|{main_process.name}={_main_reward:.3f}|{_minor_rewards_log}|{penalty_log_str}\n')
 
             if log:
                 print(f'[Thought]\n{batch_solution_str[i]}')
@@ -5303,7 +5303,7 @@ def doc2query_v4_parse_solution_fn(solution_str: str, remove_option_letter=True,
     solution_str = solution_str.replace(thought, "")
 
     try:
-        conclusion = re.findall(r'<question>(.*)</question>\n+<doc>(.*)</doc>',
+        conclusion = re.findall(r'<question>(.*)</question>\n+<response>(.*)</response>',
                                 solution_str, re.DOTALL)[0]
         prompt, doc = conclusion
         prompt, doc = prompt.strip(), doc.strip()
@@ -5373,7 +5373,8 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         batch_solution_str,
         batch_ground_truth,
         eval_task,
-        set_value,
+        min_score,
+        max_score
     ):
         task = eval_task
         indices = []
@@ -5403,7 +5404,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
             if valid is None:
                 pass
             else:
-                _score = 0.0 if valid else set_value
+                _score = max_score if valid else min_score
                 scores[index].append(_score)
 
         final_scores = [0.0] * len(batch_solution_str)
@@ -5425,7 +5426,8 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
             batch_solution_str,
             batch_ground_truth,
             eval_task=Doc2QueryV4LooseQuestionEval(),
-            set_value=-1.75,
+            min_score=0,
+            max_score=0.5,
         )
 
     async def strict_question_eval(
@@ -5439,7 +5441,8 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
             batch_solution_str,
             batch_ground_truth,
             eval_task=Doc2QueryV4StrictQuestionEval(),
-            set_value=-0.5,
+            min_score=0,
+            max_score=0.5,
         )
 
     async def get_difficulty(self,
@@ -5471,15 +5474,19 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
             return repr(self.clip_string(solution))
         return f'[Q]\n{norm[0]}\n\n[A]\n{norm[1]}'
 
-    async def rule_based_eval_reference(
+    async def get_info_retention_reward(
         self,
         batch_data_sources,
         batch_solution_str,
         batch_ground_truth,
         skip_run=None,
-        info_leakage_threshold=0.3,
-        info_gain_threshold=0.6
+        min_threshold=0.05,
+        max_threshold=0.25,
+        leakage_threshold=0.2,
     ):
+        """
+        信息保留率
+        """
         outputs = [0.0] * len(batch_solution_str)
         for i, (sol, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
             parsed = self.parse_solution_fn(sol)
@@ -5492,27 +5499,29 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
                 hyp_tokens = " ".join(tokenize(hyp.lower(), lang_code))
                 ref_tokens = " ".join(tokenize(ref.lower(), lang_code))
 
-                # 问题泄漏
-                info_leak = sacrebleu.sentence_bleu(
+                leakage = sacrebleu.sentence_bleu(
                     hyp_tokens, [q_tokens]).score / 100
-                if info_leak > info_leakage_threshold:
-                    outputs[i] += -2.0
-                    continue
+                if leakage > leakage_threshold:
+                    score = -2.0
+                else:
+                    info = sacrebleu.sentence_bleu(
+                        hyp_tokens, [ref_tokens]).score / 100
+                    # 信息过低
+                    score = 0
+                    if info < min_threshold:
+                        score = -2.0
 
-                # 信息留存奖励
-                similarity = sacrebleu.sentence_bleu(
-                    hyp_tokens, [ref_tokens]).score / 100
-                if similarity > info_gain_threshold:
-                    similarity = 1
-                outputs[i] += similarity
+                    if info > max_threshold:
+                        score = 1.0
+                outputs[i] += score
 
         return outputs
 
-    async def eval_reference(self,
-                             batch_data_sources,
-                             batch_solution_str,
-                             batch_ground_truth,
-                             skip_run=None):
+    async def get_ref_quality_score(self,
+                                    batch_data_sources,
+                                    batch_solution_str,
+                                    batch_ground_truth,
+                                    skip_run=None):
         verify_task = PairwiseJudge()
         correctness = await self._simulate_respondent(
             batch_data_sources=batch_data_sources,
@@ -5525,7 +5534,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
                 self.batch_verify_results, verify_task=verify_task, return_input_response=True),
             resp_postprocess_fn=lambda x: x.strip()
         )
-        outputs = [-1.0] * len(batch_solution_str)
+        outputs = [0.0] * len(batch_solution_str)
         correctness = correctness["eval_reference_run_args"]
         for i in range(len(batch_solution_str)):
             if i in correctness.keys():
@@ -5542,16 +5551,16 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
     def coarse_process(self):
         return [
             Process(name="LooseQEval",
-                    function=self.loose_question_eval, filter_only=False, non_skip=False),
+                    function=self.loose_question_eval, filter_only=False, non_skip=True),
             Process(name="StrictQEval",
-                    function=self.strict_question_eval, filter_only=False, non_skip=False),
-            Process(name="RuleRefQuality",
-                    function=self.rule_based_eval_reference, filter_only=False, non_skip=True),
+                    function=self.strict_question_eval, filter_only=False, non_skip=True),
+            Process(name="InfoRetention",
+                    function=self.get_info_retention_reward, filter_only=False, non_skip=False),
         ]
 
     def finegrain_process(self):
         return Process(name="RefQuality",
-                       function=self.eval_reference, filter_only=False, non_skip=False)
+                       function=self.get_ref_quality_score, filter_only=False, non_skip=False)
 
     @classmethod
     def respond(cls, result, gt):

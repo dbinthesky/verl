@@ -61,7 +61,8 @@ setup_path() {
 
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_fabricate_qa_self_taught_250829/20250906012338/hf-4776"
+    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_fabricate_qa_self_taught_250829/20250906012338/hf-4776"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v4_30b_a3_zhihu_2025-09-21_roll16_64_dapo_kl_coef_0_wo_entropy_t1.0_solver_dsv3_step_50"
     # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v4_30b_a3_zhihu_2025-09-19_roll16_128_dapo_kl_coef_0_wo_entropy_t1.0_solver_dsv3_step_30"
     TRAIN_DATA='["/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index0.parquet","/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index1.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index2.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index3.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index4.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index5.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index6.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index7.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index8.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index9.parquet"]'    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/pretrain_general_doc_8k_rl_inputs_test.parquet"
 
@@ -107,7 +108,7 @@ run_training() {
         data.val_files="${VAL_DATA}" \
         data.train_batch_size=${TRAIN_BSZ} \
         data.max_prompt_length=8192 \
-        data.max_response_length=8192 \
+        data.max_response_length=12288 \
         data.filter_overlong_prompts=True \
         data.filter_overlong_prompts_workers=256 \
         trainer.default_local_dir="${OUTPUT_DIR}" \
@@ -121,7 +122,7 @@ run_training() {
         actor_rollout_ref.actor.ppo_micro_batch_size=${TRAIN_BSZ} \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=16384 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=20480 \
         actor_rollout_ref.actor.use_kl_loss=False \
         actor_rollout_ref.actor.kl_loss_coef=${KL_LOSS_COEF} \
         actor_rollout_ref.actor.entropy_coeff=0.0 \
