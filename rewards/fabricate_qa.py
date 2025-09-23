@@ -1708,7 +1708,7 @@ class JudgeTwoQuestionSimilarity(BatchCallOpenAPI):
 class PairwiseJudge(BatchCallOpenAPI):
     _TEMPLATE = PAIRWISE_JUDGE_TEMPLATE
 
-    def __init__(self, repeat=3):
+    def __init__(self, repeat=4):
         self.repeat = repeat
 
     @classmethod
@@ -5481,7 +5481,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         batch_solution_str,
         batch_ground_truth,
         skip_run=None,
-        max_info_limit=0.15,
+        max_info_limit=0.35,
         leakage_threshold=0.08,
     ):
         """
@@ -6221,12 +6221,22 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
 DOC2QUERY_V4_DEFAULT_PARAMS = {
     "eval_reference_run_args": {
         "adv": {
+            # "model": {
+            #     "model": "Qwen2.5-32B-Instruct",
+            #     "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+            #     "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+            #     "request_kwargs": {
+            #         "temperature": 0.6,
+            #         "timeout": 360,
+            #         "max_tokens": 4096,
+            #     }
+            # },
             "model": {
-                "model": "Qwen2.5-32B-Instruct",
-                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
+                "model": "DeepSeek-V3-0324",
+                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
-                    "temperature": 0.6,
+                    "temperature": 0.8,
                     "timeout": 360,
                     "max_tokens": 4096,
                 }
