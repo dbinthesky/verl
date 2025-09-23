@@ -1781,8 +1781,9 @@ class PairwiseJudge(BatchCallOpenAPI):
                         score.append(0)
                     sims.append(_rank[2])
 
+                # 区间-1～+1 正则化到 0～+1
                 bias = 1.0
-                outputs.append(np.mean(score) + bias)
+                outputs.append((np.mean(score) + bias)/2)
             else:
                 outputs.append(None)
         return outputs
@@ -5480,9 +5481,8 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         batch_solution_str,
         batch_ground_truth,
         skip_run=None,
-        min_threshold=0.05,
-        max_threshold=0.25,
-        leakage_threshold=0.2,
+        max_info_limit=0.15,
+        leakage_threshold=0.08,
     ):
         """
         信息保留率
@@ -5499,20 +5499,25 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
                 hyp_tokens = " ".join(tokenize(hyp.lower(), lang_code))
                 ref_tokens = " ".join(tokenize(ref.lower(), lang_code))
 
-                leakage = sacrebleu.sentence_bleu(
-                    hyp_tokens, [q_tokens]).score / 100
-                if leakage > leakage_threshold:
+                if len(tokenize(question.lower(), lang_code)) > 1024:
                     score = -2.0
                 else:
-                    info = sacrebleu.sentence_bleu(
-                        hyp_tokens, [ref_tokens]).score / 100
-                    # 信息过低
-                    score = 0
-                    if info < min_threshold:
+                    leakage1 = sacrebleu.sentence_bleu(
+                        hyp_tokens, [q_tokens]).score / 100
+                    leakage2 = sacrebleu.sentence_bleu(
+                        q_tokens, [ref_tokens]).score / 100
+                    leakage3 = sacrebleu.sentence_bleu(
+                        q_tokens, [hyp_tokens]).score / 100
+                    if (leakage1 > leakage_threshold) or (leakage2 > leakage_threshold) or (leakage3 > leakage_threshold):
                         score = -2.0
+                    else:
+                        info = sacrebleu.sentence_bleu(
+                            hyp_tokens, [ref_tokens]).score / 100
 
-                    if info > max_threshold:
-                        score = 1.0
+                        # 设置上限阈值
+                        info = min(info, max_info_limit)
+                        info = info / max_info_limit
+                        score = info
                 outputs[i] += score
 
         return outputs
@@ -5565,6 +5570,9 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
     @classmethod
     def respond(cls, result, gt):
         return result[0]
+
+    def log_ground_truth(self, ground_truth):
+        return repr(ground_truth["document"])
 
     async def _compute_score(self,
                              batch_data_sources,
