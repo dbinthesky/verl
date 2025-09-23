@@ -62,7 +62,7 @@ setup_path() {
     CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
     # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_fabricate_qa_self_taught_250829/20250906012338/hf-4776"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v4_30b_a3_zhihu_2025-09-21_roll16_64_dapo_kl_coef_0_wo_entropy_t1.0_solver_dsv3_step_120"
+    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v4_30b_a3_zhihu_2025-09-21_roll16_64_dapo_kl_coef_0_wo_entropy_t1.0_solver_dsv3_step_130"
     TRAIN_DATA='["/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index0.parquet","/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index1.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index2.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index3.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index4.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index5.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index6.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index7.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index8.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index9.parquet"]'    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/pretrain_general_doc_8k_rl_inputs_test.parquet"
 
     experiment_name="doc2query_v4_30b_a3_zhihu_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_solver_dsv3"
@@ -155,8 +155,8 @@ run_training() {
         trainer.experiment_name="${experiment_name}" \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
-        trainer.save_freq=5 \
-        trainer.test_freq=40 \
+        trainer.save_freq=10 \
+        trainer.test_freq=100 \
         trainer.total_epochs=10 \
         "$@"
     local training_status=$?
