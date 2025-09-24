@@ -1783,7 +1783,7 @@ class PairwiseJudge(BatchCallOpenAPI):
 
                 # 区间-1～+1 正则化到 0～+1
                 bias = 1.0
-                outputs.append((np.mean(score) + bias)/2)
+                outputs.append(np.mean(score) + bias)
             else:
                 outputs.append(None)
         return outputs
@@ -5481,7 +5481,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         batch_solution_str,
         batch_ground_truth,
         skip_run=None,
-        max_info_limit=0.35,
+        max_info_limit=0.28,
         leakage_threshold=0.08,
     ):
         """
@@ -5517,7 +5517,8 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
                         # 设置上限阈值
                         info = min(info, max_info_limit)
                         info = info / max_info_limit
-                        score = info
+                        weight = 0.7
+                        score = info * weight
                 outputs[i] += score
 
         return outputs
@@ -6236,7 +6237,7 @@ DOC2QUERY_V4_DEFAULT_PARAMS = {
                 "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
-                    "temperature": 0.8,
+                    "temperature": 0.4,
                     "timeout": 360,
                     "max_tokens": 4096,
                 }
