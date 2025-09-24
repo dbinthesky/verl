@@ -4343,8 +4343,6 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         for _ in w_ctx:
             if any(distractor in _ for distractor in distractors):
                 return True
-            if len(_) == 0:
-                return True
 
         match_distractor = defaultdict(int)
         for _ in wo_ctx:
@@ -6157,7 +6155,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 "request_kwargs": {
                     "temperature": 0.8,
                     "timeout": 360,
-                    "max_tokens": 8192,
+                    "max_tokens": 32768,
                 },
             },
             "repeat": 5,
@@ -6188,7 +6186,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
             "request_kwargs": {
                 "temperature": 0.6,
                 "timeout": 360,
-                "max_tokens": 1024,
+                "max_tokens": 2048,
             },
         },
         "max_concurrent_requests": 512
