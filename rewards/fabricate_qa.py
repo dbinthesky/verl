@@ -2131,10 +2131,14 @@ class MultiChoiceQuestionExtractAnswerOptions(SALTSelfTaughtSimpleSolutionVerify
         return "选择题提取答案"
 
     def prompt_fn(self, example):
-        solver_response, extra, _ = example
+        solver_response, extra, gt = example
         question = extra[0]
+        _question = Doc2QueryV3ComputeScore._format_question(
+            question, Doc2QueryV3ComputeScore.add_distractor_options(
+                extra[1], gt), None
+        )
         prompt = MULTICHOICE_EXTRACT_ANSWER_FEWSHOTS + "\n\n\n" + MULTICHOICE_EXTRACT_ANSWER_TEMPLATE.format(
-            question=question,
+            question=_question,
             conclusion=solver_response,
         )
         return prompt
@@ -4143,9 +4147,9 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 
         lang_code = gt["lang_code"]
         if lang_code == "zh":
-            ans_format = '直接回答下面的不定项选择题，不要给出思考过程。'
+            ans_format = '直接回答下面的不定项选择题（选项），不要给出思考过程。'
         else:
-            ans_format = 'Answer the following multiple-select questions directly without providing the thinking process.'
+            ans_format = 'Answer the following multiple-select questions directly (output option letter) without providing the thinking process.'
 
         prompt = f'{ans_format}\n\n{cls._format_question(question=question, options=options_w_distractor, answer=None)}'
         return prompt
@@ -4338,6 +4342,8 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
         """
         for _ in w_ctx:
             if any(distractor in _ for distractor in distractors):
+                return True
+            if len(_) == 0:
                 return True
 
         match_distractor = defaultdict(int)
@@ -6117,7 +6123,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 "request_kwargs": {
                     "temperature": 0.6,
                     "timeout": 360,
-                    "max_tokens": 4096,
+                    "max_tokens": 8192,
                 },
             },
             "repeat": 1,
@@ -6135,7 +6141,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 "request_kwargs": {
                     "temperature": 0.9,
                     "timeout": 360,
-                    "max_tokens": 4096,
+                    "max_tokens": 8192,
                 },
             },
             "repeat": 8,
@@ -6151,7 +6157,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 "request_kwargs": {
                     "temperature": 0.8,
                     "timeout": 360,
-                    "max_tokens": 4096,
+                    "max_tokens": 8192,
                 },
             },
             "repeat": 5,
