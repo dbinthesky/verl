@@ -4539,10 +4539,10 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
                     function=self.loose_question_eval, filter_only=False, non_skip=False),
             Process(name="QuickDifficultyFilter",
                     function=partial(self.quick_difficulty_filter, run_key="w/o_content"), filter_only=False, non_skip=False),
-            Process(name="QuickCorrectnessFilter",
-                    function=partial(self.quick_correctness_filter, run_key="w_content"), filter_only=False, non_skip=False),
-            Process(name="Reward", function=self.rm_agent.compute_rm_score,
-                    filter_only=False, non_skip=True)
+            # Process(name="QuickCorrectnessFilter",
+            #         function=partial(self.quick_correctness_filter, run_key="w_content"), filter_only=False, non_skip=False),
+            # Process(name="Reward", function=self.rm_agent.compute_rm_score,
+            #         filter_only=False, non_skip=True)
         ]
 
     def finegrain_process(self):
@@ -6103,7 +6103,7 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
-                    "temperature": 0.6,
+                    "temperature": 0.4,
                     "timeout": 360,
                     "max_tokens": 4096,
                 },
@@ -6138,14 +6138,14 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.9,
-                    "timeout": 360,
+                    "timeout": 729,
                     "max_tokens": 8192,
                 },
             },
             "repeat": 8,
             "fn": "respond_wo_context",
             "desc": 'w/o文档',
-            "max_concurrent_requests": 256
+            "max_concurrent_requests": 128
         },
         "w_content": {
             "model": {
@@ -6154,14 +6154,14 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
                 "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
                 "request_kwargs": {
                     "temperature": 0.8,
-                    "timeout": 360,
+                    "timeout": 720,
                     "max_tokens": 32768,
                 },
             },
             "repeat": 5,
             "fn": "respond_w_context",
             "desc": 'w文档',
-            "max_concurrent_requests": 256
+            "max_concurrent_requests": 128
         },
     },
     "difficulty_metric_args": {

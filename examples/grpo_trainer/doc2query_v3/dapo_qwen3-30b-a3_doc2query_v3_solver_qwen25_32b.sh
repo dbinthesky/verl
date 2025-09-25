@@ -65,7 +65,6 @@ setup_path() {
     # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_fabricate_qa_self_taught_250829_sft_doc2query_v3_if_enhance_0911/20250911173649/hf-738"
     BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v3_30b_a3_2025-09-17_roll16_128_dapo_kl_coef_0_wo_entropy_t1.0_solver_dsv3_step_130"
     TRAIN_DATA='["/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs_learned/index0.parquet","/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs_learned/index1.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs_learned/index2.parquet"]'
-    # TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_rl_inputs_diamond.parquet"
     VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs_test.parquet"
 
     experiment_name="doc2query_v3_30b_a3_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_solver_dsv3"
