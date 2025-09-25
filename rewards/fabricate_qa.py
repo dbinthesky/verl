@@ -1074,208 +1074,33 @@ PAIRWISE_JUDGE_TEMPLATE = """
 ## 输出
 """
 
-DOC2QUERY_V4_Q_EVAL_LOOSE_TEMPLATE = """任务：基于下面的标准与方法对一道用户提问进行评价，判断是否需要改进
+DOC2QUERY_V4_CONTENT_NOT_DISRUPT = """任务：判断下面的两篇文章是否符合要求
 
-你需要判断问题的信息可获取性边界，判断问题是否存在缺陷： 
-信息可获取性边界说明
-  - 不依赖特定未公开文档：问题需明确说明所有必要数据或背景，避免出现 “基于某篇文章” 但未提供具体内容的情况。若需引用外部材料，应直接嵌入关键信息。
-  - 可通过公开资源验证：涉及事实性数据时，应确保信息可通过联网搜索获取。
-  - 不要求专业领域未公开知识：问题应基于普遍认知或可检索的专业常识，避免依赖企业内部数据、未发表研究等
-  - 具备完整性：提问包含可回答的最小信息量，必要信息应直接嵌入在提问中。
+要求：判断两篇文章在内容上是否相同，下面是一些标准
+- 文章二和文章一在内容上相同，不存在显著的信息省略、篡改
+- 文章二和文章一在格式、排版的不同，以及去除噪声、不可读的内容是允许的
 
-### 判断方法
-这里的关键是对内容信息的“有效域”进行判定，从三个类别进行区分；
-   - [1] 非长尾信息，目标回答者不依赖外部工具可回答
-   - [2] 长尾信息，但目标回答者可以通过公开资源验证获取或互联网搜索获取
-   - [3] 长尾信息，但内容信息仅局限于特定文档中，无法通过公开资源搜索获取
-
-需要确保提问回答不包含第三类信息
-
-
-### 输出要求：
-满足全部要求输出“无需修改”，否则输出“需要改进”。
-按下面的格式输出结果 （如果无需修改，[违反原则]不用填写）
-```
-[分析] ...
-[违反原则]
-[结果]
-```
-
-下面是一些例子
-
-
-[问题] Extract and present the main key point of the input text in one very short sentence, including essential details like dates or locations if necessary.
-```
-[分析] 该提问要求提取输入文本的核心要点，但未在问题中提供具体的“input text”内容，属于依赖特定未公开文档（未嵌入关键的输入文本信息），且不具备可回答的最小信息量（缺少核心分析对象“输入文本”），无法判断其有效域类别，不符合信息可获取性边界中“不依赖特定未公开文档”和“具备完整性”的要求。
-[违反原则] 1. 依赖特定未公开文档（未提供“input text”具体内容）；2. 不具备完整性（缺少可回答的最小信息量“输入文本”）
-[结果] 需要改进
+你需要判断两篇文档按上面的要求是否相同：
+你的回答需要先进行分析，再给出JSON格式的结论
+```json
+{{
+  "判断结果": "相同/不同"
+}}
 ```
 
 
-[问题] A hiker is planning a 3-day trip in the mountains, expecting rain and needing to carry water and snacks. They require a daypack that is lightweight (under 20 oz), water-resistant, has a hydration compartment, and is easy to pack away when not in use. The pack must also be comfortable for long hikes and suitable for both day hikes and travel. Which of the following daypacks is the most suitable for this scenario?
-Options:
-A) Osprey Talon 22
-B) REI Co-op Flash 22
-C) Black Diamond Distance 15
-D) Hyperlite Mountain Tools Morning time
+[文档一]
 ```
-[分析] 该提问明确嵌入了徒步者的行程需求（3天山地旅行、需防雨、携带水和零食）、背包的具体要求（轻量化＜20 oz、防水、有储水舱、易收纳、舒适、适配单日徒步与旅行）及四个具体背包选项，未依赖特定未公开文档；涉及的各背包参数（重量、材质、结构等）属于可通过联网搜索获取的公开信息，不依赖专业领域未公开知识；且包含了判断背包适用性的最小必要信息量，满足信息可获取性边界要求。从有效域看，属于[2]长尾信息，可通过公开资源验证获取。
-[违反原则]
-[结果] 无需修改
+{document1}
+```
+
+[文档二]
+```
+{document2}
 ```
 
 
-[问题] First, answer the following question. Then, write a training document in markdown format based on the article provided, ensuring that the content is self-contained, does not directly reference the prompt, and follows the guidelines for creating high-quality questions. The document should include two sections, 'horses 1-5' and 'horses 6-10', each detailing the horse's name, win percentage, race details, and rationale for being a top pick. Use the article's information to inform your analysis
-```
-[分析] 该问题提及“based on the article provided”，但未嵌入该文章的关键信息，也未提供文章具体内容，导致回答所需的核心信息仅局限于这一未公开的特定文档中。从判断方法来看，其涉及的信息属于[3]类长尾信息，无法通过公开资源搜索获取，不满足“不依赖特定未公开文档”的信息可获取性边界要求，且缺乏可回答的最小信息量（文章关键信息）。
-[违反原则] 1. 依赖特定未公开文档（未提供“文章”具体内容，也未嵌入关键信息）；2. 不具备完整性（缺少回答所需的文章关键信息，未包含可回答的最小信息量）；3. 内容信息仅局限于特定文档中，属于需避免的第三类信息。
-[结果] 需要改进
-```
-
-
-[问题] 好学校对学生的影响主要体现在哪些方面？请分析好学校如何通过努力、视野和改变世界三个方面影响学生。
-```
-[分析] 该问题不依赖特定未公开文档，未提及需引用外部未提供内容的材料，关键概念（好学校、努力、视野、改变世界）为普遍认知；涉及的“好学校对学生影响”相关分析属于教育领域常见讨论，可通过公开资源验证，无需专业领域未公开知识；提问明确指定了“努力、视野和改变世界”三个分析维度，包含可回答的最小信息量，具备完整性。从有效域判定，属于[1]非长尾信息，目标回答者不依赖外部工具可回答。
-[违反原则] 
-[结果] 无需修改
-```
-
-
-[问题] Based on the analysis provided in the article, which horse is most likely to win the 151st Belmont Stakes, and why? Consider factors such as pedigree, past performances, jockey changes, and current training status.
-```
-[分析] 问题中提到 “基于文章中的分析”，但未提供该文章的具体内容或关键信息，导致必要数据依赖未公开文档。根据搜索结果，2025 年贝尔蒙特赛马的参赛马匹、赔率等信息可通过公开资源获取，但问题要求结合特定文章的分析，而该文章未被引用或嵌入，属于第三类信息（仅局限于特定文档无法公开获取）。此外，问题未包含血统、过往表现等具体数据，需依赖外部未公开材料，违反 “不依赖特定未公开文档” 和 “具备完整性” 原则。
-[违反原则] 不依赖特定未公开文档、具备完整性
-[结果] 需要改进
-```
-
-
-[问题] Your answer must contain exactly 3 bullet points. Use the markdown bullet points such as: * This is point 1. Answer the following question: Analyze the differences in terrorism before and after the Second World War, considering historical factors, media reporting, and current trends. How do these factors influence the perception and prevalence of terrorism in non-conflict and conflict countries?
-```
-[分析] 该问题要求分析二战前后恐怖主义在历史因素、媒体报道、当前趋势方面的差异，及这些因素对冲突与非冲突国家恐怖主义认知和发生率的影响。从信息可获取性边界看，问题未依赖特定未公开文档，无“基于某篇文章”却不提供内容的情况；涉及的二战前后历史背景、恐怖主义发展脉络、媒体报道演变等事实性信息，可通过公开学术资料、历史记录等联网搜索获取，不依赖专业领域未公开知识（如企业内部数据、未发表研究）；且提问明确了分析维度（历史因素、媒体报道、当前趋势）和影响对象（非冲突与冲突国家），包含可回答的最小信息量，具备完整性。从有效域判定，属于[2]长尾信息，但目标回答者可通过公开资源验证获取，不包含[3]类信息。
-[违反原则]
-[结果]无需修改
-```
-
-
-[问题] Summarize the key points of the following article into two paragraphs, each at least 8 lines long. Ensure each paragraph has a title wrapped in double square brackets, i.e. [[title]].
-```
-[分析] 该问题要求总结某篇文章的要点，但未在提问中提供该文章的具体内容，也未嵌入文章关键信息。根据信息可获取性边界说明，问题需明确说明所有必要数据或背景，避免依赖特定未公开文档；同时需具备完整性，包含可回答的最小信息量。从判断方法来看，文章内容属于仅局限于特定文档中的长尾信息，无法通过公开资源搜索获取，符合[3]类信息，不符合提问要求。
-[违反原则] 1. 依赖特定未公开文档（未提供需总结的文章内容及关键信息）；2. 不具备完整性（缺少可回答总结任务的最小信息量——文章内容）
-[结果] 需要改进
-```
-
-
-[问题] 在杜琪峰的电影《黑社会2:以和为贵》中，黑社会的权力斗争反映了香港社会的哪些变化？请分析其生存逻辑、政治隐喻，以及对社会的影响。
-```
-[分析] 问题围绕公开上映的电影《黑社会2:以和为贵》展开，明确指定了分析对象（电影）与分析维度（黑社会权力斗争反映的香港社会变化、生存逻辑、政治隐喻、社会影响）。电影内容及相关公开解读均属于可通过公开资源验证的信息，不依赖特定未公开文档、企业内部数据或未发表研究，且包含了可回答的最小信息量，符合信息可获取性边界的所有要求。从“有效域”判定，该问题涉及的电影主题分析属于非长尾信息，目标回答者不依赖外部工具可回答，或可通过公开影评、影视分析等公开资源补充，不属于仅局限于特定文档的第三类信息。
-[违反原则]
-[结果] 无需修改
-```
-
-
-[问题] 在《权力的游戏》第八季第三集中，雪诺一方在异鬼战役中失败的主要战术原因是什么？请分析兵种搭配、战术部署、情报获取等因素。
-[分析] 该问题聚焦于《权力的游戏》第八季第三集的公开剧情，未涉及特定未公开文档。通过搜索结果可见，剧评、分集剧情及战术分析均来自豆瓣、网易等公开平台，涵盖兵种搭配（如多斯拉克骑兵冲锋）、战术部署（如布兰作为诱饵）、情报获取（如梅丽珊卓的预言）等要素。这些内容可通过公开资源验证，且无需专业领域未公开知识。问题包含具体集数与分析维度，具备完整性，符合第二类信息（长尾信息但可通过公开资源获取）的判定标准。
-[违反原则]
-[结果] 无需修改
-"""
-
-DOC2QUERY_V4_Q_EVAL_STRICT_TEMPLATE = """任务：基于下面的标准与方法对一道用户提问进行评价，判断是否需要改进
-
-你需要判断问题是否符合“最少必要约束”的设计原则，判断问题是否存在缺陷： 
-
-内嵌约束说明
-内嵌约束是在提问中隐性或显性植入的 “关键限定条件”，作用是锚定回答的核心方向、范围与输出标准，既避免模型回答过度发散或偏离核心需求，又为能力考察划定明确维度；
-其本质是通过 “最小信息干预”，让模型在约束框架内展现 “理解 - 应用 - 推导” 能力，而非无边界自由创作。
-
-例如：
-1. 创作类（诗歌 / 文案）- 形式约束（结构 / 字数）、风格约束（语气 / 情感）、内容约束（核心意象 / 主题）等
-2. 技术类（操作 / 方案）- 逻辑约束（步骤顺序 / 因果链）；结果约束（目标效果 / 指标）；场景约束（适用环境 / 工具）等
-3. 分析类（报告 / 论证）- 1. 维度约束（分析角度）2. 证据约束（支撑数据 / 案例）3. 结论约束（推导方向）等
-
-
-“最少必要约束” 的设计原则与原因（隐藏提问的提示信息）
-1. 设计原则​
-“最少必要” 指仅保留 “确保回答不跑偏、能力可考察” 的核心约束，剔除冗余限定（如非关键格式、无关背景），平衡 “边界明确性” 与 “能力发挥空间”。判断标准为：移除该约束后，回答会出现 “方向偏离” 或 “能力考察点缺失”，则该约束为必要约束。
-
-2. 核心原因​
-1. 精准区分能力层级：最少必要约束下，模型需要完成 “理解约束、补充合理细节、优化输出” 等行为，尤其是从用户语气、表述、场景中深层推理隐含意图的能力会大幅减弱，最少必要约束可直接反映不同模型其能力差异（如优秀模型会主动补充 “情感递进逻辑”，基础模型仅满足 “柔和风格 + 短诗”）
-2. 还原真实提问场景：现实中用户提问多为 “核心需求 + 少量约束”（如 “写一首关于星空的柔和风格短诗”），过多约束不符合真实交互逻辑，导致 QA 数据脱离实际应用场景。​
-3. 避免过度限制模型能力：若约束过多（如 “写诗歌需包含‘星、月、风’3 个意象，每句 5 字，押韵方式为‘平仄平’”），模型仅需机械满足条件，无法体现 “意象构建、情感递进” 等核心能力，失去 QA 数据的考察价值。​
-
-你现在需要对提问进行判断是否满足“最少必要约束” 的设计原则
-
-
-### 输出要求：
-满足全部要求输出“无需修改”，否则输出“需要改进”。
-按下面的格式输出结果 （如果无需修改，[违反原则]不用填写）
-```
-[分析] ...
-[违反原则]
-[结果]
-```
-
-下面是一些例子
-
-
-[问题] 作为一名旅游规划师，你被委托设计一个为期一周的永城文化旅游项目，旨在向游客展示永城丰富的文化遗产、自然风光和地方特色，同时促进当地经济和文化的可持续发展。请根据永城的综合信息，设计一个旅游项目，包括旅游线路、特色活动、文化体验、地方美食和住宿建议。在设计时，需考虑以下几点：
-1. 旅游线路应覆盖永城的主要文化遗产和自然景观，如芒砀山、汉梁王墓群、崇法寺塔、日月湖等。
-2. 特色活动应体现永城的地方特色，如参与永城大铙、柳琴戏、书法体验等。
-3. 文化体验需让游客深入了解永城的历史和文化，如参观永城文保单位、体验永城方言俚语、参与民俗活动等。
-4. 地方美食和住宿建议需考虑游客的多样需求，如品尝薛湖牛肉水煎包、永城豆粥、酂城糟鱼等地方美食，推荐具有永城特色的住宿地点。
-5. 分析该项目对永城经济和文化可持续发展的影响，包括对当地经济的促进作用、对文化遗产的保护和传承、对自然环境的影响等。
-```
-[分析] 该提问的核心需求是设计为期一周的永城文化旅游项目，以展示当地文化遗产、自然风光、地方特色并促进可持续发展，此核心需求明确。但提问中列举了过多具体细节（如芒砀山、汉梁王墓群、薛湖牛肉水煎包等），这些信息按提示本应从阅读材料中获取，属于冗余限定。移除这些具体细节后，回答仍能围绕“永城一周文化旅游项目设计及可持续发展影响分析”的核心方向展开，不会出现方向偏离或能力考察点缺失，因此这些具体细节不符合“最少必要约束”中“剔除冗余限定”的设计原则。
-[违反原则] 包含过多本应从阅读材料中获取的具体细节（如具体景点、美食名称），属于冗余限定，超出“最少必要约束”的范围。
-[结果] 需要改进
-```
-
-
-[问题] 设计一个流体艺术创作项目，项目应包括以下部分：
-1. 项目背景：选择一位历史上的流体艺术家作为灵感来源，简述其艺术风格和对你的影响。
-2. 所需材料：列出你将使用的所有材料，包括但不限于画布、颜料、媒介、工具等，并说明选择这些材料的原因。
-3. 创作步骤：详细描述从准备工作室到完成作品的每一步骤，包括技巧应用和预期效果。
-4. 预期结果：描述你期望的作品外观，包括颜色、纹理和设计元素。
-5. 安全措施：列出在创作过程中应采取的安全措施，确保创作环境的安全。
-```
-[分析] 该提问要求设计流体艺术创作项目，虽明确了项目需包含的核心模块（背景、材料、步骤、结果、安全措施），符合“确保回答不跑偏、能力可考察”的核心需求，但存在冗余限定。在“所需材料”部分，明确指定“包括但不限于画布、颜料、媒介、工具等”，此类具体材料名称属于非关键限定，移除后模型仍可围绕流体艺术创作合理列出所需材料及选择原因，不会导致回答方向偏离；在“创作步骤”部分，“从准备工作室到完成作品的每一步骤”这一表述过于详细，核心约束只需“描述创作步骤（含技巧应用和预期效果）”即可，过度限定步骤范围属于冗余内容，不符合“最少必要约束”中“剔除冗余限定，平衡边界明确性与能力发挥空间”的原则。
-[违反原则] 存在冗余限定（具体材料名称、过度详细的步骤范围），未严格遵循“最少必要约束”中剔除冗余限定的设计原则。
-[结果] 需要改进
-```
-
-
-[问题] Imagine you are a small business owner looking to set up an eCommerce platform. You already have an existing website and need a solution that integrates seamlessly with it. You prefer a platform that requires minimal design knowledge and offers affordable pricing with basic features. Additionally, you want to be able to sell on social media and marketplaces without significant technical hurdles. Which eCommerce platform is more suitable for your needs, and why?
-```
-[分析] 该问题包含的约束条件（现有网站整合、设计门槛低、价格亲民、基础功能、多渠道销售）均为判定电商平台适用性的核心维度，移除任意一项均会导致回答方向偏离或能力考察点缺失。例如，若缺少“整合现有网站”的约束，可能推荐独立建站方案而非插件式平台；若缺少“多渠道销售”的约束，回答将无法体现平台对社交媒体和市场places的支持能力。所有约束均符合“最少必要”原则，未包含冗余信息（如非关键格式要求），且与真实小商家提问场景高度契合。
-[违反原则]
-[结果] 无需修改
-```
-
-
-[问题] 分析Saarbrücken在中世纪、文艺复兴、工业革命和二战后四个关键历史时期的行政中心变迁，并解释变迁的原因。请详细描述每个时期的行政中心位置、重要建筑的变迁，以及导致这些变迁的历史事件。在你的回答中，确保包括以下信息：每个时期行政中心的具体位置、重要建筑的名称和功能，以及变迁的历史背景。
-```
-[分析] 该问题的核心需求是分析Saarbrücken在四个关键历史时期的行政中心变迁及原因，核心约束应为“四个历史时期（中世纪、文艺复兴、工业革命、二战后）”“行政中心变迁”“变迁原因”。但问题中先要求“详细描述每个时期的行政中心位置、重要建筑的变迁，以及导致这些变迁的历史事件”，后又重复强调“确保包括以下信息：每个时期行政中心的具体位置、重要建筑的名称和功能，以及变迁的历史背景”，两处约束内容高度重合，存在冗余限定，超出“最少必要”范畴。
-[违反原则] 存在重复冗余的约束，未剔除非必要的重复限定，不符合“最少必要约束”中“剔除冗余限定，仅保留核心约束”的设计原则。
-[结果] 需要改进
-```
-
-
-[问题] A small business owner is launching an eCommerce store and needs to choose between Shopify and Ecwid. The requirements are: 1. A free plan with basic features including website integration and social media posting. 2. Integration with Facebook and Instagram for social commerce. 3. Simple stock management system. 4. Customizable themes for website design. 5. Support for multiple selling channels including physical stores and marketplaces. Which platform is more suitable, and why? Provide a detailed comparison based on their features and pricing models.
-```
-[分析] 该提问的核心需求是帮助小企业主在Shopify和Ecwid两个电商平台中做出选择，核心约束应为“小企业主”“电商平台选择”“免费计划”“社交媒体集成”“简单库存管理”“可定制主题”“多销售渠道支持”等。这些约束条件明确了回答的方向和范围，确保回答围绕平台的相关功能和特点展开，以帮助用户做出决策。移除任何一个约束，都可能导致回答不完整或偏离用户的核心需求，例如移除“免费计划”这一约束，回答可能会忽略平台的价格因素，无法满足用户对成本的考量；移除“社交媒体集成”这一约束，回答可能不会涉及平台在社交电商方面的能力，从而影响用户对平台功能全面性的了解。因此，该问题的约束条件是最少必要的，符合“最少必要约束”的设计原则。
-[违反原则] 无
-[结果] 无需修改
-```
-
-
-[问题] 根据魏书卷十一帝纪第十一的记载，分析以下问题：
-1. 概述前废帝广陵王的政绩和官职变动，包括他在位期间的军事行动、赦免令、官职调整等。
-2. 分析齐献武王的军事行动及其对北魏政局的影响，包括他如何通过军事行动影响了北魏的政局稳定。
-3. 评估官职变动对北魏政局稳定的作用，包括官职变动如何影响了北魏的政局稳定和军事行动的成效。
-```
-[分析] 该提问的核心需求是依据《魏书卷十一帝纪第十一》分析前废帝广陵王、齐献武王相关情况及北魏官职变动的影响，核心约束应为“基于指定史料”“分析三个具体问题方向”。但在每个问题中均加入了过度具体的解题思路提示（如分析前废帝政绩时明确“包括军事行动、赦免令、官职调整等”，分析齐献武王时明确“包括如何通过军事行动影响政局稳定”），这些提示超出了“确保回答不跑偏、能力可考察”的必要范围。移除这些具体提示后，模型仍能围绕三个核心问题方向，基于史料进行分析，不会出现方向偏离或能力考察点缺失，此类提示属于冗余限定，不符合“最少必要约束”原则。
-[违反原则] 在每个分析问题中均包含过度具体的解题思路提示，属于冗余限定，降低了对模型基于史料自主挖掘关键信息、展开分析能力的考察，不符合“最少必要约束”中“剔除冗余限定，仅保留核心约束”的设计原则。
-[结果] 需要改进
-```
+下面开始你的回答，先分析再给出JSON格式的结论。
 """
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1837,58 +1662,35 @@ class Doc2QueryV3LooseQuestionEval(BatchCallOpenAPI):
         return prompt
 
 
-class Doc2QueryV4LooseQuestionEval(Doc2QueryV3LooseQuestionEval):
-    _TEMPLATE = DOC2QUERY_V4_Q_EVAL_LOOSE_TEMPLATE
+class Doc2QueryV4ModelJudgeDoc(Doc2QueryV3LooseQuestionEval):
+    _TEMPLATE = DOC2QUERY_V4_CONTENT_NOT_DISRUPT
 
     def __init__(self):
         pass
 
     @classmethod
     def task_desc(cls):
-        return "问题质量评价（宽松）"
+        return "文档内容相同（模型）"
 
     def postprocess(self, response: str):
         s = response
         try:
-            conclusion = s[s.index(
-                "[结果]")+len("[结果]"):].strip()
-            if "无需修改" in conclusion:
-                return True
-            return False
+            conclusion = s.strip()
+
+            judge = re.findall(
+                r'\"判断结果\": \"(.*)\"', conclusion)
+            assert judge[0] in ("相同", "不同")
+            if len(judge) > 0 and judge[0] in ("相同", "不同"):
+                return judge[0] == "相同"
         except Exception as err:
             raise PostprocessError(f'{err}')
 
     def prompt_fn(self, example):
-        prompt = self._TEMPLATE + \
-            f'\n\n\n现在需要你对下面的问题分析是否符合要求并判断是否需要修改。\n\n[问题]\n{example}\n'
-        return prompt
-
-
-class Doc2QueryV4StrictQuestionEval(Doc2QueryV4LooseQuestionEval):
-    _TEMPLATE = DOC2QUERY_V4_Q_EVAL_STRICT_TEMPLATE
-
-    def __init__(self):
-        pass
-
-    @classmethod
-    def task_desc(cls):
-        return "问题质量评价（严格）"
-
-    def postprocess(self, response: str):
-        s = response
-        try:
-            conclusion = s[s.index(
-                "[结果]")+len("[结果]"):].strip()
-            if "无需修改" in conclusion:
-                return True
-            return False
-        except Exception as err:
-            raise PostprocessError(f'{err}')
-
-    def prompt_fn(self, example):
-        prompt = self._TEMPLATE + \
-            f'\n\n\n现在需要你对下面的问题分析是否符合要求并判断是否需要修改。\n\n[问题]\n{example}\n'
-        return prompt
+        refined, raw = example
+        return DOC2QUERY_V4_CONTENT_NOT_DISRUPT.format(
+            document1=raw,
+            document2=refined,
+        )
 
 
 class ReasonQuestionQualityEval(Doc2QueryV3LooseQuestionEval):
@@ -5308,24 +5110,11 @@ def doc2query_v4_parse_solution_fn(solution_str: str, remove_option_letter=True,
     solution_str = solution_str.replace(thought, "")
 
     try:
-        conclusion = re.findall(r'<question>(.*)</question>\n+<response>(.*)</response>',
-                                solution_str, re.DOTALL)[0]
-        prompt, doc = conclusion
-        prompt, doc = prompt.strip(), doc.strip()
+        doc = re.findall(r'<doc>(.*)</doc>',
+                         solution_str, re.DOTALL)[0].strip()
     except Exception as err:
         return None
-    return prompt, doc
-
-
-class Doc2QueryV4LanguageConsistency(LanguageConsistency):
-    def __init__(self, parse_solution_fn, min_score, max_score, abbrev="Lang", strict=False):
-        super().__init__(
-            parse_solution_fn=parse_solution_fn, min_score=min_score, max_score=max_score, abbrev=abbrev
-        )
-        self.strict = strict
-
-    def get_penalty_or_reward(self, solution_str, ground_truth):
-        return self.max_score
+    return thought, doc
 
 
 class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
@@ -5336,6 +5125,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
                  args=None,
                  min_reward=-5.0,
                  thought_log_prob=0.01,
+                 parse_thought_and_conclusion_fn=doc2query_v4_parse_solution_fn,
                  ):
         super().__init__(
             parse_solution_fn=parse_solution_fn, split=split,
@@ -5348,31 +5138,19 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
     def init_agent(self):
         self.agents = {}
         self.init_verify_agent()
-        self.polar_agent = PolarAgent(
-            url=self.args["polar_args"]["url"],
-            postprocess_solution_fn=self.parse_solution_fn,
-            parse_result_failure_score=self.min_reward)
-        self.test_agent = Agent(
-            **self.args["difficulty_run_args"]["tester"]["model"])
-        self.agents["difficulty_run_args"] = self.test_agent
 
     def init_verify_agent(self):
         self.verify_agent = Agent(
             **self.args["verify_agent"]["model"])
-        self.judge_agent = Agent(
-            **self.args["judge_agent"]["model"])
-        self.anchor_agent = Agent(
-            **self.args["eval_reference_run_args"]["adv"]["model"]
-        )
-        self.agents["eval_reference_run_args"] = self.anchor_agent
 
     @classmethod
     def rule_based_penalties(cls):
-        return [
-            Doc2QueryV4LanguageConsistency
-        ]
+        return []
 
-    async def _question_eval(
+    def init_rule_based_penalties(self):
+        self._penalties = []
+
+    async def eval_on_doc(
         self,
         batch_data_sources,
         batch_solution_str,
@@ -5388,7 +5166,9 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
             result = self.parse_solution_fn(sol)
             if result is not None:
-                questions.append(result[0])
+                thought, refined_doc = result
+                raw_doc = gt["document"]
+                questions.append((refined_doc, raw_doc))
                 indices.append(i)
             else:
                 continue
@@ -5397,9 +5177,9 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         repeat_indices = indices
 
         qualities = await task.do_job(
-            agent=self.judge_agent,
+            agent=self.verify_agent,
             batch_inputs=repeat_questions,
-            max_concurrent_requests=self.args["judge_agent"]["max_concurrent_requests"],
+            max_concurrent_requests=self.args["verify_agent"]["max_concurrent_requests"],
         )
 
         scores = []
@@ -5420,73 +5200,28 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
                 final_scores[i] = min(score)
         return final_scores
 
-    async def loose_question_eval(
+    async def model_judge(
         self,
         batch_data_sources,
         batch_solution_str,
         batch_ground_truth,
     ):
-        return await self._question_eval(
+        return await self.eval_on_doc(
             batch_data_sources,
             batch_solution_str,
             batch_ground_truth,
-            eval_task=Doc2QueryV4LooseQuestionEval(),
-            min_score=0,
-            max_score=0.5,
+            eval_task=Doc2QueryV4ModelJudgeDoc(),
+            min_score=-1.0,
+            max_score=1.0,
         )
 
-    async def strict_question_eval(
-        self,
-        batch_data_sources,
-        batch_solution_str,
-        batch_ground_truth,
-    ):
-        return await self._question_eval(
-            batch_data_sources,
-            batch_solution_str,
-            batch_ground_truth,
-            eval_task=Doc2QueryV4StrictQuestionEval(),
-            min_score=0,
-            max_score=0.5,
-        )
-
-    async def get_difficulty(self,
-                             batch_data_sources,
-                             batch_solution_str,
-                             batch_ground_truth,
-                             skip_run=None):
-        verify_task = self.polar_agent
-
-        correctness = await self._simulate_respondent(
-            batch_data_sources=batch_data_sources,
-            batch_solution_str=batch_solution_str,
-            batch_ground_truth=batch_ground_truth,
-            skip_run=skip_run,
-            run_args={
-                "difficulty_run_args": self.args["difficulty_run_args"]["tester"]},
-            batch_verify_fn=partial(
-                self.batch_verify_results, verify_task=verify_task, return_input_response=True),
-            resp_postprocess_fn=lambda x: x.strip()
-        )
-
-        # TODO: 第一阶段不引入Reward Std
-        rm_std = [0.0] * len(batch_solution_str)
-        return rm_std, {}
-
-    def log_solution(self, solution):
-        norm = self.parse_solution_fn(solution)
-        if norm is None:
-            return repr(self.clip_string(solution))
-        return f'[Q]\n{norm[0]}\n\n[A]\n{norm[1]}'
-
-    async def get_info_retention_reward(
+    async def rule_judge(
         self,
         batch_data_sources,
         batch_solution_str,
         batch_ground_truth,
         skip_run=None,
-        max_info_limit=0.28,
-        leakage_threshold=0.08,
+        max_sim_threshold=0.45,
     ):
         """
         信息保留率
@@ -5496,61 +5231,27 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
             parsed = self.parse_solution_fn(sol)
 
             if parsed is not None:
-                question, hyp, ref = parsed[0], parsed[1], gt["document"]
-                lang_code = "zh" if contain_chinese(hyp) else "en"
+                thought, refined_doc, raw_doc = parsed[0], parsed[1], gt["document"]
+                lang_code = "zh" if contain_chinese(raw_doc) else "en"
 
-                q_tokens = " ".join(tokenize(question.lower(), lang_code))
-                hyp_tokens = " ".join(tokenize(hyp.lower(), lang_code))
-                ref_tokens = " ".join(tokenize(ref.lower(), lang_code))
+                hyp_tokens = " ".join(tokenize(refined_doc.lower(), lang_code))
+                ref_tokens = " ".join(tokenize(raw_doc.lower(), lang_code))
 
-                if len(tokenize(question.lower(), lang_code)) > 1024:
-                    score = -2.0
-                else:
-                    leakage1 = sacrebleu.sentence_bleu(
-                        hyp_tokens, [q_tokens]).score / 100
-                    leakage2 = sacrebleu.sentence_bleu(
-                        q_tokens, [ref_tokens]).score / 100
-                    leakage3 = sacrebleu.sentence_bleu(
-                        q_tokens, [hyp_tokens]).score / 100
-                    if (leakage1 > leakage_threshold) or (leakage2 > leakage_threshold) or (leakage3 > leakage_threshold):
-                        score = -2.0
-                    else:
-                        info = sacrebleu.sentence_bleu(
-                            hyp_tokens, [ref_tokens]).score / 100
+                info = sacrebleu.sentence_bleu(
+                    hyp_tokens, [ref_tokens]).score / 100
 
-                        # 设置上限阈值
-                        info = min(info, max_info_limit)
-                        info = info / max_info_limit
-                        weight = 0.7
-                        score = info * weight
+                if info >= max_sim_threshold:
+                    info = 1.0
+                score = info
                 outputs[i] += score
 
         return outputs
 
-    async def get_ref_quality_score(self,
-                                    batch_data_sources,
-                                    batch_solution_str,
-                                    batch_ground_truth,
-                                    skip_run=None):
-        verify_task = PairwiseJudge()
-        correctness = await self._simulate_respondent(
-            batch_data_sources=batch_data_sources,
-            batch_solution_str=batch_solution_str,
-            batch_ground_truth=batch_ground_truth,
-            skip_run=skip_run,
-            run_args={
-                "eval_reference_run_args": self.args["eval_reference_run_args"]["adv"]},
-            batch_verify_fn=partial(
-                self.batch_verify_results, verify_task=verify_task, return_input_response=True),
-            resp_postprocess_fn=lambda x: x.strip()
-        )
-        outputs = [0.0] * len(batch_solution_str)
-        correctness = correctness["eval_reference_run_args"]
-        for i in range(len(batch_solution_str)):
-            if i in correctness.keys():
-                outputs[i] = correctness[i][0][0]
-
-        return outputs
+    def log_solution(self, solution):
+        norm = self.parse_solution_fn(solution)
+        if norm is None:
+            return repr(self.clip_string(solution))
+        return f'[Q]\n{norm[0]}\n\n[A]\n{norm[1]}'
 
     @classmethod
     def rule_based_penalties(cls):
@@ -5560,17 +5261,13 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
 
     def coarse_process(self):
         return [
-            Process(name="LooseQEval",
-                    function=self.loose_question_eval, filter_only=False, non_skip=True),
-            Process(name="StrictQEval",
-                    function=self.strict_question_eval, filter_only=False, non_skip=True),
-            Process(name="InfoRetention",
-                    function=self.get_info_retention_reward, filter_only=False, non_skip=False),
+            Process(name="ModelJudge",
+                    function=self.model_judge, filter_only=False, non_skip=True),
         ]
 
     def finegrain_process(self):
-        return Process(name="RefQuality",
-                       function=self.get_ref_quality_score, filter_only=False, non_skip=False)
+        return Process(name="RuleJudge",
+                       function=self.rule_judge, filter_only=False, non_skip=False)
 
     @classmethod
     def respond(cls, result, gt):
@@ -6224,65 +5921,6 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
 
 
 DOC2QUERY_V4_DEFAULT_PARAMS = {
-    "eval_reference_run_args": {
-        "adv": {
-            # "model": {
-            #     "model": "Qwen2.5-32B-Instruct",
-            #     "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
-            #     "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
-            #     "request_kwargs": {
-            #         "temperature": 0.6,
-            #         "timeout": 360,
-            #         "max_tokens": 4096,
-            #     }
-            # },
-            "model": {
-                "model": "DeepSeek-V3-0324",
-                "base_url": "https://sd265fbi80c6ft26qc5ig.apigateway-cn-beijing.volceapi.com/v1",
-                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
-                "request_kwargs": {
-                    "temperature": 0.4,
-                    "timeout": 360,
-                    "max_tokens": 4096,
-                }
-            },
-            "repeat": 1,
-            "fn": "respond",
-            "desc": '基线模型',
-            "max_concurrent_requests": 512
-        },
-    },
-    "difficulty_run_args": {
-        "tester": {
-            "model": {
-                "model": "Qwen2.5-32B-Instruct",
-                "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
-                "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
-                "request_kwargs": {
-                    "temperature": 0.9,
-                    "timeout": 360,
-                    "max_tokens": 4096,
-                }
-            },
-            "repeat": 10,
-            "fn": "respond",
-            "desc": 'reward std',
-            "max_concurrent_requests": 256
-        },
-    },
-    "judge_agent": {
-        "model": {
-            "model": "Qwen2.5-32B-Instruct",
-            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
-            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
-            "request_kwargs": {
-                "temperature": 0.8,
-                "timeout": 360,
-                "max_tokens": 4096,
-            }
-        },
-        "max_concurrent_requests": 128
-    },
     "verify_agent": {
         "model": {
             "model": "Qwen2.5-32B-Instruct",
