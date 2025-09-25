@@ -1103,6 +1103,44 @@ DOC2QUERY_V4_CONTENT_NOT_DISRUPT = """任务：判断下面的两篇文章是否
 下面开始你的回答，先分析再给出JSON格式的结论。
 """
 
+
+DOC2QUERY_V4_RM_TEMPLATE_ZH = """
+任务：给定一篇文档，以第一人称给出创作该【文档】时的思考过程
+
+
+## 要求：（即评价标准）
+1. **思考过程自然通顺**: 以第一人称给出给出创作动机、思路、整体框架、细节补充等各个环节
+2. **避免重复问题**: 思考过程避免出现冗余、重复性内容，例如在不同位置出现含义相同的内容表述。
+3. **思考过程独立、自主**: 即思考过程**禁止**出现**任何**反映可以在创作时可以看到文档的表述。
+例如禁止出现下面类似的语句
+"根据提供的文档内容..."、"逆向思考...创作过程"、"我需要理解文档的核心主题和结构..."、"文档讲述了..."、"作者认为..."、
+"根据这些步骤我需要将思考过程详细..."、"遵循提供的格式和要求..."
+
+相反，好的思考过程应该是从第一人陈的视角，将创作的动机（写一篇什么内容，写给谁，我的目的是什么）、框架（我需要怎么创作）、细节设计（我是怎么一步步敲定文章的细节部分）背后的心理想法娓娓道来。
+
+下面是一些技巧帮助你识别**独立、自主的思考过程**和**逆向推导的思考过程**的差别。
+1. 看是否包含 “创作不确定性与调整痕迹”
+主动思考的过程会自然体现 “从模糊到清晰” 的调整 —— 比如提及 “一开始想把‘产品使用步骤’放开头，后来考虑到用户先需要知道‘为什么要用’，就把‘核心价值’挪到了前面”；而逆向推导往往直接给出 “最终框架”，不会有这类 “犹豫、修改” 的细节（因成品已固定，无需虚构 “调整逻辑”）。
+
+2. 看 “动机与受众需求的绑定是否具体”
+主动思考的动机必然紧扣 “真实沟通目标”，会包含 “为谁写、解决什么具体问题” 的细节 —— 比如 “想给刚接触露营的新手写攻略，因为他们总纠结‘买什么装备’，所以重点要讲‘基础必买 + 避坑清单’”；逆向推导的动机通常笼统空泛，比如只说 “想写露营攻略”，不会提及 “受众的具体痛点”（因是先看到成品内容，再反向套 “动机”，而非真的从受众需求出发）。
+
+3. 看 “细节设计的‘因果逻辑’是否完整”
+主动思考的细节会附带 “为什么这么设计” 的理由 —— 比如 “在‘注意事项’里加了‘避免高温环境使用’，因为之前测试时发现高温会让零件变形，用户可能没意识到这个风险”；而逆向推导仅会复述 “成品里有某细节”（如 “加了高温使用提示”），但说不出背后的 “经验、测试或用户需求支撑”（因细节是从成品中看到的，而非自己主动设计的）。
+
+4. 看是否有 “非成品内容的合理延展”
+主动思考的细节会附带 “为什么这么设计” 的理由 —— 比如 “在‘注意事项’里加了‘避免高温环境使用’，因为之前测试时发现高温会让零件变形，用户可能没意识到这个风险”；而逆向推导仅会复述 “成品里有某细节”（如 “加了高温使用提示”），但说不出背后的 “经验、测试或用户需求支撑”（因细节是从成品中看到的，而非自己主动设计的）。
+
+5. 看 “框架搭建的‘顺序理由’是否通顺”
+主动思考的框架逻辑是 “目的→结构”，每个部分的顺序都有明确理由 —— 比如 “先讲‘材料准备’（避免用户漏买），再讲‘操作步骤’（按流程走不混乱），最后讲‘常见问题’（解决失败场景），每个环节都是为了让新手能一次成功”；而逆向推导的框架理由往往牵强或缺失，比如只说 “分了材料、步骤、问题三部分”，却解释不出 “为什么按这个顺序”（因是先看到成品的结构，再强行套 “理由”，而非真的从 “帮用户做事” 的逻辑出发）。
+
+6. 看 “语言表述是否贴合‘受众理解场景’”
+主动思考会根据受众调整语言；而逆向推导可能直接用专业表述，且不解释（因是看到成品里的表述，没考虑受众是否可以看懂”）。
+
+7. 看是否有 “创作中的‘小失误与纠错’记录”
+主动思考可能提及 “创作中的临时纠错”；而逆向推导不会有这类 “纠错细节”（因成品是最终正确版本，倒推时不会想到 “最初写错” 的情况，只有真实创作才会经历 “出错→修正” 的过程）。
+"""
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # BASE
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1267,7 +1305,7 @@ class Agent:
                 return messages, None
 
 
-class RewardModelAgent(object):
+class Doc2QueryV3RewardModelAgent(object):
     def __init__(self, urls, postprocess_solution_fn, parse_result_failure_score):
         self.RM_URLS = urls
         self.postprocess_solution_fn = postprocess_solution_fn
@@ -1340,6 +1378,55 @@ class RewardModelAgent(object):
                     time.sleep(retry_delay)
         print("达到最大重试次数，请求失败。")
         return None
+
+
+class Doc2QueryV4RewardModelAgent(Doc2QueryV3RewardModelAgent):
+    def __init__(self, urls, postprocess_solution_fn, parse_result_failure_score):
+        super().__init__(
+            urls, postprocess_solution_fn, parse_result_failure_score
+        )
+
+    async def compute_rm_score(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+            judge_prompt_key="ground_truth"
+    ):
+        input_datas = []
+        rewards = {}
+
+        for i, (solution_str, ground_truth) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            try:
+                solution_str = self.postprocess_solution_fn(solution_str)
+            except Exception as err:
+                rewards[i] = self.parse_result_failure_score
+                continue
+
+            if solution_str is None:
+                rewards[i] = self.parse_result_failure_score
+                continue
+
+            input_data = {
+                "prompt": DOC2QUERY_V4_RM_TEMPLATE_ZH.strip(), "response": solution_str.strip(), "id": i
+            }
+            input_datas.append(input_data)
+
+        if len(input_datas) > 0:
+            url = random.choice(self.RM_URLS)
+            for batch in tqdm_nonasync(batchify(input_datas, n=128), desc=f'[RM][{url}] batchify inference (batch=128)'):
+                output_datas = self.post_with_retry(batch, url)
+                for _ in output_datas['reward']:
+                    _id = int(_["id"])
+                    rewards[_id] = _["rm_score"]
+
+        final_results = []
+        for i in range(len(batch_solution_str)):
+            if i in rewards:
+                final_results.append(rewards[i])
+            else:
+                final_results.append(0.)
+        return final_results
 
 
 class LabAgent(Agent):
@@ -3790,7 +3877,7 @@ class Doc2QueryV3ComputeScore(Doc2QueryV2ComputeScore):
 
     def init_rm_agent(self):
         if "reward_model_args" in self.args:
-            self.rm_agent = RewardModelAgent(
+            self.rm_agent = Doc2QueryV3RewardModelAgent(
                 urls=self.args["reward_model_args"]["urls"],
                 postprocess_solution_fn=lambda x: self.parse_thought_and_conclusion_fn(x)[
                     1],
@@ -5138,10 +5225,20 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
     def init_agent(self):
         self.agents = {}
         self.init_verify_agent()
+        self.init_rm_agent()
 
     def init_verify_agent(self):
         self.verify_agent = Agent(
             **self.args["verify_agent"]["model"])
+
+    def init_rm_agent(self):
+        if "reward_model_args" in self.args:
+            self.rm_agent = Doc2QueryV4RewardModelAgent(
+                urls=self.args["reward_model_args"]["urls"],
+                postprocess_solution_fn=lambda x: doc2query_v4_parse_solution_fn(x)[
+                    0],
+                parse_result_failure_score=self.min_reward
+            )
 
     @classmethod
     def rule_based_penalties(cls):
@@ -5247,12 +5344,6 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
 
         return outputs
 
-    def log_solution(self, solution):
-        norm = self.parse_solution_fn(solution)
-        if norm is None:
-            return repr(self.clip_string(solution))
-        return f'[Q]\n{norm[0]}\n\n[A]\n{norm[1]}'
-
     @classmethod
     def rule_based_penalties(cls):
         return [
@@ -5263,6 +5354,8 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         return [
             Process(name="ModelJudge",
                     function=self.model_judge, filter_only=False, non_skip=True),
+            Process(name="BT-Reward", function=self.rm_agent.compute_rm_score,
+                    filter_only=False, non_skip=True)
         ]
 
     def finegrain_process(self):
@@ -5273,15 +5366,18 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
     def respond(cls, result, gt):
         return result[0]
 
-    def log_ground_truth(self, ground_truth):
-        return repr(ground_truth["document"])
+    def log_solution(self, solution):
+        norm = self.parse_solution_fn(solution)
+        if norm is None:
+            print(repr(self.clip_string(solution)))
+        print(
+            f'[Thought]\n{norm[0]}\n\n[DOC]\n{repr(self.clip_string(norm[1]))}')
 
     async def _compute_score(self,
                              batch_data_sources,
                              batch_solution_str,
                              batch_ground_truth,
                              ):
-        self.init_save_rollouts()
 
         penalty = defaultdict(list)
         for i, (data_source, solution_str, ground_truth) in enumerate(zip(batch_data_sources, batch_solution_str, batch_ground_truth)):
@@ -5374,9 +5470,8 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
             print(
                 f"--------------------------------{log_flag}--------------------------------")
             print(
-                f"【Solution{i}】({source})`{self.log_solution(batch_solution_str[i])}`")
-            print(
-                f"【Golden{i}】({source})`{self.log_ground_truth(batch_ground_truth[i])}`")
+                f"【Solution{i}】")
+
             _minor_rewards_log = []
             for process in self.coarse_process():
                 _minor_rewards_log.append(
@@ -5386,7 +5481,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
                 f'[Final Reward]={cur_score:.3f}|{main_process.name}={str(_main_reward)}|{_minor_rewards_log}|{penalty_log_str}\n')
 
             if log:
-                print(f'[Thought]\n{batch_solution_str[i]}')
+                self.log_solution(batch_solution_str[i])
                 print()
 
         return final_results
@@ -5934,8 +6029,16 @@ DOC2QUERY_V4_DEFAULT_PARAMS = {
         },
         "max_concurrent_requests": 128
     },
-    "polar_args": {
-        "url": "10.130.1.189:30000"
+    "reward_model_args": {
+        "urls": [
+            "http://10.130.0.237:26013",
+            "http://10.130.0.237:31232",
+            "http://10.130.0.237:27543",
+            "http://10.130.0.237:31666",
+            "http://10.130.0.237:30367",
+            "http://10.130.0.237:25871",
+            "http://10.130.0.237:27587",
+        ]
     },
     "save_rollouts": {
         "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"

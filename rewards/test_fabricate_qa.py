@@ -13,7 +13,7 @@ from tqdm import tqdm
 from collections import defaultdict
 from fabricate_qa import (
     Agent,
-    RewardModelAgent,
+    Doc2QueryV3RewardModelAgent,
     JudgeTwoQuestionSimilarity,
     Doc2QueryV3LooseQuestionEval,
     QuestionRefineHack,
