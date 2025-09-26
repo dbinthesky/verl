@@ -43,6 +43,7 @@ setup_path() {
     KL_LOSS_COEF="0.5"
     TEMPERATURE="1.0"
 
+    HOME="/mnt/shared-storage-user/ailab-hx/tongjian"
     CUSTOM_CODE_DIR="${HOME}/verl"
     VERL_DIR="${HOME}/verl"
     # [PLACEHOLDER]

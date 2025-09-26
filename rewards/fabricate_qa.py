@@ -5354,8 +5354,8 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         return [
             Process(name="ModelJudge",
                     function=self.model_judge, filter_only=False, non_skip=True),
-            Process(name="BT-Reward", function=self.rm_agent.compute_rm_score,
-                    filter_only=False, non_skip=True)
+            # Process(name="BT-Reward", function=self.rm_agent.compute_rm_score,
+            #         filter_only=False, non_skip=True)
         ]
 
     def finegrain_process(self):

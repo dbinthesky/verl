@@ -2,17 +2,18 @@
 
 JOB_NAME="doc2query_v4"
 
-WORKER_IMAGE="registry.h.pjlab.org.cn/ailab/lishuaibin:lishuaibin-xpuyu-trainrlhf"
+WORKER_IMAGE="registry.h.pjlab.org.cn/ailab/pytorch:22.04-pjlab-py3.10-torch2.2.0-cu12.1"
 WORKER_COUNT="${WORKER_COUNT:-"4"}"
 WORKER_GPU="${WORKER_GPU:-"8"}"
-WORKER_CPU="${WORKER_CPU:-"48"}"
-WORKER_MEMORY="${WORKER_MEMORY:-"600"}"
+WORKER_CPU="${WORKER_CPU:-"128"}"
+WORKER_MEMORY="${WORKER_MEMORY:-"1600000"}"
 
 # [hx]
 WORKSPACE_ID="ailab-hx"
 CHARGE_GROUP="hx_gpu"
 RUN_CMD="/mnt/shared-storage-user/ailab-hx/tongjian/verl/examples/grpo_trainer/doc2query_v4/dev_dapo_qwen25-7b_doc2query_v4.sh"
 
+chmod +x ${RUN_CMD}
 
 rjob submit -e DISTRIBUTED_JOB=true \
     --image=${WORKER_IMAGE} \
