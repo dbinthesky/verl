@@ -87,7 +87,7 @@ run_training() {
     # self.config.actor.ppo_mini_batch_size //= (self.device_mesh.size() // self.ulysses_sequence_parallel_size)
     # self.config.actor.ppo_micro_batch_size_per_gpu = self.config.actor.ppo_micro_batch_size
 
-    python3 -m recipe.dapo.main_dapo \
+    python3 -m verl.trainer.main_ppo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
         custom_reward_function.name=doc2query_v4_compute_score_train \
         +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
@@ -118,13 +118,6 @@ run_training() {
         actor_rollout_ref.actor.kl_loss_coef=${KL_LOSS_COEF} \
         actor_rollout_ref.actor.entropy_coeff=0.0 \
         actor_rollout_ref.actor.grad_clip=1.0 \
-        actor_rollout_ref.actor.clip_ratio_low=0.2 \
-        actor_rollout_ref.actor.clip_ratio_high=0.3 \
-        actor_rollout_ref.actor.clip_ratio_c=10.0 \
-        reward_model.overlong_buffer.enable=True \
-        reward_model.overlong_buffer.len=$((1024 * 4)) \
-        reward_model.overlong_buffer.penalty_factor=1.0 \
-        algorithm.filter_groups.enable=False \
         actor_rollout_ref.model.enable_gradient_checkpointing=True \
         actor_rollout_ref.actor.fsdp_config.param_offload=True \
         actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \

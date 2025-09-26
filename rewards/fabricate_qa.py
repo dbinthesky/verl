@@ -5352,8 +5352,8 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
 
     def coarse_process(self):
         return [
-            Process(name="ModelJudge",
-                    function=self.model_judge, filter_only=False, non_skip=True),
+            # Process(name="ModelJudge",
+            #         function=self.model_judge, filter_only=False, non_skip=True),
             # Process(name="BT-Reward", function=self.rm_agent.compute_rm_score,
             #         filter_only=False, non_skip=True)
         ]
@@ -5368,7 +5368,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
 
     def log_solution(self, solution):
         norm = self.parse_solution_fn(solution)
-        if norm is noNone:
+        if norm is not None:
             print(
                 f'[Thought]\n{norm[0]}\n\n[DOC]\n{repr(self.clip_string(norm[1]))}')
 

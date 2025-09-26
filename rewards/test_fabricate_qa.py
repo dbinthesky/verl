@@ -126,17 +126,17 @@ _doc2query_v3_qas = [
 
 
 def load_dataset(task_name, num=100, xml_cot=False):
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0730.parquet"
+    filename = "/mnt/shared-storage-user/ailab-hx/tongjian/rl/fabricate_aio/fabricate_aio_train_0730.parquet"
     if task_name == "kg2query_v1":
-        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/kg2query_v1_oc_v1_7_hard_problem_0623.parquet"
+        filename = "/mnt/shared-storage-user/ailab-hx/tongjian/rl/fabricate_aio/kg2query_v1_oc_v1_7_hard_problem_0623.parquet"
     elif task_name == "doc2query_v3":
-        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_rl_inputs_diamond.parquet"
+        filename = "/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v3/doc2query_v3_rl_inputs_diamond.parquet"
     elif task_name == "doc2query_v4":
-        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v4/pretrain_general_doc_8k_rl_inputs_train/index0.parquet"
+        filename = "/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v4/pretrain_general_doc_8k_rl_inputs_train_sample5k.parquet"
     elif task_name == "learnable_cot":
-        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/learnable_cot/dapo_math_17k_train.parquet"
+        filename = "/mnt/shared-storage-user/ailab-hx/tongjian/rl/learnable_cot/dapo_math_17k_train.parquet"
     elif task_name == "rlvr":
-        filename = "/cpfs01/shared/llm_ddd/tongjian/rl/learnable_cot/aime_2024_2025.parquet"
+        filename = "/mnt/shared-storage-user/ailab-hx/tongjian/rl/learnable_cot/aime_2024_2025.parquet"
 
     batch_solution_str, batch_ground_truth = [], []
     batch_data_sources = []
