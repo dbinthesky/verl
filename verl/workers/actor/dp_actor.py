@@ -79,6 +79,111 @@ class DataParallelPPOActor(BasePPOActor):
         )
         self.device_name = get_device_name()
 
+def _forward_micro_batch(self, micro_batch, temperature, calculate_entropy=False) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Returns:
+            entropy: # (bs, response_len)
+            log_probs: # (bs, response_len)
+        """
+        response_length = micro_batch["responses"].size(-1)
+
+        with torch.autocast(device_type=self.device_name, dtype=torch.bfloat16):
+            input_ids = micro_batch["input_ids"]
+            batch_size, seqlen = input_ids.shape
+            attention_mask = micro_batch["attention_mask"]
+            position_ids = micro_batch["position_ids"]
+            entropy = None
+
+            if self.use_remove_padding:
+                # input_ids_rmpad (total_nnz, ...)
+                input_ids_rmpad, indices, * \
+                    _ = unpad_input(input_ids.unsqueeze(-1), attention_mask)
+                input_ids_rmpad = input_ids_rmpad.transpose(
+                    0, 1)  # (1, total_nnz)
+
+                # unpad the position_ids to align the rotary
+                position_ids_rmpad = index_first_axis(rearrange(
+                    position_ids.unsqueeze(-1), "b s ... -> (b s) ..."), indices).transpose(0, 1)
+
+                # 新增：只保留response部分的token_ids（去除prompt部分）
+                # 从末尾截取response_length长度的token作为response部分
+                input_ids_rmpad = input_ids_rmpad[:, -response_length:]  # (1, response_length)
+                position_ids_rmpad = position_ids_rmpad[:, -response_length:]  # (1, response_length)
+
+                # for compute the log_prob
+                input_ids_rmpad_rolled = torch.roll(
+                    input_ids_rmpad, shifts=-1, dims=1)  # (1, response_length)
+
+                input_ids_rmpad_rolled = input_ids_rmpad_rolled.squeeze(
+                    0)  # (response_length)
+
+                # only pass input_ids and position_ids to enable flash_attn_varlen
+                extra_args = {}
+                if self.use_fused_kernels:
+                    extra_args["temperature"] = temperature
+                    extra_args["return_dict"] = True
+
+                output = self.actor_module(
+                    input_ids=input_ids_rmpad,
+                    attention_mask=None,
+                    position_ids=position_ids_rmpad,
+                    use_cache=False,
+                    **extra_args,
+                )  # prevent model thinks we are generating
+
+                if self.use_fused_kernels:
+                    log_probs = output.log_probs.squeeze(0)  # (response_length,)
+                    entropy_rmpad = output.entropy.squeeze(0)  # (response_length,)
+
+                else:
+                    logits_rmpad = output.logits.squeeze(
+                        0)  # (response_length, vocab_size)
+                    logits_rmpad.div_(temperature)
+
+                    # if use_sp: ((response_length / sp) + pad) ; if not use_sp: (batch, response_length)
+                    inplace_backward = True
+                    if calculate_entropy:
+                        inplace_backward = False
+                    log_probs = logprobs_from_logits(
+                        logits=logits_rmpad,
+                        labels=input_ids_rmpad_rolled,
+                        inplace_backward=inplace_backward,
+                    )
+
+                    # compute entropy
+                    if calculate_entropy:
+                        if not self.config.entropy_checkpointing:
+                            entropy_rmpad = self.compute_entropy_from_logits(
+                                logits_rmpad)  # ((response_length / sp) + pad)
+                        else:
+                            entropy_rmpad = torch.utils.checkpoint.checkpoint(
+                                self.compute_entropy_from_logits, logits_rmpad)
+
+                # pad back to (bsz, response_length)
+                if calculate_entropy:
+                    full_entropy = pad_input(
+                        hidden_states=entropy_rmpad.unsqueeze(-1),
+                        indices=indices,
+                        batch=batch_size,
+                        seqlen=response_length,  # 这里也需要修改为response_length
+                    )
+                full_log_probs = pad_input(
+                    hidden_states=log_probs.unsqueeze(-1),
+                    indices=indices,
+                    batch=batch_size,
+                    seqlen=response_length,  # 这里也需要修改为response_length
+                )
+
+                # only return response part:
+                if calculate_entropy:
+                    # (bsz, response_length)
+                    entropy = full_entropy.squeeze(-1)
+
+                # (bsz, response_length)
+                log_probs = full_log_probs.squeeze(-1)
+
+            return entropy, log_probs
+
     def _forward_micro_batch(self, micro_batch, temperature, calculate_entropy=False) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Returns:

@@ -42,6 +42,8 @@ setup_path() {
     TRAIN_BSZ=$((num_gpus * world_size))
     KL_LOSS_COEF="0.5"
     TEMPERATURE="1.0"
+    USE_RM_PAD="True" # must be true 
+    ULYSSES_SP="1" # must be 1
 
     HOME="/mnt/shared-storage-user/ailab-hx/tongjian"
     CUSTOM_CODE_DIR="${HOME}/verl"
@@ -55,10 +57,10 @@ setup_path() {
     TRAIN_DATA='/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v4/pretrain_general_doc_8k_rl_inputs_train_sample5k.parquet'
     VAL_DATA='/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v4/pretrain_general_doc_8k_rl_inputs_test.parquet'
 
-    experiment_name="doc2query_v4_30b_a3_zhihu_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}"
+    experiment_name="doc2query_v4_30b_a3_zhihu_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}"
     project_name="doc2query_v4"
 
-    OUTPUT_DIR="${CKPTS_DIR}/datareview_rl_test/verl/grpo/doc2query_v4/${experiment_name}/"
+    OUTPUT_DIR="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_rl_test/verl/grpo/doc2query_v4/${experiment_name}/"
     mkdir -p "${OUTPUT_DIR}"
 }
 setup_path
@@ -107,11 +109,11 @@ run_training() {
         actor_rollout_ref.actor.optim.lr=1e-6 \
         actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
         actor_rollout_ref.actor.optim.weight_decay=0.1 \
-        actor_rollout_ref.model.use_remove_padding=True \
+        actor_rollout_ref.model.use_remove_padding=${USE_RM_PAD} \
         actor_rollout_ref.actor.shuffle=True \
         actor_rollout_ref.actor.ppo_mini_batch_size=${TRAIN_BSZ} \
         actor_rollout_ref.actor.ppo_micro_batch_size=${TRAIN_BSZ} \
-        actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
+        actor_rollout_ref.actor.ulysses_sequence_parallel_size=${ULYSSES_SP} \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
         actor_rollout_ref.actor.ppo_max_token_len_per_gpu=20480 \
         actor_rollout_ref.actor.use_kl_loss=True \
@@ -135,7 +137,7 @@ run_training() {
         algorithm.kl_ctrl.kl_coef=0.001 \
         algorithm.kl_ctrl.type="fixed" \
         algorithm.lam=0.95 \
-        reward_model.reward_manager=dapo_custom \
+        reward_model.reward_manager="custom" "$@" \
         trainer.logger='["console", "wandb"]' \
         trainer.project_name="${project_name}" \
         trainer.experiment_name="${experiment_name}" \
