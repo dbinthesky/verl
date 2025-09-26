@@ -59,13 +59,14 @@ from fabricate_qa import (
 )
 
 UNITTEST_AGENT = Agent(**{
-    "model": "qwen25_32B_instruct",
-    "base_url": "http://10.130.142.223:8000/v1",
+    "model": "gpt-oss-120b",
+    "base_url": "http://10.102.214.34:30000/v1",
     "api_keys": "EMPTY",
     "request_kwargs": {
         "temperature": 0.7,
         "timeout": 360,
         "max_tokens": 16384,
+        "reasoning_effort": "low"
     },
 })
 
@@ -677,6 +678,17 @@ class TestDoc2QueryV3Multiturn(unittest.TestCase):
 
 
 class TestDoc2QueryV4(unittest.TestCase):
+    def test_agent(self):
+        async def main():
+            prompts = ["礼拜六后面的第三天是礼拜几？"]
+            agent = UNITTEST_AGENT
+            outputs = await agent.run(
+                prompts,
+                10, desc=f"[测试 {agent.model}=32]", postprocess_fns=[lambda x: x]*len(prompts))
+            print(outputs)
+        aio.run(main())
+
+
     def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_dataset(
             task_name="doc2query_v4", num=4)

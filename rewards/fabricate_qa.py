@@ -5318,7 +5318,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         batch_solution_str,
         batch_ground_truth,
         skip_run=None,
-        max_sim_threshold=0.45,
+        max_sim_threshold=0.5,
     ):
         """
         信息保留率
@@ -6017,9 +6017,8 @@ DOC2QUERY_V3_DEFAULT_PARAMS = {
 DOC2QUERY_V4_DEFAULT_PARAMS = {
     "verify_agent": {
         "model": {
-            "model": "Qwen2.5-32B-Instruct",
-            "base_url": "https://sd262bskcm47j59r1292g.apigateway-cn-beijing.volceapi.com/v1",
-            "api_keys": "caa6246b-afbe-4d9b-ab34-87bf9922032b",
+            "model": "gpt-oss-120b",
+            "base_url": "http://10.102.214.34:30000/v1",
             "request_kwargs": {
                 "temperature": 0.6,
                 "timeout": 360,
