@@ -5368,7 +5368,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
 
     def log_solution(self, solution):
         norm = self.parse_solution_fn(solution)
-        if norm is not None:
+        if norm is noNone:
             print(
                 f'[Thought]\n{norm[0]}\n\n[DOC]\n{repr(self.clip_string(norm[1]))}')
 
