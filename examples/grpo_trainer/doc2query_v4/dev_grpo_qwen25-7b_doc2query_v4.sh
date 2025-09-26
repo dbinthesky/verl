@@ -45,6 +45,7 @@ setup_path() {
     TEMPERATURE="1.0"
     USE_RM_PAD="True" # must be true 
     ULYSSES_SP="1" # must be 1
+    USE_KL_IN_REWARD="True"
 
     HOME="/mnt/shared-storage-user/ailab-hx/tongjian"
     CUSTOM_CODE_DIR="${HOME}/verl"
@@ -138,6 +139,7 @@ run_training() {
         algorithm.kl_ctrl.kl_coef=0.001 \
         algorithm.kl_ctrl.type="fixed" \
         algorithm.lam=0.95 \
+        algorithm.use_kl_in_reward=${USE_KL_IN_REWARD} \
         reward_model.reward_manager="custom" "$@" \
         trainer.logger='["console", "wandb"]' \
         trainer.project_name="${project_name}" \
