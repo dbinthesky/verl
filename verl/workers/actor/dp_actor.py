@@ -79,110 +79,67 @@ class DataParallelPPOActor(BasePPOActor):
         )
         self.device_name = get_device_name()
 
-def _forward_micro_batch(self, micro_batch, temperature, calculate_entropy=False) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _forward_ref_micro_batch(self, micro_batch, temperature, calculate_entropy=False) -> Tuple[torch.Tensor, torch.Tensor]:
         """
+        仅使用responses计算entropy和logprob，通过处理micro_batch后调用_forward_micro_batch实现
+        
         Returns:
             entropy: # (bs, response_len)
             log_probs: # (bs, response_len)
         """
-        response_length = micro_batch["responses"].size(-1)
 
-        with torch.autocast(device_type=self.device_name, dtype=torch.bfloat16):
-            input_ids = micro_batch["input_ids"]
-            batch_size, seqlen = input_ids.shape
-            attention_mask = micro_batch["attention_mask"]
-            position_ids = micro_batch["position_ids"]
-            entropy = None
+        # 从micro_batch中获取responses和原始input_ids（包含prompt+response）
+        responses = micro_batch["responses"]  # shape: (bs, response_len)
+        original_input_ids = micro_batch["input_ids"]  # shape: (bs, prompt_len + response_len)
+        original_attention_mask = micro_batch["attention_mask"] 
+        batch_size, response_len = responses.shape
 
-            if self.use_remove_padding:
-                # input_ids_rmpad (total_nnz, ...)
-                input_ids_rmpad, indices, * \
-                    _ = unpad_input(input_ids.unsqueeze(-1), attention_mask)
-                input_ids_rmpad = input_ids_rmpad.transpose(
-                    0, 1)  # (1, total_nnz)
+        # 计算prompt长度：原始input_ids总长度 - response长度
+        total_len = original_input_ids.shape[1]
+        prompt_len = total_len - response_len  # prompt部分的长度
+        
+        # 提取真实的prompt最后一个token（关键修改）
+        # 形状：(bs, 1)，对应prompt的最后一个token
+        prompt_last_token = original_input_ids[:, prompt_len - 1 : prompt_len]  # 切片确保保持维度
+        prompt_last_mask = original_attention_mask[:, prompt_len - 1 : prompt_len]  # (bs, 1)
 
-                # unpad the position_ids to align the rotary
-                position_ids_rmpad = index_first_axis(rearrange(
-                    position_ids.unsqueeze(-1), "b s ... -> (b s) ..."), indices).transpose(0, 1)
+        # 提取response部分的mask（原始长度response_len）
+        response_mask = original_attention_mask[:, -response_len:]  # (bs, response_len)
+        
+        # 扩展input_ids和attention_mask（长度均为response_len + 1）
+        extended_input_ids = torch.cat([prompt_last_token, responses], dim=1)  # (bs, response_len + 1)
+        ref_attention_mask = torch.cat([prompt_last_mask, response_mask], dim=1)  # (bs, response_len + 1)
 
-                # 新增：只保留response部分的token_ids（去除prompt部分）
-                # 从末尾截取response_length长度的token作为response部分
-                input_ids_rmpad = input_ids_rmpad[:, -response_length:]  # (1, response_length)
-                position_ids_rmpad = position_ids_rmpad[:, -response_length:]  # (1, response_length)
+        ref_position_ids = torch.arange(response_len + 1, device=self.device_name).unsqueeze(0).repeat(batch_size, 1)
 
-                # for compute the log_prob
-                input_ids_rmpad_rolled = torch.roll(
-                    input_ids_rmpad, shifts=-1, dims=1)  # (1, response_length)
+        # 组装新的micro_batch
+        ref_micro_batch = {
+            "responses": responses,
+            "input_ids": extended_input_ids,
+            "attention_mask": ref_attention_mask,
+            "position_ids": ref_position_ids
+        }
+        return self._forward_micro_batch(ref_micro_batch, temperature, calculate_entropy)   
 
-                input_ids_rmpad_rolled = input_ids_rmpad_rolled.squeeze(
-                    0)  # (response_length)
+        # # 从micro_batch中获取responses
+        # responses = micro_batch["responses"]
+        # batch_size, response_len = responses.shape
+        
+        # # 创建新的micro_batch副本，仅包含必要的键
+        # ref_micro_batch = {
+        #     "responses": responses,  # 保留responses作为目标
+        # }
+        # # 将input_ids设置为responses的值
+        # ref_micro_batch["input_ids"] = responses
+        # original_attention_mask = micro_batch["attention_mask"]
+        # ref_attention_mask = original_attention_mask[:, -response_len:]
 
-                # only pass input_ids and position_ids to enable flash_attn_varlen
-                extra_args = {}
-                if self.use_fused_kernels:
-                    extra_args["temperature"] = temperature
-                    extra_args["return_dict"] = True
-
-                output = self.actor_module(
-                    input_ids=input_ids_rmpad,
-                    attention_mask=None,
-                    position_ids=position_ids_rmpad,
-                    use_cache=False,
-                    **extra_args,
-                )  # prevent model thinks we are generating
-
-                if self.use_fused_kernels:
-                    log_probs = output.log_probs.squeeze(0)  # (response_length,)
-                    entropy_rmpad = output.entropy.squeeze(0)  # (response_length,)
-
-                else:
-                    logits_rmpad = output.logits.squeeze(
-                        0)  # (response_length, vocab_size)
-                    logits_rmpad.div_(temperature)
-
-                    # if use_sp: ((response_length / sp) + pad) ; if not use_sp: (batch, response_length)
-                    inplace_backward = True
-                    if calculate_entropy:
-                        inplace_backward = False
-                    log_probs = logprobs_from_logits(
-                        logits=logits_rmpad,
-                        labels=input_ids_rmpad_rolled,
-                        inplace_backward=inplace_backward,
-                    )
-
-                    # compute entropy
-                    if calculate_entropy:
-                        if not self.config.entropy_checkpointing:
-                            entropy_rmpad = self.compute_entropy_from_logits(
-                                logits_rmpad)  # ((response_length / sp) + pad)
-                        else:
-                            entropy_rmpad = torch.utils.checkpoint.checkpoint(
-                                self.compute_entropy_from_logits, logits_rmpad)
-
-                # pad back to (bsz, response_length)
-                if calculate_entropy:
-                    full_entropy = pad_input(
-                        hidden_states=entropy_rmpad.unsqueeze(-1),
-                        indices=indices,
-                        batch=batch_size,
-                        seqlen=response_length,  # 这里也需要修改为response_length
-                    )
-                full_log_probs = pad_input(
-                    hidden_states=log_probs.unsqueeze(-1),
-                    indices=indices,
-                    batch=batch_size,
-                    seqlen=response_length,  # 这里也需要修改为response_length
-                )
-
-                # only return response part:
-                if calculate_entropy:
-                    # (bsz, response_length)
-                    entropy = full_entropy.squeeze(-1)
-
-                # (bsz, response_length)
-                log_probs = full_log_probs.squeeze(-1)
-
-            return entropy, log_probs
+        # ref_micro_batch["attention_mask"] = ref_attention_mask
+        # ref_position_ids = torch.arange(response_len, device=self.device_name).unsqueeze(0).repeat(batch_size, 1)
+        # ref_micro_batch["position_ids"] = ref_position_ids
+    
+        # # 调用已有的_forward_micro_batch处理新的micro_batch
+        # return self._forward_micro_batch(ref_micro_batch, temperature, calculate_entropy)
 
     def _forward_micro_batch(self, micro_batch, temperature, calculate_entropy=False) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -365,7 +322,7 @@ def _forward_micro_batch(self, micro_batch, temperature, calculate_entropy=False
         return grad_norm
 
     @GPUMemoryLogger(role="dp actor", logger=logger)
-    def compute_log_prob(self, data: DataProto, calculate_entropy=False) -> torch.Tensor:
+    def compute_log_prob(self, data: DataProto, calculate_entropy=False, on_ref=False) -> torch.Tensor:
         """Compute the log probability of the responses given input_ids, attention_mask and position_ids
 
         Args:
@@ -430,7 +387,10 @@ def _forward_micro_batch(self, micro_batch, temperature, calculate_entropy=False
             if isinstance(micro_batch, DataProto):
                 micro_batch = {**micro_batch.batch, **micro_batch.non_tensor_batch}
             with torch.no_grad():
-                entropy, log_probs = self._forward_micro_batch(micro_batch, temperature=temperature, calculate_entropy=calculate_entropy)
+                if on_ref:
+                    entropy, log_probs = self._forward_ref_micro_batch(micro_batch, temperature=temperature, calculate_entropy=calculate_entropy)
+                else:
+                    entropy, log_probs = self._forward_micro_batch(micro_batch, temperature=temperature, calculate_entropy=calculate_entropy)
             log_probs_lst.append(log_probs)
             if calculate_entropy:
                 entropy_lst.append(entropy)

@@ -677,7 +677,7 @@ class TestDoc2QueryV3Multiturn(unittest.TestCase):
 
 
 class TestDoc2QueryV4(unittest.TestCase):
-    def test_evaluate_reference(self):
+    def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_dataset(
             task_name="doc2query_v4", num=4)
         task = Doc2QueryV4ComputeScore(
