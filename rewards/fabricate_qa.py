@@ -5182,23 +5182,23 @@ class LearnableCoTComputeScore(SALTComputeScore):
 
 
 def doc2query_v4_parse_solution_fn(solution_str: str, remove_option_letter=True, extract_question_fn=parse_question_solution_fn):
-    for kw in ("</inner-think>", "</think>", "</doc>"):
+    for kw in ("</plan>", "</think>", "</doc>"):
         if solution_str.count(kw) > 1:
             return None
 
     solution_str = postprocess_solution(solution_str)
-    if not solution_str.startswith("<think>"):
-        solution_str = f'<think>\n{solution_str}'
+    if not solution_str.startswith("<plan>"):
+        return None
 
     try:
-        thought = re.findall(r'<think>.*</think>',
+        thought = re.findall(r'<plan>.*</plan>',
                              solution_str, re.DOTALL)[0]
     except Exception as err:
         return None
 
     solution_str = solution_str.replace(thought, "")
     try:
-        inner_voice = re.findall(r'<inner-think>(.*)</inner-think>',
+        inner_voice = re.findall(r'<think>(.*)</think>',
                          solution_str, re.DOTALL)[0].strip()
     except Exception as err:
         return None

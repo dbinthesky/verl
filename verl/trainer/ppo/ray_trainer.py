@@ -161,13 +161,15 @@ def apply_kl_penalty(data: DataProto, kl_ctrl: core_algos.AdaptiveKLController, 
     # compute kl between ref_policy and current policy
     # When apply_kl_penalty, algorithm.use_kl_in_reward=True, so the reference model has been enabled.
     # FIXME
-    print(f'[DEBUG] `old_log_probs` shape={data.batch["old_log_probs"].shape}, `ref_log_prob` shape={data.batch["ref_log_prob"].shape}')
+    print(f'[DEBUG] `old_log_probs` shape={data.batch["old_log_probs"].shape}, `ref_log_prob` shape={data.batch["ref_log_prob"].shape}, `response_length`={response_length}')
 
     kld = core_algos.kl_penalty(data.batch["old_log_probs"], data.batch["ref_log_prob"], kl_penalty=kl_penalty)  # (batch_size, response_length)
     kld = kld * response_mask
     beta = kl_ctrl.value
 
-    token_level_rewards = token_level_scores - beta * kld
+    # FIXME
+    # token_level_rewards = token_level_scores - beta * kld
+    token_level_rewards = token_level_scores - beta * kld / response_length
 
     current_kl = masked_mean(kld, mask=response_mask, axis=-1)  # average over sequence
     current_kl = torch.mean(current_kl, dim=0).item()

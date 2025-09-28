@@ -41,7 +41,7 @@ setup_path() {
     ROLLOUT_N=8
     TRAIN_BSZ=$((num_gpus * world_size))
     KL_LOSS_COEF="0"
-    KL_COEF="0.001"
+    KL_COEF="0.5"
     TEMPERATURE="1.0"
     USE_RM_PAD="True" # must be true 
     ULYSSES_SP="1" # must be 1
