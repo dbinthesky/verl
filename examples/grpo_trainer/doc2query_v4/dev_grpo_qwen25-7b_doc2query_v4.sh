@@ -97,7 +97,6 @@ run_training() {
         +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
         +custom_valid_reward_function.name=doc2query_v4_compute_score_valid \
         algorithm.adv_estimator="grpo" \
-        algorithm.use_kl_in_reward=False \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
         data.train_batch_size=${TRAIN_BSZ} \

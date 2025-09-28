@@ -654,254 +654,254 @@ REASON_QUESTION_QUALITY_VALUE_TEMPLATE = """
 ```
 """
 
-QA_JUDGE_DIFFICULTY_FEWSHOTS = """任务：对于一个问题的思考过程，先按思维树分析其思考过程，再基于下面的纬度分析问题的难度。
+# QA_JUDGE_DIFFICULTY_FEWSHOTS = """任务：对于一个问题的思考过程，先按思维树分析其思考过程，再基于下面的纬度分析问题的难度。
 
-问题难度来源
-1. 计算复杂度：数学工具的抽象程度、运算的维度/非线性/耦合性、应用场景的复杂度。
-  - Level 1（基础数学工具，无复杂运算逻辑）
-    - 工具：整数 / 小数的四则运算、简单代数（一元一次方程）、基础几何（平面图形面积公式直接代入）。
-    - 特点：单变量、线性、无跨步骤关联，运算量极小（最多 10 个数据）。
-  - Level 2（初等进阶工具，低维度线性运算）
-    - 工具：单变量微积分（定积分 / 导数的直接计算）、基础线性代数（2×2 矩阵的加减 / 乘法、行列式计算）、简单数值计算（如用梯形法求单一区间的积分近似值）。
-    - 特点：单变量或低维（≤2 维）、线性为主，步骤关联弱（前步误差对后步影响可忽略），运算量小。
-  - Level 3（常规高等工具，中维度结构化运算）
-    - 工具：多变量微积分（二重积分、梯度 / 散度的直接计算）、线性代数进阶（低阶矩阵分解如 LU 分解、3 阶张量的简单运算）、基础数值方法（迭代法求单变量方程根）。
-    - 特点：中维度（3-5 维）、弱非线性（如简单二次项），步骤关联中等（前 3 步误差可能影响后 2 步），运算量中等。
-  - Level 4（复杂高等工具，高维度 / 强耦合运算）
-    - 工具：偏微分方程（简单 PDE 的解析解，如拉普拉斯方程在矩形区域的分离变量解）、张量运算（应力 - 应变张量的三维转换、惯性矩阵更新）、数值线性代数（高维矩阵求逆、特征值分解）、变换域计算（拉普拉斯变换 / 傅里叶变换的常规应用）。
-    - 特点：高维度（6-20 维）、中等非线性（如纳维 - 斯托克斯方程的线性化近似），步骤强耦合（前步误差会累积影响后续结果），运算量大。
-  - Level 5（超复杂工具，高维 / 强非线性 / 跨领域耦合运算）
-    - 工具：高维偏微分方程（纳维 - 斯托克斯方程的数值离散、麦克斯韦方程组的有限元求解）、多体动力学（机器人手臂的耦合运动方程）、高维优化、多粒子系统的薛定谔方程近似解、组合优化（大规模 TSP 问题的启发式求解）。
-    - 特点：超高维度（≥20 维）、强非线性（如流体方程的对流项）、跨领域深度耦合（如电磁 - 力学 - 热学多物理场耦合），步骤关联极强（前 5 步的微小误差会导致后续结果完全失真），运算量极大。
-
-
-2. 不确定性的程度与可降低性
-  - Level 1：极低初始不确定性，零检索零推理。
-    - 核心特征：答案存在于基础常识或公理中，初始不确定性为零，无需任何检索或推理，仅凭固有知识直接确定。
-    - 推理路径：0 步推理，答案与问题直接绑定。属于本能记忆的常识性知识，无信息获取成本。
-  - Level 2：低初始不确定性，简单验证即可确定。答案存在于已知知识体系（常识、定义、单一明确信息源）中，初始不确定性低，无需复杂推理，通过直接回忆或单次简单检索即可完全消除不确定性。
-    - 核心特征：答案存在于已知知识体系（常识、定义、单一明确信息源）中，初始不确定性低，无需复杂推理，通过直接回忆或单次简单检索即可完全消除不确定性。
-    - 推理路径：无推理或仅 0-1 步直接匹配（如 “知识点→答案” 的直接对应）。​
-  - Level 3：中等初始不确定性，多知识源 + 有限步骤推理可确定。
-    - 核心特征：答案需整合 2-3 个关联知识源，通过 1-3 步线性推理即可确定，推理路径无分支或分支唯一，不确定性可通过结构化步骤完全消除。
-    - 推理路径：单链条推理（如 “A→B→答案”），每步推理逻辑唯一，无歧义。​
-  - Level 4：高初始不确定性，跨域知识整合 + 多分支推理可收敛。
-    - 核心特征：答案需整合 3 个以上跨领域知识源（如同一学科的不同分支、邻近学科关联知识），推理路径存在 2-3 个分支但可结构化，通过多维度验证可逐步收敛至确定结论。
-    - 推理路径：多分支推理（如 “A→B/C→答案”，分支可通过条件筛选排除），需验证中间结论的一致性。
-  - Level 5：极高初始不确定性，耦合系统 + 非结构化探索难收敛
-    - 核心特征：不确定性源于多因素动态耦合（如非线性关系、未知变量、跨尺度影响），知识源无法明确界定，推理路径存在无限分支且不可结构化，需持续探索且难以收敛至唯一结论。
-    - 推理路径：无固定逻辑链，分支随探索动态增加（如 “A→B→D/E/…→未知”），无法穷举。
+# 问题难度来源
+# 1. 计算复杂度：数学工具的抽象程度、运算的维度/非线性/耦合性、应用场景的复杂度。
+#   - Level 1（基础数学工具，无复杂运算逻辑）
+#     - 工具：整数 / 小数的四则运算、简单代数（一元一次方程）、基础几何（平面图形面积公式直接代入）。
+#     - 特点：单变量、线性、无跨步骤关联，运算量极小（最多 10 个数据）。
+#   - Level 2（初等进阶工具，低维度线性运算）
+#     - 工具：单变量微积分（定积分 / 导数的直接计算）、基础线性代数（2×2 矩阵的加减 / 乘法、行列式计算）、简单数值计算（如用梯形法求单一区间的积分近似值）。
+#     - 特点：单变量或低维（≤2 维）、线性为主，步骤关联弱（前步误差对后步影响可忽略），运算量小。
+#   - Level 3（常规高等工具，中维度结构化运算）
+#     - 工具：多变量微积分（二重积分、梯度 / 散度的直接计算）、线性代数进阶（低阶矩阵分解如 LU 分解、3 阶张量的简单运算）、基础数值方法（迭代法求单变量方程根）。
+#     - 特点：中维度（3-5 维）、弱非线性（如简单二次项），步骤关联中等（前 3 步误差可能影响后 2 步），运算量中等。
+#   - Level 4（复杂高等工具，高维度 / 强耦合运算）
+#     - 工具：偏微分方程（简单 PDE 的解析解，如拉普拉斯方程在矩形区域的分离变量解）、张量运算（应力 - 应变张量的三维转换、惯性矩阵更新）、数值线性代数（高维矩阵求逆、特征值分解）、变换域计算（拉普拉斯变换 / 傅里叶变换的常规应用）。
+#     - 特点：高维度（6-20 维）、中等非线性（如纳维 - 斯托克斯方程的线性化近似），步骤强耦合（前步误差会累积影响后续结果），运算量大。
+#   - Level 5（超复杂工具，高维 / 强非线性 / 跨领域耦合运算）
+#     - 工具：高维偏微分方程（纳维 - 斯托克斯方程的数值离散、麦克斯韦方程组的有限元求解）、多体动力学（机器人手臂的耦合运动方程）、高维优化、多粒子系统的薛定谔方程近似解、组合优化（大规模 TSP 问题的启发式求解）。
+#     - 特点：超高维度（≥20 维）、强非线性（如流体方程的对流项）、跨领域深度耦合（如电磁 - 力学 - 热学多物理场耦合），步骤关联极强（前 5 步的微小误差会导致后续结果完全失真），运算量极大。
 
 
-3. 推理路径的预定义性与清晰度：即问题是否存在“现成的解决步骤”，或步骤是否可明确规划
-  - Level 1：零推理路径，直接映射。问题与答案存在“一对一”的直接绑定关系，无需任何逻辑推导，仅需“检索-匹配”单一步骤或直接调用固有知识（如“圆的直径公式”“1+1的结果”），路径为“零步骤”（直接回答）或“单一步骤”（检索即得），无任何子目标或中间环节。
-  - Level 2：推理路径固定且无分支（2-3步）。解决步骤的逻辑链条完全明确，包含2-3个连续子目标，步骤间关联直接且唯一（如“A→B→答案”），每个子目标的实现方式无歧义，无需选择或判断（如“先计算长方形的长和宽，再代入面积公式求面积”），路径可提前完整规划。
-  - Level 3：推理路径固定但含少量分支（1-2个），分支可快速排除。整体框架预定义，存在1-2个可能的子步骤分支，但分支条件明确（如“若A满足条件X则选步骤B，否则选步骤C”），通过简单判断即可排除无效分支，子目标间关联清晰，最终路径仍为单链条（如“先求三角形的底和高，若为直角三角形则直接用直角边计算，否则用通用公式，最后得面积”）。
-  - Level 4：推理路径框架可预定义，细节需动态调整（3个以上分支+迭代验证）。解决路径的核心框架（如“问题拆解→子目标1→子目标2→整合结果”）可提前规划，但子目标的实现存在3个以上分支，且部分分支需通过中间结果验证后才能确定（如“推导A时得到结果B1/B2/B3，需代入后续步骤验证哪个结果与最终约束一致”），存在“尝试-反馈-修正”的短循环，但框架不会被突破。
-  - Level 5：无预定义推理路径，框架动态生成。不存在可提前规划的解决步骤或框架，子目标和关联关系随探索过程动态浮现，分支数量无限且不可结构化（如“探索A时发现新关联B，基于B又衍生出C/D/...，每个衍生方向均可能引导至未知结论”），需通过创造性构建新逻辑链（如跨学科工具融合、全新假设提出）推进，路径无固定终点或形式。
+# 2. 不确定性的程度与可降低性
+#   - Level 1：极低初始不确定性，零检索零推理。
+#     - 核心特征：答案存在于基础常识或公理中，初始不确定性为零，无需任何检索或推理，仅凭固有知识直接确定。
+#     - 推理路径：0 步推理，答案与问题直接绑定。属于本能记忆的常识性知识，无信息获取成本。
+#   - Level 2：低初始不确定性，简单验证即可确定。答案存在于已知知识体系（常识、定义、单一明确信息源）中，初始不确定性低，无需复杂推理，通过直接回忆或单次简单检索即可完全消除不确定性。
+#     - 核心特征：答案存在于已知知识体系（常识、定义、单一明确信息源）中，初始不确定性低，无需复杂推理，通过直接回忆或单次简单检索即可完全消除不确定性。
+#     - 推理路径：无推理或仅 0-1 步直接匹配（如 “知识点→答案” 的直接对应）。​
+#   - Level 3：中等初始不确定性，多知识源 + 有限步骤推理可确定。
+#     - 核心特征：答案需整合 2-3 个关联知识源，通过 1-3 步线性推理即可确定，推理路径无分支或分支唯一，不确定性可通过结构化步骤完全消除。
+#     - 推理路径：单链条推理（如 “A→B→答案”），每步推理逻辑唯一，无歧义。​
+#   - Level 4：高初始不确定性，跨域知识整合 + 多分支推理可收敛。
+#     - 核心特征：答案需整合 3 个以上跨领域知识源（如同一学科的不同分支、邻近学科关联知识），推理路径存在 2-3 个分支但可结构化，通过多维度验证可逐步收敛至确定结论。
+#     - 推理路径：多分支推理（如 “A→B/C→答案”，分支可通过条件筛选排除），需验证中间结论的一致性。
+#   - Level 5：极高初始不确定性，耦合系统 + 非结构化探索难收敛
+#     - 核心特征：不确定性源于多因素动态耦合（如非线性关系、未知变量、跨尺度影响），知识源无法明确界定，推理路径存在无限分支且不可结构化，需持续探索且难以收敛至唯一结论。
+#     - 推理路径：无固定逻辑链，分支随探索动态增加（如 “A→B→D/E/…→未知”），无法穷举。
 
 
-4. 问题结构的明确性：即问题的 “目标、边界、子任务” 是否清晰
-  - Level 1：结构绝对明确，零解构需求。问题的目标（如 “计算结果”）、边界（已知条件、限定范围）完全无歧义，无任何子任务，直接对应单一解决动作。
-  - Level 2：目标与边界明确，子任务单一且拆解步骤固定。目标和边界清晰，需拆分为 1 个唯一子任务，子任务的逻辑与步骤无歧义，可一次性规划。
-  - Level 3：目标明确，边界清晰，子任务多个且逻辑关系固定。目标和边界无歧义，需拆分为 2 个以上子任务，子任务间的先后依赖关系完全固定，无额外判断。
-  - Level 4：目标需初步界定，边界有弹性，子任务随初步探索动态生成但框架可控。目标方向明确但需简单细化，边界有伸缩性，子任务在探索中生成但整体框架可预设。
-  - Level 5：目标模糊且需深度重构，边界完全动态，子任务无预设且无限衍生。目标需彻底重新定义，边界随探索持续变化，子任务无法预设且不断衍生。
+# 3. 推理路径的预定义性与清晰度：即问题是否存在“现成的解决步骤”，或步骤是否可明确规划
+#   - Level 1：零推理路径，直接映射。问题与答案存在“一对一”的直接绑定关系，无需任何逻辑推导，仅需“检索-匹配”单一步骤或直接调用固有知识（如“圆的直径公式”“1+1的结果”），路径为“零步骤”（直接回答）或“单一步骤”（检索即得），无任何子目标或中间环节。
+#   - Level 2：推理路径固定且无分支（2-3步）。解决步骤的逻辑链条完全明确，包含2-3个连续子目标，步骤间关联直接且唯一（如“A→B→答案”），每个子目标的实现方式无歧义，无需选择或判断（如“先计算长方形的长和宽，再代入面积公式求面积”），路径可提前完整规划。
+#   - Level 3：推理路径固定但含少量分支（1-2个），分支可快速排除。整体框架预定义，存在1-2个可能的子步骤分支，但分支条件明确（如“若A满足条件X则选步骤B，否则选步骤C”），通过简单判断即可排除无效分支，子目标间关联清晰，最终路径仍为单链条（如“先求三角形的底和高，若为直角三角形则直接用直角边计算，否则用通用公式，最后得面积”）。
+#   - Level 4：推理路径框架可预定义，细节需动态调整（3个以上分支+迭代验证）。解决路径的核心框架（如“问题拆解→子目标1→子目标2→整合结果”）可提前规划，但子目标的实现存在3个以上分支，且部分分支需通过中间结果验证后才能确定（如“推导A时得到结果B1/B2/B3，需代入后续步骤验证哪个结果与最终约束一致”），存在“尝试-反馈-修正”的短循环，但框架不会被突破。
+#   - Level 5：无预定义推理路径，框架动态生成。不存在可提前规划的解决步骤或框架，子目标和关联关系随探索过程动态浮现，分支数量无限且不可结构化（如“探索A时发现新关联B，基于B又衍生出C/D/...，每个衍生方向均可能引导至未知结论”），需通过创造性构建新逻辑链（如跨学科工具融合、全新假设提出）推进，路径无固定终点或形式。
 
 
-5. 逻辑推理的链条长度与严密性：难度体现在“从前提到结论”的推理步骤数量及每一步的逻辑严密性要求，步骤数量、严密性要求逐级递增
-  - Level 1（零/单步链条，无严密性要求）
-    - 推理链条长度：零推理（直接映射，如“1+1=2”）或仅1步直接关联（如“因为A是B的子集，所以A包含于B”），无中间环节。
-    - 严密性要求：无需逻辑验证，无严密性约束，仅凭常识或定义即可直接得出结论，允许任何非原则性“跳跃”（因步骤过短无跳跃空间）。
-  - Level 2（2-3步短链条，低严密性要求）
-    - 推理链条长度：2-3个连续步骤（如“A→B→结论”），步骤间关联直接（如“先算长方形的长=5cm，宽=3cm，再代入面积公式得15cm²”）。
-    - 严密性要求：逻辑宽松，允许不影响最终结论的轻微疏漏（如步骤顺序颠倒但结果正确），无需严格验证每步的逻辑必然性。
-  - Level 3（4-6步中短链条，中等严密性要求）
-    - 推理链条长度：4-6个步骤，包含明确子目标（如“A→拆解为A1/A2→A1推导B→A2推导C→B+C整合→结论”）。
-    - 严密性要求：逻辑宽松，允许不影响最终结论的轻微疏漏（如步骤顺序颠倒但结果正确），无需严格验证每步的逻辑必然性。
-  - Level 4（7-9步中长链条，较高严密性要求）
-    - 推理链条长度：7-9个步骤，含多层子目标嵌套（如“A→子目标1（B1→B2）→子目标2（C1→C2→C3）→B2与C3关联→结论”）。
-    - 严密性要求：关键步骤（如子目标间的关联、核心变量推导）必须绝对严密，不允许任何影响中间结论的逻辑偏差；非关键步骤（如辅助说明、次要变量计算）可容忍极轻微疏漏（但需不改变结果方向），需通过中间结果验证逻辑一致性。
-  - Level 5（≥10步长链条+嵌套子链，极高严密性/零容错）
-    - 推理链条长度：≥10个步骤，包含多轮嵌套子推理链（如“主链A→子链B（B1→B2→...→B5）→子链C（C1→...→C4）→子链B与C的耦合验证→...→结论”），步骤间环环相扣。
-    - 严密性要求：零容错，每一步（包括子链的每个环节）必须满足严格逻辑必然性（如数学证明中的公理引用、定理推导），任何微小疏漏（如前提错误、步骤跳跃、逻辑矛盾）会导致整个链条断裂，需全程验证每一步的逻辑自洽性与关联性。
+# 4. 问题结构的明确性：即问题的 “目标、边界、子任务” 是否清晰
+#   - Level 1：结构绝对明确，零解构需求。问题的目标（如 “计算结果”）、边界（已知条件、限定范围）完全无歧义，无任何子任务，直接对应单一解决动作。
+#   - Level 2：目标与边界明确，子任务单一且拆解步骤固定。目标和边界清晰，需拆分为 1 个唯一子任务，子任务的逻辑与步骤无歧义，可一次性规划。
+#   - Level 3：目标明确，边界清晰，子任务多个且逻辑关系固定。目标和边界无歧义，需拆分为 2 个以上子任务，子任务间的先后依赖关系完全固定，无额外判断。
+#   - Level 4：目标需初步界定，边界有弹性，子任务随初步探索动态生成但框架可控。目标方向明确但需简单细化，边界有伸缩性，子任务在探索中生成但整体框架可预设。
+#   - Level 5：目标模糊且需深度重构，边界完全动态，子任务无预设且无限衍生。目标需彻底重新定义，边界随探索持续变化，子任务无法预设且不断衍生。
 
 
-6. 背景知识的依赖性：解题难度源于对特定领域知识体系的 “前置储备” 要求：
-  - Level 1（零壁垒，纯常识依赖）
-    - 核心特征：完全无需任何领域特定知识，仅依赖人类共有的日常经验与基础认知（如 “水会流动”“白天有太阳”），无专业术语、概念或理论涉及，任何人都可仅凭生活常识理解问题及答案，无需任何专门学习。
-  - Level 2（低壁垒，零散领域概念依赖）
-    - 核心特征：需依赖 1-2 个孤立的领域基础术语或浅表层概念（如 “细胞”“电压”“市场经济”），但无需理解术语背后的原理、体系或关联，这些概念可通过日常信息接触（如科普文章、新闻）自然获取，无需系统学习该领域知识，不涉及逻辑框架或理论推导。
-  - Level 3（中低壁垒，基础领域框架依赖）
-    - 核心特征：需依赖某一领域的基础概念体系与入门级逻辑框架（如中学数学的 “方程”“函数” 体系、基础生物学的 “生态系统” 构成），这些知识需通过短期系统学习（如中小学课程、入门科普教材）才能掌握，涉及少量核心术语的关联（如 “速度 = 路程 / 时间” 的公式逻辑），但不涉及复杂原理或深层机制。
-  - Level 4（中高壁垒，领域进阶知识依赖）
-    - 核心特征：需依赖某一领域的进阶理论、中等复杂度概念及跨章节关联知识（如大学本科专业基础课内容：物理学的 “电磁感应定律” 应用、经济学的 “供需曲线移动机制”），这些知识需通过系统专业学习（如学期制课程）才能掌握，涉及多个概念的逻辑耦合（如 “力→加速度→动量变化” 的连锁关系），需理解原理推导过程，但不涉及领域前沿或小众分支。
-  - Level 5（高壁垒，深度专业知识依赖）
-    - 核心特征：核心特征：需依赖领域内的前沿理论、复杂术语体系、细分研究范式及跨分支关联知识，这些知识需通过长期深耕才能掌握，涉及高度抽象的概念、小众术语及未完全定论的研究成果，非该领域从业者或研究者难以理解。
+# 5. 逻辑推理的链条长度与严密性：难度体现在“从前提到结论”的推理步骤数量及每一步的逻辑严密性要求，步骤数量、严密性要求逐级递增
+#   - Level 1（零/单步链条，无严密性要求）
+#     - 推理链条长度：零推理（直接映射，如“1+1=2”）或仅1步直接关联（如“因为A是B的子集，所以A包含于B”），无中间环节。
+#     - 严密性要求：无需逻辑验证，无严密性约束，仅凭常识或定义即可直接得出结论，允许任何非原则性“跳跃”（因步骤过短无跳跃空间）。
+#   - Level 2（2-3步短链条，低严密性要求）
+#     - 推理链条长度：2-3个连续步骤（如“A→B→结论”），步骤间关联直接（如“先算长方形的长=5cm，宽=3cm，再代入面积公式得15cm²”）。
+#     - 严密性要求：逻辑宽松，允许不影响最终结论的轻微疏漏（如步骤顺序颠倒但结果正确），无需严格验证每步的逻辑必然性。
+#   - Level 3（4-6步中短链条，中等严密性要求）
+#     - 推理链条长度：4-6个步骤，包含明确子目标（如“A→拆解为A1/A2→A1推导B→A2推导C→B+C整合→结论”）。
+#     - 严密性要求：逻辑宽松，允许不影响最终结论的轻微疏漏（如步骤顺序颠倒但结果正确），无需严格验证每步的逻辑必然性。
+#   - Level 4（7-9步中长链条，较高严密性要求）
+#     - 推理链条长度：7-9个步骤，含多层子目标嵌套（如“A→子目标1（B1→B2）→子目标2（C1→C2→C3）→B2与C3关联→结论”）。
+#     - 严密性要求：关键步骤（如子目标间的关联、核心变量推导）必须绝对严密，不允许任何影响中间结论的逻辑偏差；非关键步骤（如辅助说明、次要变量计算）可容忍极轻微疏漏（但需不改变结果方向），需通过中间结果验证逻辑一致性。
+#   - Level 5（≥10步长链条+嵌套子链，极高严密性/零容错）
+#     - 推理链条长度：≥10个步骤，包含多轮嵌套子推理链（如“主链A→子链B（B1→B2→...→B5）→子链C（C1→...→C4）→子链B与C的耦合验证→...→结论”），步骤间环环相扣。
+#     - 严密性要求：零容错，每一步（包括子链的每个环节）必须满足严格逻辑必然性（如数学证明中的公理引用、定理推导），任何微小疏漏（如前提错误、步骤跳跃、逻辑矛盾）会导致整个链条断裂，需全程验证每一步的逻辑自洽性与关联性。
 
 
-下面是一个具体的例子（格式需要参考下面的例子）
-
-[问题]
-```
-During Marina Abramović and Ulay's \"The Lovers\" performance, they walked the Great Wall of China for 90 days. Each walking day, they maintained an average speed of 60 meters per minute for 5 hours. However, every 10th day was a rest day for recovery. The total elevation gain over the journey was 45,000 meters, and each artist carried 20 kilograms of supplies. What is the total distance in kilometers they walked during the performance?
-```
-
-
-[思考过程]
-```
-To determine the total distance Marina Abramović and Ulay walked during "The Lovers" performance, we need to calculate the number of actual walking days and then use their daily distance to find the total.
-
-### Step 1: Calculate the number of walking days
-They spent 90 days in total, with every 10th day being a rest day.
-- Total days: 90
-- Number of rest days: Since rest days occur every 10th day, there are \( \frac{90}{10} = 9 \) rest days.
-- Walking days = Total days - Rest days = \( 90 - 9 = 81 \) days.
+# 6. 背景知识的依赖性：解题难度源于对特定领域知识体系的 “前置储备” 要求：
+#   - Level 1（零壁垒，纯常识依赖）
+#     - 核心特征：完全无需任何领域特定知识，仅依赖人类共有的日常经验与基础认知（如 “水会流动”“白天有太阳”），无专业术语、概念或理论涉及，任何人都可仅凭生活常识理解问题及答案，无需任何专门学习。
+#   - Level 2（低壁垒，零散领域概念依赖）
+#     - 核心特征：需依赖 1-2 个孤立的领域基础术语或浅表层概念（如 “细胞”“电压”“市场经济”），但无需理解术语背后的原理、体系或关联，这些概念可通过日常信息接触（如科普文章、新闻）自然获取，无需系统学习该领域知识，不涉及逻辑框架或理论推导。
+#   - Level 3（中低壁垒，基础领域框架依赖）
+#     - 核心特征：需依赖某一领域的基础概念体系与入门级逻辑框架（如中学数学的 “方程”“函数” 体系、基础生物学的 “生态系统” 构成），这些知识需通过短期系统学习（如中小学课程、入门科普教材）才能掌握，涉及少量核心术语的关联（如 “速度 = 路程 / 时间” 的公式逻辑），但不涉及复杂原理或深层机制。
+#   - Level 4（中高壁垒，领域进阶知识依赖）
+#     - 核心特征：需依赖某一领域的进阶理论、中等复杂度概念及跨章节关联知识（如大学本科专业基础课内容：物理学的 “电磁感应定律” 应用、经济学的 “供需曲线移动机制”），这些知识需通过系统专业学习（如学期制课程）才能掌握，涉及多个概念的逻辑耦合（如 “力→加速度→动量变化” 的连锁关系），需理解原理推导过程，但不涉及领域前沿或小众分支。
+#   - Level 5（高壁垒，深度专业知识依赖）
+#     - 核心特征：核心特征：需依赖领域内的前沿理论、复杂术语体系、细分研究范式及跨分支关联知识，这些知识需通过长期深耕才能掌握，涉及高度抽象的概念、小众术语及未完全定论的研究成果，非该领域从业者或研究者难以理解。
 
 
-### Step 2: Calculate daily distance walked
-Each walking day, they maintained an average speed of 60 meters per minute for 5 hours.
-- Convert 5 hours to minutes: \( 5 \times 60 = 300 \) minutes.
-- Daily distance = Speed × Time = \( 60 \, \text{meters/minute} \times 300 \, \text{minutes} = 18,000 \, \text{meters/day} \).
+# 下面是一个具体的例子（格式需要参考下面的例子）
+
+# [问题]
+# ```
+# During Marina Abramović and Ulay's \"The Lovers\" performance, they walked the Great Wall of China for 90 days. Each walking day, they maintained an average speed of 60 meters per minute for 5 hours. However, every 10th day was a rest day for recovery. The total elevation gain over the journey was 45,000 meters, and each artist carried 20 kilograms of supplies. What is the total distance in kilometers they walked during the performance?
+# ```
 
 
-### Step 3: Calculate total distance
-Total distance = Daily distance × Number of walking days
-- Total distance in meters: \( 18,000 \, \text{meters/day} \times 81 \, \text{days} = 1,458,000 \, \text{meters} \).
-- Convert to kilometers (1 kilometer = 1,000 meters): \( \frac{1,458,000}{1,000} = 1,458 \, \text{kilometers} \).
+# [思考过程]
+# ```
+# To determine the total distance Marina Abramović and Ulay walked during "The Lovers" performance, we need to calculate the number of actual walking days and then use their daily distance to find the total.
+
+# ### Step 1: Calculate the number of walking days
+# They spent 90 days in total, with every 10th day being a rest day.
+# - Total days: 90
+# - Number of rest days: Since rest days occur every 10th day, there are \( \frac{90}{10} = 9 \) rest days.
+# - Walking days = Total days - Rest days = \( 90 - 9 = 81 \) days.
 
 
-**Answer:** 1458 kilometers.
-```
+# ### Step 2: Calculate daily distance walked
+# Each walking day, they maintained an average speed of 60 meters per minute for 5 hours.
+# - Convert 5 hours to minutes: \( 5 \times 60 = 300 \) minutes.
+# - Daily distance = Speed × Time = \( 60 \, \text{meters/minute} \times 300 \, \text{minutes} = 18,000 \, \text{meters/day} \).
 
 
-[输出]
-[思考过程分析]
-```
-问题：计算总行走距离（公里）
-├─ 已知条件
-│  ├─ 总天数：90天
-│  ├─ 休息规则：每10天休息1天
-│  ├─ 行走速度：60米/分钟
-│  ├─ 每日行走时间：5小时
-│  └─ 干扰信息（忽略）：总海拔45000米、携带20kg物资
-│
-├─ 步骤1：计算行走天数
-│  ├─ 休息天数 = 90 ÷ 10 = 9天
-│  └─ 行走天数 = 90 - 9 = 81天
-│
-├─ 步骤2：计算单日行走距离
-│  ├─ 时间转换：5小时 = 5×60 = 300分钟
-│  └─ 单日距离 = 60米/分钟 × 300分钟 = 18000米
-│
-├─ 步骤3：计算总距离并转换单位
-│  ├─ 总距离（米）= 18000米 × 81天 = 1458000米
-│  └─ 总距离（公里）= 1458000 ÷ 1000 = 1458公里
-│
-└─ 结论：总行走距离为1458公里
-```
-
-[难度分析]
-```json
-{
-    "计算复杂度": {
-        "分析": "使用长方形面积公式（基础几何工具），直接代入长和宽的值进行乘法运算，单变量，线性，运算量极小（仅一个乘法步骤）。",
-        "难度评价": "Level 1"
-    },
-    "不确定性的程度与可降低性": {
-        "分析": "答案存在于已知的几何基础知识体系中（长方形面积公式），初始不确定性低，通过直接回忆公式即可消除不确定性，无需复杂推理。",
-        "难度评价": "Level 2"
-    },
-    "推理路径的预定义性与清晰度": {
-        "分析": "推理路径固定且无分支，仅需单一步骤（代入长和宽到面积公式计算），步骤间关联直接，可提前完整规划。",
-        "难度评价": "Level 2"
-    },
-    "问题结构的明确性": {
-        "分析": "目标（求面积）和边界（长、宽已知）明确，子任务单一且拆解步骤固定（应用面积公式）。",
-        "难度评价": "Level 2"
-    },
-    "逻辑推理的链条长度与严密性": {
-        "分析": "推理链条长度为 1 步（长 × 宽），无严密性要求，仅凭基础公式即可直接得出结论。",
-        "难度评价": "Level 1"
-    },
-    "背景知识的依赖性": {
-        "分析": "仅依赖 “长方形面积 = 长 × 宽” 这一孤立的领域基础术语和概念，无需理解背后复杂原理，可通过日常学习自然获取。",
-        "难度评价": "Level 2"
-    }
-}
-```
+# ### Step 3: Calculate total distance
+# Total distance = Daily distance × Number of walking days
+# - Total distance in meters: \( 18,000 \, \text{meters/day} \times 81 \, \text{days} = 1,458,000 \, \text{meters} \).
+# - Convert to kilometers (1 kilometer = 1,000 meters): \( \frac{1,458,000}{1,000} = 1,458 \, \text{kilometers} \).
 
 
+# **Answer:** 1458 kilometers.
+# ```
 
 
-[问题]
-```
-The following is an open-ended problem from an International Physics competition. The answer of The problem should be an expression. Please calculate the answer according to the given requirements and the information provided. Please use LaTeX format to represent the variables and formulas used in the solution process and results. Please end your solution with \"So the final answer is \\boxed{answer}.\" and give the result explicitly.\ni. As a parcel of air moves upward, it accelerates. Find a rough estimate for the average speed $v_{0}$ during its upward motion.\n\nPlease reason step by step, and put your final answer within \\boxed{}.
-```
+# [输出]
+# [思考过程分析]
+# ```
+# 问题：计算总行走距离（公里）
+# ├─ 已知条件
+# │  ├─ 总天数：90天
+# │  ├─ 休息规则：每10天休息1天
+# │  ├─ 行走速度：60米/分钟
+# │  ├─ 每日行走时间：5小时
+# │  └─ 干扰信息（忽略）：总海拔45000米、携带20kg物资
+# │
+# ├─ 步骤1：计算行走天数
+# │  ├─ 休息天数 = 90 ÷ 10 = 9天
+# │  └─ 行走天数 = 90 - 9 = 81天
+# │
+# ├─ 步骤2：计算单日行走距离
+# │  ├─ 时间转换：5小时 = 5×60 = 300分钟
+# │  └─ 单日距离 = 60米/分钟 × 300分钟 = 18000米
+# │
+# ├─ 步骤3：计算总距离并转换单位
+# │  ├─ 总距离（米）= 18000米 × 81天 = 1458000米
+# │  └─ 总距离（公里）= 1458000 ÷ 1000 = 1458公里
+# │
+# └─ 结论：总行走距离为1458公里
+# ```
 
-[思考过程]
-```
-### 1. **Buoyant Force and Acceleration:**\nWhen a parcel of air rises, it experiences a buoyant force due to the density difference between the parcel and the surrounding air. The buoyant force per unit mass is given by:\n\\[\na = g \\left( \\frac{\\rho_{\\text{surrounding}} - \\rho_{\\text{parcel}}}{\\rho_{\\text{parcel}}} \\right)\n\\]\nAssuming the air behaves as an ideal gas, the density is inversely proportional to temperature:\n\\[\n\\rho \\propto \\frac{1}{T}\n\\]\nLet \\( T_0 \\) be the temperature of the surrounding air and \\( T_0 + \\Delta T \\) be the temperature of the parcel (where \\( \\Delta T \\) is small). Then:\n\\[\n\\frac{\\rho_{\\text{surrounding}}}{\\rho_{\\text{parcel}}} = \\frac{T_0 + \\Delta T}{T_0} \\approx 1 + \\frac{\\Delta T}{T_0}\n\\]\nSubstituting back into the acceleration:\n\\[\na \\approx g \\left( \\frac{\\Delta T}{T_0} \\right)\n\\]\n\n### 2. **Kinematic Analysis:**\nThe parcel accelerates upward with this acceleration \\( a \\). If the parcel rises a height \\( h \\), its final speed \\( v \\) can be found using the kinematic equation:\n\\[\nv^2 = 2 a h\n\\]\nSubstituting \\( a \\):\n\\[\nv^2 = 2 g h \\left( \\frac{\\Delta T}{T_0} \\right)\n\\]\nThe average speed \\( v_0 \\) is roughly half the final speed (assuming linear acceleration):\n\\[\nv_0 \\approx \\frac{v}{2}\n\\]\nHowever, a better estimate for the average speed is the root-mean-square speed, which for uniformly accelerated motion is:\n\\[\nv_0 = \\sqrt{\\frac{v^2}{2}} = \\sqrt{g h \\left( \\frac{\\Delta T}{T_0} \\right)}\n\\]\n\n### 3. **Final Expression:**\nThus, the average speed \\( v_0 \\) is:\n\\[\nv_0 = \\sqrt{g h \\frac{\\Delta T}{T_0}}\n\\]\n\nSo the final answer is \\boxed{\\sqrt{g h \\frac{\\Delta T}{T_0}}}.
-To estimate the average speed \\( v_0 \\) of a parcel of air moving upward, we can analyze the forces and energy changes involved. Here's a step-by-step solution:\n\n
-```
-
-
-[输出]
-[思考过程分析]
-```
-问题：估算空气团向上运动的平均速度v₀
-├─ 已知条件（隐含）
-│  ├─ 浮力与密度差相关，密度与温度成反比
-│  ├─ 空气团受浮力产生加速度a
-│  ├─ 空气团上升高度为h
-│  ├─ 周围空气温度T₀，空气团温度T₀+ΔT（ΔT较小）
-│  └─ 重力加速度g
-│
-├─ 步骤1：推导加速度a的表达式
-│  ├─ 单位质量浮力公式：a = g×(ρₛᵤᵣᵣₒᵤₙ𝒹ᵢₙ𝑔 - ρₚₐᵣ𝒸ₑₗ)/ρₚₐᵣ𝒸ₑₗ
-│  ├─ 密度与温度关系：ρ ∝ 1/T → ρₛᵤᵣᵣₒᵤₙ𝒹ᵢₙ𝑔/ρₚₐᵣ𝒸ₑₗ = (T₀+ΔT)/T₀ ≈ 1 + ΔT/T₀
-│  └─ 简化得：a ≈ g×(ΔT/T₀)
-│
-├─ 步骤2：通过运动学方程关联速度与加速度
-│  ├─ 末速度v满足：v² = 2ah
-│  ├─ 代入a得：v² = 2gh×(ΔT/T₀)
-│  └─ 平均速度v₀取均方根速度：v₀ = √(v²/2) = √(gh×ΔT/T₀)
-│
-└─ 结论：平均速度v₀的表达式为√(ghΔT/T₀)
-```
-
-[难度分析]
-```json
-{
-    "计算复杂度": {
-        "分析": "使用单变量代数运算、密度与温度的比例关系（简单物理公式）、运动学方程（v²=2ah），低维度（≤2维），线性为主，步骤关联中等（加速度推导影响后续速度计算），运算量小（含平方根运算但无复杂耦合）。",
-        "难度评价": "Level 2"
-    },
-    "不确定性的程度与可降低性": {
-        "分析": "答案需整合浮力原理、密度-温度关系、运动学方程3个关联知识源，通过3步线性推理确定，推理路径无分支，不确定性可通过结构化步骤完全消除。",
-        "难度评价": "Level 3"
-    },
-    "推理路径的预定义性与清晰度": {
-        "分析": "推理路径框架固定（推导加速度→运动学求末速度→计算平均速度），含1个分支（平均速度取末速度一半或均方根），分支可通过物理合理性快速排除，子目标关联清晰，最终路径为单链条。",
-        "难度评价": "Level 3"
-    },
-    "问题结构的明确性": {
-        "分析": "目标（估算平均速度v₀）明确，边界（隐含重力加速度g、温度差ΔT、上升高度h等参数）清晰，需拆分为推导加速度、运动学分析、计算平均速度3个逻辑关系固定的子任务。",
-        "难度评价": "Level 3"
-    },
-    "逻辑推理的链条长度与严密性": {
-        "分析": "推理链条长度为4-6步（浮力→密度差→加速度→末速度→平均速度），中等严密性要求（需验证密度-温度关系、运动学公式的适用性），每步逻辑关联明确。",
-        "难度评价": "Level 3"
-    },
-    "背景知识的依赖性": {
-        "分析": "需依赖物理学的浮力原理、理想气体密度与温度关系、运动学方程等进阶理论及跨概念关联（力→加速度→速度），需系统学习中学至大学入门物理知识才能掌握。",
-        "难度评价": "Level 4"
-    }
-}
-```
+# [难度分析]
+# ```json
+# {
+#     "计算复杂度": {
+#         "分析": "使用长方形面积公式（基础几何工具），直接代入长和宽的值进行乘法运算，单变量，线性，运算量极小（仅一个乘法步骤）。",
+#         "难度评价": "Level 1"
+#     },
+#     "不确定性的程度与可降低性": {
+#         "分析": "答案存在于已知的几何基础知识体系中（长方形面积公式），初始不确定性低，通过直接回忆公式即可消除不确定性，无需复杂推理。",
+#         "难度评价": "Level 2"
+#     },
+#     "推理路径的预定义性与清晰度": {
+#         "分析": "推理路径固定且无分支，仅需单一步骤（代入长和宽到面积公式计算），步骤间关联直接，可提前完整规划。",
+#         "难度评价": "Level 2"
+#     },
+#     "问题结构的明确性": {
+#         "分析": "目标（求面积）和边界（长、宽已知）明确，子任务单一且拆解步骤固定（应用面积公式）。",
+#         "难度评价": "Level 2"
+#     },
+#     "逻辑推理的链条长度与严密性": {
+#         "分析": "推理链条长度为 1 步（长 × 宽），无严密性要求，仅凭基础公式即可直接得出结论。",
+#         "难度评价": "Level 1"
+#     },
+#     "背景知识的依赖性": {
+#         "分析": "仅依赖 “长方形面积 = 长 × 宽” 这一孤立的领域基础术语和概念，无需理解背后复杂原理，可通过日常学习自然获取。",
+#         "难度评价": "Level 2"
+#     }
+# }
+# ```
 
 
-"""
+
+
+# [问题]
+# ```
+# The following is an open-ended problem from an International Physics competition. The answer of The problem should be an expression. Please calculate the answer according to the given requirements and the information provided. Please use LaTeX format to represent the variables and formulas used in the solution process and results. Please end your solution with \"So the final answer is \\boxed{answer}.\" and give the result explicitly.\ni. As a parcel of air moves upward, it accelerates. Find a rough estimate for the average speed $v_{0}$ during its upward motion.\n\nPlease reason step by step, and put your final answer within \\boxed{}.
+# ```
+
+# [思考过程]
+# ```
+# ### 1. **Buoyant Force and Acceleration:**\nWhen a parcel of air rises, it experiences a buoyant force due to the density difference between the parcel and the surrounding air. The buoyant force per unit mass is given by:\n\\[\na = g \\left( \\frac{\\rho_{\\text{surrounding}} - \\rho_{\\text{parcel}}}{\\rho_{\\text{parcel}}} \\right)\n\\]\nAssuming the air behaves as an ideal gas, the density is inversely proportional to temperature:\n\\[\n\\rho \\propto \\frac{1}{T}\n\\]\nLet \\( T_0 \\) be the temperature of the surrounding air and \\( T_0 + \\Delta T \\) be the temperature of the parcel (where \\( \\Delta T \\) is small). Then:\n\\[\n\\frac{\\rho_{\\text{surrounding}}}{\\rho_{\\text{parcel}}} = \\frac{T_0 + \\Delta T}{T_0} \\approx 1 + \\frac{\\Delta T}{T_0}\n\\]\nSubstituting back into the acceleration:\n\\[\na \\approx g \\left( \\frac{\\Delta T}{T_0} \\right)\n\\]\n\n### 2. **Kinematic Analysis:**\nThe parcel accelerates upward with this acceleration \\( a \\). If the parcel rises a height \\( h \\), its final speed \\( v \\) can be found using the kinematic equation:\n\\[\nv^2 = 2 a h\n\\]\nSubstituting \\( a \\):\n\\[\nv^2 = 2 g h \\left( \\frac{\\Delta T}{T_0} \\right)\n\\]\nThe average speed \\( v_0 \\) is roughly half the final speed (assuming linear acceleration):\n\\[\nv_0 \\approx \\frac{v}{2}\n\\]\nHowever, a better estimate for the average speed is the root-mean-square speed, which for uniformly accelerated motion is:\n\\[\nv_0 = \\sqrt{\\frac{v^2}{2}} = \\sqrt{g h \\left( \\frac{\\Delta T}{T_0} \\right)}\n\\]\n\n### 3. **Final Expression:**\nThus, the average speed \\( v_0 \\) is:\n\\[\nv_0 = \\sqrt{g h \\frac{\\Delta T}{T_0}}\n\\]\n\nSo the final answer is \\boxed{\\sqrt{g h \\frac{\\Delta T}{T_0}}}.
+# To estimate the average speed \\( v_0 \\) of a parcel of air moving upward, we can analyze the forces and energy changes involved. Here's a step-by-step solution:\n\n
+# ```
+
+
+# [输出]
+# [思考过程分析]
+# ```
+# 问题：估算空气团向上运动的平均速度v₀
+# ├─ 已知条件（隐含）
+# │  ├─ 浮力与密度差相关，密度与温度成反比
+# │  ├─ 空气团受浮力产生加速度a
+# │  ├─ 空气团上升高度为h
+# │  ├─ 周围空气温度T₀，空气团温度T₀+ΔT（ΔT较小）
+# │  └─ 重力加速度g
+# │
+# ├─ 步骤1：推导加速度a的表达式
+# │  ├─ 单位质量浮力公式：a = g×(ρₛᵤᵣᵣₒᵤₙ𝒹ᵢₙ𝑔 - ρₚₐᵣ𝒸ₑₗ)/ρₚₐᵣ𝒸ₑₗ
+# │  ├─ 密度与温度关系：ρ ∝ 1/T → ρₛᵤᵣᵣₒᵤₙ𝒹ᵢₙ𝑔/ρₚₐᵣ𝒸ₑₗ = (T₀+ΔT)/T₀ ≈ 1 + ΔT/T₀
+# │  └─ 简化得：a ≈ g×(ΔT/T₀)
+# │
+# ├─ 步骤2：通过运动学方程关联速度与加速度
+# │  ├─ 末速度v满足：v² = 2ah
+# │  ├─ 代入a得：v² = 2gh×(ΔT/T₀)
+# │  └─ 平均速度v₀取均方根速度：v₀ = √(v²/2) = √(gh×ΔT/T₀)
+# │
+# └─ 结论：平均速度v₀的表达式为√(ghΔT/T₀)
+# ```
+
+# [难度分析]
+# ```json
+# {
+#     "计算复杂度": {
+#         "分析": "使用单变量代数运算、密度与温度的比例关系（简单物理公式）、运动学方程（v²=2ah），低维度（≤2维），线性为主，步骤关联中等（加速度推导影响后续速度计算），运算量小（含平方根运算但无复杂耦合）。",
+#         "难度评价": "Level 2"
+#     },
+#     "不确定性的程度与可降低性": {
+#         "分析": "答案需整合浮力原理、密度-温度关系、运动学方程3个关联知识源，通过3步线性推理确定，推理路径无分支，不确定性可通过结构化步骤完全消除。",
+#         "难度评价": "Level 3"
+#     },
+#     "推理路径的预定义性与清晰度": {
+#         "分析": "推理路径框架固定（推导加速度→运动学求末速度→计算平均速度），含1个分支（平均速度取末速度一半或均方根），分支可通过物理合理性快速排除，子目标关联清晰，最终路径为单链条。",
+#         "难度评价": "Level 3"
+#     },
+#     "问题结构的明确性": {
+#         "分析": "目标（估算平均速度v₀）明确，边界（隐含重力加速度g、温度差ΔT、上升高度h等参数）清晰，需拆分为推导加速度、运动学分析、计算平均速度3个逻辑关系固定的子任务。",
+#         "难度评价": "Level 3"
+#     },
+#     "逻辑推理的链条长度与严密性": {
+#         "分析": "推理链条长度为4-6步（浮力→密度差→加速度→末速度→平均速度），中等严密性要求（需验证密度-温度关系、运动学公式的适用性），每步逻辑关联明确。",
+#         "难度评价": "Level 3"
+#     },
+#     "背景知识的依赖性": {
+#         "分析": "需依赖物理学的浮力原理、理想气体密度与温度关系、运动学方程等进阶理论及跨概念关联（力→加速度→速度），需系统学习中学至大学入门物理知识才能掌握。",
+#         "难度评价": "Level 4"
+#     }
+# }
+# ```
+
+
+# """
 
 QA_JUDGE_DIFFICULTY_TEMPLATE = """
 
@@ -1341,6 +1341,8 @@ class Doc2QueryV3RewardModelAgent(object):
             else:
                 _prompt = DOC2QUERY_V3_RM_TEMPLATE_EN.format(
                     context=ground_truth["document"])
+            print(_prompt)
+            raise NotImplementedError
             input_data = {
                 "prompt": _prompt, "response": solution_str, "id": i
             }
@@ -1406,7 +1408,7 @@ class Doc2QueryV4RewardModelAgent(Doc2QueryV3RewardModelAgent):
             if solution_str is None:
                 rewards[i] = self.parse_result_failure_score
                 continue
-
+            
             input_data = {
                 "prompt": DOC2QUERY_V4_RM_TEMPLATE_ZH.strip(), "response": solution_str.strip(), "id": i
             }
@@ -5180,7 +5182,7 @@ class LearnableCoTComputeScore(SALTComputeScore):
 
 
 def doc2query_v4_parse_solution_fn(solution_str: str, remove_option_letter=True, extract_question_fn=parse_question_solution_fn):
-    for kw in ("</question>", "</think>", "</doc>"):
+    for kw in ("</inner-think>", "</think>", "</doc>"):
         if solution_str.count(kw) > 1:
             return None
 
@@ -5195,13 +5197,18 @@ def doc2query_v4_parse_solution_fn(solution_str: str, remove_option_letter=True,
         return None
 
     solution_str = solution_str.replace(thought, "")
+    try:
+        inner_voice = re.findall(r'<inner-think>(.*)</inner-think>',
+                         solution_str, re.DOTALL)[0].strip()
+    except Exception as err:
+        return None
 
     try:
         doc = re.findall(r'<doc>(.*)</doc>',
                          solution_str, re.DOTALL)[0].strip()
     except Exception as err:
         return None
-    return thought, doc
+    return thought, inner_voice, doc
 
 
 class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
@@ -5236,7 +5243,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
             self.rm_agent = Doc2QueryV4RewardModelAgent(
                 urls=self.args["reward_model_args"]["urls"],
                 postprocess_solution_fn=lambda x: doc2query_v4_parse_solution_fn(x)[
-                    0],
+                    1],
                 parse_result_failure_score=self.min_reward
             )
 
@@ -5263,7 +5270,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         for i, (gt, sol) in enumerate(zip(batch_ground_truth, batch_solution_str)):
             result = self.parse_solution_fn(sol)
             if result is not None:
-                thought, refined_doc = result
+                thought, inner_voice, refined_doc = result
                 raw_doc = gt["document"]
                 questions.append((refined_doc, raw_doc))
                 indices.append(i)
@@ -5328,7 +5335,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
             parsed = self.parse_solution_fn(sol)
 
             if parsed is not None:
-                thought, refined_doc, raw_doc = parsed[0], parsed[1], gt["document"]
+                thought, refined_doc, raw_doc = parsed[0], parsed[2], gt["document"]
                 lang_code = "zh" if contain_chinese(raw_doc) else "en"
 
                 hyp_tokens = " ".join(tokenize(refined_doc.lower(), lang_code))
@@ -5352,10 +5359,10 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
 
     def coarse_process(self):
         return [
-            # Process(name="ModelJudge",
-            #         function=self.model_judge, filter_only=False, non_skip=True),
-            # Process(name="BT-Reward", function=self.rm_agent.compute_rm_score,
-            #         filter_only=False, non_skip=True)
+            Process(name="ModelJudge",
+                    function=self.model_judge, filter_only=False, non_skip=True),
+            Process(name="BT-Reward", function=self.rm_agent.compute_rm_score,
+                    filter_only=False, non_skip=True)
         ]
 
     def finegrain_process(self):
@@ -5370,7 +5377,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         norm = self.parse_solution_fn(solution)
         if norm is not None:
             print(
-                f'[Thought]\n{norm[0]}\n\n[DOC]\n{repr(self.clip_string(norm[1]))}')
+                f'[INNER_VOICE]\n{repr(norm[1])}\n\n[DOC]\n{repr(self.clip_string(norm[2]))}')
 
     async def _compute_score(self,
                              batch_data_sources,
@@ -6025,17 +6032,14 @@ DOC2QUERY_V4_DEFAULT_PARAMS = {
                 "max_tokens": 4096,
             }
         },
-        "max_concurrent_requests": 128
+        "max_concurrent_requests": 256
     },
     "reward_model_args": {
         "urls": [
-            "http://10.130.0.237:26013",
-            "http://10.130.0.237:31232",
-            "http://10.130.0.237:27543",
-            "http://10.130.0.237:31666",
-            "http://10.130.0.237:30367",
-            "http://10.130.0.237:25871",
-            "http://10.130.0.237:27587",
+            "http://10.102.215.79:29376",
+            "http://10.102.215.79:34102",
+            "http://10.102.215.79:27438",
+            "http://10.102.215.79:32652",
         ]
     },
     "save_rollouts": {
