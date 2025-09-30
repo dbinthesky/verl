@@ -11,7 +11,8 @@ WORKER_MEMORY="${WORKER_MEMORY:-"1600000"}"
 # [hx]
 WORKSPACE_ID="ailab-hx"
 CHARGE_GROUP="hx_gpu"
-RUN_CMD="/mnt/shared-storage-user/ailab-hx/tongjian/verl/examples/grpo_trainer/doc2query_v4/grpo_qwen3-30b-a3_doc2query_v4.sh"
+# RUN_CMD="/mnt/shared-storage-user/ailab-hx/tongjian/verl/examples/grpo_trainer/doc2query_v4/grpo_qwen3-30b-a3_doc2query_v4.sh"
+RUN_CMD="/mnt/shared-storage-user/ailab-hx/tongjian/verl/examples/grpo_trainer/doc2query_v4/grpo_qwen3-30b-a3_general_doc2query_v4.sh"
 
 chmod +x ${RUN_CMD}
 

@@ -38,10 +38,10 @@ setup_path() {
     local num_gpus="${KUBERNETES_CONTAINER_RESOURCE_GPU:-8}"
     local world_size="${WORLD_SIZE:-1}"
 
-    ROLLOUT_N=8
+    ROLLOUT_N=5
     TRAIN_BSZ=$((num_gpus * world_size))
     KL_LOSS_COEF="0"
-    KL_COEF="0.5"
+    KL_COEF="0.4"
     TEMPERATURE="1.0"
     USE_RM_PAD="True" # must be true 
     ULYSSES_SP="1" # must be 1
@@ -51,11 +51,13 @@ setup_path() {
     CUSTOM_CODE_DIR="${HOME}/verl"
     VERL_DIR="${HOME}/verl"
     # BASE_MODEL_PATH="/mnt/shared-storage-user/large-model-center-share-weights/hf_hub/models--Qwen--Qwen3-30B-A3B-Thinking-2507/snapshots/4a8a1645504d39f8c2b9eacfd6d72dac693d3488"
-    BASE_MODEL_PATH="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_20250425_s1_32k_S2_32k_baseline/20250716000644/hf-30"
-    TRAIN_DATA='["/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index0.parquet","/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v4/zhihu_article_and_qa_1_0_0_8k_rl_inputs_train/index1.parquet"]' 
+    # BASE_MODEL_PATH="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_20250425_s1_32k_S2_32k_baseline/20250716000644/hf-30"
+    # BASE_MODEL_PATH="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_fabricate_qa_self_taught_250829/20250906012338/hf-4776"
+    BASE_MODEL_PATH="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v4_30b_a3_general_2025-09-29_roll16_8_kl_coef_0_wo_entropy_t1.0_step_100"
+    TRAIN_DATA='["/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v4/pretrain_mix_0930_rl_inputs_train/index0.parquet","/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v4/pretrain_mix_0930_rl_inputs_train/index1.parquet"]' 
     VAL_DATA="/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v4/pretrain_general_doc_8k_rl_inputs_test.parquet"
 
-    experiment_name="doc2query_v4_30b_a3_reer_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}"
+    experiment_name="doc2query_v4_30b_a3_general_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}"
     project_name="doc2query_v4"
 
     OUTPUT_DIR="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_rl_test/verl/grpo/doc2query_v4/${experiment_name}"
@@ -96,8 +98,8 @@ run_training() {
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
         data.train_batch_size=${TRAIN_BSZ} \
-        data.max_prompt_length=8192 \
-        data.max_response_length=12288 \
+        data.max_prompt_length=10240 \
+        data.max_response_length=14336 \
         data.filter_overlong_prompts=True \
         data.filter_overlong_prompts_workers=256 \
         trainer.default_local_dir="${OUTPUT_DIR}" \
@@ -112,7 +114,7 @@ run_training() {
         actor_rollout_ref.actor.ppo_micro_batch_size=${TRAIN_BSZ} \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=${ULYSSES_SP} \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=20480 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=24576 \
         actor_rollout_ref.actor.use_kl_loss=False \
         actor_rollout_ref.actor.kl_loss_coef=${KL_LOSS_COEF} \
         actor_rollout_ref.actor.entropy_coeff=0.0 \
@@ -141,7 +143,7 @@ run_training() {
         trainer.experiment_name="${experiment_name}" \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
-        trainer.save_freq=20 \
+        trainer.save_freq=10 \
         trainer.test_freq=100 \
         trainer.total_epochs=1 \
         "$@"

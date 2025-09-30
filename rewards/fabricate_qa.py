@@ -1109,36 +1109,14 @@ DOC2QUERY_V4_RM_TEMPLATE_ZH = """
 
 
 ## 要求：（即评价标准）
-1. **思考过程自然通顺**: 以第一人称给出给出创作动机、思路、整体框架、细节补充等各个环节
-2. **避免重复问题**: 思考过程避免出现冗余、重复性内容，例如在不同位置出现含义相同的内容表述。
-3. **思考过程独立、自主**: 即思考过程**禁止**出现**任何**反映可以在创作时可以看到文档的表述。
-例如禁止出现下面类似的语句
-"根据提供的文档内容..."、"逆向思考...创作过程"、"我需要理解文档的核心主题和结构..."、"文档讲述了..."、"作者认为..."、
-"根据这些步骤我需要将思考过程详细..."、"遵循提供的格式和要求..."
-
-相反，好的思考过程应该是从第一人陈的视角，将创作的动机（写一篇什么内容，写给谁，我的目的是什么）、框架（我需要怎么创作）、细节设计（我是怎么一步步敲定文章的细节部分）背后的心理想法娓娓道来。
-
-下面是一些技巧帮助你识别**独立、自主的思考过程**和**逆向推导的思考过程**的差别。
-1. 看是否包含 “创作不确定性与调整痕迹”
-主动思考的过程会自然体现 “从模糊到清晰” 的调整 —— 比如提及 “一开始想把‘产品使用步骤’放开头，后来考虑到用户先需要知道‘为什么要用’，就把‘核心价值’挪到了前面”；而逆向推导往往直接给出 “最终框架”，不会有这类 “犹豫、修改” 的细节（因成品已固定，无需虚构 “调整逻辑”）。
-
-2. 看 “动机与受众需求的绑定是否具体”
-主动思考的动机必然紧扣 “真实沟通目标”，会包含 “为谁写、解决什么具体问题” 的细节 —— 比如 “想给刚接触露营的新手写攻略，因为他们总纠结‘买什么装备’，所以重点要讲‘基础必买 + 避坑清单’”；逆向推导的动机通常笼统空泛，比如只说 “想写露营攻略”，不会提及 “受众的具体痛点”（因是先看到成品内容，再反向套 “动机”，而非真的从受众需求出发）。
-
-3. 看 “细节设计的‘因果逻辑’是否完整”
-主动思考的细节会附带 “为什么这么设计” 的理由 —— 比如 “在‘注意事项’里加了‘避免高温环境使用’，因为之前测试时发现高温会让零件变形，用户可能没意识到这个风险”；而逆向推导仅会复述 “成品里有某细节”（如 “加了高温使用提示”），但说不出背后的 “经验、测试或用户需求支撑”（因细节是从成品中看到的，而非自己主动设计的）。
-
-4. 看是否有 “非成品内容的合理延展”
-主动思考的细节会附带 “为什么这么设计” 的理由 —— 比如 “在‘注意事项’里加了‘避免高温环境使用’，因为之前测试时发现高温会让零件变形，用户可能没意识到这个风险”；而逆向推导仅会复述 “成品里有某细节”（如 “加了高温使用提示”），但说不出背后的 “经验、测试或用户需求支撑”（因细节是从成品中看到的，而非自己主动设计的）。
-
-5. 看 “框架搭建的‘顺序理由’是否通顺”
-主动思考的框架逻辑是 “目的→结构”，每个部分的顺序都有明确理由 —— 比如 “先讲‘材料准备’（避免用户漏买），再讲‘操作步骤’（按流程走不混乱），最后讲‘常见问题’（解决失败场景），每个环节都是为了让新手能一次成功”；而逆向推导的框架理由往往牵强或缺失，比如只说 “分了材料、步骤、问题三部分”，却解释不出 “为什么按这个顺序”（因是先看到成品的结构，再强行套 “理由”，而非真的从 “帮用户做事” 的逻辑出发）。
-
-6. 看 “语言表述是否贴合‘受众理解场景’”
-主动思考会根据受众调整语言；而逆向推导可能直接用专业表述，且不解释（因是看到成品里的表述，没考虑受众是否可以看懂”）。
-
-7. 看是否有 “创作中的‘小失误与纠错’记录”
-主动思考可能提及 “创作中的临时纠错”；而逆向推导不会有这类 “纠错细节”（因成品是最终正确版本，倒推时不会想到 “最初写错” 的情况，只有真实创作才会经历 “出错→修正” 的过程）。
+1. **语言特点**: 思考过程**必须**是第一人称的内心独白，会自然带出 “我觉得”“我担心”“我突然想到” 等主观思索词汇，让读者感受到 “真实的思考流动”；表述符合“沉浸式思考”的用语特点，高频使用口语化逻辑衔接，例如“等等，换个角度想”、“不过”、“所以”、“考虑到这一点”、“我记得”、“我需要搞清楚”、“我不确定”、“让我再想想”、“再举个例子”等体现认知过程的词汇。
+2. **动机、因果逻辑详实**: 思考过程包含“let me think step by step”, “让我一步步思考”等表述思考过程的词汇。
+3. **内容构成**: “为什么 + 怎么做”, 每一个步骤决策前说清楚因果关系。给人以生动、活生生的人物思考感。
+4. **区别于步骤罗列**: 还原 “从模糊到清晰” 的内心决策链，包含犹豫、调整、权衡。而步骤罗列是仅呈现 “最终确定的行动顺序”，无任何思考痕迹。
+    好的例子：“让我先想想，用户要做这个事，第一步该从哪切入呢？”、“等等，刚才的想法好像有漏洞，再琢磨一下”
+5. **避免语言冗余**: **避免**出现冗余、重复性内容，例如在不同位置出现含义相同的内容表述。
+6. **思考过程独立、自主**: 思考过程**禁止**泄露任何“已知最终文档”逆推创作思路的表述。需完全模拟 “独立命题时的自然思路”，**禁止**出现类似“根据提示”、“根据文档内容”、“用户提示”、"根据提供的文档内容..."、"逆向思考...创作过程"、"我需要理解文档的核心主题和结构..."、"文档讲述了..."、"作者认为..."等话术。
+7. **创作时间信息**：思考过程包含明确的创作时间信息（例如日期）
 """
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -5182,24 +5160,25 @@ class LearnableCoTComputeScore(SALTComputeScore):
 
 
 def doc2query_v4_parse_solution_fn(solution_str: str, remove_option_letter=True, extract_question_fn=parse_question_solution_fn):
-    for kw in ("</plan>", "</think>", "</doc>"):
+    for kw in ("</doc>", "</think>"):
         if solution_str.count(kw) > 1:
             return None
 
     solution_str = postprocess_solution(solution_str)
-    if not solution_str.startswith("<plan>"):
-        return None
+    if not solution_str.startswith("<think>"):
+        solution_str = f'<think>\n{solution_str}'
 
     try:
-        thought = re.findall(r'<plan>.*</plan>',
+        thought = re.findall(r'<think>.*?</think>',
                              solution_str, re.DOTALL)[0]
     except Exception as err:
         return None
 
     solution_str = solution_str.replace(thought, "")
+
     try:
-        inner_voice = re.findall(r'<think>(.*)</think>',
-                         solution_str, re.DOTALL)[0].strip()
+        inner_voice = re.findall(r'<self-narration>(.*?)</self-narration>',
+                             solution_str, re.DOTALL)[0]
     except Exception as err:
         return None
 
@@ -5208,6 +5187,18 @@ def doc2query_v4_parse_solution_fn(solution_str: str, remove_option_letter=True,
                          solution_str, re.DOTALL)[0].strip()
     except Exception as err:
         return None
+    if len(thought) == 0:
+        return None
+
+    inner_voice = inner_voice.strip()
+    if not any(_ in inner_voice for _ in ("我是", "I am")):
+        return None
+    if any(exclude_kw in inner_voice for exclude_kw in (
+        "***", "{具体身份", '{身份信息}', '{写作背景}', '{写作动机}', '{Thinking process', '{创作过程', "[Your Name]", "[Specific Research")):
+        return None
+    if any(exclude_kw in inner_voice for exclude_kw in ("引用", "原文")):
+        return None
+
     return thought, inner_voice, doc
 
 
@@ -5319,6 +5310,75 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
             max_score=1.0,
         )
 
+    async def contain_critical_keywords(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        skip_run=None,
+    ):
+        """
+        包含关键信息
+        """
+        outputs = [0.0] * len(batch_solution_str)
+        for i, (sol, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            parsed = self.parse_solution_fn(sol)
+
+            score = 0.0
+            if parsed is not None:
+                thought = parsed[1]
+                valid = False
+                if "年" in thought or "year" in thought.lower():
+                    valid = True
+                if re.findall(r"\d{4}", thought):
+                    valid = True
+                if valid:
+                    score += 0.25
+
+                thought = thought.lower()
+                if any(_ in thought for _ in ("think step by step", "to determine", "一步步思考", "要解决", "to solve")):
+                    score += 0.25
+                    
+                count = 0
+                for _ in ("now,", "break down", "wait", "thus", "because", "例如", "现在，", "因此，", "而是", "for example", "but",
+                     "since", "unless", "however", "suppose", "假设", "maybe", "assume"):
+                    if _ in thought:
+                        count += 1
+                score += min(count / 20, 1.0) * 0.1
+
+            outputs[i] += score
+        return outputs
+
+    async def info_overlap(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        skip_run=None,
+        max_sim_threshold=0.5,
+        weight=5.0,
+    ):
+        """
+        信息增益
+        """
+        outputs = [0.0] * len(batch_solution_str)
+        for i, (sol, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            parsed = self.parse_solution_fn(sol)
+
+            if parsed is not None:
+                thought, refined_doc = parsed[1], parsed[2]
+                lang_code = "zh" if contain_chinese(refined_doc) else "en"
+
+                hyp_tokens = " ".join(tokenize(thought.lower(), lang_code))
+                ref_tokens = " ".join(tokenize(refined_doc.lower(), lang_code))
+
+                info_overlap = sacrebleu.sentence_bleu(
+                    hyp_tokens, [ref_tokens]).score / 100
+
+                outputs[i] += (-info_overlap * weight)
+
+        return outputs
+
     async def rule_judge(
         self,
         batch_data_sources,
@@ -5362,7 +5422,9 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
             Process(name="ModelJudge",
                     function=self.model_judge, filter_only=False, non_skip=True),
             Process(name="BT-Reward", function=self.rm_agent.compute_rm_score,
-                    filter_only=False, non_skip=True)
+                    filter_only=False, non_skip=True),
+            Process(name="InfoOverlap", function=self.info_overlap, filter_only=False, non_skip=True),
+            Process(name="Keywords", function=self.contain_critical_keywords, filter_only=False, non_skip=True)
         ]
 
     def finegrain_process(self):
@@ -5377,7 +5439,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         norm = self.parse_solution_fn(solution)
         if norm is not None:
             print(
-                f'[INNER_VOICE]\n{repr(norm[1])}\n\n[DOC]\n{repr(self.clip_string(norm[2]))}')
+                f'[THOUGHT]({len(norm[0])})\n{repr(norm[0])}\n\n[INNER_VOICE]({len(norm[1])})\n{repr(norm[1])}\n\n[DOC]({len(norm[2])})\n{repr(self.clip_string(norm[2]))}')
 
     async def _compute_score(self,
                              batch_data_sources,
@@ -6025,21 +6087,22 @@ DOC2QUERY_V4_DEFAULT_PARAMS = {
     "verify_agent": {
         "model": {
             "model": "gpt-oss-120b",
-            "base_url": "http://10.102.214.34:30000/v1",
+            "base_url": "http://10.102.249.62:30000/v1",
             "request_kwargs": {
                 "temperature": 0.6,
                 "timeout": 360,
-                "max_tokens": 4096,
+                "max_tokens": 8192,
+                "reasoning_effort": "low" 
             }
         },
         "max_concurrent_requests": 256
     },
     "reward_model_args": {
         "urls": [
-            "http://10.102.215.79:29376",
-            "http://10.102.215.79:34102",
-            "http://10.102.215.79:27438",
-            "http://10.102.215.79:32652",
+            "http://10.102.250.38:30376",
+            "http://10.102.250.38:32891",
+            "http://10.102.250.38:25440",
+            "http://10.102.250.38:25990",
         ]
     },
     "save_rollouts": {
