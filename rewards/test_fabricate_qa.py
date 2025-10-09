@@ -55,7 +55,10 @@ from fabricate_qa import (
     multiturn_parse_question_solution_fn,
     DOC2QUERY_V4_DEFAULT_PARAMS,
     Doc2QueryV4ComputeScore,
-    doc2query_v4_parse_solution_fn
+    doc2query_v4_parse_solution_fn,
+    Doc2QueryV5ComputeScore,
+    doc2query_v5_parse_solution_fn,
+    DOC2QUERY_V5_DEFAULT_PARAMS,
 )
 
 UNITTEST_AGENT = Agent(**{
@@ -134,6 +137,8 @@ def load_dataset(task_name, num=100, xml_cot=False):
         filename = "/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v3/doc2query_v3_rl_inputs_diamond.parquet"
     elif task_name == "doc2query_v4":
         filename = "/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v4/pretrain_general_doc_8k_rl_inputs_train_sample5k.parquet"
+    elif task_name == "doc2query_v5":
+        filename = "/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v5/pretrain_general_doc_8k_rl_inputs_test.parquet"
     elif task_name == "learnable_cot":
         filename = "/mnt/shared-storage-user/ailab-hx/tongjian/rl/learnable_cot/dapo_math_17k_train.parquet"
     elif task_name == "rlvr":
@@ -170,6 +175,11 @@ def load_dataset(task_name, num=100, xml_cot=False):
         elif row["data_source"] == "doc2query_v4":
             batch_solution_str.append(
                 f'<think>\nTHOUGHT\n\n</think>\n\n<self-narration>\n我是\n{row["reward_model"]["document"]}\n</self-narration>\n\n<doc>\n{row["reward_model"]["document"]}\n</doc>'
+            )
+            row["reward_model"]["lang_code"] = "zh"
+        elif row["data_source"] == "doc2query_v5":
+            batch_solution_str.append(
+                f'<think>\n我是\n{row["reward_model"]["document"]}\n\n\n</think>\n\n<doc>\n{row["reward_model"]["document"]}\n</doc>'
             )
             row["reward_model"]["lang_code"] = "zh"
         elif row["data_source"] == "rlvr" or row["data_source"] in ("aime_2024", "aime_2025"):
@@ -701,6 +711,23 @@ class TestDoc2QueryV4(unittest.TestCase):
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
             )
         aio.run(main())
+
+
+class TestDoc2QueryV5(unittest.TestCase):
+    def test_compute_score(self):
+        batch_solution_str, batch_ground_truth = load_dataset(
+            task_name="doc2query_v5", num=4)
+        print(len(batch_solution_str))
+        task = Doc2QueryV5ComputeScore(
+            doc2query_v5_parse_solution_fn, split="valid", args=DOC2QUERY_V5_DEFAULT_PARAMS)
+
+        async def main():
+            await task._compute_score(
+                [None] *
+                len(batch_solution_str), batch_solution_str, batch_ground_truth,
+            )
+        aio.run(main())
+
 
 
 if __name__ == '__main__':

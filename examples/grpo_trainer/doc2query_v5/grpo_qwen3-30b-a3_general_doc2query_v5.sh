@@ -50,14 +50,15 @@ setup_path() {
     HOME="/mnt/shared-storage-user/ailab-hx/tongjian"
     CUSTOM_CODE_DIR="${HOME}/verl"
     VERL_DIR="${HOME}/verl"
-    BASE_MODEL_PATH="/mnt/shared-storage-user/large-model-center-share-weights/hf_hub/models--Qwen--Qwen3-30B-A3B-Thinking-2507/snapshots/4a8a1645504d39f8c2b9eacfd6d72dac693d3488"
-    TRAIN_DATA='["/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v4/pretrain_mix_0930_rl_inputs_train/index0.parquet","/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v4/pretrain_mix_0930_rl_inputs_train/index1.parquet"]' 
-    VAL_DATA="/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v4/pretrain_general_doc_8k_rl_inputs_test.parquet"
+    # BASE_MODEL_PATH="/mnt/shared-storage-user/large-model-center-share-weights/hf_hub/models--Qwen--Qwen3-30B-A3B-Thinking-2507/snapshots/4a8a1645504d39f8c2b9eacfd6d72dac693d3488"
+    BASE_MODEL_PATH="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_20250425_s1_32k_S2_32k_baseline/20250716000644/hf-30"
+    TRAIN_DATA='["/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v5/pretrain_mix_0930_rl_inputs_train/index0.parquet","/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v5/pretrain_mix_0930_rl_inputs_train/index1.parquet"]' 
+    VAL_DATA="/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v5/pretrain_general_doc_8k_rl_inputs_test.parquet"
 
-    experiment_name="doc2query_v4_30b_a3_hx_general_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}"
-    project_name="doc2query_v4"
+    experiment_name="doc2query_v5_30b_a3_nonthink_general_${YYMMDD}_${HHMMSS}_roll${ROLLOUT_N}_${TRAIN_BSZ}_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}"
+    project_name="doc2query_v5"
 
-    OUTPUT_DIR="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_rl_test/verl/grpo/doc2query_v4/${experiment_name}"
+    OUTPUT_DIR="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_rl_test/verl/grpo/doc2query_v5/${experiment_name}"
     mkdir -p "${OUTPUT_DIR}"
 }
 setup_path
@@ -88,9 +89,9 @@ run_training() {
 
     python3 -m verl.trainer.main_ppo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        custom_reward_function.name=doc2query_v4_compute_score_train \
+        custom_reward_function.name=doc2query_v5_compute_score_train \
         +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        +custom_valid_reward_function.name=doc2query_v4_compute_score_valid \
+        +custom_valid_reward_function.name=doc2query_v5_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \

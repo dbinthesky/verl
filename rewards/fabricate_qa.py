@@ -1109,14 +1109,15 @@ DOC2QUERY_V4_RM_TEMPLATE_ZH = """
 
 
 ## 要求：（即评价标准）
-1. **语言特点**: 思考过程**必须**是第一人称的内心独白，会自然带出 “我觉得”“我担心”“我突然想到” 等主观思索词汇，让读者感受到 “真实的思考流动”；表述符合“沉浸式思考”的用语特点，高频使用口语化逻辑衔接，例如“等等，换个角度想”、“不过”、“所以”、“考虑到这一点”、“我记得”、“我需要搞清楚”、“我不确定”、“让我再想想”、“再举个例子”等体现认知过程的词汇。
-2. **动机、因果逻辑详实**: 思考过程包含“let me think step by step”, “让我一步步思考”等表述思考过程的词汇。
-3. **内容构成**: “为什么 + 怎么做”, 每一个步骤决策前说清楚因果关系。给人以生动、活生生的人物思考感。
-4. **区别于步骤罗列**: 还原 “从模糊到清晰” 的内心决策链，包含犹豫、调整、权衡。而步骤罗列是仅呈现 “最终确定的行动顺序”，无任何思考痕迹。
+1. **格式要求**: 你的思考过程**必须**以“我是...”进行开头说明自己的身份、写作动机等，并直接开始描述你的创作内心活动。内心活动里**禁止**出现“让我模拟这篇文章的作者”等类似模拟、逆向推导创作思路的过程。你需要记住你就是创作者本人，创作时的内心活动是你的自然流露。
+2. **语言特点**: 思考过程**必须**是第一人称的内心独白，会自然带出 “我觉得”“我担心”“我突然想到” 等主观思索词汇，让读者感受到 “真实的思考流动”；表述符合“沉浸式思考”的用语特点，高频使用口语化逻辑衔接，例如“等等，换个角度想”、“不过”、“所以”、“考虑到这一点”、“我记得”、“我需要搞清楚”、“我不确定”、“让我再想想”、“再举个例子”等体现认知过程的词汇。
+3. **动机、因果逻辑详实**: 思考过程包含“let me think step by step”, “让我一步步思考”等表述思考过程的词汇。
+4. **内容构成**: “为什么 + 怎么做”, 每一个步骤决策前说清楚因果关系。给人以生动、活生生的人物思考感。
+5. **区别于步骤罗列**: 还原 “从模糊到清晰” 的内心决策链，包含犹豫、调整、权衡。而步骤罗列是仅呈现 “最终确定的行动顺序”，无任何思考痕迹。
     好的例子：“让我先想想，用户要做这个事，第一步该从哪切入呢？”、“等等，刚才的想法好像有漏洞，再琢磨一下”
-5. **避免语言冗余**: **避免**出现冗余、重复性内容，例如在不同位置出现含义相同的内容表述。
-6. **思考过程独立、自主**: 思考过程**禁止**泄露任何“已知最终文档”逆推创作思路的表述。需完全模拟 “独立命题时的自然思路”，**禁止**出现类似“根据提示”、“根据文档内容”、“用户提示”、"根据提供的文档内容..."、"逆向思考...创作过程"、"我需要理解文档的核心主题和结构..."、"文档讲述了..."、"作者认为..."等话术。
-7. **创作时间信息**：思考过程包含明确的创作时间信息（例如日期）
+6. **避免语言冗余**: **避免**出现冗余、重复性内容，例如在不同位置出现含义相同的内容表述。
+7. **思考过程独立、自主**: 思考过程**禁止**泄露任何“已知最终文档”逆推创作思路的表述。需完全模拟 “独立命题时的自然思路”，**禁止**出现类似“根据提示”、“根据文档内容”、“用户提示”、"根据提供的文档内容..."、"逆向思考...创作过程"、"我需要理解文档的核心主题和结构..."、"文档讲述了..."、"作者认为..."等话术。
+8. **创作时间信息**：思考过程包含明确的创作时间信息（例如日期）
 """
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -5175,7 +5176,7 @@ def doc2query_v4_parse_solution_fn(solution_str: str, remove_option_letter=True,
         return None
 
     solution_str = solution_str.replace(thought, "")
-
+ 
     try:
         inner_voice = re.findall(r'<self-narration>(.*?)</self-narration>',
                              solution_str, re.DOTALL)[0]
@@ -5233,7 +5234,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         if "reward_model_args" in self.args:
             self.rm_agent = Doc2QueryV4RewardModelAgent(
                 urls=self.args["reward_model_args"]["urls"],
-                postprocess_solution_fn=lambda x: doc2query_v4_parse_solution_fn(x)[
+                postprocess_solution_fn=lambda x: self.parse_solution_fn(x)[
                     1],
                 parse_result_failure_score=self.min_reward
             )
@@ -5333,12 +5334,15 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
                 if re.findall(r"\d{4}", thought):
                     valid = True
                 if valid:
-                    score += 0.25
+                    score += 0.15
 
                 thought = thought.lower()
-                if any(_ in thought for _ in ("think step by step", "to determine", "一步步思考", "要解决", "to solve")):
-                    score += 0.25
+                # if any(_ in thought for _ in ("think step by step", "to determine", "一步步思考", "要解决", "to solve")):
+                #     score += 0.25
                     
+                if thought.startswith("我是") or thought.startswith("I am"):
+                    score += 0.15
+
                 count = 0
                 for _ in ("now,", "break down", "wait", "thus", "because", "例如", "现在，", "因此，", "而是", "for example", "but",
                      "since", "unless", "however", "suppose", "假设", "maybe", "assume"):
@@ -5356,7 +5360,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         batch_ground_truth,
         skip_run=None,
         max_sim_threshold=0.5,
-        weight=5.0,
+        weight=2.0,
     ):
         """
         信息增益
@@ -5385,7 +5389,6 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         batch_solution_str,
         batch_ground_truth,
         skip_run=None,
-        max_sim_threshold=0.5,
     ):
         """
         信息保留率
@@ -5404,8 +5407,6 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
                 info = sacrebleu.sentence_bleu(
                     hyp_tokens, [ref_tokens]).score / 100
 
-                if info >= max_sim_threshold:
-                    info = 1.0
                 score = info
                 outputs[i] += score
 
@@ -5421,10 +5422,10 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         return [
             Process(name="ModelJudge",
                     function=self.model_judge, filter_only=False, non_skip=True),
-            Process(name="BT-Reward", function=self.rm_agent.compute_rm_score,
-                    filter_only=False, non_skip=True),
-            Process(name="InfoOverlap", function=self.info_overlap, filter_only=False, non_skip=True),
-            Process(name="Keywords", function=self.contain_critical_keywords, filter_only=False, non_skip=True)
+            # Process(name="BT-Reward", function=self.rm_agent.compute_rm_score,
+            #         filter_only=False, non_skip=True),
+            # Process(name="InfoOverlap", function=self.info_overlap, filter_only=False, non_skip=True),
+            # Process(name="Keywords", function=self.contain_critical_keywords, filter_only=False, non_skip=True)
         ]
 
     def finegrain_process(self):
@@ -5558,6 +5559,73 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
 # DOC2QUERY V4
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# DOC2QUERY V5
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+def doc2query_v5_parse_solution_fn(solution_str: str, remove_option_letter=True, extract_question_fn=parse_question_solution_fn):
+    for kw in ("</doc>", "</think>"):
+        if solution_str.count(kw) > 1:
+            return None
+
+    solution_str = postprocess_solution(solution_str)
+    if not solution_str.startswith("<think>"):
+        solution_str = f'<think>\n{solution_str}'
+
+    try:
+        thought = re.findall(r'<think>(.*?)</think>',
+                             solution_str, re.DOTALL)[0]
+    except Exception as err:
+        return None
+
+    inner_voice = thought
+
+    solution_str = solution_str.replace(thought, "")
+
+    try:
+        doc = re.findall(r'<doc>(.*)</doc>',
+                         solution_str, re.DOTALL)[0].strip()
+    except Exception as err:
+        return None
+    if len(thought) == 0:
+        return None
+
+    inner_voice = inner_voice.strip()
+    # if not any(_ in inner_voice for _ in ("我是", "I am")):
+    #     return None
+    if not any(inner_voice.startswith(_) for _ in ("我是", "I am")):
+        return None
+    if any(exclude_kw in inner_voice for exclude_kw in (
+        "***", "{具体身份", '{身份信息}', '{写作背景}', '{写作动机}', '{Thinking process', '{创作过程', "[Your Name]", "[Specific Research")):
+        return None
+    if any(exclude_kw in inner_voice for exclude_kw in ("引用", "原文")):
+        return None
+
+    return thought, inner_voice, doc
+
+
+class Doc2QueryV5ComputeScore(Doc2QueryV4ComputeScore):
+
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-5.0,
+                 thought_log_prob=0.01,
+                 parse_thought_and_conclusion_fn=doc2query_v5_parse_solution_fn,
+                 ):
+        super().__init__(
+            parse_solution_fn=parse_solution_fn, split=split,
+            args=args,
+            min_reward=min_reward,
+            thought_log_prob=thought_log_prob
+        )
+        self.task_name = "DOC2QUERY_V5"
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
+# DOC2QUERY V5
+# ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # HParams
@@ -6110,6 +6178,37 @@ DOC2QUERY_V4_DEFAULT_PARAMS = {
     }
 }
 
+DOC2QUERY_V5_DEFAULT_PARAMS = {
+    "verify_agent": {
+        "model": {
+            "model": "gpt-oss-120b",
+            "base_url": "http://10.102.249.62:30000/v1",
+            "request_kwargs": {
+                "temperature": 0.6,
+                "timeout": 360,
+                "max_tokens": 8192,
+                "reasoning_effort": "low" 
+            }
+        },
+        "max_concurrent_requests": 256
+    },
+    "reward_model_args": {
+        "urls": [
+            "http://10.102.250.38:29996",
+            "http://10.102.250.38:27276",
+            "http://10.102.250.38:27019",
+            "http://10.102.250.38:28660",
+            # "http://10.102.250.38:30376",
+            # "http://10.102.250.38:32891",
+            # "http://10.102.250.38:25440",
+            # "http://10.102.250.38:25990",
+        ]
+    },
+    "save_rollouts": {
+        "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
+    }
+}
+
 RLVR_DEFAULT_PARAMS = {
     "verify_agent": {
         "model": {
@@ -6129,6 +6228,8 @@ RLVR_DEFAULT_PARAMS = {
         "default_local_dir": "/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio_rollouts"
     }
 }
+
+
 
 # KG2QUERY_V1_DEFAULT_PARAMS = {
 #     "learnable_run_args": {
@@ -6587,3 +6688,11 @@ _default_doc2query_v4_compute_score_valid = Doc2QueryV4ComputeScore(
     doc2query_v4_parse_solution_fn, split="valid", args=DOC2QUERY_V4_DEFAULT_PARAMS)
 doc2query_v4_compute_score_train = _default_doc2query_v4_compute_score_train.compute_score
 doc2query_v4_compute_score_valid = _default_doc2query_v4_compute_score_valid.compute_score
+
+
+_default_doc2query_v5_compute_score_train = Doc2QueryV5ComputeScore(
+    doc2query_v5_parse_solution_fn, split="train", args=DOC2QUERY_V5_DEFAULT_PARAMS)
+_default_doc2query_v5_compute_score_valid = Doc2QueryV5ComputeScore(
+    doc2query_v5_parse_solution_fn, split="valid", args=DOC2QUERY_V5_DEFAULT_PARAMS)
+doc2query_v5_compute_score_train = _default_doc2query_v5_compute_score_train.compute_score
+doc2query_v5_compute_score_valid = _default_doc2query_v5_compute_score_valid.compute_score
