@@ -5401,7 +5401,8 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
                 info = sacrebleu.sentence_bleu(
                     hyp_tokens, [ref_tokens]).score / 100
 
-                score = info
+                # 分数区间正则到-1～+1
+                score = info * 2 -1
                 outputs[i] += score
 
         return outputs
@@ -5416,9 +5417,9 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         return [
             Process(name="ModelJudge",
                     function=self.model_judge, filter_only=False, non_skip=True),
-            Process(name="BT-Reward", function=self.rm_agent.compute_rm_score,
-                    filter_only=False, non_skip=True),
-            Process(name="InfoOverlap", function=self.info_overlap, filter_only=False, non_skip=True),
+            # Process(name="BT-Reward", function=self.rm_agent.compute_rm_score,
+                    # filter_only=False, non_skip=True),
+            # Process(name="InfoOverlap", function=self.info_overlap, filter_only=False, non_skip=True),
             # Process(name="Keywords", function=self.contain_critical_keywords, filter_only=False, non_skip=True)
         ]
 
@@ -5435,6 +5436,8 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         if norm is not None:
             print(
                 f'[THOUGHT]({len(norm[0])})\n{repr(norm[0])}\n\n[INNER_VOICE]({len(norm[1])})\n{repr(norm[1])}\n\n[DOC]({len(norm[2])})\n{repr(self.clip_string(norm[2]))}')
+        else:
+            print(repr(solution))
 
     async def _compute_score(self,
                              batch_data_sources,
@@ -5523,6 +5526,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
                 log = True
             else:
                 log = False
+                
 
             if cur_score == self.min_reward and random.random() < self.thought_log_prob:
                 log = True
@@ -5585,15 +5589,15 @@ def doc2query_v5_parse_solution_fn(solution_str: str, remove_option_letter=True,
         return None
 
     inner_voice = inner_voice.strip()
-    # if not any(_ in inner_voice for _ in ("我是", "I am")):
+    # # if not any(_ in inner_voice for _ in ("我是", "I am")):
+    # #     return None
+    # if not any(inner_voice.startswith(_) for _ in ("我是", "I am")):
     #     return None
-    if not any(inner_voice.startswith(_) for _ in ("我是", "I am")):
-        return None
-    if any(exclude_kw in inner_voice for exclude_kw in (
-        "***", "{具体身份", '{身份信息}', '{写作背景}', '{写作动机}', '{Thinking process', '{创作过程', "[Your Name]", "[Specific Research")):
-        return None
-    if any(exclude_kw in inner_voice for exclude_kw in ("引用", "原文")):
-        return None
+    # if any(exclude_kw in inner_voice for exclude_kw in (
+    #     "***", "{具体身份", '{身份信息}', '{写作背景}', '{写作动机}', '{Thinking process', '{创作过程', "[Your Name]", "[Specific Research")):
+    #     return None
+    # if any(exclude_kw in inner_voice for exclude_kw in ("引用", "原文")):
+    #     return None
 
     return thought, inner_voice, doc
 
@@ -6677,9 +6681,9 @@ multiturn_doc2query_v3_compute_score_valid = _multiturn_doc2query_v3_compute_sco
 
 
 _default_doc2query_v4_compute_score_train = Doc2QueryV4ComputeScore(
-    doc2query_v4_parse_solution_fn, split="train", args=DOC2QUERY_V4_DEFAULT_PARAMS)
+    doc2query_v5_parse_solution_fn, split="train", args=DOC2QUERY_V4_DEFAULT_PARAMS)
 _default_doc2query_v4_compute_score_valid = Doc2QueryV4ComputeScore(
-    doc2query_v4_parse_solution_fn, split="valid", args=DOC2QUERY_V4_DEFAULT_PARAMS)
+    doc2query_v5_parse_solution_fn, split="valid", args=DOC2QUERY_V4_DEFAULT_PARAMS)
 doc2query_v4_compute_score_train = _default_doc2query_v4_compute_score_train.compute_score
 doc2query_v4_compute_score_valid = _default_doc2query_v4_compute_score_valid.compute_score
 

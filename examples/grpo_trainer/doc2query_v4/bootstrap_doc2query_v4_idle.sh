@@ -9,18 +9,18 @@ WORKER_CPU="${WORKER_CPU:-"128"}"
 WORKER_MEMORY="${WORKER_MEMORY:-"1600000"}"
 
 # [hx]
-WORKSPACE_ID="ailab-puyullmgpu"
-CHARGE_GROUP="puyullm_gpu"
-# WORKSPACE_ID="ailab-hx"
-# CHARGE_GROUP="hx_gpu"
+# WORKSPACE_ID="ailab-puyullmgpu"
+# CHARGE_GROUP="puyullm_gpu"
+WORKSPACE_ID="ailab-hx"
+CHARGE_GROUP="hx_gpu"
 RUN_CMD="/mnt/shared-storage-user/ailab-hx/tongjian/verl/examples/grpo_trainer/doc2query_v4/grpo_qwen3-30b-a3_general_doc2query_v4.sh"
 
 chmod +x ${RUN_CMD}
 
 rjob submit -e DISTRIBUTED_JOB=true \
     --image=${WORKER_IMAGE} \
-    --host-network=true --namespace=${WORKSPACE_ID} --name ${JOB_NAME} -P ${WORKER_COUNT} --gpu ${WORKER_GPU} --cpu ${WORKER_CPU}  --memory ${WORKER_MEMORY} --charged-group ${CHARGE_GROUP} \
-    --private-machine='group' \
+    --host-network=true --namespace=${WORKSPACE_ID} --name ${JOB_NAME} -P ${WORKER_COUNT} --gpu ${WORKER_GPU} --cpu ${WORKER_CPU}  --memory ${WORKER_MEMORY} \
+    --task-type=idle \
     --gang-start=true \
     --mount=gpfs://gpfs1/songdemin:/mnt/shared-storage-user/songdemin \
     --mount=gpfs://gpfs1/large-model-center-share-weights:/mnt/shared-storage-user/large-model-center-share-weights \

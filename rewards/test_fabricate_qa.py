@@ -59,6 +59,7 @@ from fabricate_qa import (
     Doc2QueryV5ComputeScore,
     doc2query_v5_parse_solution_fn,
     DOC2QUERY_V5_DEFAULT_PARAMS,
+    _default_doc2query_v4_compute_score_train,
 )
 
 UNITTEST_AGENT = Agent(**{
@@ -174,7 +175,7 @@ def load_dataset(task_name, num=100, xml_cot=False):
             )
         elif row["data_source"] == "doc2query_v4":
             batch_solution_str.append(
-                f'<think>\nTHOUGHT\n\n</think>\n\n<self-narration>\n我是\n{row["reward_model"]["document"]}\n</self-narration>\n\n<doc>\n{row["reward_model"]["document"]}\n</doc>'
+                f'<think>\nTHOUGHT\n\n</think>\n\n<doc>\n{row["reward_model"]["document"]}\n</doc>'
             )
             row["reward_model"]["lang_code"] = "zh"
         elif row["data_source"] == "doc2query_v5":
@@ -702,11 +703,9 @@ class TestDoc2QueryV4(unittest.TestCase):
     def test_compute_score(self):
         batch_solution_str, batch_ground_truth = load_dataset(
             task_name="doc2query_v4", num=4)
-        task = Doc2QueryV4ComputeScore(
-            doc2query_v4_parse_solution_fn, split="valid", args=DOC2QUERY_V4_DEFAULT_PARAMS)
 
         async def main():
-            await task._compute_score(
+            await _default_doc2query_v4_compute_score_train._compute_score(
                 [None] *
                 len(batch_solution_str), batch_solution_str, batch_ground_truth,
             )
