@@ -121,25 +121,6 @@ class DataParallelPPOActor(BasePPOActor):
         }
         return self._forward_micro_batch(ref_micro_batch, temperature, calculate_entropy)   
 
-        # # 从micro_batch中获取responses
-        # responses = micro_batch["responses"]
-        # batch_size, response_len = responses.shape
-        
-        # # 创建新的micro_batch副本，仅包含必要的键
-        # ref_micro_batch = {
-        #     "responses": responses,  # 保留responses作为目标
-        # }
-        # # 将input_ids设置为responses的值
-        # ref_micro_batch["input_ids"] = responses
-        # original_attention_mask = micro_batch["attention_mask"]
-        # ref_attention_mask = original_attention_mask[:, -response_len:]
-
-        # ref_micro_batch["attention_mask"] = ref_attention_mask
-        # ref_position_ids = torch.arange(response_len, device=self.device_name).unsqueeze(0).repeat(batch_size, 1)
-        # ref_micro_batch["position_ids"] = ref_position_ids
-    
-        # # 调用已有的_forward_micro_batch处理新的micro_batch
-        # return self._forward_micro_batch(ref_micro_batch, temperature, calculate_entropy)
 
     def _forward_micro_batch(self, micro_batch, temperature, calculate_entropy=False) -> Tuple[torch.Tensor, torch.Tensor]:
         """
