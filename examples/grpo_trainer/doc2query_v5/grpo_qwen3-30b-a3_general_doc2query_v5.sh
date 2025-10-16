@@ -38,7 +38,7 @@ setup_path() {
     local world_size="${WORLD_SIZE:-1}"
 
     ROLLOUT_N=8
-    TRAIN_BSZ=32
+    TRAIN_BSZ=128
     KL_LOSS_COEF="0"
     KL_COEF="0.0005"
     TEMPERATURE="1.0"
@@ -97,7 +97,7 @@ run_training() {
         data.val_files="${VAL_DATA}" \
         data.train_batch_size=${TRAIN_BSZ} \
         data.max_prompt_length=10240 \
-        data.max_response_length=10240 \
+        data.max_response_length=14336 \
         +data.ref_prompt_key="ref_prompt" \
         +algorithm.enable_rlcd=True \
         data.filter_overlong_prompts=True \
@@ -115,7 +115,7 @@ run_training() {
         actor_rollout_ref.actor.ppo_micro_batch_size=${TRAIN_BSZ} \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=${ULYSSES_SP} \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=20480 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=24576 \
         actor_rollout_ref.actor.use_kl_loss=False \
         actor_rollout_ref.actor.kl_loss_coef=${KL_LOSS_COEF} \
         actor_rollout_ref.actor.entropy_coeff=0.0 \
