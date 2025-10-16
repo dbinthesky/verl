@@ -180,7 +180,7 @@ def load_dataset(task_name, num=100, xml_cot=False):
             row["reward_model"]["lang_code"] = "zh"
         elif row["data_source"] == "doc2query_v5":
             batch_solution_str.append(
-                f'<think>\n我是\n{row["reward_model"]["document"]}\n\n\n</think>\n\n<doc>\n{row["reward_model"]["document"]}\n</doc>'
+                f'<think>\n我是xxxxxxx\n\n</think>\n\n<doc>\n{row["reward_model"]["document"]}\n</doc>'
             )
             row["reward_model"]["lang_code"] = "zh"
         elif row["data_source"] == "rlvr" or row["data_source"] in ("aime_2024", "aime_2025"):

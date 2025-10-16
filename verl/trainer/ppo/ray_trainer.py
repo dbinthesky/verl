@@ -166,15 +166,7 @@ def apply_kl_penalty(data: DataProto, kl_ctrl: core_algos.AdaptiveKLController, 
     kld = core_algos.kl_penalty(data.batch["old_log_probs"], data.batch["ref_log_prob"], kl_penalty=kl_penalty)  # (batch_size, response_length)
     kld = kld * response_mask
     beta = kl_ctrl.value
-    # token_level_rewards = token_level_scores - beta * kld
-
-    # ======================================================================
-    # TODO 
-    actual_lengths = response_mask.sum(dim=1, keepdim=True)
-    actual_lengths = torch.clamp(actual_lengths, min=1)
-    normalized_kld = kld / actual_lengths
-    token_level_rewards = token_level_scores - beta * normalized_kld
-    # ======================================================================
+    token_level_rewards = token_level_scores - beta * kld
 
     current_kl = masked_mean(kld, mask=response_mask, axis=-1)  # average over sequence
     current_kl = torch.mean(current_kl, dim=0).item()

@@ -5155,7 +5155,7 @@ class LearnableCoTComputeScore(SALTComputeScore):
 
 
 def doc2query_v4_parse_solution_fn(solution_str: str, remove_option_letter=True, extract_question_fn=parse_question_solution_fn):
-    for kw in ("</doc>", "</think>"):
+    for kw in ("</think>", "</doc>", "</question>"):
         if solution_str.count(kw) > 1:
             return None
 
@@ -5168,33 +5168,34 @@ def doc2query_v4_parse_solution_fn(solution_str: str, remove_option_letter=True,
                              solution_str, re.DOTALL)[0]
     except Exception as err:
         return None
-
     solution_str = solution_str.replace(thought, "")
- 
+
     try:
-        inner_voice = re.findall(r'<self-narration>(.*?)</self-narration>',
+        question = re.findall(r'<question>.*?</question>',
                              solution_str, re.DOTALL)[0]
     except Exception as err:
         return None
+
+    solution_str = solution_str.replace(question, "")
 
     try:
         doc = re.findall(r'<doc>(.*)</doc>',
                          solution_str, re.DOTALL)[0].strip()
     except Exception as err:
         return None
-    if len(thought) == 0:
+        
+    if len(question) == 0:
         return None
 
-    inner_voice = inner_voice.strip()
-    if not any(_ in inner_voice for _ in ("我是", "I am")):
+    if not any(_ in question for _ in ("你是", "You are")):
         return None
-    if any(exclude_kw in inner_voice for exclude_kw in (
+    if any(exclude_kw in question for exclude_kw in (
         "***", "{具体身份", '{身份信息}', '{写作背景}', '{写作动机}', '{Thinking process', '{创作过程', "[Your Name]", "[Specific Research")):
         return None
-    if any(exclude_kw in inner_voice for exclude_kw in ("引用", "原文")):
+    if any(exclude_kw in question for exclude_kw in ("引用", "原文")):
         return None
 
-    return thought, inner_voice, doc
+    return question, thought, doc
 
 
 class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
@@ -5321,28 +5322,13 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
 
             score = 0.0
             if parsed is not None:
-                thought = parsed[1]
-                valid = False
-                if "年" in thought or "year" in thought.lower():
-                    valid = True
-                if re.findall(r"\d{4}", thought):
-                    valid = True
-                if valid:
-                    score += 0.15
-
-                thought = thought.lower()
-                # if any(_ in thought for _ in ("think step by step", "to determine", "一步步思考", "要解决", "to solve")):
-                #     score += 0.25
+                question = parsed[0]
+                question = question.strip().lower()
                     
-                if thought.startswith("我是") or thought.startswith("I am"):
-                    score += 0.15
-
-                count = 0
-                for _ in ("now,", "break down", "wait", "thus", "because", "例如", "现在，", "因此，", "而是", "for example", "but",
-                     "since", "unless", "however", "suppose", "假设", "maybe", "assume"):
-                    if _ in thought:
-                        count += 1
-                score += min(count / 20, 1.0) * 0.1
+                if question.startswith("你是") or question.startswith("you are"):
+                    score += 0.5
+                if "<think>" not in question and "</think>" not in question:
+                    score += 0.5
 
             outputs[i] += score
         return outputs
@@ -5417,10 +5403,10 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         return [
             Process(name="ModelJudge",
                     function=self.model_judge, filter_only=False, non_skip=True),
+            Process(name="Keywords", function=self.contain_critical_keywords, filter_only=False, non_skip=True)
             # Process(name="BT-Reward", function=self.rm_agent.compute_rm_score,
                     # filter_only=False, non_skip=True),
             # Process(name="InfoOverlap", function=self.info_overlap, filter_only=False, non_skip=True),
-            # Process(name="Keywords", function=self.contain_critical_keywords, filter_only=False, non_skip=True)
         ]
 
     def finegrain_process(self):
@@ -5435,7 +5421,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
         norm = self.parse_solution_fn(solution)
         if norm is not None:
             print(
-                f'[THOUGHT]({len(norm[0])})\n{repr(norm[0])}\n\n[INNER_VOICE]({len(norm[1])})\n{repr(norm[1])}\n\n[DOC]({len(norm[2])})\n{repr(self.clip_string(norm[2]))}')
+                f'[QUESTION]({len(norm[0])})\n{repr(norm[0])}\n\n[INNER_VOICE]({len(norm[1])})\n{repr(norm[1])}\n\n[DOC]({len(norm[2])})\n{repr(self.clip_string(norm[2]))}')
         else:
             print(repr(solution))
 
@@ -5548,6 +5534,7 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
                 f'[Final Reward]={cur_score:.3f}|{main_process.name}={str(_main_reward)}|{_minor_rewards_log}|{penalty_log_str}\n')
 
             if log:
+                self.log_ground_truth(batch_ground_truth[i])
                 self.log_solution(batch_solution_str[i])
                 print()
 
@@ -5578,6 +5565,9 @@ def doc2query_v5_parse_solution_fn(solution_str: str, remove_option_letter=True,
 
     inner_voice = thought
 
+    if len(inner_voice) < 1000:
+        return None
+
     solution_str = solution_str.replace(thought, "")
 
     try:
@@ -5589,16 +5579,6 @@ def doc2query_v5_parse_solution_fn(solution_str: str, remove_option_letter=True,
         return None
 
     inner_voice = inner_voice.strip()
-    # # if not any(_ in inner_voice for _ in ("我是", "I am")):
-    # #     return None
-    # if not any(inner_voice.startswith(_) for _ in ("我是", "I am")):
-    #     return None
-    # if any(exclude_kw in inner_voice for exclude_kw in (
-    #     "***", "{具体身份", '{身份信息}', '{写作背景}', '{写作动机}', '{Thinking process', '{创作过程', "[Your Name]", "[Specific Research")):
-    #     return None
-    # if any(exclude_kw in inner_voice for exclude_kw in ("引用", "原文")):
-    #     return None
-
     return thought, inner_voice, doc
 
 
@@ -5620,7 +5600,22 @@ class Doc2QueryV5ComputeScore(Doc2QueryV4ComputeScore):
         )
         self.task_name = "DOC2QUERY_V5"
 
+    def coarse_process(self):
+        return [
+            Process(name="ModelJudge",
+                    function=self.model_judge, filter_only=False, non_skip=True),
+        ]
 
+    def log_ground_truth(self, ground_truth):
+        return print(f'[QUESTION]({len(ground_truth["question"])})\n{repr(ground_truth["question"])}\n')
+
+    def log_solution(self, solution):
+        norm = self.parse_solution_fn(solution)
+        if norm is not None:
+            print(
+                f'[INNER_VOICE]({len(norm[1])})\n{repr(norm[1])}\n\n[DOC]({len(norm[2])})\n{repr(self.clip_string(norm[2]))}')
+        else:
+            print(repr(solution))
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # DOC2QUERY V5
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -6681,9 +6676,9 @@ multiturn_doc2query_v3_compute_score_valid = _multiturn_doc2query_v3_compute_sco
 
 
 _default_doc2query_v4_compute_score_train = Doc2QueryV4ComputeScore(
-    doc2query_v5_parse_solution_fn, split="train", args=DOC2QUERY_V4_DEFAULT_PARAMS)
+    doc2query_v4_parse_solution_fn, split="train", args=DOC2QUERY_V4_DEFAULT_PARAMS)
 _default_doc2query_v4_compute_score_valid = Doc2QueryV4ComputeScore(
-    doc2query_v5_parse_solution_fn, split="valid", args=DOC2QUERY_V4_DEFAULT_PARAMS)
+    doc2query_v4_parse_solution_fn, split="valid", args=DOC2QUERY_V4_DEFAULT_PARAMS)
 doc2query_v4_compute_score_train = _default_doc2query_v4_compute_score_train.compute_score
 doc2query_v4_compute_score_valid = _default_doc2query_v4_compute_score_valid.compute_score
 

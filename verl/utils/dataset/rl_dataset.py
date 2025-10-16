@@ -101,6 +101,7 @@ class RLHFDataset(Dataset):
         self.cache_dir = os.path.expanduser(
             config.get("cache_dir", "~/.cache/verl/rlhf"))
         self.prompt_key = config.get("prompt_key", "prompt")
+        self.ref_prompt_key = config.get("ref_prompt_key", None)
         self.image_key = config.get("image_key", "images")
         self.video_key = config.get("video_key", "videos")
         self.max_prompt_length = config.get("max_prompt_length", 1024)
@@ -329,6 +330,34 @@ class RLHFDataset(Dataset):
                 "tools_kwargs is empty for index {}, data source: {}", index, row_dict["data_source"])
         row_dict["index"] = index
         row_dict["tools_kwargs"] = tools_kwargs
+
+        # 新增逻辑：处理ref_prompt
+        if self.ref_prompt_key is not None:
+            ref_prompt_raw = self.tokenizer.apply_chat_template(
+                        ref_prompt_messages, add_generation_prompt=True, tokenize=False, **self.apply_chat_template_kwargs
+                    )
+            ref_prompt_model_inputs = self.tokenizer(ref_prompt_raw, return_tensors="pt", add_special_tokens=False)
+            ref_prompt_input_ids = ref_prompt_model_inputs.pop("input_ids")
+            ref_prompt_attention_mask = ref_prompt_model_inputs.pop("attention_mask")
+                    
+            # 后处理
+            ref_prompt_input_ids, ref_prompt_attention_mask = verl_F.postprocess_data(
+                input_ids=ref_prompt_input_ids,
+                attention_mask=ref_prompt_attention_mask,
+                max_length=self.max_prompt_length,
+                pad_token_id=self.tokenizer.pad_token_id,
+                left_pad=True,
+                truncation=self.truncation,
+            )
+                    
+            ref_prompt_position_ids = compute_position_id_with_mask(ref_prompt_attention_mask)
+                    
+            # 存储ref-prompt数据
+            row_dict["ref_prompt_input_ids"] = ref_prompt_input_ids[0]
+            row_dict["ref_prompt_attention_mask"] = ref_prompt_attention_mask[0]
+            row_dict["ref_prompt_position_ids"] = ref_prompt_position_ids[0]
+            row_dict["ref_prompt_raw"] = ref_prompt_raw
+
         return row_dict
 
     def __getstate__(self):
