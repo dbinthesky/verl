@@ -38,7 +38,7 @@ UNITTEST_AGENT = Agent(**{
 
 
 def load_doc2query_st_dataset(num=100, xml_cot=False):
-    filename = "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_self_taught/doc2query_self_taught_enhance_rl_inputs_train.parquet"
+    filename = "/mnt/shared-storage-user/ailab-hx/tongjian/rl/fabricate_qa_self_taught/fabricate_qa_self_taught_cot_rl_input_test.parquet"
 
     batch_solution_str, batch_ground_truth = [], []
     batch_data_sources = []

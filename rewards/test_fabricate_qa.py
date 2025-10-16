@@ -175,7 +175,7 @@ def load_dataset(task_name, num=100, xml_cot=False):
             )
         elif row["data_source"] == "doc2query_v4":
             batch_solution_str.append(
-                f'<think>\nTHOUGHT\n\n</think>\n\n<doc>\n{row["reward_model"]["document"]}\n</doc>'
+                f'<question>\你是\n\n</question>\n\n<doc>\n{row["reward_model"]["document"]}\n</doc>'
             )
             row["reward_model"]["lang_code"] = "zh"
         elif row["data_source"] == "doc2query_v5":
