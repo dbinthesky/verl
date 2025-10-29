@@ -9,37 +9,22 @@ setup_env() {
     export WANDB_API_KEY="2e3700316fecb744b594dff815d1b11fbe514d24"
     export WANDB_BASE_URL=https://api.bandw.top
 
-    # export WANDB_MODE="offline"
+    export WANDB_MODE="offline"
     export VERL_PPO_LOGGING_LEVEL='DEBUG'
     export VLLM_ATTENTION_BACKEND="XFORMERS"
     export VLLM_USE_MODELSCOPE="False"
-    export HOME="/cpfs01/shared/llm_ddd/tongjian"
+    export HOME="/mnt/shared-storage-user/ailab-hx/tongjian"
+    export CKPTS_DIR="${HOME}/ckpts"
     export HYDRA_FULL_ERROR=1
 }
 setup_env
 
 # ------------------------------
-# Proxy Configuration
-# ------------------------------
-setup_proxy() {
-    export PROXY_CREDENTIALS="tongjian:dazL5iB8mjDIOGtNj2uekzlsRCelVS38txIK98mWhKyoyLCBCCw9DNXlUOcX"
-    export PROXY_URL="aliyun-proxy.pjlab.org.cn:13128"
-    export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:128"
-    export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
-
-    export http_proxy="http://${PROXY_CREDENTIALS}@${PROXY_URL}"
-    export https_proxy="https://${PROXY_CREDENTIALS}@${PROXY_URL}"
-    export HTTP_PROXY="${https_proxy}"
-    export HTTPS_PROXY="${https_proxy}"
-}
-# setup_proxy
-
-# ------------------------------
 # Conda Environment Setup
 # ------------------------------
 activate_conda() {
-    source /cpfs01/shared/llm_ddd/tongjian/.bashrc
-    conda activate /cpfs01/shared/llm_ddd/gaoxuan/anaconda3/envs/Verl
+    source /mnt/shared-storage-user/ailab-hx/wulianyi/miniconda3/etc/profile.d/conda.sh
+    conda activate /mnt/shared-storage-user/ailab-hx/wulianyi/miniconda3/envs/verl-0.4.1_conda
 }
 activate_conda
 
@@ -47,29 +32,40 @@ activate_conda
 # Path Configuration
 # ------------------------------
 setup_path() {
-    YYMMDD=$(date +%Y-%m-%d)
-    HHMMSS=$(date +%H-%M-%S)
+    YYMMDD=$(date +%Y-%m-%d-%H)
 
-    CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-xml_cot_if_enhance_0529"
-    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/Qwen25-32B-32B-fabricate_qa_xml_cot_v17"
-    # TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_xml_cot_train_0718.parquet"
-    # VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_xml_cot_test_0718.parquet"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/fabricate_aio_0724_xml_cot_roll16_bsz64_dapo_wo_kl_coef_wo_entropy_t10_step_30"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_plus_xml_cot_train_0718.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_plus_xml_cot_test_0718.parquet"
+    local num_gpus="${KUBERNETES_CONTAINER_RESOURCE_GPU:-8}"
+    local world_size="${WORLD_SIZE:-1}"
 
-    experiment_name="distill-qwen-32b_fabricate_aio_xml_cot-${YYMMDD}-${HHMMSS}"
-    project_name="fabricate_aio"
+    ROLLOUT_N=8
+    TRAIN_BSZ=128
+    KL_LOSS_COEF="0"
+    KL_COEF="0.5"
+    TEMPERATURE="1.0"
+    USE_RM_PAD="True" # must be true
+    ULYSSES_SP="1" # must be 1
+    USE_KL_IN_REWARD="True"
 
-    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio/${experiment_name}/"
+    HOME="/mnt/shared-storage-user/ailab-hx/tongjian"
+    CUSTOM_CODE_DIR="${HOME}/verl"
+    VERL_DIR="${HOME}/verl"
+    BASE_MODEL_PATH="/mnt/shared-storage-user/large-model-center-share-weights/hf_hub/models--Qwen--Qwen3-30B-A3B-Thinking-2507/snapshots/4a8a1645504d39f8c2b9eacfd6d72dac693d3488"
+    # BASE_MODEL_PATH="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_20250425_s1_32k_S2_32k_baseline/20250716000644/hf-30"
+    # BASE_MODEL_PATH="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_20250425_s1_32k_S2_32k_doc2query_merge_1010/20251011035959/hf-153"
+    TRAIN_DATA='["/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/pretrain_mix_0930_ms0_rl_inputs_train/index0.parquet","/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/pretrain_mix_0930_ms0_rl_inputs_train/index1.parquet"]' 
+    VAL_DATA="/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/pretrain_general_doc_8k_ms0_rl_inputs_test.parquet"
+
+    # experiment_name="doc2query_v6_30b_a3_think_general_ms0_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_agg-loss-token-mean"
+    experiment_name="doc2query_v6_30b_a3_think_general_ms0_2025-10-20-09_roll8_128_kl_coef_0_wo_entropy_t1.0_agg-loss-token-mean"
+    project_name="doc2query_v6"
+
+    OUTPUT_DIR="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_rl_test/verl/grpo/doc2query_v6/${experiment_name}"
     mkdir -p "${OUTPUT_DIR}"
 }
 setup_path
 
 # ------------------------------
-# Install Package
+
 # ------------------------------
 # setup_package() {
 #     pip3 install -U torchdata
@@ -88,67 +84,72 @@ run_training() {
     local num_gpus="${KUBERNETES_CONTAINER_RESOURCE_GPU:-8}"
     local world_size="${WORLD_SIZE:-1}"
     local total_gpus=$((num_gpus * world_size))
+    # self.config.actor.ppo_mini_batch_size *= self.config.rollout.n
+    # self.config.actor.ppo_mini_batch_size //= (self.device_mesh.size() // self.ulysses_sequence_parallel_size)
+    # self.config.actor.ppo_micro_batch_size_per_gpu = self.config.actor.ppo_micro_batch_size
 
-    python3 -m recipe.dapo.main_dapo \
+    python3 -m verl.trainer.main_ppo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        custom_reward_function.name=xml_cot_fabricate_aio_compute_score_train \
+        custom_reward_function.name=doc2query_v6_compute_score_train \
         +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        +custom_valid_reward_function.name=xml_cot_fabricate_aio_compute_score_valid \
+        +custom_valid_reward_function.name=doc2query_v6_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=64 \
-        data.max_prompt_length=12288 \
-        data.max_response_length=8192 \
+        data.train_batch_size=${TRAIN_BSZ} \
+        data.max_prompt_length=9216 \
+        data.max_response_length=16384 \
+        +data.ref_prompt_key="ref_prompt" \
+        +algorithm.enable_rlcd=True \
         data.filter_overlong_prompts=True \
+        data.filter_overlong_prompts_workers=256 \
         trainer.default_local_dir="${OUTPUT_DIR}" \
+        trainer.val_before_train=False \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
         actor_rollout_ref.actor.optim.lr=1e-6 \
         actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
         actor_rollout_ref.actor.optim.weight_decay=0.1 \
-        actor_rollout_ref.model.use_remove_padding=True \
+        actor_rollout_ref.actor.loss_agg_mode=token-mean \
+        actor_rollout_ref.model.use_remove_padding=${USE_RM_PAD} \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=64 \
-        actor_rollout_ref.actor.ppo_micro_batch_size=64 \
-        actor_rollout_ref.actor.ulysses_sequence_parallel_size=2 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=${TRAIN_BSZ} \
+        actor_rollout_ref.actor.ppo_micro_batch_size=${TRAIN_BSZ} \
+        actor_rollout_ref.actor.ulysses_sequence_parallel_size=${ULYSSES_SP} \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=20480 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=25600 \
         actor_rollout_ref.actor.use_kl_loss=False \
-        actor_rollout_ref.actor.kl_loss_coef=0.0 \
+        actor_rollout_ref.actor.kl_loss_coef=${KL_LOSS_COEF} \
+        actor_rollout_ref.actor.kl_loss_type=abs \
         actor_rollout_ref.actor.entropy_coeff=0.0 \
-        actor_rollout_ref.actor.grad_clip=0.9 \
-        actor_rollout_ref.actor.clip_ratio_low=0.2 \
-        actor_rollout_ref.actor.clip_ratio_high=0.28 \
-        actor_rollout_ref.actor.clip_ratio_c=10.0 \
-        reward_model.overlong_buffer.enable=True \
-        reward_model.overlong_buffer.len=$((1024 * 4)) \
-        reward_model.overlong_buffer.penalty_factor=1.0 \
-        algorithm.filter_groups.enable=False \
+        actor_rollout_ref.actor.grad_clip=1.0 \
         actor_rollout_ref.model.enable_gradient_checkpointing=True \
         actor_rollout_ref.actor.fsdp_config.param_offload=True \
         actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
-        actor_rollout_ref.rollout.tensor_model_parallel_size=4 \
+        actor_rollout_ref.rollout.tensor_model_parallel_size=8 \
         actor_rollout_ref.rollout.name="vllm" \
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.75 \
-        actor_rollout_ref.rollout.temperature=1.0 \
-        actor_rollout_ref.rollout.n=16 \
+        actor_rollout_ref.rollout.temperature=${TEMPERATURE} \
+        actor_rollout_ref.rollout.n=${ROLLOUT_N} \
         actor_rollout_ref.rollout.top_p=0.95 \
-        actor_rollout_ref.ref.ulysses_sequence_parallel_size=2 \
+        actor_rollout_ref.ref.ulysses_sequence_parallel_size=1 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
-        algorithm.kl_ctrl.kl_coef=0.000 \
+        algorithm.use_kl_in_reward=${USE_KL_IN_REWARD} \
+        algorithm.kl_ctrl.kl_coef=${KL_COEF} \
+        algorithm.kl_ctrl.type="fixed" \
+        algorithm.kl_penalty="abs" \
         algorithm.lam=0.95 \
-        reward_model.reward_manager=dapo_custom \
+        reward_model.reward_manager="custom" "$@" \
         trainer.logger='["console", "wandb"]' \
         trainer.project_name="${project_name}" \
         trainer.experiment_name="${experiment_name}" \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
         trainer.save_freq=10 \
-        trainer.test_freq=25 \
-        trainer.total_epochs=10000 \
+        trainer.test_freq=100 \
+        trainer.total_epochs=1 \
         "$@"
     local training_status=$?
 

@@ -165,8 +165,52 @@ def apply_kl_penalty(data: DataProto, kl_ctrl: core_algos.AdaptiveKLController, 
 
     kld = core_algos.kl_penalty(data.batch["old_log_probs"], data.batch["ref_log_prob"], kl_penalty=kl_penalty)  # (batch_size, response_length)
     kld = kld * response_mask
+
+    # --------------------------
+    # Core improvement: Keep top 20% highest KLD positions
+    # --------------------------
+    # 1. For each sample, calculate valid token count (non-padding)
+    valid_counts = response_mask.sum(dim=1, keepdim=True)  # (batch_size, 1), number of valid tokens per sample
+
+    # 2. Calculate top 20% count (at least 1 token if valid count is small)
+    top_k = (valid_counts * 0.2).ceil().long()  # (batch_size, 1), 20% rounded up
+    # FIXME: read `max_response_length` from config
+    top_k = torch.clamp(top_k, min=1, max=2850)  # 限制最小值为1，最大值为2850
+    # top_k = torch.clamp(top_k, min=1)  # Ensure at least 1 token is selected if there are valid tokens
+    
+    # 3. For each sample, find indices of top 20% KLD values among valid tokens
+    # Create a mask for invalid tokens to set their KLD to -infinity (so they are not selected)
+    kld_for_selection = kld.masked_fill(response_mask == 0, -float('inf'))
+
+    # 4. Get top k indices for each sample
+    _, top_indices = torch.topk(kld_for_selection, k=top_k.max().item(), dim=1)  # (batch_size, max_top_k)
+
+    # 5. Create mask for top 20% positions
+    top_k_mask = torch.zeros_like(kld, dtype=torch.float32)
+    for i in range(batch_size):
+        # For sample i, take only top_k[i] indices (ignore extra from max_top_k)
+        num_top = top_k[i].item()
+        if num_top > 0 and valid_counts[i].item() > 0:
+            # Get indices of top k valid tokens for this sample
+            sample_indices = top_indices[i, :num_top]
+            top_k_mask[i, sample_indices] = 1.0  # Mark top 20% positions
+    
+    # 6. Apply mask: only keep top 20% KLD values, others set to 0
+    kld_top20 = kld * top_k_mask  # (batch_size, response_length)
+
+    # 2.1 Calculate normalization factor: valid_count * 0.2 (avoid zero division)
+    norm_factor = valid_counts * 0.2 + 1e-8  # (batch_size, 1), e.g., 5→1.0, 10→2.0, 3→0.6
+    # 2.2 Expand to token-level for broadcasting (shape: (batch_size, response_length))
+    norm_factor = norm_factor.expand_as(kld)
+    
+    kld_top20_normalized = kld_top20 / norm_factor
+
+    # --------------------------
+    # Core improvement: Keep top 20% highest KLD positions
+    # --------------------------
     beta = kl_ctrl.value
-    token_level_rewards = token_level_scores - beta * kld
+    # token_level_rewards = token_level_scores - beta * kld
+    token_level_rewards = token_level_scores - beta * kld_top20_normalized
 
     current_kl = masked_mean(kld, mask=response_mask, axis=-1)  # average over sequence
     current_kl = torch.mean(current_kl, dim=0).item()
@@ -175,7 +219,7 @@ def apply_kl_penalty(data: DataProto, kl_ctrl: core_algos.AdaptiveKLController, 
     kl_ctrl.update(current_kl=current_kl, n_steps=batch_size)
     data.batch["token_level_rewards"] = token_level_rewards
 
-    metrics = {"actor/reward_kl_penalty": current_kl, "actor/reward_kl_penalty_coeff": beta}
+    metrics = {"actor/reward_kl_penalty": current_kl, "actor/reward_kl_penalty_coeff": beta, "actor/top20_kl_ratio": (kld_top20.sum() / (kld.sum() + 1e-8)).item()}
 
     return data, metrics
 
@@ -1092,6 +1136,7 @@ class RayPPOTrainer:
 
                         # compute rewards. apply_kl_penalty if available
                         if self.config.algorithm.use_kl_in_reward:
+                            print(f'[INFO] print config.algorithm.kl_penalty={self.config.algorithm.kl_penalty}')
                             batch, kl_metrics = apply_kl_penalty(batch, kl_ctrl=self.kl_ctrl_in_reward, kl_penalty=self.config.algorithm.kl_penalty)
                             metrics.update(kl_metrics)
                         else:

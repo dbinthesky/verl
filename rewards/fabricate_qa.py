@@ -1,4 +1,4 @@
-import os
+rewards/fabricate_qa.pyimport os
 import re
 import sys
 import json
@@ -5378,8 +5378,8 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
                 info = sacrebleu.sentence_bleu(
                     hyp_tokens, [ref_tokens]).score / 100
 
-                # 分数区间正则到-1～+1
-                score = info * 2 -1
+                # 分数区间正则到-1～+1, 权重系数2
+                score = (info * 2 -1) * 2
                 outputs[i] += score
 
         return outputs
@@ -5540,7 +5540,7 @@ def doc2query_v5_parse_solution_fn(solution_str: str, remove_option_letter=True,
     for kw in ("</doc>", "</think>"):
         if solution_str.count(kw) > 1:
             return None
-
+            
     solution_str = postprocess_solution(solution_str)
     if not solution_str.startswith("<think>"):
         solution_str = f'<think>\n{solution_str}'
@@ -5553,7 +5553,7 @@ def doc2query_v5_parse_solution_fn(solution_str: str, remove_option_letter=True,
 
     inner_voice = thought
 
-    if len(inner_voice) < 1000:
+    if len(inner_voice) < 200:
         return None
 
     solution_str = solution_str.replace(thought, "")
@@ -5588,14 +5588,39 @@ class Doc2QueryV5ComputeScore(Doc2QueryV4ComputeScore):
         )
         self.task_name = "DOC2QUERY_V5"
 
-    def coarse_process(self):
-        return [
-            Process(name="ModelJudge",
-                    function=self.model_judge, filter_only=False, non_skip=True),
-        ]
+    async def contain_critical_keywords(
+        self,
+        batch_data_sources,
+        batch_solution_str,
+        batch_ground_truth,
+        skip_run=None,
+    ):
+        """
+        包含关键信息
+        """
+        outputs = [0.0] * len(batch_solution_str)
+        for i, (sol, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            parsed = self.parse_solution_fn(sol)
+
+            score = 0.0
+            if parsed is not None:
+                thought = parsed[1]
+                thought = thought.strip().lower()
+                
+                count = 0
+                for kw in (
+                    "example", "用户", "案例", "[mask]", "user", "mentioned", "placeholders", "原文", 
+                    "用户", "模板", "填充", "例子", "fill in", "blank", "[skip content]", "[mask", "空白点", "content provided",
+                    "provided text", "提示", "provided background text", "残缺信息", "提供的信息", "masked"):
+                    count += thought.count(kw)
+                
+                score = -min(count * 0.05, 2.0)
+
+            outputs[i] += score
+        return outputs
 
     def log_ground_truth(self, ground_truth):
-        return print(f'[QUESTION]({len(ground_truth["question"])})\n{repr(ground_truth["question"])}\n')
+        print(f'[QUESTION]({len(ground_truth["question"])})\n{repr(ground_truth["question"])}\n')
 
     def log_solution(self, solution):
         norm = self.parse_solution_fn(solution)
@@ -5604,6 +5629,31 @@ class Doc2QueryV5ComputeScore(Doc2QueryV4ComputeScore):
                 f'[INNER_VOICE]({len(norm[1])})\n{repr(norm[1])}\n\n[DOC]({len(norm[2])})\n{repr(self.clip_string(norm[2]))}')
         else:
             print(repr(solution))
+
+
+
+class Doc2QueryV6ComputeScore(Doc2QueryV5ComputeScore):
+
+    def __init__(self,
+                 parse_solution_fn,
+                 split="train",
+                 args=None,
+                 min_reward=-5.0,
+                 thought_log_prob=0.05,
+                 parse_thought_and_conclusion_fn=doc2query_v5_parse_solution_fn,
+                 ):
+        super().__init__(
+            parse_solution_fn=parse_solution_fn, split=split,
+            args=args,
+            min_reward=min_reward,
+            thought_log_prob=thought_log_prob
+        )
+        self.task_name = "DOC2QUERY_V6"
+
+
+    def log_ground_truth(self, ground_truth):
+        pass
+
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
 # DOC2QUERY V5
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -6677,3 +6727,11 @@ _default_doc2query_v5_compute_score_valid = Doc2QueryV5ComputeScore(
     doc2query_v5_parse_solution_fn, split="valid", args=DOC2QUERY_V5_DEFAULT_PARAMS)
 doc2query_v5_compute_score_train = _default_doc2query_v5_compute_score_train.compute_score
 doc2query_v5_compute_score_valid = _default_doc2query_v5_compute_score_valid.compute_score
+
+
+_default_doc2query_v6_compute_score_train = Doc2QueryV6ComputeScore(
+    doc2query_v5_parse_solution_fn, split="train", args=DOC2QUERY_V5_DEFAULT_PARAMS)
+_default_doc2query_v6_compute_score_valid = Doc2QueryV6ComputeScore(
+    doc2query_v5_parse_solution_fn, split="valid", args=DOC2QUERY_V5_DEFAULT_PARAMS)
+doc2query_v6_compute_score_train = _default_doc2query_v6_compute_score_train.compute_score
+doc2query_v6_compute_score_valid = _default_doc2query_v6_compute_score_valid.compute_score

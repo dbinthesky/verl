@@ -13,33 +13,18 @@ setup_env() {
     export VERL_PPO_LOGGING_LEVEL='DEBUG'
     export VLLM_ATTENTION_BACKEND="XFORMERS"
     export VLLM_USE_MODELSCOPE="False"
-    export HOME="/cpfs01/shared/llm_ddd/tongjian"
+    export HOME="/mnt/shared-storage-user/ailab-hx/tongjian"
+    export CKPTS_DIR="${HOME}/ckpts"
     export HYDRA_FULL_ERROR=1
 }
 setup_env
 
 # ------------------------------
-# Proxy Configuration
-# ------------------------------
-setup_proxy() {
-    export PROXY_CREDENTIALS="tongjian:dazL5iB8mjDIOGtNj2uekzlsRCelVS38txIK98mWhKyoyLCBCCw9DNXlUOcX"
-    export PROXY_URL="aliyun-proxy.pjlab.org.cn:13128"
-    export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:128"
-    export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
-
-    export http_proxy="http://${PROXY_CREDENTIALS}@${PROXY_URL}"
-    export https_proxy="https://${PROXY_CREDENTIALS}@${PROXY_URL}"
-    export HTTP_PROXY="${https_proxy}"
-    export HTTPS_PROXY="${https_proxy}"
-}
-# setup_proxy
-
-# ------------------------------
 # Conda Environment Setup
 # ------------------------------
 activate_conda() {
-    source /cpfs01/shared/llm_ddd/tongjian/.bashrc
-    conda activate /cpfs01/shared/llm_ddd/gaoxuan/anaconda3/envs/Verl
+    source /mnt/shared-storage-user/ailab-hx/wulianyi/miniconda3/etc/profile.d/conda.sh
+    conda activate /mnt/shared-storage-user/ailab-hx/wulianyi/miniconda3/envs/verl-0.4.1_conda
 }
 activate_conda
 
@@ -47,36 +32,37 @@ activate_conda
 # Path Configuration
 # ------------------------------
 setup_path() {
-    YYMMDD=$(date +%Y-%m-%d)
-    HHMMSS=$(date +%H-%M-%S)
+    YYMMDD=$(date +%Y-%m-%d-%H)
 
-    # Hparams
     local num_gpus="${KUBERNETES_CONTAINER_RESOURCE_GPU:-8}"
     local world_size="${WORLD_SIZE:-1}"
 
-    ROLLOUT_N=20
-    TRAIN_BSZ=$((num_gpus * world_size))
+    ROLLOUT_N=8
+    TRAIN_BSZ=32
     KL_LOSS_COEF="0"
-    TEMPERATURE="0.6"
-    TRAIN_DATA_NAME="fabricate_aio_train_0730"
+    KL_COEF="0.001"
+    TEMPERATURE="1.0"
+    USE_RM_PAD="True" # must be true
+    ULYSSES_SP="1" # must be 1
+    USE_KL_IN_REWARD="True"
 
-    CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/fabricate_aio_distillv16_s3_roll16_bsz32_dapo_wo_kl_coef_wo_entropy_t08_solver_qwq_bo8_grpo_step_100"
-    TRAIN_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_train_0730.parquet"
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/fabricate_aio/fabricate_aio_test_0730.parquet"
+    HOME="/mnt/shared-storage-user/ailab-hx/tongjian"
+    CUSTOM_CODE_DIR="${HOME}/verl"
+    VERL_DIR="${HOME}/verl"
+    # BASE_MODEL_PATH="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_20250425_s1_32k_S2_32k_baseline/20250716000644/hf-30"
+    TRAIN_DATA='["/mnt/shared-storage-user/ailab-hx/tongjian/rl/fabricate_qa_self_taught/fabricate_qa_self_taught_cot_rl_input_train/index0.parquet","/mnt/shared-storage-user/ailab-hx/tongjian/rl/fabricate_qa_self_taught/fabricate_qa_self_taught_cot_rl_input_train/index1.parquet"]' 
+    VAL_DATA="/mnt/shared-storage-user/ailab-hx/tongjian/rl/fabricate_qa_self_taught/fabricate_qa_self_taught_cot_rl_input_test.parquet"
 
-    experiment_name="fabricate_aio_v18_0730_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_${TRAIN_DATA_NAME}"
+    experiment_name="fabricate_qa_st_30b_a3_think_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_agg-loss-token-mean"
+    project_name="fabricate_qa_st"
 
-    project_name="fabricate_aio"
-
-    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_aio/${experiment_name}/"
+    OUTPUT_DIR="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_rl_test/verl/grpo/fabricate_qa_self_taught/${experiment_name}"
     mkdir -p "${OUTPUT_DIR}"
 }
 setup_path
 
 # ------------------------------
-# Install Package
+
 # ------------------------------
 # setup_package() {
 #     pip3 install -U torchdata
@@ -99,66 +85,66 @@ run_training() {
     # self.config.actor.ppo_mini_batch_size //= (self.device_mesh.size() // self.ulysses_sequence_parallel_size)
     # self.config.actor.ppo_micro_batch_size_per_gpu = self.config.actor.ppo_micro_batch_size
 
-    python3 -m recipe.dapo.main_dapo \
-        custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        custom_reward_function.name=fabricate_aio_compute_score_train \
-        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        +custom_valid_reward_function.name=fabricate_aio_compute_score_valid \
+    python3 -m verl.trainer.main_ppo \
+        custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/self_taught.py" \
+        custom_reward_function.name=doc2query_self_taught_compute_score_train \
+        +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/self_taught.py" \
+        +custom_valid_reward_function.name=doc2query_self_taught_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
-        data.train_batch_size=64 \
-        data.max_prompt_length=6144 \
-        data.max_response_length=14336 \
+        data.train_batch_size=${TRAIN_BSZ} \
+        data.max_prompt_length=9216 \
+        data.max_response_length=16384 \
+        +data.ref_prompt_key="ref_prompt" \
+        +algorithm.enable_rlcd=True \
         data.filter_overlong_prompts=True \
+        data.filter_overlong_prompts_workers=256 \
         trainer.default_local_dir="${OUTPUT_DIR}" \
+        trainer.val_before_train=False \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
         actor_rollout_ref.actor.optim.lr=1e-6 \
         actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
         actor_rollout_ref.actor.optim.weight_decay=0.1 \
-        actor_rollout_ref.model.use_remove_padding=True \
+        actor_rollout_ref.actor.loss_agg_mode=token-mean \
+        actor_rollout_ref.model.use_remove_padding=${USE_RM_PAD} \
         actor_rollout_ref.actor.shuffle=True \
-        actor_rollout_ref.actor.ppo_mini_batch_size=64 \
-        actor_rollout_ref.actor.ppo_micro_batch_size=64 \
-        actor_rollout_ref.actor.ulysses_sequence_parallel_size=2 \
+        actor_rollout_ref.actor.ppo_mini_batch_size=${TRAIN_BSZ} \
+        actor_rollout_ref.actor.ppo_micro_batch_size=${TRAIN_BSZ} \
+        actor_rollout_ref.actor.ulysses_sequence_parallel_size=${ULYSSES_SP} \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=20480 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=25600 \
         actor_rollout_ref.actor.use_kl_loss=False \
-        actor_rollout_ref.actor.kl_loss_coef=0.0 \
+        actor_rollout_ref.actor.kl_loss_coef=${KL_LOSS_COEF} \
         actor_rollout_ref.actor.entropy_coeff=0.0 \
-        actor_rollout_ref.actor.grad_clip=0.9 \
-        actor_rollout_ref.actor.clip_ratio_low=0.2 \
-        actor_rollout_ref.actor.clip_ratio_high=0.28 \
-        actor_rollout_ref.actor.clip_ratio_c=10.0 \
-        reward_model.overlong_buffer.enable=True \
-        reward_model.overlong_buffer.len=$((1024 * 4)) \
-        reward_model.overlong_buffer.penalty_factor=1.0 \
-        algorithm.filter_groups.enable=False \
+        actor_rollout_ref.actor.grad_clip=1.0 \
         actor_rollout_ref.model.enable_gradient_checkpointing=True \
         actor_rollout_ref.actor.fsdp_config.param_offload=True \
         actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
-        actor_rollout_ref.rollout.tensor_model_parallel_size=4 \
+        actor_rollout_ref.rollout.tensor_model_parallel_size=8 \
         actor_rollout_ref.rollout.name="vllm" \
         actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
         actor_rollout_ref.rollout.gpu_memory_utilization=0.75 \
         actor_rollout_ref.rollout.temperature=${TEMPERATURE} \
         actor_rollout_ref.rollout.n=${ROLLOUT_N} \
         actor_rollout_ref.rollout.top_p=0.95 \
-        actor_rollout_ref.ref.ulysses_sequence_parallel_size=2 \
+        actor_rollout_ref.ref.ulysses_sequence_parallel_size=1 \
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
-        algorithm.kl_ctrl.kl_coef=${KL_LOSS_COEF} \
+        algorithm.use_kl_in_reward=${USE_KL_IN_REWARD} \
+        algorithm.kl_ctrl.kl_coef=${KL_COEF} \
+        algorithm.kl_ctrl.type="fixed" \
         algorithm.lam=0.95 \
-        reward_model.reward_manager=dapo_custom \
+        reward_model.reward_manager="custom" "$@" \
         trainer.logger='["console", "wandb"]' \
         trainer.project_name="${project_name}" \
         trainer.experiment_name="${experiment_name}" \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
-        trainer.save_freq=10 \
-        trainer.test_freq=25 \
-        trainer.total_epochs=10000 \
+        trainer.save_freq=30 \
+        trainer.test_freq=100 \
+        trainer.total_epochs=1 \
         "$@"
     local training_status=$?
 

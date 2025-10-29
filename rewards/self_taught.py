@@ -482,8 +482,8 @@ def parse_question_solution_fn(solution_str: str):
     if not solution_str.startswith("<think>"):
         solution_str = f'<think>\n{solution_str}'
     try:
-        thought = re.findall(r'<think>.*</think>',
-                             solution_str, re.DOTALL)[0]
+        thought = re.findall(r'<think>(.*)</think>',
+                             solution_str, re.DOTALL)[0].strip()
     except Exception as err:
         return None
     solution_str = solution_str.replace(thought, "")
@@ -515,6 +515,15 @@ def general_qa_parse_solution_fn(solution_str: str, extract_question_fn=parse_qu
         return None
 
     thought, conclusion = parsed
+    thought = thought.strip()
+
+    if not contain_chinese(thought):
+        try:
+            first_line = thought.split("\n")[0]
+            if not any(_ in first_line.lower() for _ in ("create", "design")):
+                return None
+        except Exception as err:
+            return None
 
     try:
         question = conclusion[conclusion.index(
@@ -764,12 +773,40 @@ class Doc2QuerySelfTaughtComputeScore(object):
                 full_rewards[queue_index] = 2.0
         return full_rewards
 
+    async def contain_critical_keywords(
+            self,
+            batch_data_sources,
+            batch_solution_str,
+            batch_ground_truth,
+        ):
+        outputs = [0.0] * len(batch_solution_str)
+        for i, (sol, gt) in enumerate(zip(batch_solution_str, batch_ground_truth)):
+            parsed = parse_question_solution_fn(sol)
+
+            score = 0.0
+            if parsed is not None:
+                thought = parsed[0]
+                thought = thought.strip().lower()
+                    
+                count = 0
+                for kw in (
+                    "example", "用户", "案例", "[MASK]", "user", "mentioned", "placeholders", "原文", 
+                    "用户", "模板", "填充", "例子", "fill in", "blank", "[SKIP CONTENT]", "[MASK", "空白点"):
+                    count += thought.count(kw)
+                
+                score = -min(count * 0.1, 2.0)
+
+            outputs[i] += score
+        return outputs
+
     def get_processes(self):
         return [
             Process(name="ans_cons",
                     function=self.same_answer_reward, is_async=True),
             Process(name="q_cons",
                     function=self.question_similarity_reward, is_async=True),
+            Process(name="Keywords", 
+                    function=self.contain_critical_keywords, is_async=True)
         ]
 
     async def _compute_score(self,
@@ -819,7 +856,7 @@ class Doc2QuerySelfTaughtComputeScore(object):
                 reward_log_str.append(f'{k}={_reward:.3f}')
             reward_log_str = "; ".join(reward_log_str)
 
-            cur_score = np.sum(scores)
+            cur_score = sum(scores)
             final_results.append(cur_score)
 
             log_flag = f"[{self.task_name} VALID]" if self.split == "valid" else f"[{self.task_name} TRAIN]"
@@ -839,10 +876,10 @@ class Doc2QuerySelfTaughtComputeScore(object):
             print(
                 f"【Golden{i}】({source})`{self.log_ground_truth(batch_ground_truth[i])}`")
             print(
-                f'[Final Reward]=({reward_log_str})|{penalty_log_str}\n')
+                f'[Final Reward]={cur_score:.4f}({reward_log_str})|{penalty_log_str}\n')
 
             if log:
-                print(f'[Thought]\n{batch_solution_str[i]}')
+                print(f'[Thought]\n{repr(batch_solution_str[i])}')
                 print()
         return final_results
 
@@ -859,7 +896,7 @@ class Doc2QuerySelfTaughtComputeScore(object):
         norm = self.parse_solution_fn(solution)
         if norm is None:
             return repr(self.clip_string(solution))
-        return norm[0]
+        return repr(norm[0])
 
     def clip_string(self, s: str):
         if len(s) > 1500:
@@ -867,7 +904,7 @@ class Doc2QuerySelfTaughtComputeScore(object):
         return s
 
     def log_ground_truth(self, ground_truth):
-        return ground_truth["question"]
+        return repr(ground_truth["question"])
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------
