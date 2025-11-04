@@ -3,7 +3,7 @@
 JOB_NAME="doc2query_v6"
 
 WORKER_IMAGE="registry.h.pjlab.org.cn/ailab/pytorch:22.04-pjlab-py3.10-torch2.2.0-cu12.1"
-WORKER_COUNT="${WORKER_COUNT:-"16"}"
+WORKER_COUNT="${WORKER_COUNT:-"8"}"
 WORKER_GPU="${WORKER_GPU:-"8"}"
 WORKER_CPU="${WORKER_CPU:-"128"}"
 WORKER_MEMORY="${WORKER_MEMORY:-"1600000"}"

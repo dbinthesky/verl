@@ -203,7 +203,8 @@ def apply_kl_penalty(data: DataProto, kl_ctrl: core_algos.AdaptiveKLController, 
     # 2.2 Expand to token-level for broadcasting (shape: (batch_size, response_length))
     norm_factor = norm_factor.expand_as(kld)
     
-    kld_top20_normalized = kld_top20 / norm_factor
+    # kld_top20_normalized = kld_top20 / norm_factor
+    kld_top20_normalized = kld_top20
 
     # --------------------------
     # Core improvement: Keep top 20% highest KLD positions

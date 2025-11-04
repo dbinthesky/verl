@@ -38,9 +38,9 @@ setup_path() {
     local world_size="${WORLD_SIZE:-1}"
 
     ROLLOUT_N=8
-    TRAIN_BSZ=128
+    TRAIN_BSZ=64
     KL_LOSS_COEF="0"
-    KL_COEF="0.5"
+    KL_COEF="0.001"
     TEMPERATURE="1.0"
     USE_RM_PAD="True" # must be true
     ULYSSES_SP="1" # must be 1

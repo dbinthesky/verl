@@ -1,4 +1,4 @@
-rewards/fabricate_qa.pyimport os
+import os
 import re
 import sys
 import json
@@ -5392,8 +5392,8 @@ class Doc2QueryV4ComputeScore(Doc2QueryV3ComputeScore):
 
     def coarse_process(self):
         return [
-            Process(name="ModelJudge",
-                    function=self.model_judge, filter_only=False, non_skip=True),
+            # Process(name="ModelJudge",
+            #         function=self.model_judge, filter_only=False, non_skip=True),
             Process(name="Keywords", function=self.contain_critical_keywords, filter_only=False, non_skip=True)
         ]
 
