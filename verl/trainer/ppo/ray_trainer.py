@@ -204,14 +204,27 @@ def apply_kl_penalty(data: DataProto, kl_ctrl: core_algos.AdaptiveKLController, 
     norm_factor = norm_factor.expand_as(kld)
     
     # kld_top20_normalized = kld_top20 / norm_factor
-    kld_top20_normalized = kld_top20
+    kld_top20_non_normalized = kld_top20
 
     # --------------------------
     # Core improvement: Keep top 20% highest KLD positions
     # --------------------------
     beta = kl_ctrl.value
+
+    ref_log_prob = data.batch["ref_log_prob"]
+    ref_log_prob_per_seq_len = ref_log_prob / (valid_counts.expand_as(kld))
+
+    metric_raw_token_level_scores = (token_level_scores * response_mask).sum(dim=-1).mean(dim=0).item()
+    metric_kld_top20_non_normalized = (kld_top20_non_normalized * response_mask).sum(dim=-1).mean(dim=0).item()
+    metric_ref_log_prob_per_seq_len = (ref_log_prob_per_seq_len * response_mask).sum(dim=-1).mean(dim=0).item()
+
+    # data.batch["ref_log_prob"]
+    # How to set kl coef？
+    # max_response_length(16384) * 0.2 * avg_kl(1.0) * beta(0.001) = 3.28最大长度下影响
+
     # token_level_rewards = token_level_scores - beta * kld
-    token_level_rewards = token_level_scores - beta * kld_top20_normalized
+    token_level_rewards = token_level_scores - beta * kld_top20_non_normalized + 0.5 * ref_log_prob_per_seq_len
+
 
     current_kl = masked_mean(kld, mask=response_mask, axis=-1)  # average over sequence
     current_kl = torch.mean(current_kl, dim=0).item()
@@ -220,7 +233,13 @@ def apply_kl_penalty(data: DataProto, kl_ctrl: core_algos.AdaptiveKLController, 
     kl_ctrl.update(current_kl=current_kl, n_steps=batch_size)
     data.batch["token_level_rewards"] = token_level_rewards
 
-    metrics = {"actor/reward_kl_penalty": current_kl, "actor/reward_kl_penalty_coeff": beta, "actor/top20_kl_ratio": (kld_top20.sum() / (kld.sum() + 1e-8)).item()}
+    metrics = {
+        "actor/reward_kl_penalty": current_kl,
+        "actor/reward_kl_penalty_coeff": beta, 
+        "actor/metric_raw_token_level_rewards": metric_raw_token_level_scores,
+        "actor/metric_kld_top20_non_normalized": metric_kld_top20_non_normalized,
+        "actor/metric_ref_log_prob_per_seq_len": metric_ref_log_prob_per_seq_len
+    }
 
     return data, metrics
 
@@ -945,6 +964,62 @@ class RayPPOTrainer:
         global_balance_stats = log_seqlen_unbalance(seqlen_list=global_seqlen_lst, partitions=global_partition_lst, prefix=logging_prefix)
         metrics.update(global_balance_stats)
 
+    def apply_mask_to_batch(self, 
+                batch: DataProto,
+                non_mask_suffix_size: int = 0,  # 后缀不mask的长度（>=0）
+                min_mask_len: int = 1, # 最小mask长度（采样ratio=0时仍生效，设0禁用）
+                max_mask_ratio: float = 0.5,  # 随机mask_ratio的上界（[0, max_mask_ratio]均匀采样）
+            ):
+        # 提取核心数据：克隆input_ids用于修改，获取原始attention_mask仅用于计算有效长度
+        input_ids = batch.batch["input_ids"].clone()  # 克隆避免修改原始input_ids
+        attention_mask = batch.batch["attention_mask"]  # 仅读取，不修改
+        batch_size, seq_len = input_ids.shape
+
+        # 获取mask token的id（确保tokenizer已配置mask_token）
+        mask_token_id = self.tokenizer.pad_token_id
+        if mask_token_id is None:
+            raise ValueError("Tokenizer does not have a mask token. Please use a tokenizer with mask_token support.")
+
+        prompt_mask_matrix = torch.zeros_like(attention_mask, dtype=torch.float32)
+        sample_mask_ratios = torch.zeros(batch_size, dtype=torch.float32)  # 每条样本的实际mask比例（mask长度/可mask长度）
+        
+        for i in range(batch_size):
+            valid_len = attention_mask[i].sum().int().item()  # 基于原始attention_mask计算有效序列长度
+            if valid_len <= 1:
+                sample_mask_ratios[i] = 0.0
+                continue
+
+            # 计算可mask的结束位置（排除后缀不mask部分）
+            maskable_end = valid_len - non_mask_suffix_size
+            if maskable_end <= min_mask_len:
+                sample_mask_ratios[i] = 0.0
+                continue
+
+            # 采样mask比例并计算目标mask长度
+            mask_ratio = torch.rand(1).item() * max_mask_ratio
+            sample_mask_ratios[i] = mask_ratio 
+
+            target_mask_len = round(maskable_end * mask_ratio)
+            if min_mask_len > 0:
+                target_mask_len = max(min_mask_len, min(target_mask_len, maskable_end))
+            else:
+                target_mask_len = min(target_mask_len, maskable_end)
+            if target_mask_len == 0:
+                continue
+            
+            # 随机选择连续mask的起始位置（确保不超出可mask范围）
+            max_start_idx = maskable_end - target_mask_len
+            start_idx = torch.randint(0, max_start_idx + 1, (1,)).item()
+            end_idx = start_idx + target_mask_len
+
+            # 标记mask位置并修改input_ids（替换为mask_token_id）
+            prompt_mask_matrix[i, start_idx:end_idx] = 1.0
+            input_ids[i, start_idx:end_idx] = mask_token_id  # 核心修改：用mask token替换input_ids对应区间
+
+        # 将修改后的input_ids放回batch（attention_mask保持原始状态）
+        batch.batch["input_ids"] = input_ids
+        return batch
+
     def fit(self):
         """
         The training loop of PPO.
@@ -1020,6 +1095,17 @@ class RayPPOTrainer:
                 with marked_timer("step", timing_raw):
                     # generate a batch
                     with marked_timer("gen", timing_raw, color="red"):
+                        # FIXME: generate_sequences with mask tokens
+                        if self.config.algorithm.rlcd_enable_prompt_mask:
+                            gen_batch = self.apply_mask_to_batch(batch=gen_batch, 
+                                non_mask_suffix_size=self.config.data.prompt_non_mask_suffix_size,
+                                min_mask_len=1,
+                                max_mask_ratio=self.config.data.prompt_max_random_mask_ratio
+                            )
+                            input_ids = gen_batch.batch["input_ids"]
+                            pad_id = self.tokenizer.pad_token_id
+                            batch_size, seq_len = input_ids.shape
+
                         if not self.async_rollout_mode:
                             gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
                         else:

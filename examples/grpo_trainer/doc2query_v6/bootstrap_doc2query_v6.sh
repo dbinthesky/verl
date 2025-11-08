@@ -29,3 +29,16 @@ rjob submit -e DISTRIBUTED_JOB=true \
     --custom-resources mellanox.com/mlnx_rdma=1 \
     --health-check "" \
     -- bash -ecx ${RUN_CMD}
+
+# rjob submit -e DISTRIBUTED_JOB=true \
+#     --image=${WORKER_IMAGE} \
+#     --host-network=true --namespace=${WORKSPACE_ID} --name ${JOB_NAME} -P ${WORKER_COUNT} --gpu ${WORKER_GPU} --cpu ${WORKER_CPU}  --memory ${WORKER_MEMORY} \
+#     --task-type=idle \
+#     --gang-start=true \
+#     --mount=gpfs://gpfs1/songdemin:/mnt/shared-storage-user/songdemin \
+#     --mount=gpfs://gpfs1/large-model-center-share-weights:/mnt/shared-storage-user/large-model-center-share-weights \
+#     --mount=gpfs://gpfs1/ailab-hx:/mnt/shared-storage-user/ailab-hx \
+#     --custom-resources rdma/mlnx_shared=8 \
+#     --custom-resources mellanox.com/mlnx_rdma=1 \
+#     --health-check "" \
+#     -- bash -ecx ${RUN_CMD}

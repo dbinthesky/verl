@@ -24,7 +24,7 @@ setup_env
 # ------------------------------
 activate_conda() {
     source /mnt/shared-storage-user/ailab-hx/wulianyi/miniconda3/etc/profile.d/conda.sh
-    conda activate /mnt/shared-storage-user/ailab-hx/gaoxuan/miniconda3/envs/verl
+    conda activate /mnt/shared-storage-user/ailab-hx/wulianyi/miniconda3/envs/verl-0.4.1_conda
 }
 activate_conda
 
@@ -49,14 +49,10 @@ setup_path() {
     HOME="/mnt/shared-storage-user/ailab-hx/tongjian"
     CUSTOM_CODE_DIR="${HOME}/verl"
     VERL_DIR="${HOME}/verl"
-    BASE_MODEL_PATH="/mnt/shared-storage-user/large-model-center-share-weights/hf_hub/models--Qwen--Qwen3-30B-A3B-Thinking-2507/snapshots/4a8a1645504d39f8c2b9eacfd6d72dac693d3488"
-    # BASE_MODEL_PATH="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_20250425_s1_32k_S2_32k_baseline/20250716000644/hf-30"
-    # BASE_MODEL_PATH="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_20250425_s1_32k_S2_32k_doc2query_merge_1010/20251011035959/hf-153"
+    BASE_MODEL_PATH="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_20250425_s1_32k_S2_32k_kcle_rlcd_enhanced_v1_6_cot_only/20251104062705/hf-204"
     TRAIN_DATA='["/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/pretrain_mix_0930_ms0_rl_inputs_train/index0.parquet","/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/pretrain_mix_0930_ms0_rl_inputs_train/index1.parquet"]' 
-    # TRAIN_DATA='["/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/pretrain_mix_0930_ms0_rl_inputs_train_sample/index0.parquet"]'
     VAL_DATA="/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/pretrain_general_doc_8k_ms0_rl_inputs_test.parquet"
 
-    # experiment_name="doc2query_v6_30b_a3_think_general_ms0_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_agg-loss-token-mean"
     experiment_name="doc2query_v6_30b_a3_think_general_ms0_2025-10-20-09_roll8_128_kl_coef_0_wo_entropy_t1.0_agg-loss-token-mean"
     project_name="doc2query_v6"
 
@@ -85,9 +81,6 @@ run_training() {
     local num_gpus="${KUBERNETES_CONTAINER_RESOURCE_GPU:-8}"
     local world_size="${WORLD_SIZE:-1}"
     local total_gpus=$((num_gpus * world_size))
-    # self.config.actor.ppo_mini_batch_size *= self.config.rollout.n
-    # self.config.actor.ppo_mini_batch_size //= (self.device_mesh.size() // self.ulysses_sequence_parallel_size)
-    # self.config.actor.ppo_micro_batch_size_per_gpu = self.config.actor.ppo_micro_batch_size
 
     python3 -m verl.trainer.main_ppo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
@@ -100,13 +93,10 @@ run_training() {
         data.train_batch_size=${TRAIN_BSZ} \
         data.max_prompt_length=9216 \
         data.max_response_length=16384 \
+        +data.ref_prompt_key="ref_prompt" \
+        +algorithm.enable_rlcd=True \
         data.filter_overlong_prompts=True \
         data.filter_overlong_prompts_workers=256 \
-        +algorithm.enable_rlcd=True \
-        +algorithm.rlcd_enable_prompt_mask=True \
-        +data.ref_prompt_key="ref_prompt" \
-        +data.prompt_max_random_mask_ratio=0.6 \
-        +data.prompt_non_mask_suffix_size=362 \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         trainer.val_before_train=False \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
@@ -115,7 +105,7 @@ run_training() {
         actor_rollout_ref.actor.optim.weight_decay=0.1 \
         actor_rollout_ref.actor.loss_agg_mode=token-mean \
         actor_rollout_ref.model.use_remove_padding=${USE_RM_PAD} \
-        actor_rollout_ref.actor.shuffle=False \
+        actor_rollout_ref.actor.shuffle=True \
         actor_rollout_ref.actor.ppo_mini_batch_size=${TRAIN_BSZ} \
         actor_rollout_ref.actor.ppo_micro_batch_size=${TRAIN_BSZ} \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=${ULYSSES_SP} \
