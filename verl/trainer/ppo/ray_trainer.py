@@ -128,12 +128,12 @@ class ResourcePoolManager:
             if num_nodes > 0:
                 raise ValueError(f"Resource pool {resource_pool_name}: {num_gpus}*{num_nodes}" + "cannot be satisfied in this ray cluster")
 
-
 def apply_kl_penalty(data: DataProto, kl_ctrl: core_algos.AdaptiveKLController, kl_penalty="kl", multi_turn=False):
     """Apply KL penalty to the token-level rewards.
 
     This function computes the KL divergence between the reference policy and current policy,
-    then applies a penalty to the token-level rewards based on this divergence.
+    then applies a penalty to the token-level rewards based on this divergence. For samples with total score < 10,
+    the total KL penalty is fixed to -10 (evenly distributed over top KLD positions).
 
     Args:
         data (DataProto): The data containing batched model outputs and inputs.
@@ -172,73 +172,107 @@ def apply_kl_penalty(data: DataProto, kl_ctrl: core_algos.AdaptiveKLController, 
     # 1. For each sample, calculate valid token count (non-padding)
     valid_counts = response_mask.sum(dim=1, keepdim=True)  # (batch_size, 1), number of valid tokens per sample
 
-    # 2. Calculate top 20% count (at least 1 token if valid count is small)
-    top_k = (valid_counts * 0.2).ceil().long()  # (batch_size, 1), 20% rounded up
-    # FIXME: read `max_response_length` from config
-    top_k = torch.clamp(top_k, min=1, max=2850)  # 限制最小值为1，最大值为2850
-    # top_k = torch.clamp(top_k, min=1)  # Ensure at least 1 token is selected if there are valid tokens
+    # 2. Calculate top_k: min(4000, valid_count) (take up to 4000 tokens, or all if less)
+    top_k = torch.min(valid_counts, torch.tensor(4000, device=valid_counts.device)).long() 
     
-    # 3. For each sample, find indices of top 20% KLD values among valid tokens
+    # 3. For each sample, find indices of top KLD values among valid tokens
     # Create a mask for invalid tokens to set their KLD to -infinity (so they are not selected)
     kld_for_selection = kld.masked_fill(response_mask == 0, -float('inf'))
 
     # 4. Get top k indices for each sample
     _, top_indices = torch.topk(kld_for_selection, k=top_k.max().item(), dim=1)  # (batch_size, max_top_k)
 
-    # 5. Create mask for top 20% positions
+    # 5. Create mask for top KLD positions
     top_k_mask = torch.zeros_like(kld, dtype=torch.float32)
     for i in range(batch_size):
         # For sample i, take only top_k[i] indices (ignore extra from max_top_k)
         num_top = top_k[i].item()
         if num_top > 0 and valid_counts[i].item() > 0:
-            # Get indices of top k valid tokens for this sample
             sample_indices = top_indices[i, :num_top]
-            top_k_mask[i, sample_indices] = 1.0  # Mark top 20% positions
+            top_k_mask[i, sample_indices] = 1.0  # Mark top KLD positions
     
-    # 6. Apply mask: only keep top 20% KLD values, others set to 0
-    kld_top20 = kld * top_k_mask  # (batch_size, response_length)
+    # 6. Apply mask: only keep top KLD values, others set to 0
+    kld_top = kld * top_k_mask  # (batch_size, response_length)
 
-    # 2.1 Calculate normalization factor: valid_count * 0.2 (avoid zero division)
-    norm_factor = valid_counts * 0.2 + 1e-8  # (batch_size, 1), e.g., 5→1.0, 10→2.0, 3→0.6
-    # 2.2 Expand to token-level for broadcasting (shape: (batch_size, response_length))
-    norm_factor = norm_factor.expand_as(kld)
-    
-    # kld_top20_normalized = kld_top20 / norm_factor
-    kld_top20_non_normalized = kld_top20
+    norm_factor = top_k.expand_as(kld)
+    kld_top_normalized = kld_top / norm_factor  # (batch_size, response_length)
 
     # --------------------------
-    # Core improvement: Keep top 20% highest KLD positions
+    # 新增逻辑：低得分样本施加固定总KL惩罚（-10）
+    # 惩罚均分在top KLD有效位置上，整个序列惩罚总和为-10
     # --------------------------
-    beta = kl_ctrl.value
+    # 1. 计算每个样本的有效token得分总和（序列维度求和）
+    sum_scores = (token_level_scores * response_mask).sum(dim=-1)  # (batch_size,) 每个样本的有效得分总和
+    metric_raw_token_level_scores = sum_scores.mean().item()
 
-    ref_log_prob = data.batch["ref_log_prob"]
-    ref_log_prob_per_seq_len = ref_log_prob / (valid_counts.expand_as(kld))
+    # 2. 标记得分总和 < 10 的样本
+    low_score_mask = sum_scores < 10  # (batch_size,) bool张量，标记低得分样本
+    low_score_count = low_score_mask.sum().item()
+    print(f"[INFO] Found {low_score_count} low-score samples (sum_scores < 10) - applying fixed total KL penalty of -10")
 
-    metric_raw_token_level_scores = (token_level_scores * response_mask).sum(dim=-1).mean(dim=0).item()
-    metric_kld_top20_non_normalized = (kld_top20_non_normalized * response_mask).sum(dim=-1).mean(dim=0).item()
-    metric_ref_log_prob_per_seq_len = (ref_log_prob_per_seq_len * response_mask).sum(dim=-1).mean(dim=0).item()
+    # 3. 计算每个样本的top KLD有效位置数量（用于均分惩罚）
+    top_valid_counts = (top_k_mask * response_mask).sum(dim=1, keepdim=True)  # (batch_size, 1) 每个样本的top KLD有效token数
+    # 避免除零（极端情况：没有有效top KLD位置时，惩罚设为0）
+    top_valid_counts_safe = torch.clamp(top_valid_counts, min=1)  # (batch_size, 1)
 
-    # data.batch["ref_log_prob"]
-    # How to set kl coef？
-    # max_response_length(16384) * 0.2 * avg_kl(1.0) * beta(0.001) = 3.28最大长度下影响
+    # 4. 计算基础惩罚项（正常样本：beta*归一化KLD；低得分样本：-10均分）
+    # 正常样本惩罚
+    normal_penalty = kl_ctrl.value * kld_top_normalized  # (batch_size, response_length)
+    # 低得分样本惩罚：-10 均分在top KLD有效位置上
+    low_score_penalty_per_token = (-10.0) / top_valid_counts_safe  # (batch_size, 1) 每个top KLD位置的惩罚值
+    low_score_penalty = low_score_penalty_per_token * top_k_mask  # 只在top KLD位置施加惩罚，其他位置为0
 
-    # token_level_rewards = token_level_scores - beta * kld
-    token_level_rewards = token_level_scores - beta * kld_top20_non_normalized + 0.5 * ref_log_prob_per_seq_len
+    # 5. 合并最终惩罚项
+    low_score_mask_expanded = low_score_mask.unsqueeze(1).expand_as(normal_penalty)  # (batch_size, response_length)
+    final_penalty = torch.where(
+        low_score_mask_expanded,
+        low_score_penalty,
+        normal_penalty
+    )
+    # 确保padding位置惩罚为0（双重保险）
+    final_penalty = final_penalty * response_mask
 
+    # --------------------------
+    # 验证低得分样本惩罚总和（可选，调试用）
+    # --------------------------
+    if low_score_count > 0:
+        low_score_penalty_sums = (final_penalty[low_score_mask] * response_mask[low_score_mask]).sum(dim=1)
+        avg_low_score_penalty_sum = low_score_penalty_sums.mean().item()
+        print(f"[DEBUG] Low-score samples average penalty sum: {avg_low_score_penalty_sum:.2f} (target: -10)")
 
-    current_kl = masked_mean(kld, mask=response_mask, axis=-1)  # average over sequence
+    # --------------------------
+    # 原有逻辑保留，使用最终惩罚项计算奖励
+    # --------------------------
+    # 计算惩罚项相关指标
+    normal_sample_mask = ~low_score_mask  # (batch_size,)
+    if normal_sample_mask.any():
+        normal_kld_top_normalized = (kld_top_normalized[normal_sample_mask] * response_mask[normal_sample_mask]).sum() / response_mask[normal_sample_mask].sum()
+    else:
+        normal_kld_top_normalized = 0.0
+    
+    metric_kld_top_normalized = normal_kld_top_normalized.item()
+
+    # 计算调整后的token-level rewards
+    token_level_rewards = token_level_scores - final_penalty
+
+    # 计算整体KL指标（用于更新KL控制器）
+    current_kl = masked_mean(kld, mask=response_mask, axis=-1)  # average over sequence for each sample
     current_kl = torch.mean(current_kl, dim=0).item()
 
-    # according to https://github.com/huggingface/trl/blob/951ca1841f29114b969b57b26c7d3e80a39f75a0/trl/trainer/ppo_trainer.py#L837
+    # 根据TRL的实现更新KL控制器
     kl_ctrl.update(current_kl=current_kl, n_steps=batch_size)
     data.batch["token_level_rewards"] = token_level_rewards
 
+    # 扩展指标
     metrics = {
         "actor/reward_kl_penalty": current_kl,
-        "actor/reward_kl_penalty_coeff": beta, 
+        "actor/reward_kl_penalty_coeff": kl_ctrl.value,
         "actor/metric_raw_token_level_rewards": metric_raw_token_level_scores,
-        "actor/metric_kld_top20_non_normalized": metric_kld_top20_non_normalized,
-        "actor/metric_ref_log_prob_per_seq_len": metric_ref_log_prob_per_seq_len
+        "actor/metric_kld_top_normalized": metric_kld_top_normalized,
+        "actor/low_score_sample_count": low_score_count,
+        "actor/low_score_sample_ratio": low_score_count / batch_size if batch_size > 0 else 0.0,
+        "actor/avg_final_penalty": masked_mean(final_penalty, mask=response_mask, axis=[0,1]).item(),
+        "actor/avg_low_score_penalty_sum": avg_low_score_penalty_sum if low_score_count > 0 else 0.0
     }
 
     return data, metrics
