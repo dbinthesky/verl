@@ -18,7 +18,10 @@ Design Philosophy:
 
 from __future__ import annotations
 
+import os
+import sys
 import math
+import logging
 import asyncio as aio
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -927,6 +930,161 @@ def create_context(
 
 
 # ==============================================================================
+# Structured Logging Module - Using structlog
+# ==============================================================================
+
+"""
+Structured JSON logging with async support.
+
+Installation:
+    pip install structlog
+
+Usage:
+    from reward import setup_logging, get_logger
+
+    # Setup once at startup
+    setup_logging(log_dir="./logs", log_level="INFO")
+
+    # Get logger
+    logger = get_logger(__name__)
+
+    # Log structured data
+    logger.info("pipeline_started", batch_size=32, model="gpt-4")
+    logger.error("api_error", error_code=500, retry_count=3)
+"""
+
+try:
+    import structlog
+    from structlog.types import FilteringBoundLogger
+    STRUCTLOG_AVAILABLE = True
+except ImportError:
+    STRUCTLOG_AVAILABLE = False
+    FilteringBoundLogger = Any  # Fallback type
+
+
+def setup_logging(
+    log_dir: str = "./logs",
+    log_level: str = "INFO",
+    log_filename: Optional[str] = None,
+    console_output: bool = True,
+    json_indent: Optional[int] = None
+) -> Any:
+    """Setup structured JSON logging with file + console output.
+
+    Args:
+        log_dir: Directory for log files
+        log_level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        log_filename: Custom filename (default: app_YYYYMMDD_HHMMSS.jsonl)
+        console_output: Enable console output (human-readable)
+        json_indent: JSON indent (None=JSONL compact, 2=pretty)
+
+    Returns:
+        Root logger
+
+    Raises:
+        ImportError: If structlog is not installed
+
+    Example:
+        >>> setup_logging(log_dir="./logs", log_level="INFO")
+        >>> logger = get_logger(__name__)
+        >>> logger.info("event", key="value", count=42)
+    """
+    if not STRUCTLOG_AVAILABLE:
+        raise ImportError(
+            "structlog is required for logging. Install: pip install structlog"
+        )
+
+    from pathlib import Path
+    from datetime import datetime
+
+    # Create log directory
+    log_dir_path = Path(log_dir)
+    log_dir_path.mkdir(parents=True, exist_ok=True)
+
+    # Generate filename
+    if log_filename is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_filename = f"app_{timestamp}.jsonl"
+
+    log_file = log_dir_path / log_filename
+
+    # Configure stdlib logging backend
+    logging.basicConfig(
+        format="%(message)s",
+        level=getattr(logging, log_level.upper()),
+        handlers=[]
+    )
+
+    # File handler (JSON/JSONL)
+    file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
+    file_handler.setLevel(getattr(logging, log_level.upper()))
+    file_handler.setFormatter(
+        structlog.stdlib.ProcessorFormatter(
+            processor=structlog.processors.JSONRenderer(indent=json_indent)
+        )
+    )
+    logging.root.addHandler(file_handler)
+
+    # Console handler (human-readable)
+    if console_output:
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(getattr(logging, log_level.upper()))
+        console_handler.setFormatter(
+            structlog.stdlib.ProcessorFormatter(
+                processor=structlog.dev.ConsoleRenderer(colors=True)
+            )
+        )
+        logging.root.addHandler(console_handler)
+
+    # Configure structlog
+    structlog.configure(
+        processors=[
+            structlog.stdlib.filter_by_level,
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.add_logger_name,
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.CallsiteParameterAdder([
+                structlog.processors.CallsiteParameter.FILENAME,
+                structlog.processors.CallsiteParameter.LINENO,
+                structlog.processors.CallsiteParameter.FUNC_NAME,
+            ]),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.processors.UnicodeDecoder(),
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
+    )
+
+    print(f"[Logging] File: {log_file}")
+    print(f"[Logging] Level: {log_level}, Console: {console_output}")
+
+    return get_logger("root")
+
+
+def get_logger(name: str) -> Any:
+    """Get structured logger.
+
+    Args:
+        name: Logger name (typically __name__)
+
+    Returns:
+        Structured logger instance
+
+    Example:
+        >>> logger = get_logger(__name__)
+        >>> logger.info("event", user_id=123, action="login")
+    """
+    if not STRUCTLOG_AVAILABLE:
+        # Fallback to standard logging
+        return logging.getLogger(name)
+
+    return structlog.get_logger(name)
+
+
+# ==============================================================================
 # Framework Version & Exports
 # ==============================================================================
 
@@ -961,8 +1119,13 @@ __all__ = [
     'LLMError',
     'RateLimitError',
 
+    # Logging
+    'setup_logging',
+    'get_logger',
+
     # Utilities
     'create_context',
+    'create_agent',
 ]
 
 
@@ -1089,10 +1252,15 @@ class Agent:
         """
         self.config = config
         self._client: Optional[Any] = None
+        self._logger = get_logger(f"agent.{config.model}")
 
         # Get API key
         self.api_key = config.api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
+            self._logger.error("agent_init_failed",
+                reason="missing_api_key",
+                model=config.model
+            )
             raise ValueError("API key not provided and OPENAI_API_KEY env var not set")
 
     async def _get_client(self):
@@ -1106,6 +1274,10 @@ class Agent:
                     timeout=self.config.timeout
                 )
             except ImportError:
+                self._logger.error("agent_init_failed",
+                    reason="openai_not_installed",
+                    model=self.config.model
+                )
                 raise ImportError("openai package not installed. Run: pip install openai")
         return self._client
 
@@ -1169,6 +1341,11 @@ class Agent:
                     try:
                         content = postprocess_fn(content)
                     except Exception as e:
+                        self._logger.error("postprocess_failed",
+                            error_message=str(e),
+                            response_length=len(content),
+                            prompt_length=len(prompt)
+                        )
                         raise PostprocessError(f"Postprocess failed: {e}")
 
                 return LLMResponse(
@@ -1189,18 +1366,38 @@ class Agent:
 
                 # Detect rate limit errors
                 if 'rate' in error_msg or '429' in error_msg:
+                    self._logger.error("api_call_failed",
+                        error_type="rate_limit",
+                        error_message=str(e),
+                        model=self.config.model,
+                        prompt_length=len(prompt)
+                    )
                     raise RateLimitError(f"Rate limit exceeded: {e}")
 
                 # Other API errors are retryable
+                self._logger.error("api_call_failed",
+                    error_type="api_error",
+                    error_message=str(e),
+                    model=self.config.model,
+                    prompt_length=len(prompt)
+                )
                 raise APIError(f"API call failed: {e}")
 
         try:
             return await _call_api()
         except (RateLimitError, APIError) as e:
-            print(f"[Agent] Generation failed after {self.config.max_retries} retries: {e}")
+            self._logger.error("generation_failed_after_retries",
+                error_type=type(e).__name__,
+                error_message=str(e),
+                max_retries=self.config.max_retries,
+                model=self.config.model
+            )
             return None
         except PostprocessError as e:
-            print(f"[Agent] Postprocessing failed: {e}")
+            self._logger.error("generation_failed_postprocess",
+                error_message=str(e),
+                model=self.config.model
+            )
             return None
 
     async def batch_generate(self,
@@ -1255,7 +1452,21 @@ class Agent:
 
         if show_progress and desc:
             success_count = sum(1 for _, resp in results if resp is not None)
+            failed_count = len(unique_prompts) - success_count
+            failure_rate = failed_count / len(unique_prompts) if unique_prompts else 0
+
             print(f"[Agent] {desc} - Completed: {success_count}/{len(unique_prompts)} successful")
+
+            # Log high failure rate
+            if failure_rate > 0.2:  # More than 20% failures
+                self._logger.warning("batch_high_failure_rate",
+                    desc=desc,
+                    total=len(unique_prompts),
+                    successful=success_count,
+                    failed=failed_count,
+                    failure_rate=failure_rate,
+                    model=self.config.model
+                )
 
         # Map back to original order if deduplicated
         if deduplicate:
