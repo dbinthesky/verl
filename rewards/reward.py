@@ -586,12 +586,8 @@ class TopologyGraph:
             all_connected.add(edge.to_node)
 
         isolated = set(self.nodes.keys()) - all_connected
-
-        # Allow isolated nodes only if there's exactly one node total
-        # Otherwise, all nodes must be connected
-        if isolated and len(self.nodes) > 1:
-            raise ValueError(f"Isolated nodes found: {isolated}. "
-                           f"All nodes must be connected in a multi-node topology.")
+        if len(isolated) > 1:  # Allow single root node
+            raise ValueError(f"Isolated nodes found: {isolated}")
 
         # Try topological sort (will raise if cycles exist)
         self.topological_sort()
@@ -707,9 +703,6 @@ class PipelineExecutor:
                         original_inputs: List[Any]) -> List[Optional[Any]]:
         """Get inputs for a node from predecessor outputs or original inputs.
 
-        Strategy: Nodes always receive structured data (from parser/transformer),
-        not scores from rule/judge nodes. This maintains type consistency.
-
         Args:
             node_name: Name of node to get inputs for
             original_inputs: Original batch inputs
@@ -725,32 +718,25 @@ class PipelineExecutor:
             return [inp if i not in self.skip_indices else None
                    for i, inp in enumerate(original_inputs)]
 
-        # Strategy: Find the closest upstream PARSER/TRANSFORMER node
-        # Use BFS to traverse backwards through the graph
-        visited = set()
-        queue = deque(predecessors)
+        # Strategy: Use output from first parser/transformer node in chain
+        # For rule/judge nodes, use the parser's output
+        # This ensures type consistency
 
-        while queue:
-            pred_name = queue.popleft()
-            if pred_name in visited:
-                continue
-            visited.add(pred_name)
-
+        # Find the first parser/transformer predecessor
+        for pred_name in predecessors:
             pred_node = self.topology.nodes[pred_name]
-            pred_result = self.results.get(pred_name)
-
-            # If this is a parser/transformer node, use its output
             if pred_node.node_type in (NodeType.PARSER, NodeType.TRANSFORMER, NodeType.LLM_GENERATOR):
+                pred_result = self.results.get(pred_name)
                 if pred_result is not None:
                     return pred_result.outputs
 
-            # Otherwise, continue searching backwards
-            for upstream in self.topology.reverse_adjacency.get(pred_name, []):
-                queue.append(upstream)
+        # Fallback: use first predecessor's output
+        pred_result = self.results.get(predecessors[0])
+        if pred_result is None:
+            # Predecessor hasn't executed yet (shouldn't happen with topo sort)
+            raise RuntimeError(f"Predecessor {predecessors[0]} of {node_name} not executed")
 
-        # Fallback: use original inputs with skip mask
-        return [inp if i not in self.skip_indices else None
-               for i, inp in enumerate(original_inputs)]
+        return pred_result.outputs
 
     async def _execute_node_wrapper(self,
                                     node: Node,
@@ -968,9 +954,400 @@ __all__ = [
     'TopologyGraph',
     'PipelineExecutor',
 
+    # LLM Agent
+    'Agent',
+    'AgentConfig',
+    'LLMResponse',
+    'LLMError',
+    'RateLimitError',
+
     # Utilities
     'create_context',
 ]
+
+
+# ==============================================================================
+# LLM Agent Module - Async OpenAI Client with Strong Typing
+# ==============================================================================
+
+import os
+from dataclasses import replace
+
+
+class LLMError(Exception):
+    """Base exception for LLM-related errors."""
+    pass
+
+
+class RateLimitError(LLMError):
+    """Rate limit exceeded."""
+    pass
+
+
+class PostprocessError(LLMError):
+    """Postprocessing failed."""
+    pass
+
+
+class APIError(LLMError):
+    """API call failed."""
+    pass
+
+
+@dataclass(frozen=True)
+class AgentConfig:
+    """Configuration for LLM Agent.
+
+    Attributes:
+        model: Model name (e.g., 'gpt-4', 'claude-3-sonnet')
+        base_url: API base URL (None for default OpenAI endpoint)
+        api_key: Single API key (None to use env var OPENAI_API_KEY)
+        system_message: System message for all requests
+        max_tokens: Maximum tokens to generate
+        temperature: Sampling temperature [0, 2]
+        top_p: Nucleus sampling parameter [0, 1]
+        seed: Random seed for reproducibility
+        timeout: Request timeout in seconds
+        max_retries: Maximum retry attempts for transient errors
+        retry_min_wait: Minimum wait between retries (seconds)
+        retry_max_wait: Maximum wait between retries (seconds)
+    """
+    model: str = "gpt-3.5-turbo"
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    system_message: str = "You are a helpful and harmless assistant."
+    max_tokens: int = 1024
+    temperature: float = 0.6
+    top_p: float = 0.95
+    seed: int = 100745534
+    timeout: float = 60.0
+    max_retries: int = 4
+    retry_min_wait: float = 5.0
+    retry_max_wait: float = 20.0
+
+    def __post_init__(self):
+        if self.temperature < 0 or self.temperature > 2:
+            raise ValueError(f"temperature must be in [0, 2], got {self.temperature}")
+        if self.top_p < 0 or self.top_p > 1:
+            raise ValueError(f"top_p must be in [0, 1], got {self.top_p}")
+        if self.max_retries < 0:
+            raise ValueError(f"max_retries must be >= 0, got {self.max_retries}")
+
+
+@dataclass
+class LLMResponse:
+    """Response from LLM with metadata.
+
+    Attributes:
+        content: Generated text content
+        prompt: Original prompt
+        model: Model used
+        finish_reason: Why generation stopped
+        usage: Token usage stats
+        latency: Response time in seconds
+    """
+    content: str
+    prompt: str
+    model: str
+    finish_reason: Optional[str] = None
+    usage: Optional[Dict[str, int]] = None
+    latency: float = 0.0
+
+
+class Agent:
+    """Async LLM Agent with strong typing and robust error handling.
+
+    Features:
+    - Type-safe configuration
+    - Automatic retries with exponential backoff
+    - Batch processing with concurrency control
+    - Prompt deduplication
+    - Client connection pooling
+    - Comprehensive error handling
+
+    Example:
+        config = AgentConfig(
+            model="gpt-4",
+            temperature=0.7,
+            max_tokens=2048
+        )
+        agent = Agent(config)
+
+        prompts = ["Question 1", "Question 2"]
+        responses = await agent.batch_generate(
+            prompts=prompts,
+            max_concurrent=10,
+            postprocess_fn=lambda x: x.strip()
+        )
+    """
+
+    def __init__(self, config: AgentConfig):
+        """Initialize agent with configuration.
+
+        Args:
+            config: Agent configuration
+        """
+        self.config = config
+        self._client: Optional[Any] = None
+
+        # Get API key
+        self.api_key = config.api_key or os.getenv("OPENAI_API_KEY")
+        if not self.api_key:
+            raise ValueError("API key not provided and OPENAI_API_KEY env var not set")
+
+    async def _get_client(self):
+        """Get or create AsyncOpenAI client (lazy initialization)."""
+        if self._client is None:
+            try:
+                from openai import AsyncOpenAI
+                self._client = AsyncOpenAI(
+                    api_key=self.api_key,
+                    base_url=self.config.base_url,
+                    timeout=self.config.timeout
+                )
+            except ImportError:
+                raise ImportError("openai package not installed. Run: pip install openai")
+        return self._client
+
+    async def generate(self,
+                      prompt: str,
+                      postprocess_fn: Optional[Callable[[str], str]] = None,
+                      **override_kwargs) -> Optional[LLMResponse]:
+        """Generate single response.
+
+        Args:
+            prompt: Input prompt
+            postprocess_fn: Optional function to clean up response
+            **override_kwargs: Override config parameters for this call
+
+        Returns:
+            LLMResponse or None if generation failed
+        """
+        import time
+        from tenacity import (
+            retry, stop_after_attempt, wait_exponential,
+            retry_if_exception_type
+        )
+
+        @retry(
+            stop=stop_after_attempt(self.config.max_retries),
+            wait=wait_exponential(
+                multiplier=1,
+                min=self.config.retry_min_wait,
+                max=self.config.retry_max_wait
+            ),
+            retry=retry_if_exception_type((RateLimitError, APIError))
+        )
+        async def _call_api():
+            client = await self._get_client()
+
+            # Build request kwargs
+            request_kwargs = {
+                'model': self.config.model,
+                'messages': [
+                    {'role': 'system', 'content': self.config.system_message},
+                    {'role': 'user', 'content': prompt}
+                ],
+                'max_tokens': self.config.max_tokens,
+                'temperature': self.config.temperature,
+                'top_p': self.config.top_p,
+                'seed': self.config.seed
+            }
+
+            # Apply overrides
+            request_kwargs.update(override_kwargs)
+
+            start = time.time()
+            try:
+                response = await client.chat.completions.create(**request_kwargs)
+                latency = time.time() - start
+
+                content = response.choices[0].message.content
+
+                # Postprocess if needed
+                if postprocess_fn:
+                    try:
+                        content = postprocess_fn(content)
+                    except Exception as e:
+                        raise PostprocessError(f"Postprocess failed: {e}")
+
+                return LLMResponse(
+                    content=content,
+                    prompt=prompt,
+                    model=response.model,
+                    finish_reason=response.choices[0].finish_reason,
+                    usage={
+                        'prompt_tokens': response.usage.prompt_tokens,
+                        'completion_tokens': response.usage.completion_tokens,
+                        'total_tokens': response.usage.total_tokens
+                    } if response.usage else None,
+                    latency=latency
+                )
+
+            except Exception as e:
+                error_msg = str(e).lower()
+
+                # Detect rate limit errors
+                if 'rate' in error_msg or '429' in error_msg:
+                    raise RateLimitError(f"Rate limit exceeded: {e}")
+
+                # Other API errors are retryable
+                raise APIError(f"API call failed: {e}")
+
+        try:
+            return await _call_api()
+        except (RateLimitError, APIError) as e:
+            print(f"[Agent] Generation failed after {self.config.max_retries} retries: {e}")
+            return None
+        except PostprocessError as e:
+            print(f"[Agent] Postprocessing failed: {e}")
+            return None
+
+    async def batch_generate(self,
+                            prompts: List[str],
+                            max_concurrent: int = 10,
+                            postprocess_fn: Optional[Callable[[str], str]] = None,
+                            deduplicate: bool = True,
+                            desc: Optional[str] = None,
+                            show_progress: bool = True
+                            ) -> List[Tuple[str, Optional[LLMResponse]]]:
+        """Generate responses for batch of prompts with concurrency control.
+
+        Args:
+            prompts: List of input prompts
+            max_concurrent: Maximum concurrent requests
+            postprocess_fn: Optional postprocessing function
+            deduplicate: If True, deduplicate prompts before calling API
+            desc: Description for progress bar
+            show_progress: Whether to show progress
+
+        Returns:
+            List of (prompt, response) tuples in original order
+        """
+        if not prompts:
+            return []
+
+        # Deduplicate prompts
+        if deduplicate:
+            unique_prompts = list(dict.fromkeys(prompts))  # Preserve order
+            prompt_to_indices = defaultdict(list)
+            for idx, prompt in enumerate(prompts):
+                prompt_to_indices[prompt].append(idx)
+        else:
+            unique_prompts = prompts
+            prompt_to_indices = {p: [i] for i, p in enumerate(prompts)}
+
+        # Create semaphore for concurrency control
+        semaphore = aio.Semaphore(max_concurrent)
+
+        async def _generate_with_semaphore(prompt):
+            async with semaphore:
+                return prompt, await self.generate(prompt, postprocess_fn)
+
+        # Execute all requests
+        tasks = [_generate_with_semaphore(p) for p in unique_prompts]
+
+        if show_progress and desc:
+            print(f"[Agent] {desc} - {len(unique_prompts)} unique prompts "
+                  f"(from {len(prompts)} total, concurrency={max_concurrent})")
+
+        results = await aio.gather(*tasks)
+
+        if show_progress and desc:
+            success_count = sum(1 for _, resp in results if resp is not None)
+            print(f"[Agent] {desc} - Completed: {success_count}/{len(unique_prompts)} successful")
+
+        # Map back to original order if deduplicated
+        if deduplicate:
+            result_map = {prompt: resp for prompt, resp in results}
+            outputs = []
+            for prompt in prompts:
+                outputs.append((prompt, result_map.get(prompt)))
+            return outputs
+        else:
+            return results
+
+    async def batch_generate_simple(self,
+                                    prompts: List[str],
+                                    max_concurrent: int = 10,
+                                    postprocess_fn: Optional[Callable[[str], str]] = None,
+                                    desc: Optional[str] = None
+                                    ) -> List[Optional[str]]:
+        """Simplified batch generation returning only content strings.
+
+        Compatible with original Agent.run() interface.
+
+        Args:
+            prompts: List of input prompts
+            max_concurrent: Maximum concurrent requests
+            postprocess_fn: Optional postprocessing function
+            desc: Description for logging
+
+        Returns:
+            List of generated strings (None for failed generations)
+        """
+        results = await self.batch_generate(
+            prompts=prompts,
+            max_concurrent=max_concurrent,
+            postprocess_fn=postprocess_fn,
+            desc=desc
+        )
+
+        return [resp.content if resp else None for _, resp in results]
+
+    async def close(self):
+        """Close the client connection."""
+        if self._client:
+            await self._client.close()
+            self._client = None
+
+    async def __aenter__(self):
+        """Context manager entry."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        await self.close()
+
+
+# Backward compatibility: create Agent from old-style kwargs
+def create_agent(
+    system: Optional[str] = None,
+    model: str = "gpt-3.5-turbo",
+    base_url: Optional[str] = None,
+    api_key: Optional[str] = None,
+    request_kwargs: Optional[Dict[str, Any]] = None
+) -> Agent:
+    """Create Agent from old-style parameters (backward compatibility).
+
+    Args:
+        system: System message
+        model: Model name
+        base_url: API base URL
+        api_key: API key
+        request_kwargs: Additional request parameters
+
+    Returns:
+        Agent instance
+    """
+    config = AgentConfig(
+        model=model,
+        base_url=base_url,
+        api_key=api_key,
+        system_message=system or "You are a helpful and harmless assistant."
+    )
+
+    # Apply request_kwargs if provided
+    if request_kwargs:
+        config = replace(
+            config,
+            max_tokens=request_kwargs.get('max_tokens', config.max_tokens),
+            temperature=request_kwargs.get('temperature', config.temperature),
+            top_p=request_kwargs.get('top_p', config.top_p),
+            seed=request_kwargs.get('seed', config.seed)
+        )
+
+    return Agent(config)
 
 
 if __name__ == "__main__":
