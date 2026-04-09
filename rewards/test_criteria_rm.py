@@ -35,7 +35,7 @@ from criteria_rm import (
 
 UNITTEST_AGENT = Agent(**{
     "model": "qwen25_32B_instruct",
-    "base_url": "http://10.130.142.154:8000/v1",
+    "base_url": "http://10.102.250.32:28000/v1",
     "api_keys": "EMPTY",
     "request_kwargs": {
         "temperature": 0.7,

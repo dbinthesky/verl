@@ -1,12 +1,12 @@
 #!/bin/bash
 
-JOB_NAME="doc2query_v3_rl"
+JOB_NAME="rlvr_rl"
 
 WORKER_IMAGE="registry.h.pjlab.org.cn/ailab/pytorch:22.04-pjlab-py3.10-torch2.2.0-cu12.1"
 WORKER_COUNT="${WORKER_COUNT:-"4"}"
 WORKER_GPU="${WORKER_GPU:-"8"}"
-WORKER_CPU="${WORKER_CPU:-"32"}"
-WORKER_MEMORY="${WORKER_MEMORY:-"1400000"}"
+WORKER_CPU="${WORKER_CPU:-"100"}"
+WORKER_MEMORY="${WORKER_MEMORY:-"1800000"}"
 
 # [hx]
 # WORKSPACE_ID="ailab-puyullmgpu"
@@ -15,7 +15,7 @@ WORKSPACE_ID="ailab-hx"
 CHARGE_GROUP="hx_gpu"
 # WORKSPACE_ID="ailab-puyullmgpunew"
 # CHARGE_GROUP="puyullmgpunew_gpu"
-RUN_CMD="/mnt/shared-storage-user/ailab-hx/tongjian/verl/examples/grpo_trainer/doc2query_v3/dapo_qwen3-30b-a3_doc2query_v3.sh"
+RUN_CMD="/mnt/shared-storage-user/ailab-hx/tongjian/verl/examples/grpo_trainer/rlvr/grpo_qwen3-30b-a3_general_rlvr.sh"
 
 chmod +x ${RUN_CMD}
 
@@ -27,8 +27,22 @@ rjob submit -e DISTRIBUTED_JOB=true \
     --mount=gpfs://gpfs1/songdemin:/mnt/shared-storage-user/songdemin \
     --mount=gpfs://gpfs1/large-model-center-share-weights:/mnt/shared-storage-user/large-model-center-share-weights \
     --mount=gpfs://gpfs1/ailab-hx:/mnt/shared-storage-user/ailab-hx \
-    --mount=gpfs://gpfs2/intern-pretrain-shared02 \
     --custom-resources rdma/mlnx_shared=8 \
     --custom-resources mellanox.com/mlnx_rdma=1 \
     --health-check "" \
     -- bash -ecx ${RUN_CMD}
+
+# rjob submit -e DISTRIBUTED_JOB=true \
+#     --image=${WORKER_IMAGE} \
+#     --host-network=true --namespace=${WORKSPACE_ID} --name ${JOB_NAME} -P ${WORKER_COUNT} --gpu ${WORKER_GPU} --cpu ${WORKER_CPU}  --memory ${WORKER_MEMORY} \
+#     --task-type=idle \
+#     --restart-policy=restartjobonfailure \
+#     --backoff_limit=10 \
+#     --gang-start=true \
+#     --mount=gpfs://gpfs1/songdemin:/mnt/shared-storage-user/songdemin \
+#     --mount=gpfs://gpfs1/large-model-center-share-weights:/mnt/shared-storage-user/large-model-center-share-weights \
+#     --mount=gpfs://gpfs1/ailab-hx:/mnt/shared-storage-user/ailab-hx \
+#     --custom-resources rdma/mlnx_shared=8 \
+#     --custom-resources mellanox.com/mlnx_rdma=1 \
+#     --health-check "" \
+#     -- bash -ecx ${RUN_CMD}

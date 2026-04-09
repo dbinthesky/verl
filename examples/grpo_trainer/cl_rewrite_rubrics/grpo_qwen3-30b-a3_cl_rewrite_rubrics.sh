@@ -9,7 +9,7 @@ setup_env() {
     export WANDB_API_KEY="2e3700316fecb744b594dff815d1b11fbe514d24"
     export WANDB_BASE_URL=https://api.bandw.top
 
-        export WANDB_MODE="offline"
+    export WANDB_MODE="offline"
     export VERL_PPO_LOGGING_LEVEL='DEBUG'
     export VLLM_ATTENTION_BACKEND="XFORMERS"
     export VLLM_USE_MODELSCOPE="False"
@@ -37,41 +37,27 @@ setup_path() {
     local num_gpus="${KUBERNETES_CONTAINER_RESOURCE_GPU:-8}"
     local world_size="${WORLD_SIZE:-1}"
 
+    USE_RM_PAD="True"
     ROLLOUT_N=8
-    TRAIN_BSZ=32
+    TRAIN_BSZ=64
     KL_LOSS_COEF="0"
-    KL_COEF="1.2" # NORM 1; NON-NORM 0.001
+    KL_COEF="0" # NORM 1; NON-NORM 0.001
     TEMPERATURE="1.0"
-    USE_RM_PAD="True" # must be true
     ULYSSES_SP="1" # must be 1
     USE_KL_IN_REWARD="True"
 
     HOME="/mnt/shared-storage-user/ailab-hx/tongjian"
     CUSTOM_CODE_DIR="${HOME}/verl"
     VERL_DIR="${HOME}/verl"
-    # ACTOR_MODEL_PATH="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v6/doc2query_v6_30b_a3_think_general_ms0_2025-11-20-15_roll8_32_kl_coef_0_wo_entropy_t1.0_agg-loss-token-mean_step_50"
-    # ACTOR_MODEL_PATH="/mnt/shared-storage-user/large-model-center-share-weights/hf_hub/models--Qwen--Qwen3-30B-A3B-Thinking-2507/snapshots/4a8a1645504d39f8c2b9eacfd6d72dac693d3488"
-    # ACTOR_MODEL_PATH="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_20250425_s1_32k_S2_32k_baseline/20250716000644/hf-30"
-    # ACTOR_MODEL_PATH="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_20250425_s1_32k_S2_32k_doc2query_merge_1010/20251011035959/hf-153"
-    # ACTOR_MODEL_PATH="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_thinking_2507_doc2query_v6_coldstart_sample/20251120034354/hf-314"
-    ACTOR_MODEL_PATH="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_thinking_doc2query_v6_enhance_251125/20251126070947/hf-928"
-    # ACTOR_MODEL_PATH="/mnt/shared-storage-user/large-model-center-share-weights/hf_hub/models--Qwen--Qwen3-30B-A3B-Instruct-2507/snapshots/3d729a084f14c9502775d59d95c71385293f5518"
-    # ACTOR_MODEL_PATH="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_thinking_doc2query_v6_enhance_code_251217/20251217045347/hf-42"
-    
-    # TRAIN_DATA='/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/encc_low_8k_rl_inputs_train.parquet'
-    # TRAIN_DATA='["/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/pretrain_mix_0930_ms0_rl_inputs_train/index0.parquet","/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/pretrain_mix_0930_ms0_rl_inputs_train/index1.parquet"]' 
-    # TRAIN_DATA='["/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/math_retrieval_1209_rl_inputs_train/index0.parquet","/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/math_retrieval_1209_rl_inputs_train/index1.parquet", "/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/math_retrieval_1209_rl_inputs_train/index2.parquet", "/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/math_retrieval_1209_rl_inputs_train/index3.parquet"]' 
-    TRAIN_DATA='["/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/internlm_2_5_archive_251206_rl_inputs_train/index0.parquet","/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/internlm_2_5_archive_251206_rl_inputs_train/index1.parquet", "/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/internlm_2_5_archive_251206_rl_inputs_train/index2.parquet", "/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/internlm_2_5_archive_251206_rl_inputs_train/index3.parquet"]' 
-    # TRAIN_DATA='["/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/pretrain_mix_0930_ms0_rl_inputs_train_sample/index0.parquet"]'
-    VAL_DATA="/mnt/shared-storage-user/ailab-hx/tongjian/rl/doc2query_v6/pretrain_general_doc_8k_ms0_rl_inputs_test.parquet"
+    BASE_MODEL_PATH="/mnt/shared-storage-user/large-model-center-share-weights/hf_hub/models--Qwen--Qwen3-30B-A3B-Thinking-2507/snapshots/4a8a1645504d39f8c2b9eacfd6d72dac693d3488"
+    TRAIN_DATA='["/mnt/shared-storage-user/ailab-hx/tongjian/rl/cl_rewrite_rubrics/rl_inputs_dclm_2k_7k/index0.parquet","/mnt/shared-storage-user/ailab-hx/tongjian/rl/cl_rewrite_rubrics/rl_inputs_dclm_2k_7k/index1.parquet", "/mnt/shared-storage-user/ailab-hx/tongjian/rl/cl_rewrite_rubrics/rl_inputs_dclm_2k_7k/index2.parquet", "/mnt/shared-storage-user/ailab-hx/tongjian/rl/cl_rewrite_rubrics/rl_inputs_dclm_2k_7k/index3.parquet", "/mnt/shared-storage-user/ailab-hx/tongjian/rl/cl_rewrite_rubrics/rl_inputs_dclm_2k_7k/index4.parquet"]' 
+    VAL_DATA="/mnt/shared-storage-user/ailab-hx/tongjian/rl/cl_rewrite_rubrics/rl_inputs_dclm_2k_7k/index0.parquet"
 
-    # experiment_name="doc2query_v6_30b_a3_think_general_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_agg-loss-token-mean"
-    # experiment_name="doc2query_v6_30b_a3_think_general_2025-11-26-18_roll8_64_kl_coef_0_wo_entropy_t1.0_agg-loss-token-mean"
-    # experiment_name="doc2query_v6_30b_a3_think_general_ms0_2025-11-20-15_roll8_32_kl_coef_0_wo_entropy_t1.0_agg-loss-token-mean"
-    experiment_name="doc2query_v6_30b_a3_think_cot_strict_code_2025-12-15-18_roll8_64_kl_coef_0_wo_entropy_t1.0_agg-loss-token-mean"
-    project_name="doc2query_v6"
+    # experiment_name="cl_rewrite_rubrics_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_kl_coef_${KL_LOSS_COEF}_t${TEMPERATURE}"
+    experiment_name="cl_rewrite_rubrics_2026-02-15-09_roll8_64_kl_coef_0_t1.0"
+    project_name="cl_rewrite_rubrics"
 
-    OUTPUT_DIR="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_rl_test/verl/grpo/doc2query_v6/${experiment_name}"
+    OUTPUT_DIR="/mnt/shared-storage-user/songdemin/user/tongjian/ckpts/datareview_rl_test/verl/grpo/cl_rewrite_rubrics/${experiment_name}"
     mkdir -p "${OUTPUT_DIR}"
 }
 setup_path
@@ -100,43 +86,39 @@ run_training() {
     # self.config.actor.ppo_mini_batch_size //= (self.device_mesh.size() // self.ulysses_sequence_parallel_size)
     # self.config.actor.ppo_micro_batch_size_per_gpu = self.config.actor.ppo_micro_batch_size
 
-    python3 -m verl.trainer.main_ppo \
+    python3 -m recipe.dapo.main_dapo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        custom_reward_function.name=doc2query_v6_compute_score_train \
+        custom_reward_function.name=cl_rewrite_rubrics_compute_score_train \
         +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        +custom_valid_reward_function.name=doc2query_v6_compute_score_valid \
+        +custom_valid_reward_function.name=cl_rewrite_rubrics_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
         data.train_batch_size=${TRAIN_BSZ} \
-        data.max_prompt_length=9216 \
-        data.max_response_length=16384 \
+        data.max_prompt_length=8192 \
+        data.max_response_length=8192 \
         data.filter_overlong_prompts=True \
         data.filter_overlong_prompts_workers=256 \
-        +algorithm.enable_rlcd=True \
-        +algorithm.rlcd_enable_prompt_mask=True \
-        +data.ref_prompt_key="ref_prompt" \
-        +data.prompt_max_random_mask_ratio=0.6 \
-        +data.prompt_non_mask_suffix_size=362 \
         trainer.default_local_dir="${OUTPUT_DIR}" \
         trainer.val_before_train=False \
-        actor_rollout_ref.model.path="${ACTOR_MODEL_PATH}" \
+        actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
         actor_rollout_ref.actor.optim.lr=1e-6 \
         actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
         actor_rollout_ref.actor.optim.weight_decay=0.1 \
-        actor_rollout_ref.actor.loss_agg_mode=token-mean \
         actor_rollout_ref.model.use_remove_padding=${USE_RM_PAD} \
         actor_rollout_ref.actor.shuffle=False \
         actor_rollout_ref.actor.ppo_mini_batch_size=${TRAIN_BSZ} \
         actor_rollout_ref.actor.ppo_micro_batch_size=${TRAIN_BSZ} \
         actor_rollout_ref.actor.ulysses_sequence_parallel_size=${ULYSSES_SP} \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=25600 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=16384 \
         actor_rollout_ref.actor.use_kl_loss=False \
         actor_rollout_ref.actor.kl_loss_coef=${KL_LOSS_COEF} \
-        actor_rollout_ref.actor.kl_loss_type=abs \
         actor_rollout_ref.actor.entropy_coeff=0.0 \
         actor_rollout_ref.actor.grad_clip=1.0 \
+        actor_rollout_ref.actor.clip_ratio_low=0.2 \
+        actor_rollout_ref.actor.clip_ratio_high=0.3 \
+        actor_rollout_ref.actor.clip_ratio_c=10.0 \
         actor_rollout_ref.model.enable_gradient_checkpointing=True \
         actor_rollout_ref.actor.fsdp_config.param_offload=True \
         actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
@@ -151,19 +133,16 @@ run_training() {
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
-        algorithm.use_kl_in_reward=${USE_KL_IN_REWARD} \
         algorithm.kl_ctrl.kl_coef=${KL_COEF} \
-        algorithm.kl_ctrl.type="fixed" \
-        algorithm.kl_penalty="abs" \
         algorithm.lam=0.95 \
-        reward_model.reward_manager="custom" "$@" \
+        reward_model.reward_manager=dapo_custom \
         trainer.logger='["console", "wandb"]' \
         trainer.project_name="${project_name}" \
         trainer.experiment_name="${experiment_name}" \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
-        trainer.save_freq=5 \
-        trainer.test_freq=100 \
+        trainer.save_freq=10 \
+        trainer.test_freq=1000 \
         trainer.total_epochs=1 \
         "$@"
     local training_status=$?

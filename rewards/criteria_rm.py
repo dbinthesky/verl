@@ -2363,7 +2363,6 @@ class CriteriaRFTComputeScore(CriteriaRMRecallComputeScore):
                              batch_solution_str,
                              batch_ground_truth,
                              ):
-        self.init_save_rollouts()
         accuracy = await self.get_accuracy(
             batch_data_sources,
             batch_solution_str,

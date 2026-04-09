@@ -1,12 +1,12 @@
 #!/bin/bash
 
-JOB_NAME="doc2query_v6"
+JOB_NAME="doc2query_v6_rl"
 
 WORKER_IMAGE="registry.h.pjlab.org.cn/ailab/pytorch:22.04-pjlab-py3.10-torch2.2.0-cu12.1"
-WORKER_COUNT="${WORKER_COUNT:-"8"}"
+WORKER_COUNT="${WORKER_COUNT:-"4"}"
 WORKER_GPU="${WORKER_GPU:-"8"}"
-WORKER_CPU="${WORKER_CPU:-"128"}"
-WORKER_MEMORY="${WORKER_MEMORY:-"1600000"}"
+WORKER_CPU="${WORKER_CPU:-"100"}"
+WORKER_MEMORY="${WORKER_MEMORY:-"1800000"}"
 
 # [hx]
 # WORKSPACE_ID="ailab-puyullmgpu"
@@ -25,6 +25,7 @@ rjob submit -e DISTRIBUTED_JOB=true \
     --mount=gpfs://gpfs1/songdemin:/mnt/shared-storage-user/songdemin \
     --mount=gpfs://gpfs1/large-model-center-share-weights:/mnt/shared-storage-user/large-model-center-share-weights \
     --mount=gpfs://gpfs1/ailab-hx:/mnt/shared-storage-user/ailab-hx \
+    --mount=gpfs://gpfs2/intern-pretrain-shared02 \
     --custom-resources rdma/mlnx_shared=8 \
     --custom-resources mellanox.com/mlnx_rdma=1 \
     --health-check "" \

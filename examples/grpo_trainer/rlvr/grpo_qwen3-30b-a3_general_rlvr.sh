@@ -13,35 +13,18 @@ setup_env() {
     export VERL_PPO_LOGGING_LEVEL='DEBUG'
     export VLLM_ATTENTION_BACKEND="XFORMERS"
     export VLLM_USE_MODELSCOPE="False"
-    export HOME="/cpfs01/shared/llm_ddd/tongjian"
+    export HOME="/mnt/shared-storage-user/ailab-hx/tongjian"
+    export CKPTS_DIR="${HOME}/ckpts"
     export HYDRA_FULL_ERROR=1
 }
 setup_env
 
 # ------------------------------
-# Proxy Configuration
-# ------------------------------
-setup_proxy() {
-    export PROXY_CREDENTIALS="tongjian:dazL5iB8mjDIOGtNj2uekzlsRCelVS38txIK98mWhKyoyLCBCCw9DNXlUOcX"
-    export PROXY_URL="aliyun-proxy.pjlab.org.cn:13128"
-    export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:128"
-    export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
-
-    export http_proxy="http://${PROXY_CREDENTIALS}@${PROXY_URL}"
-    export https_proxy="https://${PROXY_CREDENTIALS}@${PROXY_URL}"
-    export HTTP_PROXY="${https_proxy}"
-    export HTTPS_PROXY="${https_proxy}"
-}
-# setup_proxy
-
-# ------------------------------
 # Conda Environment Setup
 # ------------------------------
 activate_conda() {
-    source /cpfs01/shared/llm_ddd/tongjian/.bashrc
-    conda activate /cpfs01/shared/llm_ddd/gaoxuan/anaconda3/envs/Verl
-    # source /cpfs01/shared/llm_ddd/tongjian/.bashrc
-    # conda activate /cpfs01/shared/public/wulianyi/verl-0.4.1_conda
+    source /mnt/shared-storage-user/ailab-hx/wulianyi/miniconda3/etc/profile.d/conda.sh
+    conda activate /mnt/shared-storage-user/ailab-hx/gaoxuan/miniconda3/envs/verl
 }
 activate_conda
 
@@ -49,28 +32,32 @@ activate_conda
 # Path Configuration
 # ------------------------------
 setup_path() {
-    YYMMDD=$(date +%Y-%m-%d)
-    HHMMSS=$(date +%H-%M-%S)
+    YYMMDD=$(date +%Y-%m-%d-%H)
 
     local num_gpus="${KUBERNETES_CONTAINER_RESOURCE_GPU:-8}"
     local world_size="${WORLD_SIZE:-1}"
 
-    ROLLOUT_N=16
-    TRAIN_BSZ=$((num_gpus * world_size))
+    USE_RM_PAD="True"
+    ROLLOUT_N=8
+    TRAIN_BSZ=16
     KL_LOSS_COEF="0"
+    KL_COEF="0" # NORM 1; NON-NORM 0.001
     TEMPERATURE="1.0"
+    ULYSSES_SP="1" # must be 1
+    USE_KL_IN_REWARD="True"
 
-    CUSTOM_CODE_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    VERL_DIR="/cpfs01/shared/llm_ddd/tongjian/verl"
-    # BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_instruct_fabricate_qa_self_taught_250829_sft_doc2query_v3_if_enhance_0911/20250911173649/hf-738"
-    BASE_MODEL_PATH="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/archived/doc2query_v3_30b_a3_2025-09-17_roll16_128_dapo_kl_coef_0_wo_entropy_t1.0_solver_dsv3_step_130"
-    TRAIN_DATA='["/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs_learned/index0.parquet","/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs_learned/index1.parquet", "/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs_learned/index2.parquet"]'
-    VAL_DATA="/cpfs01/shared/llm_ddd/tongjian/rl/doc2query_v3/doc2query_v3_pdf_rl_8k_inputs_test.parquet"
+    HOME="/mnt/shared-storage-user/ailab-hx/tongjian"
+    CUSTOM_CODE_DIR="${HOME}/verl"
+    VERL_DIR="${HOME}/verl"
+    BASE_MODEL_PATH="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_sft_test/Qwen_30B_A3_decay_16k_cpt_rlcd_pretrain_cot_merge_251205_sft_reason_v1_22_2025_12_14_nothink_subset1_ep3/20251215160651/hf-1014"
+    TRAIN_DATA='["/mnt/shared-storage-user/ailab-hx/tongjian/rl/rlvr/reason_v1_22_2025_12_14_nothink_subset2/index0.parquet","/mnt/shared-storage-user/ailab-hx/tongjian/rl/rlvr/reason_v1_22_2025_12_14_nothink_subset2/index1.parquet", "/mnt/shared-storage-user/ailab-hx/tongjian/rl/rlvr/reason_v1_22_2025_12_14_nothink_subset2/index2.parquet",  "/mnt/shared-storage-user/ailab-hx/tongjian/rl/rlvr/reason_v1_22_2025_12_14_nothink_subset2/index3.parquet"]' 
+    VAL_DATA="/mnt/shared-storage-user/ailab-hx/tongjian/rl/rlvr/reason_v1_22_2025_12_14_nothink_subset2/index0.parquet"
 
-    experiment_name="doc2query_v3_30b_a3_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_dapo_kl_coef_${KL_LOSS_COEF}_wo_entropy_t${TEMPERATURE}_solver_dsv3"
-    project_name="doc2query_v3"
+    experiment_name="rlvr_cpt_rlcd_pretrain_cot_merge_251205_${YYMMDD}_roll${ROLLOUT_N}_${TRAIN_BSZ}_kl_coef_${KL_LOSS_COEF}_t${TEMPERATURE}"
+    # experiment_name="doc2query_v6_30b_a3_think_general_ms0_2025-10-20-09_roll8_128_kl_coef_0_wo_entropy_t1.0_agg-loss-token-mean"
+    project_name="rlvr"
 
-    OUTPUT_DIR="/cpfs01/shared/llm_ddd/tongjian/ckpts/datareview_rl_test/verl/grpo/doc2query_v3/${experiment_name}/"
+    OUTPUT_DIR="/mnt/shared-storage-user/ailab-hx/tongjian/ckpts/datareview_rl_test/verl/grpo/rlvr/${experiment_name}"
     mkdir -p "${OUTPUT_DIR}"
 }
 setup_path
@@ -101,29 +88,30 @@ run_training() {
 
     python3 -m recipe.dapo.main_dapo \
         custom_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        custom_reward_function.name=doc2query_v3_compute_score_train \
+        custom_reward_function.name=rlvr_shortcot_compute_score_valid \
         +custom_valid_reward_function.path="${CUSTOM_CODE_DIR}/rewards/fabricate_qa.py" \
-        +custom_valid_reward_function.name=doc2query_v3_compute_score_valid \
+        +custom_valid_reward_function.name=rlvr_shortcot_compute_score_valid \
         algorithm.adv_estimator="grpo" \
         data.train_files="${TRAIN_DATA}" \
         data.val_files="${VAL_DATA}" \
         data.train_batch_size=${TRAIN_BSZ} \
-        data.max_prompt_length=12288 \
+        data.max_prompt_length=2048 \
         data.max_response_length=8192 \
         data.filter_overlong_prompts=True \
         data.filter_overlong_prompts_workers=256 \
         trainer.default_local_dir="${OUTPUT_DIR}" \
+        trainer.val_before_train=False \
         actor_rollout_ref.model.path="${BASE_MODEL_PATH}" \
         actor_rollout_ref.actor.optim.lr=1e-6 \
         actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
         actor_rollout_ref.actor.optim.weight_decay=0.1 \
-        actor_rollout_ref.model.use_remove_padding=True \
-        actor_rollout_ref.actor.shuffle=True \
+        actor_rollout_ref.model.use_remove_padding=${USE_RM_PAD} \
+        actor_rollout_ref.actor.shuffle=False \
         actor_rollout_ref.actor.ppo_mini_batch_size=${TRAIN_BSZ} \
         actor_rollout_ref.actor.ppo_micro_batch_size=${TRAIN_BSZ} \
-        actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
+        actor_rollout_ref.actor.ulysses_sequence_parallel_size=${ULYSSES_SP} \
         actor_rollout_ref.actor.use_dynamic_bsz=True \
-        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=20480 \
+        actor_rollout_ref.actor.ppo_max_token_len_per_gpu=25600 \
         actor_rollout_ref.actor.use_kl_loss=False \
         actor_rollout_ref.actor.kl_loss_coef=${KL_LOSS_COEF} \
         actor_rollout_ref.actor.entropy_coeff=0.0 \
@@ -131,10 +119,6 @@ run_training() {
         actor_rollout_ref.actor.clip_ratio_low=0.2 \
         actor_rollout_ref.actor.clip_ratio_high=0.3 \
         actor_rollout_ref.actor.clip_ratio_c=10.0 \
-        reward_model.overlong_buffer.enable=True \
-        reward_model.overlong_buffer.len=$((1024 * 4)) \
-        reward_model.overlong_buffer.penalty_factor=1.0 \
-        algorithm.filter_groups.enable=False \
         actor_rollout_ref.model.enable_gradient_checkpointing=True \
         actor_rollout_ref.actor.fsdp_config.param_offload=True \
         actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
@@ -149,7 +133,7 @@ run_training() {
         +actor_rollout_ref.rollout.trust_remote_code=True \
         actor_rollout_ref.rollout.log_prob_micro_batch_size=8 \
         +actor_rollout_ref.rollout.n_val=1 \
-        algorithm.kl_ctrl.kl_coef=0.000 \
+        algorithm.kl_ctrl.kl_coef=${KL_COEF} \
         algorithm.lam=0.95 \
         reward_model.reward_manager=dapo_custom \
         trainer.logger='["console", "wandb"]' \
@@ -157,9 +141,9 @@ run_training() {
         trainer.experiment_name="${experiment_name}" \
         trainer.n_gpus_per_node="${num_gpus}" \
         trainer.nnodes="${world_size}" \
-        trainer.save_freq=10 \
-        trainer.test_freq=80 \
-        trainer.total_epochs=10 \
+        trainer.save_freq=30 \
+        trainer.test_freq=200 \
+        trainer.total_epochs=1 \
         "$@"
     local training_status=$?
 
