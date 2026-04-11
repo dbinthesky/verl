@@ -962,11 +962,85 @@ except ImportError:
     FilteringBoundLogger = Any  # Fallback type
 
 
+def _extract_console_sample_rate(logger, method_name, event_dict):
+    """Extract console_sample_rate and mark in event_dict.
+
+    The console_sample_rate will be kept in event_dict with a special prefix
+    so that SamplingFilter can extract it from the formatted message.
+    After filtering, it will be removed before final formatting.
+    """
+    if 'console_sample_rate' in event_dict:
+        # Store with special prefix for filter to find
+        event_dict['__console_sample_rate__'] = event_dict.pop('console_sample_rate')
+
+    return event_dict
+
+
+def _remove_console_sample_rate(logger, method_name, event_dict):
+    """Remove __console_sample_rate__ before final formatting.
+
+    This runs after filtering but before rendering to JSON/console.
+    """
+    event_dict.pop('__console_sample_rate__', None)
+    return event_dict
+
+
+class SamplingFilter(logging.Filter):
+    """Filter that samples log records based on per-log sample rate.
+
+    Each log record can specify its own console_sample_rate:
+        logger.info("event", key=value, console_sample_rate=0.1)
+
+    If not specified, default_sample_rate is used (1.0 = no sampling).
+    ERROR and CRITICAL are always logged regardless of rate.
+    """
+    def __init__(self, default_sample_rate: float = 1.0):
+        super().__init__()
+        if not 0.0 <= default_sample_rate <= 1.0:
+            raise ValueError(f"default_sample_rate must be 0.0-1.0, got {default_sample_rate}")
+        self.default_sample_rate = default_sample_rate
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Determine if record should be logged."""
+        # Always log ERROR and CRITICAL
+        if record.levelno >= logging.ERROR:
+            return True
+
+        # Try to extract console_sample_rate from the formatted message
+        # For structlog, the msg contains the event_dict before formatting
+        sample_rate = self.default_sample_rate
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Determine if record should be logged."""
+        # Always log ERROR and CRITICAL
+        if record.levelno >= logging.ERROR:
+            return True
+
+        # Extract console_sample_rate from record.msg (structlog event_dict)
+        sample_rate = self.default_sample_rate
+
+        if hasattr(record, 'msg') and isinstance(record.msg, dict):
+            sample_rate = record.msg.get('__console_sample_rate__', self.default_sample_rate)
+
+        # No sampling (keep all)
+        if sample_rate >= 1.0:
+            return True
+
+        # Drop all (except ERROR/CRITICAL already handled)
+        if sample_rate <= 0.0:
+            return False
+
+        # Sample based on probability
+        import random
+        return random.random() < sample_rate
+
+
 def setup_logging(
     log_dir: str = "./logs",
     log_level: str = "INFO",
     log_filename: Optional[str] = None,
     console_output: bool = True,
+    console_sample_rate: float = 1.0,
     json_indent: Optional[int] = None
 ) -> Any:
     """Setup structured JSON logging with file + console output.
@@ -976,6 +1050,8 @@ def setup_logging(
         log_level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         log_filename: Custom filename (default: app_YYYYMMDD_HHMMSS.jsonl)
         console_output: Enable console output (human-readable)
+        console_sample_rate: Console sampling rate (0.0-1.0, 1.0=no sampling).
+                            File output is always full. ERROR/CRITICAL always logged.
         json_indent: JSON indent (None=JSONL compact, 2=pretty)
 
     Returns:
@@ -985,7 +1061,12 @@ def setup_logging(
         ImportError: If structlog is not installed
 
     Example:
+        >>> # Full logging (default)
         >>> setup_logging(log_dir="./logs", log_level="INFO")
+        >>>
+        >>> # Sample 10% to console, full to file
+        >>> setup_logging(log_dir="./logs", console_sample_rate=0.1)
+        >>>
         >>> logger = get_logger(__name__)
         >>> logger.info("event", key="value", count=42)
     """
@@ -1015,25 +1096,30 @@ def setup_logging(
         handlers=[]
     )
 
-    # File handler (JSON/JSONL)
+    # File handler (JSON/JSONL) - remove __console_sample_rate__ before rendering
     file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
     file_handler.setLevel(getattr(logging, log_level.upper()))
     file_handler.setFormatter(
         structlog.stdlib.ProcessorFormatter(
-            processor=structlog.processors.JSONRenderer(indent=json_indent)
+            processor=structlog.processors.JSONRenderer(indent=json_indent),
+            foreign_pre_chain=[_remove_console_sample_rate]
         )
     )
     logging.root.addHandler(file_handler)
 
-    # Console handler (human-readable)
+    # Console handler (human-readable with sampling)
     if console_output:
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(getattr(logging, log_level.upper()))
         console_handler.setFormatter(
             structlog.stdlib.ProcessorFormatter(
-                processor=structlog.dev.ConsoleRenderer(colors=True)
+                processor=structlog.dev.ConsoleRenderer(colors=True),
+                foreign_pre_chain=[_remove_console_sample_rate]
             )
         )
+        # Add sampling filter (file handler logs everything)
+        # Filter is always added to allow per-log console_sample_rate
+        console_handler.addFilter(SamplingFilter(default_sample_rate=console_sample_rate))
         logging.root.addHandler(console_handler)
 
     # Configure structlog
@@ -1048,6 +1134,7 @@ def setup_logging(
                 structlog.processors.CallsiteParameter.LINENO,
                 structlog.processors.CallsiteParameter.FUNC_NAME,
             ]),
+            _extract_console_sample_rate,  # Extract before formatting
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
@@ -1058,8 +1145,9 @@ def setup_logging(
         cache_logger_on_first_use=True,
     )
 
-    print(f"[Logging] File: {log_file}")
-    print(f"[Logging] Level: {log_level}, Console: {console_output}")
+    sampling_info = f", Console Sampling: {console_sample_rate:.1%}" if console_sample_rate < 1.0 else ""
+    print(f"[Logging] File: {log_file} (Full)")
+    print(f"[Logging] Level: {log_level}, Console: {console_output}{sampling_info}")
 
     return get_logger("root")
 
