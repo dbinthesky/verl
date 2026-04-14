@@ -25,7 +25,12 @@ Usage:
 from .data import AgenticTaskSample, RubricCategory, RubricItem
 from .parser import AgenticTaskParserNode
 from .expander import RubricCategoryExpanderNode, RubricItemExpanderNode
-from .validator import CategoryOrthogonalityCheckNode
+from .validator import (
+    CategoryOrthogonalityCheckNode,
+    CategoryClassificationCheckNode,
+    RubricQualityCheckNode,
+    RubricRigidityCheckNode,
+)
 from .pipeline import AgenticTaskPipeline
 
 
@@ -40,6 +45,9 @@ __all__ = [
     'RubricCategoryExpanderNode',
     'RubricItemExpanderNode',
     'CategoryOrthogonalityCheckNode',
+    'CategoryClassificationCheckNode',
+    'RubricQualityCheckNode',
+    'RubricRigidityCheckNode',
 
     # Pipeline
     'AgenticTaskPipeline',

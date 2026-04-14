@@ -45,122 +45,292 @@ SAMPLE_LLM_RESPONSE = """这是思考过程...
   "verify_rubrics": {
     "核心价值主张锚定": [
       {
-        "rubric_name": "三重核心价值显性标注",
-        "binary_statement": "内容架构明确标注节目「幕后揭秘、创意竞技、行业教育」三重核心价值，未偏向纯娱乐化叙事",
+        "rubric_name": "三重核心价值标注完整性",
+        "binary_statement": "内容架构中出现「幕后揭秘」这一文字表述",
         "justification": [
-          "步骤1：从task_description核心约束提取「锚定三重核心、杜绝纯娱乐化」强制规则",
-          "步骤2：该三重核心为节目唯一核心定位，无替代表述",
-          "步骤3：唯一推导出架构需显性体现该三重核心"
+          "步骤1：从task_description中提取「幕后揭秘」为强制核心价值关键词",
+          "步骤2：判卷仅需在架构文本中检索该固定词汇",
+          "步骤3：仅依据文本存在性即可完成判定"
         ],
-        "traceability": "对应专家工作流节点B1、B2；预训练语料定义节目为创意+竞争+教育融合体"
+        "traceability": "对应专家工作流节点B1；预训练语料定义节目核心为幕后揭秘类时尚真人秀"
+      },
+      {
+        "rubric_name": "创意竞技价值标注",
+        "binary_statement": "内容架构中出现「创意竞技」这一文字表述",
+        "justification": [
+          "步骤1：从task_description中提取「创意竞技」为强制核心价值关键词",
+          "步骤2：判卷仅需在架构文本中检索该固定词汇",
+          "步骤3：仅依据文本存在性即可完成判定"
+        ],
+        "traceability": "对应专家工作流节点B1；预训练语料定义节目为创意竞技类真人秀"
+      },
+      {
+        "rubric_name": "行业教育价值标注",
+        "binary_statement": "内容架构中出现「行业教育」这一文字表述",
+        "justification": [
+          "步骤1：从task_description中提取「行业教育」为强制核心价值关键词",
+          "步骤2：判卷仅需在架构文本中检索该固定词汇",
+          "步骤3：仅依据文本存在性即可完成判定"
+        ],
+        "traceability": "对应专家工作流节点B1；预训练语料强调节目教育属性"
+      },
+      {
+        "rubric_name": "纯娱乐化叙事规避",
+        "binary_statement": "内容架构未将节目定位描述为纯娱乐化节目",
+        "justification": [
+          "步骤1：从task_description中提取「杜绝纯娱乐化叙事」约束",
+          "步骤2：判卷仅需核查架构定位描述",
+          "步骤3：仅依据文本表述即可完成判定"
+        ],
+        "traceability": "对应专家工作流节点B2"
       }
     ],
     "叙事认知链路构建": [
       {
-        "rubric_name": "四阶认知递进完整呈现",
-        "binary_statement": "内容架构完整包含「引发好奇→行业理解→情感共鸣→价值行动」的认知递进链路",
+        "rubric_name": "认知递进链路完整性",
+        "binary_statement": "内容架构中出现「引发好奇→行业理解→情感共鸣→价值行动」完整文字序列",
         "justification": [
-          "步骤1：从task_description叙事约束提取四阶认知递进强制要求",
-          "步骤2：该链路为唯一指定叙事闭环逻辑",
-          "步骤3：必然得出架构需完整覆盖该递进链路"
+          "步骤1：从task_description中提取固定认知递进序列",
+          "步骤2：判卷仅需检索该完整固定序列",
+          "步骤3：仅依据文本存在性即可完成判定"
         ],
-        "traceability": "对应专家工作流节点H1；预训练语料以幕后好奇开场构建受众认知"
+        "traceability": "对应专家工作流节点H1"
       }
     ],
     "结构维度完整覆盖": [
       {
-        "rubric_name": "14项指定维度无遗漏",
-        "binary_statement": "内容架构完整覆盖任务指定的14个核心维度，无任何维度删减",
+        "rubric_name": "节目传记维度覆盖",
+        "binary_statement": "内容架构包含节目传记模块",
         "justification": [
-          "步骤1：从task_description结构约束提取14项刚性维度列表",
-          "步骤2：该维度列表无替换或删减空间",
-          "步骤3：唯一推导出架构需包含全部14个维度"
+          "步骤1：从task_description中提取节目传记为指定维度",
+          "步骤2：判卷仅需核查模块名称存在性",
+          "步骤3：仅依据文本存在性即可完成判定"
         ],
-        "traceability": "对应专家工作流节点D1；预训练语料正文包含全部对应章节"
+        "traceability": "对应专家工作流节点D1；预训练语料含对应章节"
+      },
+      {
+        "rubric_name": "创作理念维度覆盖",
+        "binary_statement": "内容架构包含创作理念模块",
+        "justification": [
+          "步骤1：从task_description中提取创作理念为指定维度",
+          "步骤2：判卷仅需核查模块名称存在性",
+          "步骤3：仅依据文本存在性即可完成判定"
+        ],
+        "traceability": "对应专家工作流节点D1；预训练语料含对应章节"
+      },
+      {
+        "rubric_name": "幕后制作维度覆盖",
+        "binary_statement": "内容架构包含幕后制作模块",
+        "justification": [
+          "步骤1：从task_description中提取幕后制作为指定维度",
+          "步骤2：判卷仅需核查模块名称存在性",
+          "步骤3：仅依据文本存在性即可完成判定"
+        ],
+        "traceability": "对应专家工作流节点D1；预训练语料含对应章节"
+      },
+      {
+        "rubric_name": "评委维度覆盖",
+        "binary_statement": "内容架构包含评委模块",
+        "justification": [
+          "步骤1：从task_description中提取评委为指定维度",
+          "步骤2：判卷仅需核查模块名称存在性",
+          "步骤3：仅依据文本存在性即可完成判定"
+        ],
+        "traceability": "对应专家工作流节点D1；预训练语料含对应章节"
+      },
+      {
+        "rubric_name": "选手历程维度覆盖",
+        "binary_statement": "内容架构包含选手历程模块",
+        "justification": [
+          "步骤1：从task_description中提取选手历程为指定维度",
+          "步骤2：判卷仅需核查模块名称存在性",
+          "步骤3：仅依据文本存在性即可完成判定"
+        ],
+        "traceability": "对应专家工作流节点D1；预训练语料含对应章节"
+      },
+      {
+        "rubric_name": "设计挑战维度覆盖",
+        "binary_statement": "内容架构包含设计挑战模块",
+        "justification": [
+          "步骤1：从task_description中提取设计挑战为指定维度",
+          "步骤2：判卷仅需核查模块名称存在性",
+          "步骤3：仅依据文本存在性即可完成判定"
+        ],
+        "traceability": "对应专家工作流节点D1；预训练语料含对应章节"
+      },
+      {
+        "rubric_name": "行业影响维度覆盖",
+        "binary_statement": "内容架构包含行业影响模块",
+        "justification": [
+          "步骤1：从task_description中提取行业影响为指定维度",
+          "步骤2：判卷仅需核查模块名称存在性",
+          "步骤3：仅依据文本存在性即可完成判定"
+        ],
+        "traceability": "对应专家工作流节点D1；预训练语料含对应章节"
+      },
+      {
+        "rubric_name": "受众反响维度覆盖",
+        "binary_statement": "内容架构包含受众反响模块",
+        "justification": [
+          "步骤1：从task_description中提取受众反响为指定维度",
+          "步骤2：判卷仅需核查模块名称存在性",
+          "步骤3：仅依据文本存在性即可完成判定"
+        ],
+        "traceability": "对应专家工作流节点D1；预训练语料含对应章节"
+      },
+      {
+        "rubric_name": "创新引领维度覆盖",
+        "binary_statement": "内容架构包含创新引领模块",
+        "justification": [
+          "步骤1：从task_description中提取创新引领为指定维度",
+          "步骤2：判卷仅需核查模块名称存在性",
+          "步骤3：仅依据文本存在性即可完成判定"
+        ],
+        "traceability": "对应专家工作流节点D1；预训练语料含对应章节"
+      },
+      {
+        "rubric_name": "教育价值维度覆盖",
+        "binary_statement": "内容架构包含教育价值模块",
+        "justification": [
+          "步骤1：从task_description中提取教育价值为指定维度",
+          "步骤2：判卷仅需核查模块名称存在性",
+          "步骤3：仅依据文本存在性即可完成判定"
+        ],
+        "traceability": "对应专家工作流节点D1；预训练语料含对应章节"
+      },
+      {
+        "rubric_name": "全球影响力维度覆盖",
+        "binary_statement": "内容架构包含全球影响力模块",
+        "justification": [
+          "步骤1：从task_description中提取全球影响力为指定维度",
+          "步骤2：判卷仅需核查模块名称存在性",
+          "步骤3：仅依据文本存在性即可完成判定"
+        ],
+        "traceability": "对应专家工作流节点D1；预训练语料含对应章节"
+      },
+      {
+        "rubric_name": "技术融合维度覆盖",
+        "binary_statement": "内容架构包含技术融合模块",
+        "justification": [
+          "步骤1：从task_description中提取技术融合为指定维度",
+          "步骤2：判卷仅需核查模块名称存在性",
+          "步骤3：仅依据文本存在性即可完成判定"
+        ],
+        "traceability": "对应专家工作流节点D1；预训练语料含对应章节"
+      },
+      {
+        "rubric_name": "未来规划维度覆盖",
+        "binary_statement": "内容架构包含未来规划模块",
+        "justification": [
+          "步骤1：从task_description中提取未来规划为指定维度",
+          "步骤2：判卷仅需核查模块名称存在性",
+          "步骤3：仅依据文本存在性即可完成判定"
+        ],
+        "traceability": "对应专家工作流节点D1；预训练语料含对应章节"
+      },
+      {
+        "rubric_name": "常见问答维度覆盖",
+        "binary_statement": "内容架构包含常见问答模块",
+        "justification": [
+          "步骤1：从task_description中提取常见问答为指定维度",
+          "步骤2：判卷仅需核查模块名称存在性",
+          "步骤3：仅依据文本存在性即可完成判定"
+        ],
+        "traceability": "对应专家工作流节点D1；预训练语料含对应章节"
       }
     ],
     "隐性合规要素落地": [
       {
         "rubric_name": "多元文化包容要素呈现",
-        "binary_statement": "内容架构中明确体现节目多元文化背景包容性设计",
+        "binary_statement": "内容架构中出现「多元文化包容性」这一文字表述",
         "justification": [
-          "步骤1：从task_description合规约束提取多元文化包容隐性要求",
-          "步骤2：该要素为强制合规项，需独立呈现",
-          "步骤3：必然得出架构需包含该要素"
+          "步骤1：从task_description中提取「多元文化包容性」固定表述",
+          "步骤2：判卷仅需检索该固定文字",
+          "步骤3：仅依据文本存在性即可完成判定"
         ],
-        "traceability": "对应专家工作流节点F4；预训练语料强调选手多元文化背景"
+        "traceability": "对应专家工作流节点F4；预训练语料强调多元文化背景"
       },
       {
         "rubric_name": "可持续时尚要素呈现",
-        "binary_statement": "内容架构中明确体现节目对可持续时尚设计的倡导",
+        "binary_statement": "内容架构中出现「可持续时尚」这一文字表述",
         "justification": [
-          "步骤1：从task_description合规约束提取可持续时尚倡导要求",
-          "步骤2：该要素为独立隐性约束，不可省略",
-          "步骤3：唯一推导出架构需包含该要素"
+          "步骤1：从task_description中提取「可持续时尚」固定表述",
+          "步骤2：判卷仅需检索该固定文字",
+          "步骤3：仅依据文本存在性即可完成判定"
         ],
-        "traceability": "对应专家工作流节点F2；预训练语料行业影响章节提及可持续时尚"
+        "traceability": "对应专家工作流节点F2；预训练语料提及可持续时尚倡导"
       },
       {
-        "rubric_name": "数字技术应用呈现",
-        "binary_statement": "内容架构中明确提及3D打印、数字设计类技术融合应用",
+        "rubric_name": "3D打印技术提及",
+        "binary_statement": "内容架构中出现「3D打印」这一文字表述",
         "justification": [
-          "步骤1：从task_description合规约束提取数字技术应用要求",
-          "步骤2：该技术项为独立合规要素",
-          "步骤3：必然得出架构需包含该技术表述"
+          "步骤1：从task_description中提取「3D打印」固定技术名词",
+          "步骤2：判卷仅需检索该固定文字",
+          "步骤3：仅依据文本存在性即可完成判定"
         ],
-        "traceability": "对应专家工作流节点F6；预训练语料技术整合章节提及数字设计技术"
+        "traceability": "对应专家工作流节点F6；预训练语料提及3D打印应用"
       },
       {
-        "rubric_name": "隐性信息分布均衡",
-        "binary_statement": "三类隐性合规要素在架构中均有体现，无单一要素缺失",
+        "rubric_name": "数字设计技术提及",
+        "binary_statement": "内容架构中出现「数字设计」这一文字表述",
         "justification": [
-          "步骤1：从task_description合规约束提取「隐性信息公平分布」规则",
-          "步骤2：三类要素为并列强制项，需均衡呈现",
-          "步骤3：唯一推导出三类要素均需存在"
+          "步骤1：从task_description中提取「数字设计」固定技术名词",
+          "步骤2：判卷仅需检索该固定文字",
+          "步骤3：仅依据文本存在性即可完成判定"
         ],
-        "traceability": "对应专家工作流节点F1"
+        "traceability": "对应专家工作流节点F6；预训练语料提及数字设计应用"
       }
     ],
     "受众分层适配落地": [
       {
-        "rubric_name": "专业受众技术适配",
-        "binary_statement": "内容架构包含时尚设计专业术语与流程细节内容",
+        "rubric_name": "专业术语呈现",
+        "binary_statement": "内容架构中出现时尚设计专业术语",
         "justification": [
-          "步骤1：从task_description受众约束提取专业爱好者适配要求",
-          "步骤2：专业技术细节为适配该群体的独立要素",
-          "步骤3：必然得出架构需包含专业技术内容"
+          "步骤1：从task_description中提取需包含设计专业术语的约束",
+          "步骤2：判卷仅需核查专业术语存在性",
+          "步骤3：仅依据文本特征即可完成判定"
         ],
-        "traceability": "对应专家工作流节点G3；预训练语料教育章节讲解设计专业流程"
+        "traceability": "对应专家工作流节点G3；预训练语料含设计专业内容"
       },
       {
-        "rubric_name": "大众受众情感适配",
-        "binary_statement": "内容架构包含选手个人成长故事线相关内容",
+        "rubric_name": "设计流程细节呈现",
+        "binary_statement": "内容架构中出现时尚设计流程相关描述",
         "justification": [
-          "步骤1：从task_description受众约束提取普通大众适配要求",
-          "步骤2：选手故事线为适配该群体的独立要素",
-          "步骤3：唯一推导出架构需包含该故事内容"
+          "步骤1：从task_description中提取需包含设计流程细节的约束",
+          "步骤2：判卷仅需核查流程描述存在性",
+          "步骤3：仅依据文本特征即可完成判定"
         ],
-        "traceability": "对应专家工作流节点G4；预训练语料选手历程章节聚焦个人故事"
+        "traceability": "对应专家工作流节点G3；预训练语料讲解设计流程"
+      },
+      {
+        "rubric_name": "选手故事线呈现",
+        "binary_statement": "内容架构中出现选手个人成长故事相关描述",
+        "justification": [
+          "步骤1：从task_description中提取需包含选手故事线的约束",
+          "步骤2：判卷仅需核查故事描述存在性",
+          "步骤3：仅依据文本特征即可完成判定"
+        ],
+        "traceability": "对应专家工作流节点G4；预训练语料聚焦选手故事"
       }
     ],
     "叙事逻辑无捷径合规": [
       {
-        "rubric_name": "非流水账架构落地",
-        "binary_statement": "内容架构未采用纯行业流水账式概述形式",
+        "rubric_name": "流水账形式规避",
+        "binary_statement": "内容架构未采用纯行业流水账式文本结构",
         "justification": [
-          "步骤1：从task_description核心约束提取「禁止流水账」刚性规则",
-          "步骤2：该规则无任何豁免情形",
-          "步骤3：必然得出架构需规避流水账形式"
+          "步骤1：从task_description中提取「禁止流水账」约束",
+          "步骤2：判卷仅需核查文本结构形式",
+          "步骤3：仅依据文本结构即可完成判定"
         ],
         "traceability": "对应专家工作流节点B2"
       },
       {
-        "rubric_name": "逻辑捷径完全规避",
-        "binary_statement": "内容架构所有核心结论均由任务约束推导，无主观臆造内容",
+        "rubric_name": "约束推导合规性",
+        "binary_statement": "内容架构中所有模块均来自task_description指定维度列表",
         "justification": [
-          "步骤1：从task_description叙事约束提取「无逻辑捷径」规则",
-          "步骤2：架构内容需完全依托给定约束，不可凭空添加",
-          "步骤3：唯一推导出所有关键点均需由约束触发"
+          "步骤1：从task_description中提取固定维度列表",
+          "步骤2：判卷仅需比对模块与列表一致性",
+          "步骤3：仅依据文本比对即可完成判定"
         ],
         "traceability": "对应专家工作流节点H2"
       }
@@ -726,6 +896,517 @@ class TestCategoryOrthogonalityCheck(unittest.TestCase):
         asyncio.run(run())
 
 
+class TestCategoryClassificationCheck(unittest.TestCase):
+    """测试 CategoryClassificationCheckNode"""
+
+    # Test configuration
+    TEST_MODEL = "gpt-oss-120b"
+    TEST_BASE_URL = "http://10.102.215.37:28000/v1"
+    TEST_API_KEY = "dummy-key"
+
+    def setUp(self):
+        """Set up agent and nodes."""
+        self.agent_config = AgentConfig(
+            model=self.TEST_MODEL,
+            base_url=self.TEST_BASE_URL,
+            api_key=self.TEST_API_KEY,
+            temperature=0.7,
+            max_tokens=4096,
+            reasoning_effort="high"
+        )
+        self.agent = Agent(self.agent_config)
+
+    def test_classification_check_prompt(self):
+        """测试分类检查的 Prompt 生成（不调用 LLM，只打印 prompt）"""
+        async def run():
+            print("\n" + "="*100)
+            print(" " * 30 + "CATEGORY CLASSIFICATION CHECK TEST")
+            print("="*100)
+
+            # Parse and expand sample
+            sample = AgenticTaskSample(
+                sample_idx=0,
+                raw_response=SAMPLE_LLM_RESPONSE
+            )
+
+            parser = AgenticTaskParserNode(
+                NodeConfig(name="parser", node_type=NodeType.PARSER)
+            )
+            await parser.process_one(sample, create_simple_context([]))
+
+            category_expander = RubricCategoryExpanderNode(
+                NodeConfig(name="category_expander", node_type=NodeType.EXPANDER)
+            )
+            await category_expander.process_one(sample, create_simple_context([]))
+
+            # Expand items for all categories
+            categories = sample.get_children(RubricCategory)
+            item_expander = RubricItemExpanderNode(
+                NodeConfig(name="item_expander", node_type=NodeType.EXPANDER)
+            )
+            context = create_simple_context([])
+            await asyncio.gather(*[item_expander.process_one(cat, context) for cat in categories])
+
+            print(f"\n📊 Sample 信息:")
+            print(f"   Categories: {len(categories)}")
+            for i, cat in enumerate(categories, 1):
+                items = cat.get_children(RubricItem)
+                print(f"   {i}. {cat.category_name}: {len(items)} items")
+
+            # Create classifier node (without calling LLM)
+            from reward_framework.nodes.agentic_task_synthesis.validator import CategoryClassificationCheckNode
+
+            classifier = CategoryClassificationCheckNode(
+                NodeConfig(
+                    name="category_classifier",
+                    node_type=NodeType.LLM_JUDGE,
+                    skip_on_failure=False  # Don't skip, just record
+                ),
+                agent=None  # We won't call LLM
+            )
+
+            # Pick first category to check
+            test_category = categories[0]
+            all_category_names = [cat.category_name for cat in categories]
+
+            print(f"\n🔍 检查的 Category:")
+            print(f"   名称: {test_category.category_name}")
+            print(f"   Items 数量: {len(test_category.get_children(RubricItem))}")
+
+            # Build and print prompt
+            prompt = classifier._build_prompt(
+                current_category=test_category,
+                all_category_names=all_category_names,
+                task_description=sample.task_description
+            )
+
+            print("\n" + "="*100)
+            print(" " * 40 + "生成的 PROMPT")
+            print("="*100)
+            print(prompt)
+            print("="*100)
+
+            print("\n✅ Prompt 生成测试完成!")
+            print("   请检查 prompt 格式是否正确，是否包含所有必要信息。")
+            print("="*100)
+
+        asyncio.run(run())
+
+    def test_classification_check_with_llm(self):
+        """测试分类检查（调用真实 LLM，打印 prompt 和 response）"""
+        async def run():
+            # Parse and expand sample
+            sample = AgenticTaskSample(
+                sample_idx=0,
+                raw_response=SAMPLE_LLM_RESPONSE
+            )
+
+            parser = AgenticTaskParserNode(
+                NodeConfig(name="parser", node_type=NodeType.PARSER)
+            )
+            await parser.process_one(sample, create_simple_context([]))
+
+            category_expander = RubricCategoryExpanderNode(
+                NodeConfig(name="category_expander", node_type=NodeType.EXPANDER)
+            )
+            await category_expander.process_one(sample, create_simple_context([]))
+
+            # Expand items for all categories
+            categories = sample.get_children(RubricCategory)
+            item_expander = RubricItemExpanderNode(
+                NodeConfig(name="item_expander", node_type=NodeType.EXPANDER)
+            )
+            context = create_simple_context([])
+            await asyncio.gather(*[item_expander.process_one(cat, context) for cat in categories])
+
+            print("\n" + "="*100)
+            print(" " * 30 + "CATEGORY CLASSIFICATION CHECK WITH LLM")
+            print("="*100)
+
+            print(f"\n📋 任务描述:")
+            print(f"    {sample.task_description[:200]}...")
+
+            print(f"\n📊 Rubric 大类 ({len(categories)} 个):")
+            for i, cat in enumerate(categories, 1):
+                items = cat.get_children(RubricItem)
+                print(f"    {i}. {cat.category_name}: {len(items)} items")
+
+            # Create classifier node
+            from reward_framework.nodes.agentic_task_synthesis.validator import CategoryClassificationCheckNode
+
+            classifier = CategoryClassificationCheckNode(
+                NodeConfig(
+                    name="category_classifier",
+                    node_type=NodeType.LLM_JUDGE,
+                    skip_on_failure=False,
+                    skip_on_negative=False
+                ),
+                agent=self.agent
+            )
+
+            # Pick first category to check
+            test_category = categories[0]
+            all_category_names = [cat.category_name for cat in categories]
+
+            print(f"\n🔍 检查的 Category:")
+            print(f"   名称: {test_category.category_name}")
+            print(f"   Items 数量: {len(test_category.get_children(RubricItem))}")
+
+            # Build and print prompt
+            prompt = classifier._build_prompt(
+                current_category=test_category,
+                all_category_names=all_category_names,
+                task_description=sample.task_description
+            )
+
+            print("\n" + "="*100)
+            print(" " * 40 + "生成的 PROMPT")
+            print("="*100)
+            print(prompt)
+            print("="*100)
+
+            # Execute classification check
+            print("\n🤖 调用 LLM 进行分类检查...")
+            print(f"   Model: {self.TEST_MODEL}")
+            print(f"   Endpoint: {self.TEST_BASE_URL}")
+            print(f"   Reasoning effort: high")
+
+            # Prepare context with parent sample and task description
+            check_context = create_simple_context([])
+            check_context['parent_sample'] = sample
+            check_context['task_description'] = sample.task_description
+
+            result = await classifier.process_one(test_category, check_context)
+
+            print(f"\n✅ LLM 调用完成:")
+            print(f"   Processed: {'Yes' if not result.is_skipped else 'No'}")
+            print(f"   Skipped: {'Yes' if result.is_skipped else 'No'}")
+
+            # Get the raw LLM response
+            raw_response = test_category.get_meta('category_classification_raw_response', None)
+
+            print("\n" + "="*100)
+            print(" " * 38 + "LLM 原始响应")
+            print("="*100)
+
+            if raw_response:
+                print(raw_response)
+            else:
+                print("(未找到原始响应)")
+
+            # Print token usage and finish_reason
+            print("\n" + "="*100)
+            print(" " * 35 + "LLM 调用详细信息")
+            print("="*100)
+
+            all_meta = test_category.get_all_meta()
+            if 'category_classification_raw_response' in all_meta:
+                response_len = len(all_meta['category_classification_raw_response'])
+                print(f"响应长度: {response_len} 字符")
+
+            if 'category_classification_finish_reason' in all_meta:
+                finish_reason = all_meta['category_classification_finish_reason']
+                print(f"Finish reason: {finish_reason}")
+                if finish_reason == 'length':
+                    print("⚠️  响应因 max_tokens 限制被截断！")
+
+            if 'category_classification_token_usage' in all_meta:
+                usage = all_meta['category_classification_token_usage']
+                print(f"Token usage: {usage}")
+
+            if test_category.is_skipped:
+                reason, node = test_category.get_skip_info()
+                print(f"Category 被 skip: {reason} (at {node})")
+
+            if 'category_classification_error' in all_meta:
+                print(f"错误信息: {all_meta['category_classification_error']}")
+
+            print("\n" + "="*100)
+            print(" " * 40 + "解析后的结果")
+            print("="*100)
+
+            # Get parsed judgment
+            judgment = test_category.get_meta('category_classification_judgment', {})
+            print(f"{judgment}")
+
+            print("\n" + "="*100)
+
+            await self.agent.close()
+
+            print("\n✅ 测试完成!")
+            print("="*100)
+
+        asyncio.run(run())
+
+
+class TestRubricRigidityCheck(unittest.TestCase):
+    """测试 RubricRigidityCheckNode"""
+
+    # Test configuration
+    TEST_MODEL = "gpt-oss-120b"
+    TEST_BASE_URL = "http://10.102.215.37:28000/v1"
+    TEST_API_KEY = "dummy-key"
+
+    def setUp(self):
+        """Set up agent and nodes."""
+        self.agent_config = AgentConfig(
+            model=self.TEST_MODEL,
+            base_url=self.TEST_BASE_URL,
+            api_key=self.TEST_API_KEY,
+            temperature=0.7,
+            max_tokens=4096,
+            reasoning_effort="high"
+        )
+        self.agent = Agent(self.agent_config)
+
+    def test_rigidity_check_prompt(self):
+        """测试刚性检查的 Prompt 生成（不调用 LLM，只打印 prompt）"""
+        async def run():
+            print("\n" + "="*100)
+            print(" " * 35 + "RUBRIC RIGIDITY CHECK TEST")
+            print("="*100)
+
+            # Parse and expand sample to get rubric items
+            sample = AgenticTaskSample(
+                sample_idx=0,
+                raw_response=SAMPLE_LLM_RESPONSE
+            )
+
+            parser = AgenticTaskParserNode(
+                NodeConfig(name="parser", node_type=NodeType.PARSER)
+            )
+            await parser.process_one(sample, create_simple_context([]))
+
+            category_expander = RubricCategoryExpanderNode(
+                NodeConfig(name="category_expander", node_type=NodeType.EXPANDER)
+            )
+            await category_expander.process_one(sample, create_simple_context([]))
+
+            # Expand items for all categories
+            categories = sample.get_children(RubricCategory)
+            item_expander = RubricItemExpanderNode(
+                NodeConfig(name="item_expander", node_type=NodeType.EXPANDER)
+            )
+            context = create_simple_context([])
+            await asyncio.gather(*[item_expander.process_one(cat, context) for cat in categories])
+
+            # Get first rubric item for testing
+            test_rubric_item = None
+            for cat in categories:
+                items = cat.get_children(RubricItem)
+                if items:
+                    test_rubric_item = items[0]
+                    break
+
+            if not test_rubric_item:
+                print("❌ No rubric items found for testing")
+                return
+
+            print(f"\n📊 测试 Rubric 条目:")
+            print(f"   名称: {test_rubric_item.rubric_name}")
+            print(f"   二元判断: {test_rubric_item.binary_statement}")
+
+            # Create rigidity check node
+            from reward_framework.nodes.agentic_task_synthesis.validator import RubricRigidityCheckNode
+
+            rigidity_checker = RubricRigidityCheckNode(
+                NodeConfig(
+                    name="rigidity_check",
+                    node_type=NodeType.LLM_JUDGE,
+                    skip_on_failure=False
+                ),
+                agent=None  # We won't call LLM
+            )
+
+            # Build and print prompt
+            prompt = rigidity_checker._build_prompt(
+                test_rubric_item,
+                {'task_description': sample.task_description}
+            )
+
+            print("\n" + "="*100)
+            print(" " * 40 + "生成的 PROMPT")
+            print("="*100)
+            print(prompt)
+            print("="*100)
+
+            print("\n✅ Prompt 生成测试完成!")
+            print("   请检查 prompt 格式是否正确，是否包含三项检查规则。")
+            print("="*100)
+
+        asyncio.run(run())
+
+    def test_rigidity_check_with_llm(self):
+        """测试刚性检查（调用真实 LLM，打印 prompt 和 response）"""
+        async def run():
+            # Parse and expand sample to get rubric items
+            sample = AgenticTaskSample(
+                sample_idx=0,
+                raw_response=SAMPLE_LLM_RESPONSE
+            )
+
+            parser = AgenticTaskParserNode(
+                NodeConfig(name="parser", node_type=NodeType.PARSER)
+            )
+            await parser.process_one(sample, create_simple_context([]))
+
+            category_expander = RubricCategoryExpanderNode(
+                NodeConfig(name="category_expander", node_type=NodeType.EXPANDER)
+            )
+            await category_expander.process_one(sample, create_simple_context([]))
+
+            # Expand items for all categories
+            categories = sample.get_children(RubricCategory)
+            item_expander = RubricItemExpanderNode(
+                NodeConfig(name="item_expander", node_type=NodeType.EXPANDER)
+            )
+            context = create_simple_context([])
+            await asyncio.gather(*[item_expander.process_one(cat, context) for cat in categories])
+
+            print("\n" + "="*100)
+            print(" " * 30 + "RUBRIC RIGIDITY CHECK WITH LLM (ALL ITEMS)")
+            print("="*100)
+
+            # Collect all rubric items from all categories
+            all_rubric_items = []
+            for cat in categories:
+                items = cat.get_children(RubricItem)
+                for item in items:
+                    all_rubric_items.append((cat, item))
+
+            print(f"\n📊 总共 {len(all_rubric_items)} 个 Rubric 条目:")
+            for i, (cat, item) in enumerate(all_rubric_items, 1):
+                print(f"   {i}. [{cat.category_name}] {item.rubric_name}")
+
+            # Create rigidity check node
+            from reward_framework.nodes.agentic_task_synthesis.validator import RubricRigidityCheckNode
+
+            rigidity_checker = RubricRigidityCheckNode(
+                NodeConfig(
+                    name="rigidity_check",
+                    node_type=NodeType.LLM_JUDGE,
+                    skip_on_failure=False,
+                    skip_on_negative=False
+                ),
+                agent=self.agent
+            )
+
+            # Show first item's prompt as example
+            if all_rubric_items:
+                first_cat, first_item = all_rubric_items[0]
+                prompt = rigidity_checker._build_prompt(
+                    first_item,
+                    {'task_description': sample.task_description}
+                )
+                print("\n" + "="*100)
+                print(" " * 35 + "Prompt 示例（第一条）")
+                print("="*100)
+                print(prompt)
+                print("="*100)
+
+            # Execute rigidity check for all items (concurrently)
+            print(f"\n🤖 并发调用 LLM 进行刚性检查...")
+            print(f"   Model: {self.TEST_MODEL}")
+            print(f"   Endpoint: {self.TEST_BASE_URL}")
+            print(f"   Reasoning effort: high")
+            print(f"   并发数量: {len(all_rubric_items)} 个 items")
+
+            check_context = create_simple_context([])
+            check_context['task_description'] = sample.task_description
+
+            # Concurrent execution
+            await asyncio.gather(*[
+                rigidity_checker.process_one(item, check_context)
+                for cat, item in all_rubric_items
+            ])
+
+            print(f"\n✅ 所有 LLM 调用完成!")
+
+            # Print results for all items
+            print("\n" + "="*100)
+            print(" " * 35 + "所有条目的检查结果")
+            print("="*100)
+
+            for i, (cat, item) in enumerate(all_rubric_items, 1):
+                print(f"\n{'='*100}")
+                print(f"【{i}/{len(all_rubric_items)}】{cat.category_name} - {item.rubric_name}")
+                print(f"{'='*100}")
+
+                print(f"\n📝 二元判断:")
+                print(f"   {item.binary_statement}")
+
+                # Get stored metadata
+                pass_value = item.get_meta('rubric_rigidity_pass', 'N/A')
+                reason_value = item.get_meta('rubric_rigidity_reason', 'N/A')
+                judgment = item.get_meta('rubric_rigidity_judgment', {})
+
+                print(f"\n✅ 判定结果:")
+                print(f"   通过: {pass_value}")
+
+                if judgment:
+                    is_atomic = judgment.get('is_atomic', 'N/A')
+                    is_self_contained = judgment.get('is_self_contained', 'N/A')
+                    is_rigid = judgment.get('is_rigid', 'N/A')
+
+                    print(f"\n📋 详细检查:")
+                    print(f"   原子性 (is_atomic): {is_atomic}")
+                    print(f"   自闭环 (is_self_contained): {is_self_contained}")
+                    print(f"   二元刚性 (is_rigid): {is_rigid}")
+
+                print(f"\n💬 理由:")
+                print(f"   {reason_value}")
+
+                # Show raw response for debugging
+                raw_response = item.get_meta('rubric_rigidity_raw_response', None)
+                if raw_response:
+                    print(f"\n🔍 LLM 原始响应:")
+                    print(f"   {raw_response[:200]}..." if len(raw_response) > 200 else f"   {raw_response}")
+
+                # Check for errors
+                if item.is_skipped:
+                    skip_reason, node = item.get_skip_info()
+                    print(f"\n⚠️  被跳过: {skip_reason} (at {node})")
+
+                error = item.get_meta('rubric_rigidity_error', None)
+                if error:
+                    print(f"\n❌ 错误: {error}")
+
+            # Summary statistics
+            print("\n" + "="*100)
+            print(" " * 40 + "汇总统计")
+            print("="*100)
+
+            total = len(all_rubric_items)
+            passed = sum(1 for _, item in all_rubric_items if item.get_meta('rubric_rigidity_pass', False))
+            failed = total - passed
+
+            print(f"\n总计: {total} 个 Rubric 条目")
+            print(f"✅ 通过: {passed} 个 ({passed/total*100:.1f}%)")
+            print(f"❌ 未通过: {failed} 个 ({failed/total*100:.1f}%)")
+
+            # Breakdown by violation type
+            atomic_violations = sum(1 for _, item in all_rubric_items
+                                   if not item.get_meta('rubric_rigidity_judgment', {}).get('is_atomic', True))
+            self_contained_violations = sum(1 for _, item in all_rubric_items
+                                           if not item.get_meta('rubric_rigidity_judgment', {}).get('is_self_contained', True))
+            rigid_violations = sum(1 for _, item in all_rubric_items
+                                  if not item.get_meta('rubric_rigidity_judgment', {}).get('is_rigid', True))
+
+            print(f"\n违规类型统计:")
+            print(f"  - 违背原子性: {atomic_violations} 个")
+            print(f"  - 违背自闭环: {self_contained_violations} 个")
+            print(f"  - 违背二元刚性: {rigid_violations} 个")
+
+            print("\n" + "="*100)
+
+            await self.agent.close()
+
+            print("\n✅ 测试完成!")
+            print("="*100)
+
+        asyncio.run(run())
+
+
 def suite():
     """Create test suite."""
     suite = unittest.TestSuite()
@@ -733,6 +1414,8 @@ def suite():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestAgenticTaskParserNode))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRubricExpansion))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCategoryOrthogonalityCheck))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCategoryClassificationCheck))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRubricRigidityCheck))
     return suite
 
 
