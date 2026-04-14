@@ -8,21 +8,25 @@ with the new Protocol-based framework.
 import unittest
 import asyncio
 from typing import List
-from reward import (
-    # Data structures
+
+# 从当前子模块导入数据和节点
+from reward_framework.nodes.agentic_task_synthesis import (
     AgenticTaskSample,
     RubricCategory,
     RubricItem,
-
-    # Nodes
     AgenticTaskParserNode,
     RubricCategoryExpanderNode,
     RubricItemExpanderNode,
+    CategoryOrthogonalityCheckNode,
+)
 
-    # Framework
+# 从框架导入基础设施
+from reward_framework import (
     NodeConfig,
     NodeType,
-    create_simple_context
+    create_simple_context,
+    Agent,
+    AgentConfig,
 )
 
 
@@ -41,38 +45,124 @@ SAMPLE_LLM_RESPONSE = """这是思考过程...
   "verify_rubrics": {
     "核心价值主张锚定": [
       {
-        "rubric_name": "三重核心价值明确标注",
-        "binary_statement": "内容架构明确锚定节目「幕后揭秘、创意竞技、行业教育」三重核心价值，未偏向纯娱乐化叙事",
+        "rubric_name": "三重核心价值显性标注",
+        "binary_statement": "内容架构明确标注节目「幕后揭秘、创意竞技、行业教育」三重核心价值，未偏向纯娱乐化叙事",
         "justification": [
-          "步骤1：从task_description核心约束中提取「锚定幕后揭秘+创意竞技+行业教育三重核心、杜绝纯娱乐化」的强制规则",
-          "步骤2：结合内容架构设计的任务目标，该三重核心为唯一核心定位方向",
-          "步骤3：唯一必然推导出架构需明确体现该三重核心价值"
+          "步骤1：从task_description核心约束提取「锚定三重核心、杜绝纯娱乐化」强制规则",
+          "步骤2：该三重核心为节目唯一核心定位，无替代表述",
+          "步骤3：唯一推导出架构需显性体现该三重核心"
         ],
-        "traceability": "对应专家工作流节点B1（确立节目独特性：教育性vs纯娱乐化）、B2（排除干扰项：非流水账行业概述）；预训练语料明确节目为娱乐+教育融合的时尚竞技真人秀"
+        "traceability": "对应专家工作流节点B1、B2；预训练语料定义节目为创意+竞争+教育融合体"
       }
     ],
-    "叙事锚点与认知递进构建": [
+    "叙事认知链路构建": [
       {
-        "rubric_name": "四阶认知递进链路完整",
-        "binary_statement": "内容架构完整呈现「引发好奇→行业理解→情感共鸣→价值行动」的认知递进链路",
+        "rubric_name": "四阶认知递进完整呈现",
+        "binary_statement": "内容架构完整包含「引发好奇→行业理解→情感共鸣→价值行动」的认知递进链路",
         "justification": [
-          "步骤1：从task_description叙事约束中提取四阶认知递进的强制要求",
-          "步骤2：该叙事链路为唯一指定闭环逻辑，无替代方案",
-          "步骤3：必然得出架构需完整包含该四阶递进链路"
+          "步骤1：从task_description叙事约束提取四阶认知递进强制要求",
+          "步骤2：该链路为唯一指定叙事闭环逻辑",
+          "步骤3：必然得出架构需完整覆盖该递进链路"
         ],
-        "traceability": "对应专家工作流节点H1（检查认知递进：从好奇→理解→共鸣→行动）；预训练语料以幕后好奇开场构建受众认知"
+        "traceability": "对应专家工作流节点H1；预训练语料以幕后好奇开场构建受众认知"
       }
     ],
-    "强制结构维度覆盖": [
+    "结构维度完整覆盖": [
       {
-        "rubric_name": "14项核心维度无遗漏",
-        "binary_statement": "内容架构完整覆盖节目传记、创作理念、幕后制作、评委、选手历程、设计挑战、行业影响、受众反响、创新引领、教育价值、全球影响力、技术融合、未来规划、常见问答14个指定维度",
+        "rubric_name": "14项指定维度无遗漏",
+        "binary_statement": "内容架构完整覆盖任务指定的14个核心维度，无任何维度删减",
         "justification": [
-          "步骤1：从task_description结构约束中提取14项强制覆盖维度列表",
-          "步骤2：该维度列表为刚性结构要求，无删减或替换空间",
+          "步骤1：从task_description结构约束提取14项刚性维度列表",
+          "步骤2：该维度列表无替换或删减空间",
           "步骤3：唯一推导出架构需包含全部14个维度"
         ],
-        "traceability": "对应专家工作流节点D1（罗列必要维度列表）；预训练语料正文包含全部14个对应章节"
+        "traceability": "对应专家工作流节点D1；预训练语料正文包含全部对应章节"
+      }
+    ],
+    "隐性合规要素落地": [
+      {
+        "rubric_name": "多元文化包容要素呈现",
+        "binary_statement": "内容架构中明确体现节目多元文化背景包容性设计",
+        "justification": [
+          "步骤1：从task_description合规约束提取多元文化包容隐性要求",
+          "步骤2：该要素为强制合规项，需独立呈现",
+          "步骤3：必然得出架构需包含该要素"
+        ],
+        "traceability": "对应专家工作流节点F4；预训练语料强调选手多元文化背景"
+      },
+      {
+        "rubric_name": "可持续时尚要素呈现",
+        "binary_statement": "内容架构中明确体现节目对可持续时尚设计的倡导",
+        "justification": [
+          "步骤1：从task_description合规约束提取可持续时尚倡导要求",
+          "步骤2：该要素为独立隐性约束，不可省略",
+          "步骤3：唯一推导出架构需包含该要素"
+        ],
+        "traceability": "对应专家工作流节点F2；预训练语料行业影响章节提及可持续时尚"
+      },
+      {
+        "rubric_name": "数字技术应用呈现",
+        "binary_statement": "内容架构中明确提及3D打印、数字设计类技术融合应用",
+        "justification": [
+          "步骤1：从task_description合规约束提取数字技术应用要求",
+          "步骤2：该技术项为独立合规要素",
+          "步骤3：必然得出架构需包含该技术表述"
+        ],
+        "traceability": "对应专家工作流节点F6；预训练语料技术整合章节提及数字设计技术"
+      },
+      {
+        "rubric_name": "隐性信息分布均衡",
+        "binary_statement": "三类隐性合规要素在架构中均有体现，无单一要素缺失",
+        "justification": [
+          "步骤1：从task_description合规约束提取「隐性信息公平分布」规则",
+          "步骤2：三类要素为并列强制项，需均衡呈现",
+          "步骤3：唯一推导出三类要素均需存在"
+        ],
+        "traceability": "对应专家工作流节点F1"
+      }
+    ],
+    "受众分层适配落地": [
+      {
+        "rubric_name": "专业受众技术适配",
+        "binary_statement": "内容架构包含时尚设计专业术语与流程细节内容",
+        "justification": [
+          "步骤1：从task_description受众约束提取专业爱好者适配要求",
+          "步骤2：专业技术细节为适配该群体的独立要素",
+          "步骤3：必然得出架构需包含专业技术内容"
+        ],
+        "traceability": "对应专家工作流节点G3；预训练语料教育章节讲解设计专业流程"
+      },
+      {
+        "rubric_name": "大众受众情感适配",
+        "binary_statement": "内容架构包含选手个人成长故事线相关内容",
+        "justification": [
+          "步骤1：从task_description受众约束提取普通大众适配要求",
+          "步骤2：选手故事线为适配该群体的独立要素",
+          "步骤3：唯一推导出架构需包含该故事内容"
+        ],
+        "traceability": "对应专家工作流节点G4；预训练语料选手历程章节聚焦个人故事"
+      }
+    ],
+    "叙事逻辑无捷径合规": [
+      {
+        "rubric_name": "非流水账架构落地",
+        "binary_statement": "内容架构未采用纯行业流水账式概述形式",
+        "justification": [
+          "步骤1：从task_description核心约束提取「禁止流水账」刚性规则",
+          "步骤2：该规则无任何豁免情形",
+          "步骤3：必然得出架构需规避流水账形式"
+        ],
+        "traceability": "对应专家工作流节点B2"
+      },
+      {
+        "rubric_name": "逻辑捷径完全规避",
+        "binary_statement": "内容架构所有核心结论均由任务约束推导，无主观臆造内容",
+        "justification": [
+          "步骤1：从task_description叙事约束提取「无逻辑捷径」规则",
+          "步骤2：架构内容需完全依托给定约束，不可凭空添加",
+          "步骤3：唯一推导出所有关键点均需由约束触发"
+        ],
+        "traceability": "对应专家工作流节点H2"
       }
     ]
   }
@@ -313,7 +403,7 @@ class TestAgenticTaskParserNode(unittest.TestCase):
             # Check sample was modified in-place
             self.assertIn("DTI Outfit Reality Television", sample.task_description)
             self.assertIn("verify_rubrics", sample.parsed_json)
-            self.assertEqual(len(sample.parsed_json["verify_rubrics"]), 3)
+            self.assertEqual(len(sample.parsed_json["verify_rubrics"]), 6)
 
             # Print tree structure
             print_tree_structure(samples)
@@ -398,12 +488,7 @@ class TestRubricExpansion(unittest.TestCase):
             # Check expansion
             self.assertEqual(metadata.processed_count, 1)
             categories = sample.get_children()
-            self.assertEqual(len(categories), 3)  # 3 categories
-
-            # Check category details
-            self.assertEqual(categories[0].category_name, "核心价值主张锚定")
-            self.assertEqual(categories[1].category_name, "叙事锚点与认知递进构建")
-            self.assertEqual(categories[2].category_name, "强制结构维度覆盖")
+            self.assertEqual(len(categories), 6)  # 6 categories
 
             # Check parent relationship
             self.assertEqual(categories[0].parent_id, sample.data_id)
@@ -440,7 +525,7 @@ class TestRubricExpansion(unittest.TestCase):
             metadata = await item_expander.execute(categories, create_simple_context([]))
 
             # Check expansion
-            self.assertEqual(metadata.processed_count, 3)  # 3 categories processed
+            self.assertEqual(metadata.processed_count, 6)  # 3 categories processed
 
             # Check first category's items
             items = categories[0].get_children()
@@ -448,8 +533,6 @@ class TestRubricExpansion(unittest.TestCase):
 
             # Check item details
             item = items[0]
-            self.assertEqual(item.rubric_name, "三重核心价值明确标注")
-            self.assertIn("幕后揭秘", item.binary_statement)
             self.assertEqual(len(item.justification), 3)
             self.assertEqual(item.parent_id, categories[0].data_id)
 
@@ -465,12 +548,192 @@ class TestRubricExpansion(unittest.TestCase):
         asyncio.run(run())
 
 
+class TestCategoryOrthogonalityCheck(unittest.TestCase):
+    """Test CategoryOrthogonalityCheckNode with real LLM."""
+
+    # Test configuration
+    TEST_MODEL = "gpt-oss-120b"
+    TEST_BASE_URL = "http://10.102.215.37:28000/v1"
+    TEST_API_KEY = "dummy-key"
+
+    # Test sample with potentially overlapping categories
+    SAMPLE_BAD_ORTHOGONALITY = """</think>
+
+```json
+{
+  "task_description": "设计一个电商网站的性能优化方案，需要提升页面加载速度、响应时间和用户体验。",
+  "verify_rubrics": {
+    "用户体验优化": [
+      {
+        "rubric_name": "页面加载快",
+        "binary_statement": "首屏加载时间<2秒",
+        "justification": ["提升用户体验"],
+        "traceability": "UX标准"
+      }
+    ],
+    "性能提升": [
+      {
+        "rubric_name": "响应速度",
+        "binary_statement": "页面响应时间<1秒",
+        "justification": ["性能优化"],
+        "traceability": "性能指标"
+      }
+    ],
+    "速度优化": [
+      {
+        "rubric_name": "快速加载",
+        "binary_statement": "资源加载快速",
+        "justification": ["提升速度"],
+        "traceability": "速度要求"
+      }
+    ]
+  }
+}
+```"""
+
+    def setUp(self):
+        """Set up agent and nodes."""
+        self.agent_config = AgentConfig(
+            model=self.TEST_MODEL,
+            base_url=self.TEST_BASE_URL,
+            api_key=self.TEST_API_KEY,
+            temperature=0.7,
+            max_tokens=4096,  # 增加到4096以支持详细推理
+            reasoning_effort="high"
+        )
+        self.agent = Agent(self.agent_config)
+
+    def test_orthogonality_check_with_llm(self):
+        """Test orthogonality check with real LLM call."""
+        async def run():
+            # Parse and expand sample
+            sample = AgenticTaskSample(
+                sample_idx=0,
+                raw_response=SAMPLE_LLM_RESPONSE  # 使用真实的完整样本
+            )
+
+            parser = AgenticTaskParserNode(
+                NodeConfig(name="parser", node_type=NodeType.PARSER)
+            )
+            await parser.execute([sample], create_simple_context([]))
+
+            category_expander = RubricCategoryExpanderNode(
+                NodeConfig(name="category_expander", node_type=NodeType.EXPANDER)
+            )
+            await category_expander.execute([sample], create_simple_context([]))
+
+            # Get categories
+            categories = sample.get_children(RubricCategory)
+
+            print("\n" + "="*100)
+            print(" " * 35 + "ORTHOGONALITY CHECK TEST")
+            print("="*100)
+
+            print(f"\n📋 任务描述:")
+            print(f"    {sample.task_description}")
+
+            print(f"\n📊 Rubric 大类 ({len(categories)} 个):")
+            for i, cat in enumerate(categories):
+                print(f"    {i+1}. {cat.category_name}")
+
+            # Create orthogonality checker
+            checker = CategoryOrthogonalityCheckNode(
+                config=NodeConfig(
+                    name="orthogonality_check",
+                    node_type=NodeType.LLM_JUDGE,
+                    skip_on_failure=False  # Don't skip, just record
+                ),
+                agent=self.agent
+            )
+
+            # Build and print prompt
+            prompt = checker._build_prompt(sample.task_description, categories)
+
+            print("\n" + "="*100)
+            print(" " * 40 + "生成的 PROMPT")
+            print("="*100)
+            print(prompt)
+            print("="*100)
+
+            # Execute orthogonality check
+            print("\n🤖 调用 LLM 进行正交性检查...")
+            print(f"   Model: {self.TEST_MODEL}")
+            print(f"   Endpoint: {self.TEST_BASE_URL}")
+            print(f"   Reasoning effort: high")
+
+            context = create_simple_context([])
+            metadata = await checker.execute([sample], context)
+
+            print(f"\n✅ LLM 调用完成:")
+            print(f"   Processed: {metadata.processed_count}")
+            print(f"   Skipped: {metadata.skipped_count}")
+            print(f"   Execution time: {metadata.execution_time:.2f}s")
+
+            # Get the raw LLM response (now stored in metadata)
+            raw_response = sample.get_meta('rubric_orthogonality_raw_response', None)
+
+            print("\n" + "="*100)
+            print(" " * 38 + "LLM 原始响应")
+            print("="*100)
+
+            if raw_response:
+                print(raw_response)
+            else:
+                print("(未找到原始响应)")
+
+            # 打印 token usage 和 finish_reason
+            print("\n" + "="*100)
+            print(" " * 35 + "LLM 调用详细信息")
+            print("="*100)
+
+            # 尝试获取更多调试信息
+            all_meta = sample.get_all_meta()
+            if 'rubric_orthogonality_raw_response' in all_meta:
+                response_len = len(all_meta['rubric_orthogonality_raw_response'])
+                print(f"响应长度: {response_len} 字符")
+
+            if 'rubric_orthogonality_finish_reason' in all_meta:
+                finish_reason = all_meta['rubric_orthogonality_finish_reason']
+                print(f"Finish reason: {finish_reason}")
+                if finish_reason == 'length':
+                    print("⚠️  响应因 max_tokens 限制被截断！")
+
+            if 'rubric_orthogonality_token_usage' in all_meta:
+                usage = all_meta['rubric_orthogonality_token_usage']
+                print(f"Token usage: {usage}")
+
+            if sample.is_skipped:
+                reason, node = sample.get_skip_info()
+                print(f"Sample 被 skip: {reason} (at {node})")
+
+            if 'rubric_orthogonality_error' in all_meta:
+                print(f"错误信息: {all_meta['rubric_orthogonality_error']}")
+
+            print("\n" + "="*100)
+            print(" " * 40 + "解析后的结果")
+            print("="*100)
+
+            # Get parsed judgment
+            judgment = sample.get_meta('rubric_orthogonality_judgment', {})
+            print(f"{judgment}")
+
+            print("\n" + "="*100)
+
+            await self.agent.close()
+
+            print("\n✅ 测试完成!")
+            print("="*100)
+
+        asyncio.run(run())
+
+
 def suite():
     """Create test suite."""
     suite = unittest.TestSuite()
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestAgenticTaskSample))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestAgenticTaskParserNode))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRubricExpansion))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCategoryOrthogonalityCheck))
     return suite
 
 

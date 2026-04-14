@@ -8,7 +8,7 @@ Or: python -m unittest test_reward.py -v
 import unittest
 import asyncio
 from typing import List, Optional, Tuple
-from reward import (
+from reward_framework import (
     Node, NodeConfig, NodeType, NodeResult,
     TopologyGraph, PipelineExecutor, ExecutionContext,
     create_context, Edge, SolverConfig, DifficultyMetricConfig

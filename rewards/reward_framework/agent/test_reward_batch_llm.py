@@ -9,7 +9,7 @@ import unittest
 import asyncio
 import time
 from typing import List
-from reward import Agent, AgentConfig, LLMResponse
+from reward_framework import Agent, AgentConfig, LLMResponse
 
 
 # Test configuration

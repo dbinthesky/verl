@@ -10,10 +10,11 @@ This demonstrates:
 6. Topology graph and pipeline execution
 """
 
+import pytest
 import asyncio
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
-from reward import (
+from reward_framework import (
     # Core Protocol & Base
     PipelineData, PipelineDataBase,
 
@@ -289,6 +290,8 @@ def test_parent_child_relationships():
     print("\n✓ Parent-child relationship test passed!")
 
 
+@pytest.mark.asyncio
+@pytest.mark.asyncio
 async def test_map_node():
     """Test MapNode in-place modification"""
     print("\n" + "="*70)
@@ -328,6 +331,8 @@ async def test_map_node():
     print("\n✓ MapNode test passed!")
 
 
+@pytest.mark.asyncio
+@pytest.mark.asyncio
 async def test_expand_node():
     """Test ExpandNode creating children"""
     print("\n" + "="*70)
@@ -362,6 +367,8 @@ async def test_expand_node():
     print("\n✓ ExpandNode test passed!")
 
 
+@pytest.mark.asyncio
+@pytest.mark.asyncio
 async def test_aggregate_node():
     """Test AggregateNode"""
     print("\n" + "="*70)
@@ -415,6 +422,8 @@ async def test_aggregate_node():
     print("\n✓ AggregateNode test passed!")
 
 
+@pytest.mark.asyncio
+@pytest.mark.asyncio
 async def test_skip_propagation():
     """Test that skip propagates from parent to children"""
     print("\n" + "="*70)
@@ -453,6 +462,8 @@ async def test_skip_propagation():
     print("\n✓ Skip propagation test passed!")
 
 
+@pytest.mark.asyncio
+@pytest.mark.asyncio
 async def test_full_pipeline():
     """Test complete pipeline with topology"""
     print("\n" + "="*70)
@@ -537,6 +548,8 @@ async def test_full_pipeline():
     print("\n✓ Full pipeline test passed!")
 
 
+@pytest.mark.asyncio
+@pytest.mark.asyncio
 async def test_multi_level_expansion():
     """Test multi-dimensional expansion (Sample → Parts → Rubrics)"""
     print("\n" + "="*70)

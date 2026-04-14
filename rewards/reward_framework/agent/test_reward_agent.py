@@ -7,7 +7,7 @@ Tests against local deployed model: gpt-oss-120b at 10.102.215.37:28000
 import unittest
 import asyncio
 import time
-from reward import Agent, AgentConfig, LLMResponse, create_agent
+from reward_framework import Agent, AgentConfig, LLMResponse, create_agent
 
 
 # Test configuration

@@ -6,7 +6,7 @@ This test deliberately triggers errors to verify logging works.
 
 import unittest
 import asyncio
-from reward import Agent, AgentConfig, setup_logging, get_logger
+from reward_framework import Agent, AgentConfig, setup_logging, get_logger
 
 
 # Setup logging first
