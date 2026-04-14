@@ -48,6 +48,11 @@ from .nodes import (
     CategoryOrthogonalityCheckNode,
 )
 
+# Pipeline
+from .pipeline import (
+    Pipeline,
+)
+
 # Topology
 from .topology import (
     Edge,
@@ -99,6 +104,7 @@ __all__ = [
     'MapNode',
     'ExpandNode',
     'AggregateNode',
+    'Pipeline',
     'Edge',
     'TopologyGraph',
     'PipelineExecutor',

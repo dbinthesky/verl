@@ -6,19 +6,27 @@ A complete pipeline for agentic task synthesis and validation:
 - Parser: AgenticTaskParserNode
 - Expanders: RubricCategoryExpanderNode, RubricItemExpanderNode
 - Validator: CategoryOrthogonalityCheckNode
+- Pipeline: AgenticTaskPipeline
 
 Usage:
     from reward_framework.nodes.agentic_task_synthesis import (
         AgenticTaskSample,
-        AgenticTaskParserNode,
-        CategoryOrthogonalityCheckNode
+        AgenticTaskPipeline,
     )
+
+    # Create pipeline
+    pipeline = AgenticTaskPipeline(...)
+
+    # Process single sample (verl interface)
+    sample = AgenticTaskSample(raw_response="...")
+    result = await pipeline.run_one(sample, context)
 """
 
 from .data import AgenticTaskSample, RubricCategory, RubricItem
 from .parser import AgenticTaskParserNode
 from .expander import RubricCategoryExpanderNode, RubricItemExpanderNode
 from .validator import CategoryOrthogonalityCheckNode
+from .pipeline import AgenticTaskPipeline
 
 
 __all__ = [
@@ -32,4 +40,7 @@ __all__ = [
     'RubricCategoryExpanderNode',
     'RubricItemExpanderNode',
     'CategoryOrthogonalityCheckNode',
+
+    # Pipeline
+    'AgenticTaskPipeline',
 ]

@@ -8,7 +8,7 @@ Expands hierarchical data structures:
 
 from __future__ import annotations
 
-from typing import List
+from typing import Any, Dict, List
 
 from ..base import ExpandNode
 from .data import AgenticTaskSample, RubricCategory, RubricItem
@@ -26,7 +26,7 @@ class RubricCategoryExpanderNode(ExpandNode[AgenticTaskSample]):
     # 显式声明处理的数据类型（输入）
     data_type = AgenticTaskSample
 
-    def expand_one(self, data: AgenticTaskSample) -> List[RubricCategory]:
+    def expand_one(self, data: AgenticTaskSample, context: Dict[str, Any]) -> List[RubricCategory]:
         """Expand sample into category nodes."""
         categories = []
 
@@ -54,7 +54,7 @@ class RubricItemExpanderNode(ExpandNode[RubricCategory]):
     # 显式声明处理的数据类型（输入）
     data_type = RubricCategory
 
-    def expand_one(self, data: RubricCategory) -> List[RubricItem]:
+    def expand_one(self, data: RubricCategory, context: Dict[str, Any]) -> List[RubricItem]:
         """Expand category into rubric item nodes."""
         items = []
 
