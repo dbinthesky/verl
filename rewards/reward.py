@@ -582,15 +582,25 @@ class TopologyGraph:
         Raises:
             ValueError: If topology is invalid
         """
-        # Check for isolated nodes
+        if not self.nodes:
+            return  # Empty topology is valid
+
+        # Check for completely isolated nodes (no edges at all)
+        # Root nodes (no incoming edges) are allowed
         all_connected = set()
         for edge in self.edges:
             all_connected.add(edge.from_node)
             all_connected.add(edge.to_node)
 
         isolated = set(self.nodes.keys()) - all_connected
-        if len(isolated) > 1:  # Allow single root node
-            raise ValueError(f"Isolated nodes found: {isolated}")
+
+        # If all nodes are isolated, allow single node (trivial pipeline)
+        if len(isolated) == len(self.nodes):
+            if len(isolated) > 1:
+                raise ValueError(f"Multiple isolated nodes found: {isolated}")
+        # Otherwise, any isolated node is an error
+        elif isolated:
+            raise ValueError(f"Isolated nodes found (not connected to pipeline): {isolated}")
 
         # Try topological sort (will raise if cycles exist)
         self.topological_sort()

@@ -11,8 +11,10 @@ from reward import Agent, AgentConfig, LLMResponse, create_agent
 
 
 # Test configuration
-TEST_MODEL = "gpt-oss-120b"
-TEST_BASE_URL = "http://10.102.215.37:28000/v1"
+# TEST_MODEL = "gpt-oss-120b"
+# TEST_BASE_URL = "http://10.102.215.37:28000/v1"
+TEST_MODEL = "qwen3.5-35b"
+TEST_BASE_URL = "http://10.102.216.23:28000/v1"
 TEST_API_KEY = "dummy-key"
 
 
