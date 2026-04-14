@@ -1659,6 +1659,234 @@ def create_agent(
     return Agent(config)
 
 
+# ==============================================================================
+# Agentic Task Synthesis Reward Implementation
+# ==============================================================================
+
+"""
+Agentic Task Synthesis Reward.
+
+Evaluates generated agentic tasks for quality and complexity.
+"""
+
+
+# Data structures
+@dataclass(frozen=True)
+class ParsedAgenticTask:
+    """Parsed agentic task data structure.
+
+    Attributes:
+        task_description: The main task description
+        subtasks: List of subtasks (if any)
+        expected_output: Expected output format or criteria
+        raw_text: Original raw text
+    """
+    task_description: str
+    subtasks: List[str]
+    expected_output: str
+    raw_text: str
+
+
+# Parser Node
+class AgenticTaskParserNode(Node[str, ParsedAgenticTask]):
+    """Parse raw text into structured agentic task.
+
+    Input: List[str] - Raw generated text
+    Output: List[ParsedAgenticTask] - Parsed task structures
+    """
+
+    def _postprocess_solution(self, solution_str: str) -> str:
+        """Remove common LLM end-of-sequence markers.
+
+        Args:
+            solution_str: Raw solution string
+
+        Returns:
+            Cleaned solution string
+        """
+        markers = [
+            "<|im_end|>",
+            "<｜end▁of▁sentence｜>",
+            "<|endoftext|>"
+        ]
+
+        for marker in markers:
+            if marker in solution_str:
+                return solution_str[:solution_str.index(marker)].strip()
+
+        return solution_str
+
+    def _extract_json_from_response(self, response: str) -> str:
+        """Extract JSON content from LLM response.
+
+        Process steps:
+        1. Remove end-of-sequence markers
+        2. Cut from </think> onwards
+        3. Extract content between ```json and ```
+
+        Args:
+            response: Raw LLM response
+
+        Returns:
+            JSON string
+
+        Raises:
+            ValueError: If JSON cannot be extracted
+        """
+        # Step 1: Remove EOS markers
+        cleaned = self._postprocess_solution(response)
+
+        # Step 2: Cut from </think> onwards
+        if "</think>" in cleaned:
+            cleaned = cleaned[cleaned.index("</think>") + len("</think>"):].strip()
+
+        # Step 3: Extract from ```json ... ```
+        import re
+        json_pattern = r'```json\s*(.*?)\s*```'
+        match = re.search(json_pattern, cleaned, re.DOTALL)
+
+        if not match:
+            raise ValueError("No JSON block found in response (expected ```json...```)")
+
+        return match.group(1).strip()
+
+    def _validate_schema(self, data: Dict[str, Any]) -> bool:
+        """Validate parsed JSON schema.
+
+        Expected schema:
+        {
+            "task_description": str,
+            "verify_rubrics": {
+                "category": [
+                    {
+                        "rubric_name": str,
+                        "binary_statement": str,
+                        "justification": List[str],
+                        "traceability": str
+                    }
+                ]
+            }
+        }
+
+        Args:
+            data: Parsed JSON data
+
+        Returns:
+            True if valid, False otherwise
+        """
+        # Check top-level keys
+        if not isinstance(data, dict):
+            return False
+
+        if "task_description" not in data or "verify_rubrics" not in data:
+            return False
+
+        if not isinstance(data["task_description"], str):
+            return False
+
+        if not isinstance(data["verify_rubrics"], dict):
+            return False
+
+        # Check rubrics structure
+        for category, rubrics in data["verify_rubrics"].items():
+            if not isinstance(rubrics, list):
+                return False
+
+            for rubric in rubrics:
+                if not isinstance(rubric, dict):
+                    return False
+
+                required_fields = ["rubric_name", "binary_statement", "justification", "traceability"]
+                if not all(field in rubric for field in required_fields):
+                    return False
+
+                if not isinstance(rubric["rubric_name"], str):
+                    return False
+                if not isinstance(rubric["binary_statement"], str):
+                    return False
+                if not isinstance(rubric["justification"], list):
+                    return False
+                if not isinstance(rubric["traceability"], str):
+                    return False
+
+        return True
+
+    def _parse_single(self, raw_text: str) -> Optional[ParsedAgenticTask]:
+        """Parse single raw text into ParsedAgenticTask.
+
+        Args:
+            raw_text: Raw LLM response
+
+        Returns:
+            ParsedAgenticTask or None if parsing fails
+        """
+        try:
+            # Extract JSON
+            json_str = self._extract_json_from_response(raw_text)
+
+            # Parse JSON
+            import json
+            data = json.loads(json_str)
+
+            # Validate schema
+            if not self._validate_schema(data):
+                raise ValueError("Schema validation failed")
+
+            # Extract components
+            task_description = data["task_description"]
+            subtasks = list(data["verify_rubrics"].keys())  # Categories as subtasks
+
+            # Collect all rubric names as expected output
+            expected_rubrics = []
+            for category, rubrics in data["verify_rubrics"].items():
+                for rubric in rubrics:
+                    expected_rubrics.append(rubric["rubric_name"])
+
+            expected_output = f"验证标准包含 {len(expected_rubrics)} 个检查点: " + ", ".join(expected_rubrics[:3])
+            if len(expected_rubrics) > 3:
+                expected_output += f" ... (共{len(expected_rubrics)}项)"
+
+            return ParsedAgenticTask(
+                task_description=task_description,
+                subtasks=subtasks,
+                expected_output=expected_output,
+                raw_text=raw_text
+            )
+
+        except Exception as e:
+            # Log error but return None (parser failure)
+            print(f"[Parser Error] Failed to parse: {e}")
+            return None
+
+    async def execute(
+        self,
+        batch_inputs: List[Optional[str]],
+        context: ExecutionContext
+    ) -> NodeResult[ParsedAgenticTask]:
+        """Parse batch of raw texts into structured tasks.
+
+        Args:
+            batch_inputs: List of raw text strings
+            context: Execution context
+
+        Returns:
+            NodeResult containing parsed tasks
+        """
+        results = []
+
+        for raw_text in batch_inputs:
+            if raw_text is None:
+                results.append(None)
+            else:
+                parsed = self._parse_single(raw_text)
+                results.append(parsed)
+
+        return NodeResult(
+            outputs=results,
+            metadata={"parser_success": sum(1 for r in results if r is not None)}
+        )
+
+
 if __name__ == "__main__":
     # Framework self-test
     print(f"Typed Pipeline Framework v{__version__}")
