@@ -110,8 +110,8 @@ class AgenticTaskPipeline(Pipeline):
 
         if categories:
             await asyncio.gather(
-                # Expand categories into items
-                self.item_expander.process_batch(categories, context),
+                # Expand categories into items (concurrent)
+                *[self.item_expander.process_one(cat, context) for cat in categories],
                 # Check category orthogonality
                 self.orthogonality_checker.process_one(data, context),
             )

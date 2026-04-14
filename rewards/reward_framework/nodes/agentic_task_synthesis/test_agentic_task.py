@@ -394,11 +394,10 @@ class TestAgenticTaskParserNode(unittest.TestCase):
 
             # Parse
             context = create_simple_context([])
-            results = await self.parser.process_batch(samples, context)
+            result = await self.parser.process_one(sample, context)
 
-            # Check metadata
-            self.assertEqual(len([r for r in results if not r.is_skipped]), 1)
-            self.assertEqual(len([r for r in results if r.is_skipped]), 0)
+            # Check result
+            self.assertFalse(result.is_skipped)
 
             # Check sample was modified in-place
             self.assertIn("DTI Outfit Reality Television", sample.task_description)
@@ -423,7 +422,7 @@ class TestAgenticTaskParserNode(unittest.TestCase):
 
             # Parse (should fail and mark as skipped)
             context = create_simple_context([])
-            results = await self.parser.process_batch(samples, context)
+            result = await self.parser.process_one(sample, context)
 
             # Check it was skipped
             self.assertTrue(sample.is_skipped)
@@ -443,9 +442,9 @@ class TestAgenticTaskParserNode(unittest.TestCase):
                 AgenticTaskSample(sample_idx=2, raw_response=SAMPLE_INVALID_SCHEMA),  # Should fail
             ]
 
-            # Parse
+            # Parse (concurrent)
             context = create_simple_context([])
-            results = await self.parser.process_batch(samples, context)
+            results = await asyncio.gather(*[self.parser.process_one(s, context) for s in samples])
 
             # Check results
             self.assertEqual(len([r for r in results if not r.is_skipped]), 2)  # First two succeed
@@ -477,16 +476,16 @@ class TestRubricExpansion(unittest.TestCase):
             parser = AgenticTaskParserNode(
                 NodeConfig(name="parser", node_type=NodeType.PARSER)
             )
-            await parser.process_batch([sample], create_simple_context([]))
+            await parser.process_one(sample, create_simple_context([]))
 
             # Expand into categories
             expander = RubricCategoryExpanderNode(
                 NodeConfig(name="category_expander", node_type=NodeType.EXPANDER)
             )
-            results = await expander.process_batch([sample], create_simple_context([]))
+            result = await expander.process_one(sample, create_simple_context([]))
 
             # Check expansion
-            self.assertEqual(len([r for r in results if not r.is_skipped]), 1)
+            self.assertFalse(result.is_skipped)
             categories = sample.get_children()
             self.assertEqual(len(categories), 6)  # 6 categories
 
@@ -509,12 +508,12 @@ class TestRubricExpansion(unittest.TestCase):
             parser = AgenticTaskParserNode(
                 NodeConfig(name="parser", node_type=NodeType.PARSER)
             )
-            await parser.process_batch([sample], create_simple_context([]))
+            await parser.process_one(sample, create_simple_context([]))
 
             category_expander = RubricCategoryExpanderNode(
                 NodeConfig(name="category_expander", node_type=NodeType.EXPANDER)
             )
-            await category_expander.process_batch([sample], create_simple_context([]))
+            await category_expander.process_one(sample, create_simple_context([]))
 
             # Now expand categories to rubric items
             categories = sample.get_children()
@@ -522,7 +521,8 @@ class TestRubricExpansion(unittest.TestCase):
             item_expander = RubricItemExpanderNode(
                 NodeConfig(name="item_expander", node_type=NodeType.EXPANDER)
             )
-            results = await item_expander.process_batch(categories, create_simple_context([]))
+            context = create_simple_context([])
+            results = await asyncio.gather(*[item_expander.process_one(item, context) for item in categories])
 
             # Check expansion
             self.assertEqual(len([r for r in results if not r.is_skipped]), 6)  # 3 categories processed
@@ -615,12 +615,12 @@ class TestCategoryOrthogonalityCheck(unittest.TestCase):
             parser = AgenticTaskParserNode(
                 NodeConfig(name="parser", node_type=NodeType.PARSER)
             )
-            await parser.process_batch([sample], create_simple_context([]))
+            await parser.process_one(sample, create_simple_context([]))
 
             category_expander = RubricCategoryExpanderNode(
                 NodeConfig(name="category_expander", node_type=NodeType.EXPANDER)
             )
-            await category_expander.process_batch([sample], create_simple_context([]))
+            await category_expander.process_one(sample, create_simple_context([]))
 
             # Get categories
             categories = sample.get_children(RubricCategory)
@@ -662,12 +662,11 @@ class TestCategoryOrthogonalityCheck(unittest.TestCase):
             print(f"   Reasoning effort: high")
 
             context = create_simple_context([])
-            results = await checker.process_batch([sample], context)
+            result = await checker.process_one(sample, context)
 
             print(f"\n✅ LLM 调用完成:")
-            print(f"   Processed: {len([r for r in results if not r.is_skipped])}")
-            print(f"   Skipped: {len([r for r in results if r.is_skipped])}")
-            print(f"   Execution time: {0.0:.2f}s")
+            print(f"   Processed: {'Yes' if not result.is_skipped else 'No'}")
+            print(f"   Skipped: {'Yes' if result.is_skipped else 'No'}")
 
             # Get the raw LLM response (now stored in metadata)
             raw_response = sample.get_meta('rubric_orthogonality_raw_response', None)

@@ -2,7 +2,7 @@
 Node Base Classes - Single-Item Processing
 
 This module provides the base classes for all pipeline nodes.
-Core principle: Nodes process single items by default, with optional batch optimization.
+Core principle: Nodes process single items. Concurrency is controlled by asyncio.gather().
 """
 
 from __future__ import annotations
@@ -25,9 +25,9 @@ class Node(ABC, Generic[DataT]):
 
     Core principles:
     1. process_one() handles single item (required)
-    2. process_batch() handles batch (default: concurrent process_one)
-    3. Nodes modify data in-place
-    4. data_type declares the type of data this node processes
+    2. Nodes modify data in-place
+    3. data_type declares the type of data this node processes
+    4. Concurrency is controlled by caller using asyncio.gather()
     """
 
     # Explicitly declare the data type this node processes
@@ -54,25 +54,6 @@ class Node(ABC, Generic[DataT]):
             The processed data item (same object, modified in-place)
         """
         raise NotImplementedError
-
-    async def process_batch(
-        self,
-        batch: List[DataT],
-        context: Dict[str, Any]
-    ) -> List[DataT]:
-        """Process a batch of data items (default: concurrent process_one)
-
-        Subclasses can override this for batch-specific optimizations
-        (e.g., LLM nodes can use batch API).
-
-        Args:
-            batch: List of data items
-            context: Execution context
-
-        Returns:
-            List of processed data items
-        """
-        return await asyncio.gather(*[self.process_one(data, context) for data in batch])
 
     # ===== Framework utility methods =====
 

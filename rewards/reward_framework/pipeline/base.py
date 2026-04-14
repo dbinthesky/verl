@@ -2,7 +2,7 @@
 Pipeline Base Class
 
 Provides the Pipeline abstraction for manual orchestration of node execution.
-Replaces the legacy TopologyGraph/Executor pattern.
+Single-item processing with explicit concurrency control using asyncio.gather().
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ class Pipeline(ABC):
     """Pipeline base class for manual orchestration
 
     Users inherit from this class and implement run_one() to explicitly
-    control node execution order and parallelism.
+    control node execution order and parallelism using asyncio.gather().
 
     Example:
         class MyPipeline(Pipeline):
@@ -35,7 +35,7 @@ class Pipeline(ABC):
                 # Step 3: Parallel processing
                 children = data.get_children()
                 await asyncio.gather(
-                    self.node_a.process_batch(children, context),
+                    *[self.node_a.process_one(child, context) for child in children],
                     self.node_b.process_one(data, context),
                 )
 
@@ -58,22 +58,3 @@ class Pipeline(ABC):
             Processed data item
         """
         raise NotImplementedError
-
-    async def run_batch(
-        self,
-        batch: List[PipelineData],
-        context: Dict[str, Any]
-    ) -> List[PipelineData]:
-        """Execute the pipeline for a batch of data items
-
-        Default implementation: concurrent run_one() for all items.
-        Override if you need batch-specific logic.
-
-        Args:
-            batch: List of input data items
-            context: Execution context
-
-        Returns:
-            List of processed data items
-        """
-        return await asyncio.gather(*[self.run_one(data, context) for data in batch])
