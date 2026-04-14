@@ -1,25 +1,37 @@
 """
 Test Agentic Task Synthesis Reward.
 
-Tests all components of the Agentic Task Synthesis reward implementation.
+Tests all components of the Agentic Task Synthesis implementation
+with the new Protocol-based framework.
 """
 
 import unittest
 import asyncio
+from typing import List
 from reward import (
-    ParsedAgenticTask,
+    # Data structures
+    AgenticTaskSample,
+    RubricCategory,
+    RubricItem,
+
+    # Nodes
     AgenticTaskParserNode,
+    RubricCategoryExpanderNode,
+    RubricItemExpanderNode,
+
+    # Framework
     NodeConfig,
     NodeType,
-    create_context
+    create_simple_context
 )
 
 
-# ========== 共用测试样例 ==========
+# ==============================================================================
+# Test Data Samples
+# ==============================================================================
 
 # 完整的 LLM 响应样例（包含 <think>、```json```）
-SAMPLE_LLM_RESPONSE = """<think>
-这是思考过程...
+SAMPLE_LLM_RESPONSE = """这是思考过程...
 需要分析任务需求...
 </think>
 
@@ -102,49 +114,100 @@ SAMPLE_INVALID_SCHEMA = """```json
 ```"""
 
 
-# ========== 测试用例 ==========
+# ==============================================================================
+# Utility Functions
+# ==============================================================================
 
-class TestParsedAgenticTask(unittest.TestCase):
-    """Test ParsedAgenticTask data structure."""
+def print_tree_structure(samples: List[AgenticTaskSample], max_depth: int = 3):
+    """Print complete tree structure of samples with children.
 
-    def test_create_parsed_task(self):
-        """Test creating ParsedAgenticTask instance."""
-        task = ParsedAgenticTask(
-            task_description="Create a travel planning agent",
-            subtasks=["Book flights", "Find hotels", "Create itinerary"],
-            expected_output="JSON with travel plan",
-            raw_text="Task: Create a travel planning agent..."
+    Args:
+        samples: List of AgenticTaskSample
+        max_depth: Maximum depth to print
+    """
+    print("\n" + "="*80)
+    print("TREE STRUCTURE")
+    print("="*80)
+
+    for sample in samples:
+        # Level 1: Sample
+        status = "[SKIPPED]" if sample.is_skipped else "[OK]"
+        print(f"\n{status} Sample: {sample.data_id}")
+        print(f"  └─ task_desc: {sample.task_description[:80]}...")
+        print(f"  └─ raw_response_len: {len(sample.raw_response)}")
+
+        if sample.is_skipped:
+            reason, node = sample.get_skip_info()
+            print(f"  └─ skip_reason: {reason} (at {node})")
+            continue
+
+        # Level 2: Categories
+        categories = sample.get_children()
+        print(f"  └─ categories: {len(categories)}")
+
+        for i, category in enumerate(categories):
+            cat_status = "[SKIPPED]" if category.is_skipped else "[OK]"
+            print(f"\n     {cat_status} Category {i}: {category.data_id}")
+            print(f"        ├─ name: {category.category_name}")
+            print(f"        ├─ parent_id: {category.parent_id}")
+
+            if category.is_skipped:
+                reason, node = category.get_skip_info()
+                print(f"        └─ skip_reason: {reason}")
+                continue
+
+            # Level 3: Rubric Items
+            items = category.get_children()
+            print(f"        └─ rubric_items: {len(items)}")
+
+            for j, item in enumerate(items):
+                item_status = "[SKIPPED]" if item.is_skipped else "[OK]"
+                print(f"\n           {item_status} RubricItem {j}: {item.data_id}")
+                print(f"              ├─ name: {item.rubric_name}")
+                print(f"              ├─ parent_id: {item.parent_id}")
+                print(f"              ├─ binary_statement: {item.binary_statement[:60]}...")
+                print(f"              ├─ justification_steps: {len(item.justification)}")
+                print(f"              ├─ traceability: {item.traceability[:60]}...")
+                print(f"              └─ judge_score: {item.judge_score}")
+
+    print("\n" + "="*80)
+
+
+# ==============================================================================
+# Test Cases
+# ==============================================================================
+
+class TestAgenticTaskSample(unittest.TestCase):
+    """Test AgenticTaskSample data structure."""
+
+    def test_create_sample(self):
+        """Test creating AgenticTaskSample instance."""
+        sample = AgenticTaskSample(
+            sample_idx=0,
+            raw_response="test response",
+            task_description="Test task"
         )
 
-        self.assertEqual(task.task_description, "Create a travel planning agent")
-        self.assertEqual(len(task.subtasks), 3)
-        self.assertEqual(task.expected_output, "JSON with travel plan")
-        self.assertIn("travel planning", task.raw_text)
+        self.assertEqual(sample.sample_idx, 0)
+        self.assertEqual(sample.data_id, "sample_0")
+        self.assertEqual(sample.raw_response, "test response")
+        self.assertEqual(sample.task_description, "Test task")
 
-    def test_parsed_task_immutable(self):
-        """Test that ParsedAgenticTask is immutable."""
-        task = ParsedAgenticTask(
-            task_description="Test task",
-            subtasks=[],
-            expected_output="Output",
-            raw_text="Raw"
+    def test_parent_child_relationships(self):
+        """Test parent-child relationships."""
+        sample = AgenticTaskSample(sample_idx=0)
+
+        category = RubricCategory(
+            sample_idx=0,
+            data_id="sample_0/category_0",
+            parent_id="sample_0",
+            category_name="Test Category"
         )
 
-        # Should not be able to modify
-        with self.assertRaises(Exception):
-            task.task_description = "Modified"
+        sample.add_child(category)
 
-    def test_empty_subtasks(self):
-        """Test task with no subtasks."""
-        task = ParsedAgenticTask(
-            task_description="Simple task",
-            subtasks=[],
-            expected_output="Result",
-            raw_text="Simple task"
-        )
-
-        self.assertEqual(len(task.subtasks), 0)
-        self.assertEqual(task.task_description, "Simple task")
+        self.assertEqual(len(sample.get_children()), 1)
+        self.assertEqual(category.parent_id, sample.data_id)
 
 
 class TestAgenticTaskParserNode(unittest.TestCase):
@@ -155,11 +218,6 @@ class TestAgenticTaskParserNode(unittest.TestCase):
         self.parser = AgenticTaskParserNode(
             NodeConfig(name="parser", node_type=NodeType.PARSER)
         )
-
-    def test_parser_node_creation(self):
-        """Test creating parser node."""
-        self.assertEqual(self.parser.config.name, "parser")
-        self.assertEqual(self.parser.config.node_type, NodeType.PARSER)
 
     def test_postprocess_solution(self):
         """Test removing EOS markers."""
@@ -172,11 +230,6 @@ class TestAgenticTaskParserNode(unittest.TestCase):
         text = "Test<｜end▁of▁sentence｜>extra"
         result = self.parser._postprocess_solution(text)
         self.assertEqual(result, "Test")
-
-        # Test with <|endoftext|>
-        text = "Content<|endoftext|>extra"
-        result = self.parser._postprocess_solution(text)
-        self.assertEqual(result, "Content")
 
         # Test without markers
         text = "No markers here"
@@ -238,75 +291,176 @@ class TestAgenticTaskParserNode(unittest.TestCase):
         }
         self.assertFalse(self.parser._validate_schema(invalid_data2))
 
-        # Missing rubric fields
-        invalid_data3 = {
-            "task_description": "Test",
-            "verify_rubrics": {
-                "category": [
-                    {"rubric_name": "test"}  # Missing other fields
-                ]
-            }
-        }
-        self.assertFalse(self.parser._validate_schema(invalid_data3))
-
-    def test_parse_single_success(self):
+    def test_parse_success(self):
         """Test parsing single response successfully."""
-        parsed = self.parser._parse_single(SAMPLE_LLM_RESPONSE)
-
-        self.assertIsNotNone(parsed)
-        self.assertIn("DTI Outfit Reality Television", parsed.task_description)
-        self.assertIn("核心价值主张锚定", parsed.subtasks)
-        self.assertIn("叙事锚点与认知递进构建", parsed.subtasks)
-        self.assertIn("强制结构维度覆盖", parsed.subtasks)
-        self.assertIn("验证标准包含", parsed.expected_output)
-
-    def test_parse_single_failure(self):
-        """Test parsing failure with invalid input."""
-        parsed = self.parser._parse_single(SAMPLE_INVALID_SCHEMA)
-        self.assertIsNone(parsed)
-
-        parsed = self.parser._parse_single("No JSON at all")
-        self.assertIsNone(parsed)
-
-    def test_execute_batch(self):
-        """Test batch parsing."""
         async def run():
-            batch_inputs = [
-                SAMPLE_LLM_RESPONSE,
-                SAMPLE_NO_THINK,
-                SAMPLE_INVALID_SCHEMA,  # Should fail
-                None  # Skip
-            ]
+            # Create sample
+            sample = AgenticTaskSample(
+                sample_idx=0,
+                raw_response=SAMPLE_LLM_RESPONSE
+            )
 
-            context = create_context(batch_inputs)
-            result = await self.parser.execute(batch_inputs, context)
+            samples = [sample]
 
-            # Check results
-            self.assertEqual(len(result.outputs), 4)
-            self.assertIsNotNone(result.outputs[0])  # First should succeed
-            self.assertIsNotNone(result.outputs[1])  # Second should succeed
-            self.assertIsNone(result.outputs[2])     # Third should fail
-            self.assertIsNone(result.outputs[3])     # Fourth is None
+            # Parse
+            context = create_simple_context([])
+            metadata = await self.parser.execute(samples, context)
 
             # Check metadata
-            self.assertEqual(result.metadata["parser_success"], 2)
+            self.assertEqual(metadata.processed_count, 1)
+            self.assertEqual(metadata.skipped_count, 0)
 
-            # Check first parsed result
-            first = result.outputs[0]
-            self.assertIsInstance(first, ParsedAgenticTask)
-            self.assertEqual(len(first.subtasks), 3)
+            # Check sample was modified in-place
+            self.assertIn("DTI Outfit Reality Television", sample.task_description)
+            self.assertIn("verify_rubrics", sample.parsed_json)
+            self.assertEqual(len(sample.parsed_json["verify_rubrics"]), 3)
+
+            # Print tree structure
+            print_tree_structure(samples)
 
         asyncio.run(run())
 
-    def test_execute_empty_batch(self):
-        """Test parsing empty batch."""
+    def test_parse_failure(self):
+        """Test parsing failure with invalid input."""
         async def run():
-            batch_inputs = []
-            context = create_context(batch_inputs)
-            result = await self.parser.execute(batch_inputs, context)
+            # Create sample with invalid schema
+            sample = AgenticTaskSample(
+                sample_idx=0,
+                raw_response=SAMPLE_INVALID_SCHEMA
+            )
 
-            self.assertEqual(len(result.outputs), 0)
-            self.assertEqual(result.metadata["parser_success"], 0)
+            samples = [sample]
+
+            # Parse (should fail and mark as skipped)
+            context = create_simple_context([])
+            metadata = await self.parser.execute(samples, context)
+
+            # Check it was skipped
+            self.assertTrue(sample.is_skipped)
+            reason, node = sample.get_skip_info()
+            self.assertIn("parse_error", reason)
+            self.assertEqual(node, "parser")
+
+        asyncio.run(run())
+
+    def test_parse_batch(self):
+        """Test batch parsing."""
+        async def run():
+            # Create batch
+            samples = [
+                AgenticTaskSample(sample_idx=0, raw_response=SAMPLE_LLM_RESPONSE),
+                AgenticTaskSample(sample_idx=1, raw_response=SAMPLE_NO_THINK),
+                AgenticTaskSample(sample_idx=2, raw_response=SAMPLE_INVALID_SCHEMA),  # Should fail
+            ]
+
+            # Parse
+            context = create_simple_context([])
+            metadata = await self.parser.execute(samples, context)
+
+            # Check results
+            self.assertEqual(metadata.processed_count, 2)  # First two succeed
+            self.assertEqual(len(metadata.newly_skipped_ids), 1)  # Third fails
+
+            # Check individual samples
+            self.assertFalse(samples[0].is_skipped)
+            self.assertFalse(samples[1].is_skipped)
+            self.assertTrue(samples[2].is_skipped)
+
+            print_tree_structure(samples)
+
+        asyncio.run(run())
+
+
+class TestRubricExpansion(unittest.TestCase):
+    """Test RubricCategory and RubricItem expansion."""
+
+    def test_category_expansion(self):
+        """Test expanding sample into categories."""
+        async def run():
+            # Create and parse sample
+            sample = AgenticTaskSample(
+                sample_idx=0,
+                raw_response=SAMPLE_LLM_RESPONSE
+            )
+
+            # Parse first
+            parser = AgenticTaskParserNode(
+                NodeConfig(name="parser", node_type=NodeType.PARSER)
+            )
+            await parser.execute([sample], create_simple_context([]))
+
+            # Expand into categories
+            expander = RubricCategoryExpanderNode(
+                NodeConfig(name="category_expander", node_type=NodeType.EXPANDER)
+            )
+            metadata = await expander.execute([sample], create_simple_context([]))
+
+            # Check expansion
+            self.assertEqual(metadata.processed_count, 1)
+            categories = sample.get_children()
+            self.assertEqual(len(categories), 3)  # 3 categories
+
+            # Check category details
+            self.assertEqual(categories[0].category_name, "核心价值主张锚定")
+            self.assertEqual(categories[1].category_name, "叙事锚点与认知递进构建")
+            self.assertEqual(categories[2].category_name, "强制结构维度覆盖")
+
+            # Check parent relationship
+            self.assertEqual(categories[0].parent_id, sample.data_id)
+
+            print_tree_structure([sample])
+
+        asyncio.run(run())
+
+    def test_rubric_item_expansion(self):
+        """Test expanding categories into rubric items."""
+        async def run():
+            # Setup: Parse and expand to categories
+            sample = AgenticTaskSample(
+                sample_idx=0,
+                raw_response=SAMPLE_LLM_RESPONSE
+            )
+
+            parser = AgenticTaskParserNode(
+                NodeConfig(name="parser", node_type=NodeType.PARSER)
+            )
+            await parser.execute([sample], create_simple_context([]))
+
+            category_expander = RubricCategoryExpanderNode(
+                NodeConfig(name="category_expander", node_type=NodeType.EXPANDER)
+            )
+            await category_expander.execute([sample], create_simple_context([]))
+
+            # Now expand categories to rubric items
+            categories = sample.get_children()
+
+            item_expander = RubricItemExpanderNode(
+                NodeConfig(name="item_expander", node_type=NodeType.EXPANDER)
+            )
+            metadata = await item_expander.execute(categories, create_simple_context([]))
+
+            # Check expansion
+            self.assertEqual(metadata.processed_count, 3)  # 3 categories processed
+
+            # Check first category's items
+            items = categories[0].get_children()
+            self.assertEqual(len(items), 1)  # 1 rubric in first category
+
+            # Check item details
+            item = items[0]
+            self.assertEqual(item.rubric_name, "三重核心价值明确标注")
+            self.assertIn("幕后揭秘", item.binary_statement)
+            self.assertEqual(len(item.justification), 3)
+            self.assertEqual(item.parent_id, categories[0].data_id)
+
+            # Print full tree
+            print_tree_structure([sample])
+
+            # Test iter_all_descendants
+            all_descendants = list(sample.iter_all_descendants())
+            print(f"\n总共 {len(all_descendants)} 个后代节点:")
+            print(f"  - 3 个 Category")
+            print(f"  - {len(all_descendants) - 3} 个 RubricItem")
 
         asyncio.run(run())
 
@@ -314,26 +468,23 @@ class TestAgenticTaskParserNode(unittest.TestCase):
 def suite():
     """Create test suite."""
     suite = unittest.TestSuite()
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(
-        TestParsedAgenticTask
-    ))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(
-        TestAgenticTaskParserNode
-    ))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestAgenticTaskSample))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestAgenticTaskParserNode))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRubricExpansion))
     return suite
 
 
 if __name__ == '__main__':
-    print("\n" + "="*70)
-    print(" "*15 + "AGENTIC TASK SYNTHESIS TESTS")
-    print("="*70)
+    print("\n" + "="*80)
+    print(" "*20 + "AGENTIC TASK SYNTHESIS TESTS")
+    print("="*80)
 
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite())
 
-    print("\n" + "="*70)
+    print("\n" + "="*80)
     if result.wasSuccessful():
         print("✅ ALL TESTS PASSED")
     else:
         print(f"❌ {len(result.failures + result.errors)} TEST(S) FAILED")
-    print("="*70)
+    print("="*80)

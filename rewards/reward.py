@@ -5,15 +5,19 @@ This module provides a strongly-typed, declarative framework for building
 multi-stage LLM pipelines with explicit topology definition.
 
 Core Concepts:
-    - Node: Atomic processing unit with typed inputs/outputs
+    - PipelineData: Protocol-based data contract (framework agnostic)
+    - Node: Atomic processing unit (in-place modification)
     - Topology: DAG defining node dependencies
-    - Executor: Orchestrates node execution with context management
+    - Executor: Orchestrates node execution
 
 Design Philosophy:
+    - Protocol-driven (不依赖具体类型)
+    - In-place modification (数据直接修改，不返回新数据)
     - Composition over inheritance
-    - Explicit topology as first-class citizen
     - Type-safe interfaces with generic support
     - Single-file constraint (for verl framework compatibility)
+
+Version: 2.0.0 (Refactored with Protocol-based design)
 """
 
 from __future__ import annotations
@@ -27,29 +31,167 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import (
     Any, Dict, List, Optional, Callable, TypeVar, Generic,
-    Protocol, TypedDict, Union, Tuple, Set, Awaitable
+    Protocol, TypedDict, Union, Tuple, Set, Awaitable, Iterator,
+    runtime_checkable
 )
-from dataclasses import dataclass, field
-from collections import defaultdict, deque, OrderedDict
+from dataclasses import dataclass, field, replace
+from collections import defaultdict, deque
 import numpy as np
 
 
-# ==============================================================================
-# Type Variables & Generic Types
-# ==============================================================================
-
-InputT = TypeVar('InputT')
-OutputT = TypeVar('OutputT')
-ParsedT = TypeVar('ParsedT')
-ScoreT = Union[float, List[float]]
+__version__ = "2.0.0"
 
 
 # ==============================================================================
-# Core Type Definitions
+# Framework Core: Data Protocol (最小契约)
+# ==============================================================================
+
+@runtime_checkable
+class PipelineData(Protocol):
+    """Pipeline数据必须实现的最小契约
+
+    框架层只依赖这些接口，不关心具体实现。
+    任务可以选择继承PipelineDataBase，或者自己实现这个Protocol。
+    """
+
+    # ===== 身份标识 =====
+    @property
+    def data_id(self) -> str:
+        """全局唯一标识符（如 "sample_0" 或 "sample_0/part_1"）"""
+        ...
+
+    @property
+    def sample_idx(self) -> int:
+        """归属的样本索引（根节点）"""
+        ...
+
+    # ===== Skip状态 =====
+    @property
+    def is_skipped(self) -> bool:
+        """是否被跳过"""
+        ...
+
+    def mark_skipped(self, reason: str, node_name: str) -> None:
+        """标记为跳过"""
+        ...
+
+    def get_skip_info(self) -> Tuple[str, str]:
+        """获取跳过信息：(reason, node_name)"""
+        ...
+
+    # ===== 层次结构（支持展开/聚合）=====
+    def get_children(self) -> List['PipelineData']:
+        """获取子项（如果有展开）"""
+        ...
+
+    def add_child(self, child: 'PipelineData') -> None:
+        """添加子项"""
+        ...
+
+    @property
+    def parent_id(self) -> Optional[str]:
+        """父节点ID"""
+        ...
+
+    # ===== 元数据 =====
+    def set_meta(self, key: str, value: Any) -> None:
+        """设置元数据"""
+        ...
+
+    def get_meta(self, key: str, default: Any = None) -> Any:
+        """获取元数据"""
+        ...
+
+    def get_all_meta(self) -> Dict[str, Any]:
+        """获取所有元数据"""
+        ...
+
+
+# ==============================================================================
+# Framework Core: Base Implementation (可选基类)
+# ==============================================================================
+
+@dataclass
+class PipelineDataBase:
+    """框架提供的基础实现（任务可以选择继承或自己实现PipelineData）
+
+    实现了PipelineData的所有接口，提供开箱即用的功能。
+    """
+
+    # 必需字段
+    sample_idx: int
+    data_id: str = ""
+
+    # Skip状态
+    _is_skipped: bool = False
+    _skip_reason: str = ""
+    _skip_at_node: str = ""
+
+    # 层次结构
+    parent_id: Optional[str] = None
+    _children: List['PipelineDataBase'] = field(default_factory=list)
+
+    # 元数据
+    _metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        if not self.data_id:
+            self.data_id = f"sample_{self.sample_idx}"
+
+    # ===== 实现PipelineData接口 =====
+
+    @property
+    def is_skipped(self) -> bool:
+        return self._is_skipped
+
+    def mark_skipped(self, reason: str, node_name: str) -> None:
+        self._is_skipped = True
+        self._skip_reason = reason
+        self._skip_at_node = node_name
+
+    def get_skip_info(self) -> Tuple[str, str]:
+        return (self._skip_reason, self._skip_at_node)
+
+    def get_children(self) -> List['PipelineDataBase']:
+        return self._children
+
+    def add_child(self, child: 'PipelineDataBase') -> None:
+        self._children.append(child)
+
+    def set_meta(self, key: str, value: Any) -> None:
+        self._metadata[key] = value
+
+    def get_meta(self, key: str, default: Any = None) -> Any:
+        return self._metadata.get(key, default)
+
+    def get_all_meta(self) -> Dict[str, Any]:
+        return self._metadata.copy()
+
+    # ===== 便捷方法 =====
+
+    def add_score(self, score_name: str, score_value: float) -> None:
+        """添加分数到元数据"""
+        if 'scores' not in self._metadata:
+            self._metadata['scores'] = {}
+        self._metadata['scores'][score_name] = score_value
+
+    def get_all_scores(self) -> Dict[str, float]:
+        """获取所有分数"""
+        return self._metadata.get('scores', {})
+
+    def iter_all_descendants(self) -> Iterator['PipelineDataBase']:
+        """递归迭代所有后代节点（DFS）"""
+        for child in self._children:
+            yield child
+            yield from child.iter_all_descendants()
+
+
+# ==============================================================================
+# Node Configuration & Metadata
 # ==============================================================================
 
 class NodeType(Enum):
-    """Node type enumeration for categorization and visualization."""
+    """Node type enumeration."""
     PARSER = "parser"
     RULE = "rule"
     LLM_GENERATOR = "llm_generator"
@@ -57,48 +199,25 @@ class NodeType(Enum):
     AGGREGATOR = "aggregator"
     FILTER = "filter"
     TRANSFORMER = "transformer"
-
-
-class ExecutionContext(TypedDict, total=False):
-    """Execution context passed to all nodes.
-
-    Required fields:
-        ground_truths: Ground truth data for each sample
-
-    Optional fields:
-        agents: Dictionary of LLM agents by name
-        max_concurrent: Concurrency limits by agent name
-        parse_fn: Solution parsing function
-        parsed_questions: Parsed question data
-        extra_context: Additional task-specific context
-        min_reward: Minimum reward value for failed samples
-        skip_indices: Set of sample indices to skip
-    """
-    ground_truths: List[Dict[str, Any]]
-    agents: Dict[str, Any]
-    max_concurrent: Dict[str, int]
-    parse_fn: Callable[[str], Optional[Any]]
-    parsed_questions: List[Any]
-    extra_context: Optional[Any]
-    min_reward: float
-    skip_indices: Set[int]
+    EXPANDER = "expander"
 
 
 @dataclass(frozen=True)
 class NodeConfig:
-    """Immutable configuration for a processing node.
-
-    Attributes:
-        name: Unique identifier for the node
-        node_type: Category of the node
-        skip_on_negative: If True, mark samples with negative scores for skipping
-        filter_only: If True, node score is not included in final aggregation
-        weight: Multiplicative weight for node's contribution to final score
-        enabled: If False, node is skipped during execution
-    """
+    """节点配置（框架层）"""
     name: str
     node_type: NodeType
+
+    # Skip策略
+    respect_skip: bool = True              # 是否尊重上游skip标记
     skip_on_negative: bool = False
+    skip_on_none: bool = False
+
+    # 并行控制
+    enable_internal_parallel: bool = False
+    max_internal_concurrent: int = 10
+
+    # 其他
     filter_only: bool = False
     weight: float = 1.0
     enabled: bool = True
@@ -110,451 +229,379 @@ class NodeConfig:
             raise ValueError(f"Node weight must be non-negative, got {self.weight}")
 
 
-@dataclass(frozen=True)
-class SolverConfig:
-    """Configuration for a single solver in multi-solver evaluation.
-
-    Attributes:
-        name: Solver identifier (e.g., 'weak', 'adv')
-        agent_key: Key to lookup agent in ExecutionContext.agents
-        repeat: Number of times to repeat each question
-        prompt_fn_key: Key to lookup prompt construction function in context
-        max_concurrent: Maximum concurrent requests for this solver
-    """
-    name: str
-    agent_key: str
-    repeat: int
-    prompt_fn_key: str
-    max_concurrent: int
-
-    def __post_init__(self):
-        if self.repeat <= 0:
-            raise ValueError(f"Repeat must be positive, got {self.repeat}")
-        if self.max_concurrent <= 0:
-            raise ValueError(f"Max concurrent must be positive, got {self.max_concurrent}")
-
-
-@dataclass(frozen=True)
-class DifficultyMetricConfig:
-    """Configuration for difficulty score computation.
-
-    Defines thresholds and weights for evaluating question difficulty
-    based on weak and advanced solver performance.
-
-    Attributes:
-        weak_name: Name of weak solver
-        adv_name: Name of advanced solver
-        weak_weight: Weight for weak solver difficulty contribution
-        adv_weight: Weight for advanced solver difficulty contribution
-        weak_overcomplex_threshold: Below this, question is too hard for weak
-        adv_overcomplex_threshold: Below this, question is too hard for advanced
-        weak_oversimple_threshold: Above this, question is too easy for weak
-        adv_oversimple_threshold: Above this, question is too easy for advanced
-        advantage_gap_threshold: Minimum required gap (adv - weak) pass rate
-        confidence_bonus_threshold: Advanced pass rate for bonus eligibility
-        confidence_bonus_weight: Weight for confidence bonus
-    """
-    weak_name: str
-    adv_name: str
-    weak_weight: float = 0.4
-    adv_weight: float = 0.6
-    weak_overcomplex_threshold: float = 0.1
-    adv_overcomplex_threshold: float = 0.3
-    weak_oversimple_threshold: float = 0.9
-    adv_oversimple_threshold: float = 0.95
-    advantage_gap_threshold: float = 0.2
-    confidence_bonus_threshold: float = 0.8
-    confidence_bonus_weight: float = 0.1
-
-
 @dataclass
-class NodeResult(Generic[OutputT]):
-    """Result of node execution with metadata.
-
-    Attributes:
-        outputs: List of outputs for each sample (None for failed samples)
-        node_name: Name of the node that produced this result
-        execution_time: Time taken to execute in seconds
-        metadata: Additional node-specific metadata
-    """
-    outputs: List[Optional[OutputT]]
-    node_name: str
+class ExecutionMetadata:
+    """节点执行元数据（框架标准）"""
+    node_name: str = ""
+    processed_count: int = 0
+    skipped_count: int = 0
+    newly_skipped_ids: List[str] = field(default_factory=list)
     execution_time: float = 0.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    extra: Dict[str, Any] = field(default_factory=dict)
 
 
 # ==============================================================================
-# Protocol Definitions (for duck typing interfaces)
+# Node Base Class (框架层)
 # ==============================================================================
 
-class ParseFunction(Protocol):
-    """Protocol for solution parsing functions."""
-
-    def __call__(self, solution_str: str) -> Optional[ParsedT]:
-        """Parse solution string into structured format.
-
-        Args:
-            solution_str: Raw solution string from model
-
-        Returns:
-            Parsed result or None if parsing failed
-        """
-        ...
+DataT = TypeVar('DataT', bound=PipelineData)
 
 
-class PostprocessFunction(Protocol):
-    """Protocol for response postprocessing functions."""
+class Node(ABC, Generic[DataT]):
+    """节点基类（框架层）
 
-    def __call__(self, response: str) -> Optional[str]:
-        """Postprocess model response.
-
-        Args:
-            response: Raw model response
-
-        Returns:
-            Cleaned response or None if postprocessing failed
-        """
-        ...
-
-
-class PromptFunction(Protocol):
-    """Protocol for prompt construction functions."""
-
-    def __call__(self, parsed: Any, ground_truth: Dict[str, Any],
-                 extra_context: Optional[Any] = None) -> str:
-        """Construct prompt for model.
-
-        Args:
-            parsed: Parsed question/solution data
-            ground_truth: Ground truth data
-            extra_context: Optional additional context
-
-        Returns:
-            Formatted prompt string
-        """
-        ...
-
-
-class PenaltyOrRewardModule(Protocol):
-    """Protocol for rule-based penalty/reward modules."""
-
-    def get_penalty_or_reward(self, solution_str: str,
-                             ground_truth: Dict[str, Any]) -> float:
-        """Compute penalty or reward score.
-
-        Args:
-            solution_str: Solution string to evaluate
-            ground_truth: Ground truth data
-
-        Returns:
-            Score (negative for penalty, positive for reward)
-        """
-        ...
-
-
-# ==============================================================================
-# Abstract Node Base Class
-# ==============================================================================
-
-class Node(ABC, Generic[InputT, OutputT]):
-    """Abstract base class for all processing nodes.
-
-    Nodes are the atomic units of computation in the pipeline. Each node:
-    - Has typed inputs and outputs
-    - Executes asynchronously
-    - Has access to shared execution context
-    - Can mark samples for skipping
-
-    Type Parameters:
-        InputT: Type of input for each sample
-        OutputT: Type of output for each sample
+    核心原则：
+    1. 只依赖PipelineData接口，不依赖具体类型
+    2. In-place修改数据，不创建新数据
+    3. 返回执行元数据（用于监控和日志）
     """
 
     def __init__(self, config: NodeConfig):
-        """Initialize node with configuration.
-
-        Args:
-            config: Immutable node configuration
-        """
         self.config = config
         self.name = config.name
         self.node_type = config.node_type
 
     @abstractmethod
-    async def execute(self,
-                     batch_inputs: List[Optional[InputT]],
-                     context: ExecutionContext) -> NodeResult[OutputT]:
-        """Execute node logic on batch of inputs.
+    async def process(
+        self,
+        batch: List[DataT],
+        context: Dict[str, Any]
+    ) -> ExecutionMetadata:
+        """处理批量数据（子类实现）
 
         Args:
-            batch_inputs: List of inputs (None for skipped samples)
-            context: Shared execution context
+            batch: 数据列表（会被直接修改）
+            context: 执行上下文
 
         Returns:
-            NodeResult containing outputs and metadata
+            执行元数据
         """
         raise NotImplementedError
 
-    def _filter_valid_inputs(self,
-                            batch_inputs: List[Optional[InputT]]
-                            ) -> Tuple[List[int], List[InputT]]:
-        """Filter out None inputs and return valid indices and values.
+    # ===== 框架提供的工具方法 =====
 
-        Args:
-            batch_inputs: Batch with potential None values
+    def should_skip(self, data: PipelineData) -> bool:
+        """判断是否跳过（框架标准逻辑）"""
+        if data.is_skipped and self.config.respect_skip:
+            return True
+        return False
+
+    def filter_valid(self, batch: List[DataT]) -> List[DataT]:
+        """过滤出有效数据（未跳过）"""
+        return [data for data in batch if not self.should_skip(data)]
+
+    async def execute(
+        self,
+        batch: List[DataT],
+        context: Dict[str, Any]
+    ) -> ExecutionMetadata:
+        """框架层的执行入口（封装了通用逻辑）
+
+        此方法不应被子类override，子类只需实现process()
+        """
+        import time
+        start = time.time()
+
+        # 调用子类实现
+        metadata = await self.process(batch, context)
+
+        # 补充执行时间
+        metadata.execution_time = time.time() - start
+        metadata.node_name = self.name
+
+        return metadata
+
+
+# ==============================================================================
+# Generic Node Types (框架提供)
+# ==============================================================================
+
+class MapNode(Node[DataT]):
+    """映射节点（框架通用类型）
+
+    功能：对每个数据项进行1对1处理
+    用法：子类只需实现 map_one() 方法
+    """
+
+    @abstractmethod
+    async def map_one(self, data: DataT, context: Dict[str, Any]) -> None:
+        """处理单个数据项（子类实现，In-place修改）"""
+        raise NotImplementedError
+
+    async def process(
+        self,
+        batch: List[DataT],
+        context: Dict[str, Any]
+    ) -> ExecutionMetadata:
+        """框架实现的映射逻辑（支持并行）"""
+        processed = 0
+        skipped = 0
+        newly_skipped = []
+
+        # 过滤有效数据
+        valid_data = [d for d in batch if not self.should_skip(d)]
+        skipped = len(batch) - len(valid_data)
+
+        # 并行处理（如果配置了并发）
+        if self.config.enable_internal_parallel and len(valid_data) > 1:
+            tasks = [self.map_one(data, context) for data in valid_data]
+            results = await aio.gather(*tasks, return_exceptions=True)
+
+            # 处理异常
+            for data, result in zip(valid_data, results):
+                if isinstance(result, Exception):
+                    data.mark_skipped(f"error: {result}", self.name)
+                    newly_skipped.append(data.data_id)
+                elif data.is_skipped:
+                    # map_one 内部标记了 skip
+                    newly_skipped.append(data.data_id)
+        else:
+            # 顺序处理
+            for data in valid_data:
+                try:
+                    await self.map_one(data, context)
+                except Exception as e:
+                    data.mark_skipped(f"error: {e}", self.name)
+                    newly_skipped.append(data.data_id)
+
+                # 检查是否在 map_one 内部被标记为 skipped
+                if data.is_skipped and data.data_id not in newly_skipped:
+                    newly_skipped.append(data.data_id)
+
+        processed = len(valid_data) - len(newly_skipped)
+
+        return ExecutionMetadata(
+            processed_count=processed,
+            skipped_count=skipped,
+            newly_skipped_ids=newly_skipped
+        )
+
+
+class ExpandNode(Node[DataT]):
+    """展开节点（框架通用类型）
+
+    功能：将每个数据项展开为多个子项
+    用法：子类只需实现 expand_one() 方法
+    """
+
+    @abstractmethod
+    def expand_one(self, data: DataT) -> List[DataT]:
+        """展开单个数据项（子类实现）
 
         Returns:
-            Tuple of (valid_indices, valid_inputs)
+            子数据项列表
         """
-        valid_indices = [i for i, inp in enumerate(batch_inputs) if inp is not None]
-        valid_inputs = [batch_inputs[i] for i in valid_indices]
-        return valid_indices, valid_inputs
+        raise NotImplementedError
 
-    def _reconstruct_batch(self,
-                          valid_indices: List[int],
-                          valid_outputs: List[OutputT],
-                          total_size: int) -> List[Optional[OutputT]]:
-        """Reconstruct full batch with None for skipped samples.
+    async def process(
+        self,
+        batch: List[DataT],
+        context: Dict[str, Any]
+    ) -> ExecutionMetadata:
+        """框架实现的展开逻辑"""
+        processed = 0
+        skipped = 0
+
+        for data in batch:
+            if self.should_skip(data):
+                skipped += 1
+                continue
+
+            try:
+                # 调用子类实现的展开逻辑
+                children = self.expand_one(data)
+
+                # 添加子项
+                for child in children:
+                    data.add_child(child)
+
+                processed += 1
+            except Exception as e:
+                data.mark_skipped(f"expand_error: {e}", self.name)
+                skipped += 1
+
+        return ExecutionMetadata(
+            processed_count=processed,
+            skipped_count=skipped
+        )
+
+
+class AggregateNode(Node[DataT]):
+    """聚合节点（框架通用类型）
+
+    功能：将子项结果聚合到父项
+    用法：子类只需实现 aggregate_children() 方法
+    """
+
+    @abstractmethod
+    def aggregate_children(
+        self,
+        parent: DataT,
+        children: List[DataT]
+    ) -> float:
+        """聚合子项（子类实现）
 
         Args:
-            valid_indices: Indices of valid samples
-            valid_outputs: Outputs for valid samples
-            total_size: Total batch size
+            parent: 父数据项
+            children: 子数据项列表
 
         Returns:
-            Full batch with None for skipped indices
+            聚合后的分数
         """
-        outputs: List[Optional[OutputT]] = [None] * total_size
-        for idx, output in zip(valid_indices, valid_outputs):
-            outputs[idx] = output
-        return outputs
+        raise NotImplementedError
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(name='{self.name}', type={self.node_type.value})"
+    async def process(
+        self,
+        batch: List[DataT],
+        context: Dict[str, Any]
+    ) -> ExecutionMetadata:
+        """框架实现的聚合逻辑"""
+        processed = 0
+        skipped = 0
+
+        for data in batch:
+            if self.should_skip(data):
+                skipped += 1
+                continue
+
+            children = data.get_children()
+
+            # 过滤有效子项
+            valid_children = [c for c in children if not c.is_skipped]
+
+            if not valid_children:
+                data.mark_skipped("no_valid_children", self.name)
+                skipped += 1
+                continue
+
+            try:
+                # 调用子类实现的聚合逻辑
+                score = self.aggregate_children(data, valid_children)
+                data.set_meta('aggregated_score', score)
+
+                processed += 1
+            except Exception as e:
+                data.mark_skipped(f"aggregate_error: {e}", self.name)
+                skipped += 1
+
+        return ExecutionMetadata(
+            processed_count=processed,
+            skipped_count=skipped
+        )
 
 
 # ==============================================================================
 # Topology Graph
 # ==============================================================================
 
-@dataclass(frozen=True)
+@dataclass
 class Edge:
-    """Directed edge connecting two nodes.
-
-    Attributes:
-        from_node: Source node name
-        to_node: Target node name
-        condition: Optional condition function for conditional execution
-    """
+    """Edge in the topology graph."""
     from_node: str
     to_node: str
-    condition: Optional[Callable[[ExecutionContext], bool]] = None
-
-    def should_execute(self, context: ExecutionContext) -> bool:
-        """Check if edge should be traversed given context.
-
-        Args:
-            context: Current execution context
-
-        Returns:
-            True if edge should be traversed
-        """
-        if self.condition is None:
-            return True
-        return self.condition(context)
+    condition: Optional[Callable[[Any], bool]] = None
 
 
 class TopologyGraph:
-    """Directed Acyclic Graph (DAG) defining pipeline topology.
-
-    The topology graph:
-    - Stores nodes and their dependencies
-    - Validates DAG structure (no cycles)
-    - Computes execution order via topological sort
-    - Supports visualization for debugging
-
-    Usage:
-        topology = (TopologyGraph()
-            .add_node(parser_node)
-            .add_node(rule_node)
-            .add_edge("parser", "rule"))
-    """
+    """Topology graph for defining node dependencies."""
 
     def __init__(self):
         self.nodes: Dict[str, Node] = {}
         self.edges: List[Edge] = []
-        self.adjacency: Dict[str, List[str]] = defaultdict(list)
-        self.reverse_adjacency: Dict[str, List[str]] = defaultdict(list)
+        self._adj_list: Dict[str, List[str]] = defaultdict(list)
 
-    def add_node(self, node: Node) -> TopologyGraph:
-        """Add a node to the graph.
-
-        Args:
-            node: Node instance to add
-
-        Returns:
-            Self for method chaining
-
-        Raises:
-            ValueError: If node with same name already exists
-        """
+    def add_node(self, node: Node) -> 'TopologyGraph':
+        """Add a node to the graph."""
         if node.name in self.nodes:
-            raise ValueError(f"Node '{node.name}' already exists in topology")
-
+            raise ValueError(f"Node {node.name} already exists")
         self.nodes[node.name] = node
         return self
 
-    def add_edge(self,
-                 from_node: str,
-                 to_node: str,
-                 condition: Optional[Callable[[ExecutionContext], bool]] = None
-                 ) -> TopologyGraph:
-        """Add a directed edge between two nodes.
-
-        Args:
-            from_node: Name of source node
-            to_node: Name of target node
-            condition: Optional condition for conditional execution
-
-        Returns:
-            Self for method chaining
-
-        Raises:
-            ValueError: If either node doesn't exist or edge creates cycle
-        """
+    def add_edge(
+        self,
+        from_node: str,
+        to_node: str,
+        condition: Optional[Callable[[Any], bool]] = None
+    ) -> 'TopologyGraph':
+        """Add an edge between nodes."""
         if from_node not in self.nodes:
-            raise ValueError(f"Source node '{from_node}' not found in topology")
+            raise ValueError(f"Node {from_node} not found")
         if to_node not in self.nodes:
-            raise ValueError(f"Target node '{to_node}' not found in topology")
+            raise ValueError(f"Node {to_node} not found")
 
-        edge = Edge(from_node, to_node, condition)
+        # Check for cycles
+        if self._would_create_cycle(from_node, to_node):
+            raise ValueError(f"Adding edge {from_node} -> {to_node} would create a cycle")
+
+        edge = Edge(from_node=from_node, to_node=to_node, condition=condition)
         self.edges.append(edge)
-        self.adjacency[from_node].append(to_node)
-        self.reverse_adjacency[to_node].append(from_node)
-
-        # Validate no cycles
-        if self._has_cycle():
-            # Rollback
-            self.edges.pop()
-            self.adjacency[from_node].pop()
-            self.reverse_adjacency[to_node].pop()
-            raise ValueError(f"Adding edge {from_node} -> {to_node} creates a cycle")
+        self._adj_list[from_node].append(to_node)
 
         return self
 
-    def _has_cycle(self) -> bool:
-        """Check if graph contains a cycle using DFS.
+    def _would_create_cycle(self, from_node: str, to_node: str) -> bool:
+        """Check if adding an edge would create a cycle."""
+        # BFS from to_node to see if we can reach from_node
+        visited = set()
+        queue = deque([to_node])
 
-        Returns:
-            True if cycle exists, False otherwise
-        """
-        visited: Set[str] = set()
-        rec_stack: Set[str] = set()
+        while queue:
+            node = queue.popleft()
+            if node == from_node:
+                return True
 
-        def dfs(node: str) -> bool:
+            if node in visited:
+                continue
             visited.add(node)
-            rec_stack.add(node)
 
-            for neighbor in self.adjacency.get(node, []):
-                if neighbor not in visited:
-                    if dfs(neighbor):
-                        return True
-                elif neighbor in rec_stack:
-                    return True
-
-            rec_stack.remove(node)
-            return False
-
-        for node in self.nodes:
-            if node not in visited:
-                if dfs(node):
-                    return True
+            for neighbor in self._adj_list.get(node, []):
+                queue.append(neighbor)
 
         return False
 
-    def topological_sort(self) -> List[List[str]]:
-        """Compute topological ordering as levels.
-
-        Returns levels where:
-        - Nodes in same level can execute in parallel
-        - All dependencies of level N are in levels < N
-
-        Returns:
-            List of levels, where each level is a list of node names
-
-        Raises:
-            ValueError: If graph contains cycles (shouldn't happen due to add_edge validation)
-        """
+    def topological_sort(self) -> List[str]:
+        """Return nodes in topological order."""
         in_degree = {name: 0 for name in self.nodes}
+
         for edge in self.edges:
             in_degree[edge.to_node] += 1
 
-        levels: List[List[str]] = []
-        queue = deque([name for name, deg in in_degree.items() if deg == 0])
-
-        if not queue:
-            raise ValueError("No nodes with zero in-degree found (cycle detected)")
+        queue = deque([name for name, degree in in_degree.items() if degree == 0])
+        result = []
 
         while queue:
-            level: List[str] = []
-            for _ in range(len(queue)):
-                node_name = queue.popleft()
-                level.append(node_name)
+            node = queue.popleft()
+            result.append(node)
 
-                for neighbor in self.adjacency.get(node_name, []):
-                    in_degree[neighbor] -= 1
-                    if in_degree[neighbor] == 0:
-                        queue.append(neighbor)
+            for neighbor in self._adj_list[node]:
+                in_degree[neighbor] -= 1
+                if in_degree[neighbor] == 0:
+                    queue.append(neighbor)
 
-            levels.append(level)
+        if len(result) != len(self.nodes):
+            raise ValueError("Graph contains a cycle")
 
-        # Verify all nodes were included
-        total_nodes = sum(len(level) for level in levels)
-        if total_nodes != len(self.nodes):
-            raise ValueError("Topological sort failed: cycle detected")
-
-        return levels
+        return result
 
     def get_node(self, name: str) -> Node:
-        """Get node by name.
-
-        Args:
-            name: Node name
-
-        Returns:
-            Node instance
-
-        Raises:
-            KeyError: If node not found
-        """
+        """Get node by name."""
         if name not in self.nodes:
-            raise KeyError(f"Node '{name}' not found in topology")
+            raise KeyError(f"Node {name} not found")
         return self.nodes[name]
 
-    def visualize(self, show_types: bool = True) -> str:
-        """Generate ASCII visualization of topology.
+    def visualize(self) -> str:
+        """Generate ASCII visualization of the topology."""
+        lines = ["=" * 60, "Pipeline Topology", "=" * 60, ""]
 
-        Args:
-            show_types: If True, include node types in output
+        # Group by levels
+        sorted_nodes = self.topological_sort()
+        levels = self._compute_levels(sorted_nodes)
 
-        Returns:
-            Multi-line string representation of topology
-        """
-        lines = ["=" * 60, "Pipeline Topology", "=" * 60]
-
-        try:
-            levels = self.topological_sort()
-        except ValueError as e:
-            return f"Error: {e}"
-
-        for level_idx, level_nodes in enumerate(levels):
-            lines.append(f"\nLevel {level_idx}:")
-            for node_name in level_nodes:
+        for level, node_names in enumerate(levels):
+            lines.append(f"Level {level}:")
+            for node_name in node_names:
                 node = self.nodes[node_name]
-                if show_types:
-                    type_str = f" [{node.node_type.value}]"
-                else:
-                    type_str = ""
+                type_str = f" [{node.config.node_type.value}]"
 
                 config_str = []
                 if node.config.skip_on_negative:
@@ -565,10 +612,10 @@ class TopologyGraph:
                     config_str.append(f"w={node.config.weight:.2f}")
 
                 config_info = f" ({', '.join(config_str)})" if config_str else ""
-
                 lines.append(f"  - {node_name}{type_str}{config_info}")
+            lines.append("")
 
-        lines.append("\nEdges:")
+        lines.append("Edges:")
         for edge in self.edges:
             cond_str = " [conditional]" if edge.condition else ""
             lines.append(f"  {edge.from_node} -> {edge.to_node}{cond_str}")
@@ -576,17 +623,33 @@ class TopologyGraph:
         lines.append("=" * 60)
         return "\n".join(lines)
 
-    def validate(self) -> None:
-        """Validate topology structure.
+    def _compute_levels(self, sorted_nodes: List[str]) -> List[List[str]]:
+        """Compute node levels for visualization."""
+        levels: Dict[str, int] = {}
 
-        Raises:
-            ValueError: If topology is invalid
-        """
+        for node_name in sorted_nodes:
+            # Find max level of predecessors
+            predecessors = [e.from_node for e in self.edges if e.to_node == node_name]
+
+            if not predecessors:
+                levels[node_name] = 0
+            else:
+                max_pred_level = max(levels[pred] for pred in predecessors)
+                levels[node_name] = max_pred_level + 1
+
+        # Group by level
+        level_groups: Dict[int, List[str]] = defaultdict(list)
+        for node_name, level in levels.items():
+            level_groups[level].append(node_name)
+
+        return [level_groups[i] for i in range(max(levels.values()) + 1)]
+
+    def validate(self) -> None:
+        """Validate topology structure."""
         if not self.nodes:
-            return  # Empty topology is valid
+            return
 
         # Check for completely isolated nodes (no edges at all)
-        # Root nodes (no incoming edges) are allowed
         all_connected = set()
         for edge in self.edges:
             all_connected.add(edge.from_node)
@@ -611,335 +674,95 @@ class TopologyGraph:
 # ==============================================================================
 
 class PipelineExecutor:
-    """Orchestrates execution of nodes according to topology.
+    """Pipeline执行器（简化版）"""
 
-    The executor:
-    - Manages execution order via topological sort
-    - Handles parallel execution within levels
-    - Maintains execution context and results
-    - Implements skip logic for failed samples
-    - Aggregates node outputs into final scores
-
-    Attributes:
-        topology: The topology graph to execute
-        context: Shared execution context
-        results: Stores NodeResult for each executed node
-        skip_indices: Set of sample indices marked for skipping
-    """
-
-    def __init__(self,
-                 topology: TopologyGraph,
-                 context: ExecutionContext):
-        """Initialize executor.
-
-        Args:
-            topology: Validated topology graph
-            context: Execution context with required fields
-        """
+    def __init__(self, topology: TopologyGraph):
         self.topology = topology
-        self.context = context
-        self.results: Dict[str, NodeResult] = {}
-        self.skip_indices: Set[int] = set()
+        self.context: Dict[str, Any] = {}
+        self.execution_log: List[ExecutionMetadata] = []
 
-        # Add skip_indices to context
-        self.context['skip_indices'] = self.skip_indices
-
-        # Validate topology
-        self.topology.validate()
-
-    async def execute(self, batch_inputs: List[Any]) -> List[float]:
-        """Execute complete pipeline on batch of inputs.
+    async def execute(
+        self,
+        batch: List[PipelineData],
+        context: Optional[Dict[str, Any]] = None
+    ) -> List[PipelineData]:
+        """执行pipeline
 
         Args:
-            batch_inputs: Batch of raw inputs (e.g., solution strings)
+            batch: 数据列表
+            context: 执行上下文（可选）
 
         Returns:
-            List of final scores, one per input
+            处理后的数据列表（同一个对象，已被修改）
         """
-        import time
+        self.context = context or {}
+        self.execution_log = []
 
-        num_samples = len(batch_inputs)
+        print(f"[Executor] Starting pipeline with {len(batch)} samples")
 
-        # Get execution order
-        levels = self.topology.topological_sort()
+        # 拓扑排序
+        sorted_nodes = self.topology.topological_sort()
 
-        print(f"[Executor] Starting pipeline with {num_samples} samples")
-        print(f"[Executor] Execution plan: {len(levels)} levels")
+        print(f"[Executor] Execution plan: {len(sorted_nodes)} nodes\n")
 
-        # Execute level by level
-        for level_idx, level_nodes in enumerate(levels):
-            print(f"\n[Executor] === Level {level_idx} ===")
-            print(f"[Executor] Nodes: {', '.join(level_nodes)}")
-
-            # Get enabled nodes in this level
-            enabled_nodes = [name for name in level_nodes
-                           if self.topology.nodes[name].config.enabled]
-
-            if not enabled_nodes:
-                print(f"[Executor] All nodes in level {level_idx} disabled, skipping")
-                continue
-
-            # Prepare tasks for parallel execution
-            tasks: List[Awaitable[Tuple[str, NodeResult]]] = []
-
-            for node_name in enabled_nodes:
-                node = self.topology.get_node(node_name)
-
-                # Get inputs for this node
-                node_inputs = self._get_node_inputs(node_name, batch_inputs)
-
-                # Create task
-                task = self._execute_node_wrapper(node, node_inputs)
-                tasks.append(task)
-
-            # Execute all nodes in level in parallel
-            level_start = time.time()
-            level_results = await aio.gather(*tasks)
-            level_time = time.time() - level_start
-
-            # Store results and update skip indices
-            for node_name, result in level_results:
-                self.results[node_name] = result
-                self._update_skip_indices(node_name, result)
-
-            print(f"[Executor] Level {level_idx} completed in {level_time:.2f}s")
-            print(f"[Executor] Skipped samples: {len(self.skip_indices)}/{num_samples}")
-
-        # Aggregate final scores
-        print(f"\n[Executor] Aggregating final scores...")
-        final_scores = self._aggregate_final_scores(num_samples)
-
-        return final_scores
-
-    def _get_node_inputs(self,
-                        node_name: str,
-                        original_inputs: List[Any]) -> List[Optional[Any]]:
-        """Get inputs for a node from predecessor outputs or original inputs.
-
-        Args:
-            node_name: Name of node to get inputs for
-            original_inputs: Original batch inputs
-
-        Returns:
-            List of inputs for the node (with None for skipped samples)
-        """
-        # Find predecessor nodes
-        predecessors = self.topology.reverse_adjacency.get(node_name, [])
-
-        if not predecessors:
-            # Root node: use original inputs, apply skip mask
-            return [inp if i not in self.skip_indices else None
-                   for i, inp in enumerate(original_inputs)]
-
-        # Strategy: Use output from first parser/transformer node in chain
-        # For rule/judge nodes, use the parser's output
-        # This ensures type consistency
-
-        # Find the first parser/transformer predecessor
-        for pred_name in predecessors:
-            pred_node = self.topology.nodes[pred_name]
-            if pred_node.node_type in (NodeType.PARSER, NodeType.TRANSFORMER, NodeType.LLM_GENERATOR):
-                pred_result = self.results.get(pred_name)
-                if pred_result is not None:
-                    return pred_result.outputs
-
-        # Fallback: use first predecessor's output
-        pred_result = self.results.get(predecessors[0])
-        if pred_result is None:
-            # Predecessor hasn't executed yet (shouldn't happen with topo sort)
-            raise RuntimeError(f"Predecessor {predecessors[0]} of {node_name} not executed")
-
-        return pred_result.outputs
-
-    async def _execute_node_wrapper(self,
-                                    node: Node,
-                                    inputs: List[Optional[Any]]
-                                    ) -> Tuple[str, NodeResult]:
-        """Wrapper for executing a node with timing.
-
-        Args:
-            node: Node to execute
-            inputs: Inputs for the node
-
-        Returns:
-            Tuple of (node_name, result)
-        """
-        import time
-
-        print(f"[Executor] Executing {node.name}...")
-
-        start_time = time.time()
-        try:
-            result = await node.execute(inputs, self.context)
-            result.execution_time = time.time() - start_time
-
-            print(f"[Executor] {node.name} completed in {result.execution_time:.2f}s")
-            return node.name, result
-
-        except Exception as e:
-            print(f"[Executor] ERROR in {node.name}: {e}")
-            # Return empty result on error
-            empty_result = NodeResult(
-                outputs=[None] * len(inputs),
-                node_name=node.name,
-                execution_time=time.time() - start_time,
-                metadata={'error': str(e)}
-            )
-            return node.name, empty_result
-
-    def _update_skip_indices(self, node_name: str, result: NodeResult) -> None:
-        """Update skip indices based on node result.
-
-        Args:
-            node_name: Name of executed node
-            result: Node execution result
-        """
-        node = self.topology.get_node(node_name)
-
-        if not node.config.skip_on_negative:
-            return
-
-        # Mark samples with negative scores for skipping
-        for i, output in enumerate(result.outputs):
-            if output is not None and isinstance(output, (int, float)) and output < 0:
-                self.skip_indices.add(i)
-
-    def _aggregate_final_scores(self, num_samples: int) -> List[float]:
-        """Aggregate node outputs into final scores.
-
-        Args:
-            num_samples: Number of samples in batch
-
-        Returns:
-            List of final scores
-        """
-        final_scores = [0.0] * num_samples
-
-        # Collect all non-filter nodes with their weights
-        score_nodes = [
-            (name, node) for name, node in self.topology.nodes.items()
-            if not node.config.filter_only and node.config.enabled
-        ]
-
-        for i in range(num_samples):
-            if i in self.skip_indices:
-                # Use minimum reward for skipped samples
-                final_scores[i] = self.context.get('min_reward', -2.0)
-                continue
-
-            # Accumulate weighted scores from all nodes
-            sample_score = 0.0
-
-            for node_name, node in score_nodes:
-                result = self.results.get(node_name)
-                if result is None:
-                    continue
-
-                output = result.outputs[i]
-                if output is None:
-                    continue
-
-                # Handle different output types
-                if isinstance(output, (int, float)):
-                    node_score = output
-                elif isinstance(output, (list, tuple)):
-                    # Check if it's a list of numbers
-                    try:
-                        if all(isinstance(x, (int, float)) for x in output):
-                            node_score = sum(output)
-                        else:
-                            # Non-numeric list/tuple, skip
-                            continue
-                    except:
-                        continue
-                else:
-                    # Unknown type, skip
-                    continue
-
-                sample_score += node.config.weight * node_score
-
-            final_scores[i] = sample_score
-
-        return final_scores
-
-    def get_node_result(self, node_name: str) -> Optional[NodeResult]:
-        """Get execution result for a specific node.
-
-        Args:
-            node_name: Name of node
-
-        Returns:
-            NodeResult if node was executed, None otherwise
-        """
-        return self.results.get(node_name)
-
-    def print_summary(self) -> None:
-        """Print execution summary."""
-        print("\n" + "=" * 60)
-        print("Execution Summary")
-        print("=" * 60)
-
-        for node_name, result in self.results.items():
+        # 顺序执行节点
+        for node_name in sorted_nodes:
             node = self.topology.get_node(node_name)
 
-            non_none_count = sum(1 for o in result.outputs if o is not None)
-            total_count = len(result.outputs)
+            if not node.config.enabled:
+                print(f"[Executor] Skipping {node_name} (disabled)")
+                continue
 
-            print(f"\n{node_name}:")
-            print(f"  Type: {node.node_type.value}")
-            print(f"  Time: {result.execution_time:.2f}s")
-            print(f"  Valid outputs: {non_none_count}/{total_count}")
+            print(f"[Executor] Executing {node_name}...")
 
-            if result.metadata:
-                print(f"  Metadata: {result.metadata}")
+            # 执行节点
+            metadata = await node.execute(batch, self.context)
+            self.execution_log.append(metadata)
 
-        print("\n" + "=" * 60)
+            print(f"[Executor] {node_name} completed in {metadata.execution_time:.2f}s")
+            print(f"[Executor]   Processed: {metadata.processed_count}, Skipped: {metadata.skipped_count}")
+
+            if metadata.newly_skipped_ids:
+                print(f"[Executor]   Newly skipped: {len(metadata.newly_skipped_ids)} samples")
+
+        print(f"\n[Executor] Pipeline completed")
+        return batch
+
+    def get_execution_summary(self) -> Dict[str, Any]:
+        """获取执行摘要"""
+        return {
+            "total_nodes": len(self.execution_log),
+            "total_time": sum(m.execution_time for m in self.execution_log),
+            "node_summary": [
+                {
+                    "name": m.node_name,
+                    "processed": m.processed_count,
+                    "skipped": m.skipped_count,
+                    "time": m.execution_time
+                }
+                for m in self.execution_log
+            ]
+        }
 
 
 # ==============================================================================
 # Utility Functions
 # ==============================================================================
 
-def create_context(
-    ground_truths: List[Dict[str, Any]],
-    agents: Optional[Dict[str, Any]] = None,
-    max_concurrent: Optional[Dict[str, int]] = None,
-    parse_fn: Optional[Callable] = None,
-    min_reward: float = -2.0,
-    **kwargs
-) -> ExecutionContext:
-    """Convenience function to create ExecutionContext.
-
-    Args:
-        ground_truths: Ground truth data for each sample
-        agents: Dictionary of LLM agents
-        max_concurrent: Concurrency limits by agent
-        parse_fn: Solution parsing function
-        min_reward: Minimum reward for failed samples
-        **kwargs: Additional context fields
-
-    Returns:
-        ExecutionContext instance
-    """
-    context: ExecutionContext = {
-        'ground_truths': ground_truths,
-        'agents': agents or {},
-        'max_concurrent': max_concurrent or {},
-        'min_reward': min_reward,
-        'skip_indices': set()
+def create_simple_context(ground_truths: List[Any]) -> Dict[str, Any]:
+    """创建简单的执行上下文（便捷函数）"""
+    return {
+        "ground_truths": ground_truths,
+        "min_reward": 0.0
     }
-
-    if parse_fn is not None:
-        context['parse_fn'] = parse_fn
-
-    # Add additional kwargs
-    for key, value in kwargs.items():
-        context[key] = value  # type: ignore
-
-    return context
 
 
 # ==============================================================================
+# PLACEHOLDER: Agent and Logging modules will be inserted here
+# ==============================================================================
+
+# Agent模块和Logging模块将保留在这里（从原文件拷贝）
+
 # Structured Logging Module - Using structlog
 # ==============================================================================
 
@@ -1186,26 +1009,23 @@ def get_logger(name: str) -> Any:
 # Framework Version & Exports
 # ==============================================================================
 
-__version__ = "0.1.0"
 __all__ = [
     # Enums
     'NodeType',
 
-    # Type definitions
-    'ExecutionContext',
-    'NodeConfig',
-    'SolverConfig',
-    'DifficultyMetricConfig',
-    'NodeResult',
+    # Protocols & Data
+    'PipelineData',
+    'PipelineDataBase',
 
-    # Protocols
-    'ParseFunction',
-    'PostprocessFunction',
-    'PromptFunction',
-    'PenaltyOrRewardModule',
+    # Configuration
+    'NodeConfig',
+    'ExecutionMetadata',
 
     # Core classes
     'Node',
+    'MapNode',
+    'ExpandNode',
+    'AggregateNode',
     'Edge',
     'TopologyGraph',
     'PipelineExecutor',
@@ -1216,14 +1036,24 @@ __all__ = [
     'LLMResponse',
     'LLMError',
     'RateLimitError',
+    'APIError',
+    'PostprocessError',
 
     # Logging
     'setup_logging',
     'get_logger',
 
     # Utilities
-    'create_context',
+    'create_simple_context',
     'create_agent',
+
+    # Agentic Task Synthesis
+    'AgenticTaskSample',
+    'RubricCategory',
+    'RubricItem',
+    'AgenticTaskParserNode',
+    'RubricCategoryExpanderNode',
+    'RubricItemExpanderNode',
 ]
 
 
@@ -1660,50 +1490,92 @@ def create_agent(
 
 
 # ==============================================================================
-# Agentic Task Synthesis Reward Implementation
+# Agentic Task Synthesis - Data Structures & Nodes
 # ==============================================================================
 
 """
-Agentic Task Synthesis Reward.
+Agentic Task Synthesis Implementation.
 
-Evaluates generated agentic tasks for quality and complexity.
+Evaluates generated agentic tasks with multi-level rubric evaluation:
+    Level 1: AgenticTaskSample (LLM raw response)
+    Level 2: RubricCategory (e.g., "核心价值主张锚定")
+    Level 3: RubricItem (specific rubric to judge)
 """
 
 
-# Data structures
-@dataclass(frozen=True)
-class ParsedAgenticTask:
-    """Parsed agentic task data structure.
+@dataclass
+class AgenticTaskSample(PipelineDataBase):
+    """Level 1: LLM generated raw response (root node).
 
     Attributes:
-        task_description: The main task description
-        subtasks: List of subtasks (if any)
-        expected_output: Expected output format or criteria
-        raw_text: Original raw text
+        raw_response: Original LLM output (includes <think>, ```json```, etc.)
+        task_description: Parsed task description
+        parsed_json: Parsed JSON data
     """
-    task_description: str
-    subtasks: List[str]
-    expected_output: str
-    raw_text: str
+    raw_response: str = ""
+    task_description: str = ""
+    parsed_json: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        super().__post_init__()
+        if not self.data_id:
+            self.data_id = f"sample_{self.sample_idx}"
 
 
-# Parser Node
-class AgenticTaskParserNode(Node[str, ParsedAgenticTask]):
-    """Parse raw text into structured agentic task.
+@dataclass
+class RubricCategory(PipelineDataBase):
+    """Level 2: Rubric category (middle node).
 
-    Input: List[str] - Raw generated text
-    Output: List[ParsedAgenticTask] - Parsed task structures
+    Attributes:
+        category_name: Category name (e.g., "核心价值主张锚定")
+        category_rubrics: Raw rubric data for this category
+        category_score: Aggregated score from child rubrics
+    """
+    category_name: str = ""
+    category_rubrics: List[Dict[str, Any]] = field(default_factory=list)
+    category_score: float = 0.0
+
+    def __post_init__(self):
+        super().__post_init__()
+
+
+@dataclass
+class RubricItem(PipelineDataBase):
+    """Level 3: Specific rubric item (leaf node).
+
+    Attributes:
+        rubric_name: Rubric name
+        binary_statement: Binary judgment statement
+        justification: Reasoning steps
+        traceability: Traceability information
+        judge_score: LLM judge score (0-1)
+        judge_reason: Judge reasoning
+    """
+    rubric_name: str = ""
+    binary_statement: str = ""
+    justification: List[str] = field(default_factory=list)
+    traceability: str = ""
+
+    # Judge results
+    judge_score: float = 0.0
+    judge_reason: str = ""
+
+    def __post_init__(self):
+        super().__post_init__()
+
+
+class AgenticTaskParserNode(MapNode[AgenticTaskSample]):
+    """Parser node: parses raw LLM response into AgenticTaskSample.
+
+    Processing:
+        1. Remove EOS markers
+        2. Extract JSON from <think> and ```json``` blocks
+        3. Validate schema
+        4. Populate AgenticTaskSample fields
     """
 
     def _postprocess_solution(self, solution_str: str) -> str:
-        """Remove common LLM end-of-sequence markers.
-
-        Args:
-            solution_str: Raw solution string
-
-        Returns:
-            Cleaned solution string
-        """
+        """Remove common LLM end-of-sequence markers."""
         markers = [
             "<|im_end|>",
             "<｜end▁of▁sentence｜>",
@@ -1719,13 +1591,10 @@ class AgenticTaskParserNode(Node[str, ParsedAgenticTask]):
     def _extract_json_from_response(self, response: str) -> str:
         """Extract JSON content from LLM response.
 
-        Process steps:
-        1. Remove end-of-sequence markers
-        2. Cut from </think> onwards
-        3. Extract content between ```json and ```
-
-        Args:
-            response: Raw LLM response
+        Steps:
+            1. Remove EOS markers
+            2. Cut from </think> onwards
+            3. Extract between ```json and ```
 
         Returns:
             JSON string
@@ -1733,6 +1602,8 @@ class AgenticTaskParserNode(Node[str, ParsedAgenticTask]):
         Raises:
             ValueError: If JSON cannot be extracted
         """
+        import re
+
         # Step 1: Remove EOS markers
         cleaned = self._postprocess_solution(response)
 
@@ -1741,12 +1612,11 @@ class AgenticTaskParserNode(Node[str, ParsedAgenticTask]):
             cleaned = cleaned[cleaned.index("</think>") + len("</think>"):].strip()
 
         # Step 3: Extract from ```json ... ```
-        import re
         json_pattern = r'```json\s*(.*?)\s*```'
         match = re.search(json_pattern, cleaned, re.DOTALL)
 
         if not match:
-            raise ValueError("No JSON block found in response (expected ```json...```)")
+            raise ValueError("No JSON block found (expected ```json...```)")
 
         return match.group(1).strip()
 
@@ -1767,14 +1637,7 @@ class AgenticTaskParserNode(Node[str, ParsedAgenticTask]):
                 ]
             }
         }
-
-        Args:
-            data: Parsed JSON data
-
-        Returns:
-            True if valid, False otherwise
         """
-        # Check top-level keys
         if not isinstance(data, dict):
             return False
 
@@ -1787,7 +1650,7 @@ class AgenticTaskParserNode(Node[str, ParsedAgenticTask]):
         if not isinstance(data["verify_rubrics"], dict):
             return False
 
-        # Check rubrics structure
+        # Validate rubrics structure
         for category, rubrics in data["verify_rubrics"].items():
             if not isinstance(rubrics, list):
                 return False
@@ -1811,80 +1674,78 @@ class AgenticTaskParserNode(Node[str, ParsedAgenticTask]):
 
         return True
 
-    def _parse_single(self, raw_text: str) -> Optional[ParsedAgenticTask]:
-        """Parse single raw text into ParsedAgenticTask.
+    async def map_one(self, data: AgenticTaskSample, context: Dict[str, Any]) -> None:
+        """Parse single raw response (in-place modification).
 
-        Args:
-            raw_text: Raw LLM response
-
-        Returns:
-            ParsedAgenticTask or None if parsing fails
+        Modifies data.task_description and data.parsed_json.
+        Marks as skipped if parsing fails.
         """
         try:
             # Extract JSON
-            json_str = self._extract_json_from_response(raw_text)
+            json_str = self._extract_json_from_response(data.raw_response)
 
             # Parse JSON
             import json
-            data = json.loads(json_str)
+            parsed = json.loads(json_str)
 
             # Validate schema
-            if not self._validate_schema(data):
+            if not self._validate_schema(parsed):
                 raise ValueError("Schema validation failed")
 
-            # Extract components
-            task_description = data["task_description"]
-            subtasks = list(data["verify_rubrics"].keys())  # Categories as subtasks
-
-            # Collect all rubric names as expected output
-            expected_rubrics = []
-            for category, rubrics in data["verify_rubrics"].items():
-                for rubric in rubrics:
-                    expected_rubrics.append(rubric["rubric_name"])
-
-            expected_output = f"验证标准包含 {len(expected_rubrics)} 个检查点: " + ", ".join(expected_rubrics[:3])
-            if len(expected_rubrics) > 3:
-                expected_output += f" ... (共{len(expected_rubrics)}项)"
-
-            return ParsedAgenticTask(
-                task_description=task_description,
-                subtasks=subtasks,
-                expected_output=expected_output,
-                raw_text=raw_text
-            )
+            # Populate fields (in-place)
+            data.task_description = parsed["task_description"]
+            data.parsed_json = parsed
 
         except Exception as e:
-            # Log error but return None (parser failure)
-            print(f"[Parser Error] Failed to parse: {e}")
-            return None
+            # Mark as skipped on parse failure
+            data.mark_skipped(f"parse_error: {e}", self.name)
 
-    async def execute(
-        self,
-        batch_inputs: List[Optional[str]],
-        context: ExecutionContext
-    ) -> NodeResult[ParsedAgenticTask]:
-        """Parse batch of raw texts into structured tasks.
 
-        Args:
-            batch_inputs: List of raw text strings
-            context: Execution context
+class RubricCategoryExpanderNode(ExpandNode[AgenticTaskSample]):
+    """Expands AgenticTaskSample into RubricCategory nodes."""
 
-        Returns:
-            NodeResult containing parsed tasks
-        """
-        results = []
+    def expand_one(self, data: AgenticTaskSample) -> List[RubricCategory]:
+        """Expand sample into category nodes."""
+        categories = []
 
-        for raw_text in batch_inputs:
-            if raw_text is None:
-                results.append(None)
-            else:
-                parsed = self._parse_single(raw_text)
-                results.append(parsed)
+        if "verify_rubrics" not in data.parsed_json:
+            return categories
 
-        return NodeResult(
-            outputs=results,
-            metadata={"parser_success": sum(1 for r in results if r is not None)}
-        )
+        verify_rubrics = data.parsed_json["verify_rubrics"]
+
+        for i, (category_name, rubrics) in enumerate(verify_rubrics.items()):
+            category = RubricCategory(
+                sample_idx=data.sample_idx,
+                data_id=f"{data.data_id}/category_{i}",
+                parent_id=data.data_id,
+                category_name=category_name,
+                category_rubrics=rubrics
+            )
+            categories.append(category)
+
+        return categories
+
+
+class RubricItemExpanderNode(ExpandNode[RubricCategory]):
+    """Expands RubricCategory into RubricItem nodes."""
+
+    def expand_one(self, data: RubricCategory) -> List[RubricItem]:
+        """Expand category into rubric item nodes."""
+        items = []
+
+        for i, rubric_data in enumerate(data.category_rubrics):
+            item = RubricItem(
+                sample_idx=data.sample_idx,
+                data_id=f"{data.data_id}/rubric_{i}",
+                parent_id=data.data_id,
+                rubric_name=rubric_data.get("rubric_name", ""),
+                binary_statement=rubric_data.get("binary_statement", ""),
+                justification=rubric_data.get("justification", []),
+                traceability=rubric_data.get("traceability", "")
+            )
+            items.append(item)
+
+        return items
 
 
 if __name__ == "__main__":
