@@ -9,7 +9,8 @@ Defines the hierarchical data structure for agentic task synthesis:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+import json
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 
 from ...core import PipelineDataBase
@@ -30,15 +31,21 @@ class AgenticTaskSample(PipelineDataBase):
         raw_response: Original LLM output (includes <think>, ```json```, etc.)
         task_description: Parsed task description
         parsed_json: Parsed JSON data
+        ground_truth: Ground truth answer for evaluation (from verl reward interface)
     """
     raw_response: str = ""
     task_description: str = ""
     parsed_json: Dict[str, Any] = field(default_factory=dict)
+    ground_truth: str = ""  # Ground truth for reward computation
 
     def __post_init__(self):
         super().__post_init__()
         if not self.data_id:
             self.data_id = f"sample_{self.sample_idx}"
+
+    def get_ground_truth(self, context: Optional[Dict[str, Any]] = None) -> Any:
+        """重写基类方法，直接解析 ground_truth JSON 字符串"""
+        return json.loads(self.ground_truth)
 
 
 @dataclass

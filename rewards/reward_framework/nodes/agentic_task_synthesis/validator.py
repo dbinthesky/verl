@@ -24,6 +24,7 @@ __all__ = [
     'CategoryClassificationCheckNode',
     'RubricQualityCheckNode',
     'RubricRigidityCheckNode',
+    'RubricFidelityCheckNode',
 ]
 
 
@@ -872,3 +873,203 @@ Rubric 是用于评价任务执行结果的二元判定标准（通过/不通过
 
         except Exception as e:
             raise ValueError(f"Failed to parse LLM response: {e}")
+
+
+class RubricFidelityCheckNode(RubricQualityCheckNode):
+    """Check rubric fidelity against source document (Pass 5: Source Grounding Check).
+
+    This node validates whether a rubric's binary_statement is grounded in the original
+    source material, preventing hallucinated or "out-of-scope" rubric items.
+
+    Key characteristics:
+    - This is the ONLY validation that requires external information (ground truth document)
+    - Must run independently AFTER other checks to avoid "spoiling" context-free judgments
+    - Acts as a "copyright & fidelity checker" to prevent fabricated exam points
+
+    Processing:
+        - Input: Single RubricItem
+        - Retrieves ground_truth["document"] using data.get_ground_truth(context)
+        - Checks if traceability and binary_statement are grounded in source
+        - Uses LLM to judge whether the rubric is a valid derivation or a hallucination
+
+    Example:
+        config = NodeConfig(name="fidelity_check", node_type=NodeType.LLM_JUDGE)
+        node = RubricFidelityCheckNode(config, agent)
+        await node.process_one(rubric_item, context)
+
+        # Check results
+        if rubric_item.get_meta('rubric_fidelity_pass'):
+            print("✅ Fidelity check passed: grounded in source")
+        else:
+            print(f"❌ Hallucination detected: {rubric_item.get_meta('rubric_fidelity_reason')}")
+    """
+
+    def __init__(self, config: NodeConfig, agent: 'Agent'):
+        """Initialize fidelity check node.
+
+        Args:
+            config: Node configuration
+            agent: LLM agent for validation
+        """
+        super().__init__(config, agent, judge_dimension_name="fidelity")
+
+    def _build_prompt(
+        self,
+        rubric_item: RubricItem,
+        context: Dict[str, Any]
+    ) -> str:
+        """Build prompt for LLM to check source grounding.
+
+        Args:
+            rubric_item: The rubric item being validated
+            context: Execution context (used to retrieve ground_truth)
+
+        Returns:
+            Prompt string for LLM
+
+        Raises:
+            ValueError: If ground_truth or document field is missing
+        """
+        # Get ground truth using unified accessor
+        ground_truth = rubric_item.get_ground_truth(context)
+
+        if ground_truth is None:
+            raise ValueError("Ground truth not found in context or data hierarchy")
+
+        # Extract document and workflow_mermaid from ground truth
+        if not isinstance(ground_truth, dict):
+            raise ValueError(f"Ground truth must be a dict, got: {type(ground_truth)}")
+
+        if "document" not in ground_truth:
+            raise ValueError("Ground truth must contain 'document' field")
+
+        if "workflow_mermaid" not in ground_truth:
+            raise ValueError("Ground truth must contain 'workflow_mermaid' field")
+
+        document = ground_truth["document"]
+        workflow_mermaid = ground_truth["workflow_mermaid"]
+        binary_statement = rubric_item.binary_statement
+        traceability = rubric_item.traceability
+
+        # Get task_description from context or traverse to root
+        task_description = context.get('task_description', '')
+        if not task_description:
+            # Traverse up to root (AgenticTaskSample) to get task_description
+            root = rubric_item
+            while root.get_parent() is not None:
+                root = root.get_parent()
+            if hasattr(root, 'task_description'):
+                task_description = root.task_description
+
+        prompt = f"""你现在的角色是"高阶认知基准测试 (Benchmark) 的终极溯源与逻辑承重审计官"。
+
+【背景描述】
+之前我们尝试通过从一篇原始的预训练语料去逆向构造一道高难度的 Agentic 任务和对应的 Rubric，当前你的核心任务是判定 Rubric 考点是否符合要求。最常见的两种问题一个是考点编造，并没有借鉴专家思路（预训练文档反映）；另一个问题则是模式不匹配，生搬硬套，因为构造的任务与原始文章的动机、背景可能都不完全一致，原文的策略也不一定在合成任务上适合或必要。
+
+你的核心使命是拦截任何存在"上帝视角幻觉"或"边缘废话凑数"的劣质判定考点（Rubric）。你必须对输入的材料执行零容忍的【双向逻辑穿透测试】：
+1. **向后溯源（防幻觉）**：剥离伪造与篡改，确保考点在原始语料中有绝对的客观锚点。
+2. **向前反证（防凑数）**：使用致命的反事实推演，验证该考点是否是任务破局路径上不可绕开的"承重墙"。
+
+**【什么是合格的 Rubric？】**
+Rubric 绝不是阅读理解的"得分点"，而是用于评价复杂任务执行质量的"生死判决书"。一条合格的高阶 Rubric，不仅必须拥有不可辩驳的事实依据，更必须是整个任务逻辑链条上的核心枢纽。如果抽掉这块砖，整个任务的解决方案就会彻底坍塌。
+
+由于这里的任务
+
+# 输入
+【原始预训练语料】：{document}
+
+【专家工作流编排】：{workflow_mermaid}
+
+【任务描述】：{task_description}
+
+【生成的判定考点】：{binary_statement}
+
+【溯源声明】：{traceability}
+
+# 审查双逻辑链 (Dual-Audit Logic)
+请深呼吸，严格按顺序执行以下两项独立检查，任意一项不达标即为伪劣考点：
+
+## 检查点 1：事实溯源检查 (Fact-Grounding Check)
+- **动作**：顺着【考点溯源声明】的指引，去【原始预训练语料】中核对。
+- **判定标准**：这个考点要求的数据、实体或因果关系，是否在原文中有**白纸黑字的确凿依据**？（如果是大模型凭空捏造、歪曲篡改原文来强行增加难度的，直接判定为违规）。
+
+## 检查点 2：业务反证法检查 (Proof-by-Contradiction Check)
+- **动作**：暂且忽略原文，现在请死死盯住【合成的任务描述】和【待审判定考点】。
+- **反事实推演**：假设一位执行者针对该任务，给出了一份表面上看起来很连贯的行动方案，但唯独**完全没有做到/彻底无视了**该考点所要求的动作（例如：没有算那个数、没有排那个雷、没有指出那个冲突）。
+- **判定标准**：
+  - **选项 A (崩塌)**：如果不做这件事，整个任务目标将彻底失败，或导致灾难性的业务后果/逻辑死局。 -> **【本考点是承重墙，合格】**
+  - **选项 B (无伤大雅/非必要)**：如果不做这件事，方案可能只是不够完美，或者只是漏掉了一个跟核心破局毫无关系的细枝末节（比如无用的背景知识、边缘指标）。 -> **【本考点是凑数废话或者不使用，违规】**
+
+# 输出格式 (JSON)
+请直接输出 JSON，不要附加任何废话：
+```json
+{{
+  "reason": "指出考点是如何具备一定的设计依据，从原始数据或专家编排中抽象出了关键决策；指出这个考点**完全**从任务描述出发是否是必要的",
+  "pass": true/false
+}}
+```
+"""
+        return prompt
+
+    def _parse_llm_response(self, response_text: str) -> Dict[str, Any]:
+        """Parse LLM response to extract fidelity judgment.
+
+        Expected JSON format from LLM:
+        {
+          "reason": str,
+          "pass": bool
+        }
+
+        Converts to standard format:
+        {
+          "pass": bool,
+          "reason": str
+        }
+
+        Args:
+            response_text: Raw LLM response
+
+        Returns:
+            Parsed judgment dict with keys:
+                - pass (bool): True if rubric passes fidelity check
+                - reason (str): Detailed explanation of the judgment
+
+        Raises:
+            ValueError: If parsing fails
+        """
+        try:
+            # Extract JSON from response
+            json_pattern = r'```json\s*(.*?)\s*```'
+            match = re.search(json_pattern, response_text, re.DOTALL)
+
+            if match:
+                json_str = match.group(1)
+            else:
+                # Try to find bare JSON object
+                json_pattern2 = r'\{[^}]*"pass"[^}]*\}'
+                match2 = re.search(json_pattern2, response_text, re.DOTALL)
+                if match2:
+                    json_str = match2.group(0)
+                else:
+                    raise ValueError("No JSON found in response")
+
+            data = json.loads(json_str)
+
+            # Validate required fields
+            if "pass" not in data:
+                raise ValueError("Missing 'pass' field in response")
+            if "reason" not in data:
+                raise ValueError("Missing 'reason' field in response")
+
+            # Extract values
+            pass_flag = bool(data["pass"])
+            reason = str(data["reason"])
+
+            return {
+                "pass": pass_flag,
+                "reason": reason,
+            }
+
+        except Exception as e:
+            raise ValueError(f"Failed to parse LLM response: {e}")
+

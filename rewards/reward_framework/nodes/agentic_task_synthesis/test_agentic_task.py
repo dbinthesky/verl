@@ -34,6 +34,242 @@ from reward_framework import (
 # Test Data Samples
 # ==============================================================================
 
+DOCUMENT = """
+Have you ever wondered what happens behind the scenes of your favorite fashion reality shows? "DTI Outfit Reality Television" offers a unique glimpse into the vibrant world of fashion design and entrepreneurship. Combining creativity with competition, this show captures the imagination of viewers and aspiring designers alike. With its compelling blend of drama, innovation, and fashion, "DTI Outfit Reality Television" is more than just a spectacle; it's an educational journey into the heart of the fashion industry.
+
+Reality television has long captivated audiences with its unscripted drama and real-life scenarios, but few genres have merged the competitive spirit and creative flair like fashion reality shows. "DTI Outfit Reality Television" stands out with its focus on emerging designers and their quest to make a mark in the fashion world. From selecting fabrics to the final runway show, viewers get a front-row seat to the challenges and triumphs of creating standout fashion pieces. This show not only entertains but also inspires a new generation of fashion enthusiasts.
+
+In today's fast-paced world, where fashion trends change at the blink of an eye, "DTI Outfit Reality Television" serves as a platform for fresh talent to showcase their skills and gain recognition. It highlights the importance of innovation and adaptability in the fashion industry, encouraging designers to push boundaries and explore new ideas. Through engaging storytelling and dynamic visuals, the show invites audiences to appreciate the artistry and dedication that go into the world of fashion design.
+
+## Table of Contents
+
+## Biography of DTI Outfit Reality Television
+
+"DTI Outfit Reality Television" is a groundbreaking show that first aired in 2018, aiming to revolutionize the way we perceive fashion on screen. The show was conceived by a team of fashion experts and television producers who recognized the potential of merging the drama of reality TV with the creativity of fashion design. Set in the heart of the fashion capital, the show quickly gained a dedicated following, becoming a staple for fashion enthusiasts around the world.
+
+The premise of "DTI Outfit Reality Television" revolves around a group of talented designers competing in various fashion challenges. Each episode presents a new theme or concept, pushing contestants to innovate and think outside the box. With limited time and resources, participants must create garments that impress a panel of esteemed judges, all while being filmed for the world to see.
+
+The show's success can be attributed to its unique format, which combines elements of competition, education, and entertainment. By offering viewers an inside look at the creative process, "DTI Outfit Reality Television" demystifies the world of fashion design, making it accessible to a broader audience. The show not only celebrates the artistry of fashion but also highlights the dedication and perseverance required to succeed in the industry.
+
+| Attribute | Details |
+|---|---|
+| First Aired | 2018 |
+| Genre | Reality Television, Fashion |
+| Format | Competition, Drama |
+| Location | Fashion Capital |
+| Target Audience | Fashion Enthusiasts, General Audience |
+
+## The Concept and Creation
+
+The inception of "DTI Outfit Reality Television" was driven by a desire to create a platform that would both entertain and educate viewers about the intricacies of fashion design. The show's creators envisioned a space where emerging designers could showcase their talent and gain exposure to industry professionals. By combining the competitive nature of reality TV with the artistic flair of fashion, they aimed to produce a series that would captivate audiences and inspire creativity.
+
+The development process involved assembling a diverse team of experts from various fields, including fashion design, television production, and marketing. Together, they crafted a format that would challenge contestants while providing viewers with valuable insights into the world of fashion. The show's structure was designed to test participants' creativity, technical skills, and ability to work under pressure, all while maintaining a focus on entertainment.
+
+One of the key elements that set "DTI Outfit Reality Television" apart from other fashion shows is its emphasis on storytelling. Each episode follows the journey of the contestants as they navigate the challenges and triumphs of the competition. By highlighting their personal stories and struggles, the show creates a narrative that resonates with viewers and fosters a deeper connection with the audience.
+
+The show's creators also recognized the importance of diversity and inclusion in the fashion industry. As such, they made a conscious effort to feature designers from various backgrounds and cultures, reflecting the global nature of fashion. This commitment to representation has been a significant factor in the show's success, as it allows audiences to see themselves reflected in the contestants and their creations.
+
+## Behind-the-Scenes Magic
+
+The magic of "DTI Outfit Reality Television" lies in its ability to capture the essence of fashion design while delivering a compelling narrative. Behind the scenes, a dedicated team of professionals works tirelessly to bring the show to life, ensuring that every aspect of the production runs smoothly.
+
+From the set design to the camera work, each element is meticulously planned to create a visually stunning experience for viewers. The production team collaborates closely with the designers, providing support and guidance throughout the competition. This collaborative approach fosters a positive environment that encourages creativity and innovation.
+
+One of the most challenging aspects of producing a reality television show is managing the unpredictable nature of the competition. To capture the raw emotions and genuine reactions of the contestants, the production team must be agile and adaptable, ready to film at a moment's notice. This requires a high level of coordination and communication among the crew, ensuring that every moment is documented with precision.
+
+The behind-the-scenes team also plays a crucial role in shaping the narrative of the show. Through careful editing and storytelling, they craft a cohesive storyline that engages viewers and highlights the unique personalities of the contestants. By weaving together moments of tension, triumph, and emotion, they create a captivating viewing experience that keeps audiences coming back for more.
+
+## Meet the Judges
+
+The panel of judges on "DTI Outfit Reality Television" is composed of esteemed fashion experts and industry professionals, each bringing their unique perspective and expertise to the show. Their role is to evaluate the contestants' creations, providing constructive feedback and guidance to help them grow as designers.
+
+Each judge is carefully selected for their experience and influence in the fashion world. Their diverse backgrounds and areas of expertise ensure that the contestants receive well-rounded critiques that consider both the artistic and commercial aspects of fashion design. This approach helps participants develop a comprehensive understanding of what it takes to succeed in the industry.
+
+The judges also play a pivotal role in shaping the tone and direction of the show. Their interactions with the contestants, as well as their deliberations and decisions, add depth and drama to the narrative. By offering insights into the decision-making process, the judges provide viewers with a behind-the-scenes look at the complexities of fashion design and evaluation.
+
+Throughout the competition, the judges serve as mentors and guides for the contestants, offering advice and encouragement to help them navigate the challenges they face. Their support and expertise are invaluable resources for the designers, empowering them to push their creative boundaries and achieve their full potential.
+
+## Contestant Journeys
+
+At the heart of "DTI Outfit Reality Television" are the inspiring journeys of the contestants, each with their unique story and vision for fashion. The competition provides a platform for these emerging designers to showcase their talent and creativity, offering them a chance to make their mark in the industry.
+
+Throughout the series, viewers are introduced to a diverse group of contestants, each with their distinct style and approach to design. From the initial auditions to the final runway show, the audience follows their progress, witnessing the highs and lows of the competition. This personal connection with the contestants adds an emotional layer to the show, making each episode a compelling watch.
+
+The challenges faced by the contestants are designed to test their skills and creativity, pushing them to think outside the box and innovate. From creating garments with unconventional materials to designing for specific themes and occasions, each task presents a unique opportunity for the designers to showcase their abilities.
+
+As the competition progresses, the contestants grow both personally and professionally, gaining valuable insights and experience that will serve them well in their future careers. The friendships and rivalries that develop along the way add depth to the narrative, creating a dynamic and engaging viewing experience.
+
+## Fashion Design Challenges
+
+The fashion design challenges on "DTI Outfit Reality Television" are a pivotal aspect of the show, offering contestants the opportunity to demonstrate their creativity, technical skills, and ability to work under pressure. Each challenge is carefully crafted to test the designers' abilities and push them to explore new ideas and techniques.
+
+The challenges vary in complexity and scope, ranging from creating a collection inspired by a specific theme to designing garments with limited resources or unconventional materials. These tasks challenge the contestants to think creatively and adapt to different situations, honing their skills and expanding their understanding of fashion design.
+
+In addition to testing the designers' technical abilities, the challenges also encourage them to consider the commercial aspects of fashion. This includes understanding target audiences, creating marketable designs, and navigating the business side of the industry. By incorporating these elements into the competition, the show provides a comprehensive learning experience for the contestants.
+
+The fashion design challenges are not only a test of skill but also a source of inspiration for viewers. By showcasing the creative process and the dedication required to bring a garment to life, the show offers audiences a deeper appreciation for the art of fashion design. It also encourages aspiring designers to pursue their passions and explore their creativity.
+
+## Impact on the Fashion Industry
+
+"DTI Outfit Reality Television" has made a significant impact on the fashion industry, offering a platform for emerging designers to gain exposure and recognition. By showcasing the talent and creativity of its contestants, the show has helped launch the careers of many successful designers, contributing to the industry's growth and diversification.
+
+The show's emphasis on innovation and creativity has also influenced fashion trends, inspiring designers and brands to explore new ideas and push the boundaries of traditional design. By highlighting the work of up-and-coming designers, "DTI Outfit Reality Television" has helped to shape the future of fashion, encouraging a more inclusive and diverse industry.
+
+In addition to its impact on the design community, the show has also played a role in promoting sustainability and ethical practices within the industry. By featuring challenges that focus on eco-friendly materials and sustainable design, the show has raised awareness of the importance of responsible fashion and inspired viewers to consider the environmental impact of their choices.
+
+The success of "DTI Outfit Reality Television" has also paved the way for other fashion reality shows, expanding the genre and providing more opportunities for designers to showcase their work. As a result, the fashion industry has become more accessible and inclusive, offering a platform for diverse voices and perspectives.
+
+## Audience Engagement and Reception
+
+The reception of "DTI Outfit Reality Television" has been overwhelmingly positive, with audiences around the world captivated by its engaging storytelling and innovative design challenges. The show's ability to connect with viewers on an emotional level has been a key factor in its success, fostering a loyal fan base and generating widespread interest in fashion design.
+
+Social media has played a significant role in the show's popularity, with fans sharing their thoughts and opinions on the contestants and their creations. This online engagement has created a sense of community among viewers, allowing them to connect with fellow fans and participate in discussions about the show.
+
+The show's interactive elements, such as audience voting and social media challenges, have further enhanced viewer engagement, allowing fans to have a direct impact on the competition. This level of involvement has deepened the connection between the audience and the show, making it a shared experience that extends beyond the screen.
+
+The positive reception of "DTI Outfit Reality Television" has also been reflected in its critical acclaim, with the show receiving numerous awards and accolades for its innovative format and compelling storytelling. Its success has solidified its place as a leading fashion reality show, inspiring other programs to follow suit and explore the intersection of fashion and entertainment.
+
+## Innovation and Trendsetting
+
+One of the defining characteristics of "DTI Outfit Reality Television" is its commitment to innovation and trendsetting within the fashion industry. By showcasing cutting-edge designs and experimental techniques, the show has become a source of inspiration for designers and fashion enthusiasts alike.
+
+The show's emphasis on innovation has encouraged contestants to push the boundaries of traditional design, exploring new materials, technologies, and concepts. This approach has led to the creation of groundbreaking garments that challenge conventional notions of fashion and inspire new trends.
+
+In addition to its impact on design, "DTI Outfit Reality Television" has also influenced the way fashion is presented and consumed. By incorporating elements of storytelling and drama into the competition, the show has redefined the fashion show format, creating a dynamic and engaging viewing experience that resonates with audiences.
+
+The show's trendsetting influence can also be seen in its commitment to diversity and inclusion, which has set a new standard for representation within the industry. By featuring designers from various backgrounds and cultures, the show has expanded the definition of fashion and encouraged a more inclusive and diverse industry.
+
+## Education and Inspiration
+
+One of the key objectives of "DTI Outfit Reality Television" is to educate and inspire viewers about the world of fashion design. By offering a behind-the-scenes look at the creative process, the show provides valuable insights into the skills and dedication required to succeed in the industry.
+
+The educational aspect of the show is evident in its focus on the technical and artistic elements of fashion design. Through the various challenges and critiques, viewers gain a deeper understanding of the complexities of garment construction, fabric selection, and design innovation. This knowledge empowers aspiring designers to explore their creativity and pursue their passions.
+
+The show also serves as a source of inspiration for viewers, showcasing the talent and creativity of its contestants and encouraging audiences to think outside the box. By highlighting the personal stories and journeys of the designers, the show fosters a sense of connection and empathy, inspiring viewers to pursue their dreams and overcome challenges.
+
+In addition to its impact on aspiring designers, "DTI Outfit Reality Television" has also inspired a broader appreciation for fashion as an art form. By showcasing the creativity and dedication that goes into each design, the show encourages audiences to view fashion as a means of self-expression and innovation.
+
+## Global Reach and Cultural Influence
+
+The global reach of "DTI Outfit Reality Television" has been a significant factor in its success, with the show attracting viewers from around the world. Its international appeal has been driven by its commitment to diversity and inclusion, featuring designers and judges from various cultural backgrounds.
+
+This global perspective has allowed the show to explore different fashion traditions and styles, offering viewers a diverse and enriching experience. By showcasing the unique cultural influences that shape fashion, the show has fostered a greater appreciation for the diversity and creativity of the industry.
+
+The cultural influence of the show extends beyond its audience, impacting the fashion industry as a whole. By highlighting the work of designers from different cultures, the show has encouraged a more inclusive and diverse industry, paving the way for new voices and perspectives.
+
+"DTI Outfit Reality Television" has also played a role in promoting cultural exchange and understanding through fashion. By showcasing the beauty and creativity of different cultures, the show has fostered a sense of connection and empathy among viewers, encouraging them to explore new ideas and embrace diversity.
+
+## Technology and Digital Integration
+
+The integration of technology and digital platforms has been a key aspect of "DTI Outfit Reality Television," enhancing the viewing experience and engaging audiences in new and innovative ways. From interactive voting to social media challenges, the show has leveraged technology to connect with viewers and expand its reach.
+
+The use of digital platforms has allowed the show to engage with a global audience, providing fans with access to exclusive content, behind-the-scenes footage, and interactive experiences. This level of engagement has created a sense of community among viewers, allowing them to connect with fellow fans and participate in discussions about the show.
+
+In addition to enhancing audience engagement, the integration of technology has also influenced the design process on the show. Contestants are encouraged to explore new tools and techniques, such as 3D printing and digital design, to create innovative and cutting-edge garments. This emphasis on technology has helped to redefine the boundaries of fashion design, inspiring new trends and ideas.
+
+The show's commitment to digital integration has also paved the way for new opportunities in the fashion industry, encouraging designers and brands to explore the potential of technology and digital platforms. By embracing the digital age, "DTI Outfit Reality Television" has positioned itself at the forefront of the fashion industry, inspiring a new generation of designers and entrepreneurs.
+
+## Future of DTI Outfit Reality Television
+
+The future of "DTI Outfit Reality Television" looks bright, with the show poised to continue its influence on the fashion industry and inspire new generations of designers. As the show evolves, it will likely explore new formats and themes, incorporating emerging trends and technologies to keep the competition fresh and engaging.
+
+One potential area of growth for the show is its expansion into new markets and regions, offering opportunities for designers from around the world to participate and showcase their talent. By embracing a global perspective, the show can continue to promote diversity and inclusion within the fashion industry, fostering a more inclusive and dynamic landscape.
+
+The show's commitment to sustainability and ethical practices is also likely to play a significant role in its future direction. By continuing to promote eco-friendly design and responsible fashion, "DTI Outfit Reality Television" can help raise awareness of the importance of sustainability and inspire positive change within the industry.
+
+As the show looks to the future, it will undoubtedly continue to push the boundaries of fashion design and storytelling, offering viewers a captivating and inspiring experience. With its unique blend of creativity, innovation, and entertainment, "DTI Outfit Reality Television" is set to remain a leading force in the world of fashion reality television.
+
+## Frequently Asked Questions
+
+### What is "DTI Outfit Reality Television" about?
+
+"DTI Outfit Reality Television" is a reality show focused on fashion design, where talented designers compete in various challenges to showcase their creativity and skills. The show offers viewers an inside look at the fashion industry, highlighting the artistry and dedication required to succeed.
+
+### Who are the judges on "DTI Outfit Reality Television"?
+
+The judges on the show are esteemed fashion experts and industry professionals, each bringing their unique perspective and expertise to evaluate the contestants' creations. They provide constructive feedback and guidance to help the designers grow and succeed in the competition.
+
+### How does "DTI Outfit Reality Television" impact the fashion industry?
+
+The show has made a significant impact on the fashion industry by providing a platform for emerging designers to gain exposure and recognition. It has also influenced fashion trends, promoted sustainability, and encouraged diversity and inclusion within the industry.
+
+### What types of challenges do contestants face on the show?
+
+Contestants face a variety of challenges that test their creativity, technical skills, and ability to work under pressure. These challenges range from designing garments inspired by specific themes to creating collections with limited resources or unconventional materials.
+
+### How can viewers engage with "DTI Outfit Reality Television"?
+
+Viewers can engage with the show through social media, interactive voting, and online discussions. The show's digital integration allows fans to connect with fellow viewers, participate in challenges, and access exclusive content and behind-the-scenes footage.
+
+### What is the future of "DTI Outfit Reality Television"?
+
+The future of the show looks promising, with potential expansions into new markets and regions, a continued focus on sustainability, and the exploration of new trends and technologies. The show will continue to inspire and engage audiences with its unique blend of creativity and entertainment.
+
+## Conclusion
+
+"DTI Outfit Reality Television" has redefined the landscape of fashion reality shows, offering a captivating and inspiring experience for viewers and contestants alike. Through its emphasis on creativity, innovation, and diversity, the show has made a significant impact on the fashion industry, shaping trends and fostering a more inclusive and dynamic landscape.
+
+By providing a platform for emerging designers to showcase their talent and gain recognition, "DTI Outfit Reality Television" has contributed to the industry's growth and diversification. Its commitment to sustainability and ethical practices has also raised awareness of the importance of responsible fashion, inspiring positive change within the industry.
+
+As the show continues to evolve and expand, it will undoubtedly remain a leading force in the world of fashion reality television, inspiring new generations of designers and fashion enthusiasts. With its unique blend of creativity, entertainment, and education, "DTI Outfit Reality Television" is set to captivate audiences for years to come.
+
+### You Might Also Like
+
+Kristy McNichol: A Journey Through Stardom And Beyond
+
+ The Future Of Sean Preston Federline: What To Expect In 2024
+
+ Kilchers 2024: A Comprehensive Insight Into Their Upcoming Ventures And Legacy
+
+ The Remarkable Life Of Hafþór Björnsson And His Family
+
+ Unraveling The Enigma: Bill Belichick's Age And Legacy
+
+
+
+### Article Recommendations
+
+Details
+
+Details
+"""
+
+# 专家工作流编排（Mermaid 格式，用于 Fidelity Check）
+# TODO: 用户提供实际 workflow mermaid 内容
+WORKFLOW_MERMAID = """
+```mermaid
+flowchart TD
+    A[任务描述] --> B[锚定核心价值主张]
+    B --> B1[确立节目独特性：教育性vs纯娱乐化]
+    B --> B2[排除干扰项：非流水账行业概述]
+    B1 --> C[构建叙事锚点]
+    C --> C1[用认知钩子开场：引发“幕后好奇”]
+    C --> C2[定义节目本质：创作+竞争+教育的融合体]
+    A --> D[建立结构骨架]
+    D --> D1[罗列必要维度列表：Biography, Concept, Behind-the-Scenes, Judges, Contestants, Challenges, Impact, Audience, Innovation, Education, Global, Tech, Future, FAQ]
+    D1 --> E[深度验证逻辑闭环]
+    E --> E1[评估维度是否强化核心价值？]
+    E1 -->|是| E2[保留维度]
+    E1 -->|否| E3[移除维度]
+    E2 --> F[交叉检验关键约束]
+    F --> F1[检查“无篡改点”：隐性信息必须公平分布]
+    F1 -->|缺失| F2[植入关键隐性约束]
+    F1 -->|完整| F3[验证文化包容性标准]
+    F3 -->|文化元素缺失| F4[添加多元背景设计]
+    F3 -->|符合| F5[验证技术整合逻辑]
+    F5 -->|数字工具不足| F6[增强3D打印/AR应用案例]
+    A --> G[条件分支评估]
+    G --> G1[目标受众分层：Fashion Enthusiasts vs General Audience]
+    G1 --> G2[内容侧重调整]
+    G2 -->|Enthusiasts优先| G3[深化技术术语与设计流程]
+    G2 -->|General优先| G4[强化选手故事线与情感连接]
+    G4 --> H[最终叙事闭环]
+    H --> H1[检查认知递进：从好奇→理解→共鸣→行动]
+    H --> H2[确保无捷径验证：所有关键点必须通过隐性约束触发]
+    H1 --> I[输出成品]
+```
+"""
+
 # 完整的 LLM 响应样例（包含 <think>、```json```）
 SAMPLE_LLM_RESPONSE = """这是思考过程...
 需要分析任务需求...
@@ -1407,6 +1643,263 @@ class TestRubricRigidityCheck(unittest.TestCase):
         asyncio.run(run())
 
 
+class TestRubricFidelityCheck(unittest.TestCase):
+    """测试 RubricFidelityCheckNode（溯源忠实度检查）"""
+
+    # Test configuration
+    TEST_MODEL = "gpt-oss-120b"
+    TEST_BASE_URL = "http://10.102.215.37:28000/v1"
+    TEST_API_KEY = "dummy-key"
+
+    def setUp(self):
+        """Set up agent and nodes."""
+        self.agent_config = AgentConfig(
+            model=self.TEST_MODEL,
+            base_url=self.TEST_BASE_URL,
+            api_key=self.TEST_API_KEY,
+            temperature=0.7,
+            max_tokens=4096,
+            reasoning_effort="high"
+        )
+        self.agent = Agent(self.agent_config)
+
+    def test_fidelity_check_prompt(self):
+        """测试忠实度检查的 Prompt 生成（不调用 LLM，只打印 prompt）"""
+        async def run():
+            import json
+
+            print("\n" + "="*100)
+            print(" " * 30 + "RUBRIC FIDELITY CHECK - PROMPT ONLY")
+            print("="*100)
+
+            # Parse and expand sample to get rubric items
+            sample = AgenticTaskSample(
+                sample_idx=0,
+                raw_response=SAMPLE_LLM_RESPONSE,
+                ground_truth=json.dumps({
+                    "document": DOCUMENT,
+                    "workflow_mermaid": WORKFLOW_MERMAID
+                })  # 设置 ground_truth
+            )
+
+            parser = AgenticTaskParserNode(
+                NodeConfig(name="parser", node_type=NodeType.PARSER)
+            )
+            await parser.process_one(sample, create_simple_context([]))
+
+            category_expander = RubricCategoryExpanderNode(
+                NodeConfig(name="category_expander", node_type=NodeType.EXPANDER)
+            )
+            await category_expander.process_one(sample, create_simple_context([]))
+
+            # Expand items for all categories
+            categories = sample.get_children(RubricCategory)
+            item_expander = RubricItemExpanderNode(
+                NodeConfig(name="item_expander", node_type=NodeType.EXPANDER)
+            )
+            context = create_simple_context([])
+            await asyncio.gather(*[item_expander.process_one(cat, context) for cat in categories])
+
+            # Get first rubric item for testing
+            test_rubric_item = None
+            for cat in categories:
+                items = cat.get_children(RubricItem)
+                if items:
+                    test_rubric_item = items[0]
+                    break
+
+            if not test_rubric_item:
+                print("❌ No rubric items found for testing")
+                return
+
+            print(f"\n📊 测试 Rubric 条目:")
+            print(f"   名称: {test_rubric_item.rubric_name}")
+            print(f"   二元判断: {test_rubric_item.binary_statement}")
+            print(f"   溯源声明: {test_rubric_item.traceability}")
+
+            # Create fidelity check node
+            from reward_framework.nodes.agentic_task_synthesis.validator import RubricFidelityCheckNode
+
+            fidelity_checker = RubricFidelityCheckNode(
+                NodeConfig(
+                    name="fidelity_check",
+                    node_type=NodeType.LLM_JUDGE,
+                    skip_on_failure=False
+                ),
+                agent=None  # We won't call LLM
+            )
+
+            # Build and print prompt
+            prompt = fidelity_checker._build_prompt(
+                test_rubric_item,
+                {}  # context 为空，ground_truth 会从 sample 获取
+            )
+
+            print("\n" + "="*100)
+            print(" " * 40 + "生成的 PROMPT")
+            print("="*100)
+            print(prompt)
+            print("="*100)
+
+            print("\n✅ Prompt 生成测试完成!")
+            print("   请检查 prompt 格式是否正确，是否包含原始语料、专家工作流、任务描述、判定考点、溯源声明五部分。")
+            print("="*100)
+
+        asyncio.run(run())
+
+    def test_fidelity_check_with_llm(self):
+        """测试忠实度检查（调用真实 LLM，打印 prompt 和 response）"""
+        async def run():
+            import json
+
+            print("\n" + "="*100)
+            print(" " * 35 + "RUBRIC FIDELITY CHECK TEST")
+            print("="*100)
+
+            # Parse and expand sample to get rubric items
+            sample = AgenticTaskSample(
+                sample_idx=0,
+                raw_response=SAMPLE_LLM_RESPONSE,
+                ground_truth=json.dumps({
+                    "document": DOCUMENT,
+                    "workflow_mermaid": WORKFLOW_MERMAID
+                })  # 设置 ground_truth
+            )
+
+            parser = AgenticTaskParserNode(
+                NodeConfig(name="parser", node_type=NodeType.PARSER)
+            )
+            await parser.process_one(sample, create_simple_context([]))
+
+            category_expander = RubricCategoryExpanderNode(
+                NodeConfig(name="category_expander", node_type=NodeType.EXPANDER)
+            )
+            await category_expander.process_one(sample, create_simple_context([]))
+
+            # Expand items for all categories
+            categories = sample.get_children(RubricCategory)
+            item_expander = RubricItemExpanderNode(
+                NodeConfig(name="item_expander", node_type=NodeType.EXPANDER)
+            )
+            context = create_simple_context([])
+            await asyncio.gather(*[item_expander.process_one(cat, context) for cat in categories])
+
+            # Get first rubric item for testing
+            test_rubric_item = None
+            for cat in categories:
+                items = cat.get_children(RubricItem)
+                if items:
+                    test_rubric_item = items[0]
+                    break
+
+            if not test_rubric_item:
+                print("❌ No rubric items found for testing")
+                return
+
+            print(f"\n📊 测试 Rubric 条目:")
+            print(f"   名称: {test_rubric_item.rubric_name}")
+            print(f"   二元判断: {test_rubric_item.binary_statement}")
+            print(f"   溯源声明: {test_rubric_item.traceability}")
+
+            # Create fidelity check node
+            from reward_framework.nodes.agentic_task_synthesis.validator import RubricFidelityCheckNode
+
+            fidelity_checker = RubricFidelityCheckNode(
+                NodeConfig(
+                    name="fidelity_check",
+                    node_type=NodeType.LLM_JUDGE,
+                    skip_on_failure=False,
+                    skip_on_negative=False
+                ),
+                agent=self.agent
+            )
+
+            # Build and print prompt
+            prompt = fidelity_checker._build_prompt(
+                test_rubric_item,
+                {}  # context 为空，ground_truth 会从 sample 获取
+            )
+
+            print("\n" + "="*100)
+            print(" " * 40 + "生成的 PROMPT")
+            print("="*100)
+            print(prompt)
+            print("="*100)
+
+            # Execute fidelity check
+            print("\n🤖 调用 LLM 进行忠实度检查...")
+            print(f"   Model: {self.TEST_MODEL}")
+            print(f"   Endpoint: {self.TEST_BASE_URL}")
+            print(f"   Reasoning effort: high")
+
+            check_context = {}
+            await fidelity_checker.process_one(test_rubric_item, check_context)
+
+            print(f"\n✅ LLM 调用完成:")
+            print(f"   Skipped: {'Yes' if test_rubric_item.is_skipped else 'No'}")
+
+            # Get the raw LLM response
+            raw_response = test_rubric_item.get_meta('rubric_fidelity_raw_response', None)
+
+            print("\n" + "="*100)
+            print(" " * 38 + "LLM 原始响应")
+            print("="*100)
+
+            if raw_response:
+                print(raw_response)
+            else:
+                print("(未找到原始响应)")
+
+            # Print token usage and finish_reason
+            print("\n" + "="*100)
+            print(" " * 35 + "LLM 调用详细信息")
+            print("="*100)
+
+            all_meta = test_rubric_item.get_all_meta()
+            if 'rubric_fidelity_raw_response' in all_meta:
+                response_len = len(all_meta['rubric_fidelity_raw_response'])
+                print(f"响应长度: {response_len} 字符")
+
+            if 'rubric_fidelity_finish_reason' in all_meta:
+                finish_reason = all_meta['rubric_fidelity_finish_reason']
+                print(f"Finish reason: {finish_reason}")
+                if finish_reason == 'length':
+                    print("⚠️  响应因 max_tokens 限制被截断！")
+
+            if 'rubric_fidelity_token_usage' in all_meta:
+                usage = all_meta['rubric_fidelity_token_usage']
+                print(f"Token usage: {usage}")
+
+            if test_rubric_item.is_skipped:
+                reason, node = test_rubric_item.get_skip_info()
+                print(f"Rubric 被 skip: {reason} (at {node})")
+
+            if 'rubric_fidelity_error' in all_meta:
+                print(f"错误信息: {all_meta['rubric_fidelity_error']}")
+
+            print("\n" + "="*100)
+            print(" " * 40 + "解析后的结果")
+            print("="*100)
+
+            # Print all three stored fields separately
+            pass_flag = test_rubric_item.get_meta('rubric_fidelity_pass', None)
+            judgment = test_rubric_item.get_meta('rubric_fidelity_judgment', {})
+            reason = test_rubric_item.get_meta('rubric_fidelity_reason', '')
+
+            print(f"通过检查: {pass_flag}")
+            print(f"完整判断结果: {judgment}")
+            print(f"判断原因: {reason}")
+
+            print("\n" + "="*100)
+
+            await self.agent.close()
+
+            print("\n✅ 测试完成!")
+            print("="*100)
+
+        asyncio.run(run())
+
+
 def suite():
     """Create test suite."""
     suite = unittest.TestSuite()
@@ -1416,6 +1909,7 @@ def suite():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCategoryOrthogonalityCheck))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCategoryClassificationCheck))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRubricRigidityCheck))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRubricFidelityCheck))
     return suite
 
 

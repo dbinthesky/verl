@@ -73,6 +73,7 @@ class PipelineDataBase:
 
     def add_child(self, child: 'PipelineDataBase') -> None:
         self._children.append(child)
+        child._parent = self
 
     def set_meta(self, key: str, value: Any) -> None:
         self._metadata[key] = value
@@ -120,3 +121,52 @@ class PipelineDataBase:
         self.mark_skipped(reason, node_name)
         for child in self._children:
             child.mark_skipped_recursive(f"parent_skipped: {reason}", node_name)
+
+    def get_parent(self) -> Optional['PipelineDataBase']:
+        """获取父节点（需要在添加子节点时维护引用）
+
+        Note: 当前简单实现，如果需要向上追溯，需要在 add_child 时设置 _parent
+        """
+        return getattr(self, '_parent', None)
+
+    def get_ground_truth(self, context: Optional[Dict[str, Any]] = None) -> Any:
+        """统一的 ground_truth 访问接口
+
+        查找顺序（优先级从高到低）：
+        1. context['ground_truth'] - 运行时传入的单个 GT（最高优先级）
+        2. 向上追溯到 root，调用 root.get_ground_truth() 方法
+
+        Args:
+            context: 执行上下文（可选）
+
+        Returns:
+            Ground truth 数据，如果找不到返回 None
+
+        Examples:
+            # 在 Node 中使用
+            gt = rubric_item.get_ground_truth(context)
+
+            # 不需要关心 GT 存储在哪里，统一接口访问
+        """
+        # 1. 优先从 context 取单个 GT（运行时传入）
+        if context and 'ground_truth' in context:
+            return context['ground_truth']
+
+        # 2. 向上追溯到 root 节点
+        root = self
+        while root.get_parent() is not None:
+            root = root.get_parent()
+
+        # 3. 如果 root 不是 self（向上追溯了），调用 root 的 get_ground_truth
+        #    这样可以利用子类重写的解析逻辑（如 AgenticTaskSample 的 JSON 解析）
+        if root is not self:
+            return root.get_ground_truth(context)
+
+        # 4. 如果 root 是 self（没有父节点），返回自己的 ground_truth 属性
+        if hasattr(self, 'ground_truth'):
+            gt = getattr(self, 'ground_truth')
+            if gt is not None:  # 只排除 None
+                return gt
+
+        # 找不到返回 None
+        return None
