@@ -1753,7 +1753,7 @@ class TestRubricFidelityCheck(unittest.TestCase):
             import json
 
             print("\n" + "="*100)
-            print(" " * 35 + "RUBRIC FIDELITY CHECK TEST")
+            print(" " * 30 + "RUBRIC FIDELITY CHECK - ALL ITEMS")
             print("="*100)
 
             # Parse and expand sample to get rubric items
@@ -1784,22 +1784,20 @@ class TestRubricFidelityCheck(unittest.TestCase):
             context = create_simple_context([])
             await asyncio.gather(*[item_expander.process_one(cat, context) for cat in categories])
 
-            # Get first rubric item for testing
-            test_rubric_item = None
+            # Collect all rubric items from all categories
+            all_rubric_items = []
             for cat in categories:
                 items = cat.get_children(RubricItem)
-                if items:
-                    test_rubric_item = items[0]
-                    break
+                for item in items:
+                    all_rubric_items.append((cat, item))
 
-            if not test_rubric_item:
+            print(f"\n📊 数据统计:")
+            print(f"   Category 数量: {len(categories)}")
+            print(f"   Rubric Item 总数: {len(all_rubric_items)}")
+
+            if not all_rubric_items:
                 print("❌ No rubric items found for testing")
                 return
-
-            print(f"\n📊 测试 Rubric 条目:")
-            print(f"   名称: {test_rubric_item.rubric_name}")
-            print(f"   二元判断: {test_rubric_item.binary_statement}")
-            print(f"   溯源声明: {test_rubric_item.traceability}")
 
             # Create fidelity check node
             from reward_framework.nodes.agentic_task_synthesis.validator import RubricFidelityCheckNode
@@ -1814,81 +1812,96 @@ class TestRubricFidelityCheck(unittest.TestCase):
                 agent=self.agent
             )
 
-            # Build and print prompt
-            prompt = fidelity_checker._build_prompt(
-                test_rubric_item,
-                {}  # context 为空，ground_truth 会从 sample 获取
-            )
+            # Show first item's prompt as example
+            if all_rubric_items:
+                first_cat, first_item = all_rubric_items[0]
+                prompt = fidelity_checker._build_prompt(
+                    first_item,
+                    {}  # context 为空，ground_truth 会从 sample 获取
+                )
+                print("\n" + "="*100)
+                print(" " * 35 + "Prompt 示例（第一条）")
+                print("="*100)
+                print(prompt[:2000] + "..." if len(prompt) > 2000 else prompt)  # 截断长 prompt
+                print("="*100)
 
-            print("\n" + "="*100)
-            print(" " * 40 + "生成的 PROMPT")
-            print("="*100)
-            print(prompt)
-            print("="*100)
-
-            # Execute fidelity check
-            print("\n🤖 调用 LLM 进行忠实度检查...")
+            # Execute fidelity check for all items (concurrently)
+            print(f"\n🤖 并发调用 LLM 进行忠实度检查...")
             print(f"   Model: {self.TEST_MODEL}")
             print(f"   Endpoint: {self.TEST_BASE_URL}")
             print(f"   Reasoning effort: high")
+            print(f"   并发数量: {len(all_rubric_items)} 个 items")
 
             check_context = {}
-            await fidelity_checker.process_one(test_rubric_item, check_context)
 
-            print(f"\n✅ LLM 调用完成:")
-            print(f"   Skipped: {'Yes' if test_rubric_item.is_skipped else 'No'}")
+            # Concurrent execution
+            await asyncio.gather(*[
+                fidelity_checker.process_one(item, check_context)
+                for cat, item in all_rubric_items
+            ])
 
-            # Get the raw LLM response
-            raw_response = test_rubric_item.get_meta('rubric_fidelity_raw_response', None)
+            print(f"\n✅ 所有 LLM 调用完成!")
 
+            # Print results for all items
             print("\n" + "="*100)
-            print(" " * 38 + "LLM 原始响应")
+            print(" " * 35 + "所有条目的检查结果")
             print("="*100)
 
-            if raw_response:
-                print(raw_response)
-            else:
-                print("(未找到原始响应)")
+            for i, (cat, item) in enumerate(all_rubric_items, 1):
+                print(f"\n{'='*100}")
+                print(f"【{i}/{len(all_rubric_items)}】{cat.category_name} - {item.rubric_name}")
+                print(f"{'='*100}")
 
-            # Print token usage and finish_reason
+                print(f"\n📝 二元判断:")
+                print(f"   {item.binary_statement}")
+
+                print(f"\n🔗 溯源声明:")
+                print(f"   {item.traceability}")
+
+                # Get stored metadata
+                pass_value = item.get_meta('rubric_fidelity_pass', 'N/A')
+                reason_value = item.get_meta('rubric_fidelity_reason', 'N/A')
+                judgment = item.get_meta('rubric_fidelity_judgment', {})
+
+                print(f"\n✅ 判定结果:")
+                print(f"   通过: {pass_value}")
+
+                print(f"\n💬 详细理由:")
+                print(f"   {reason_value}")
+
+                # Show LLM response
+                raw_response = item.get_meta('rubric_fidelity_raw_response', None)
+                if raw_response:
+                    print(f"\n🔍 LLM 原始响应:")
+                    print(f"   {raw_response}")
+
+                # Show token usage
+                token_usage = item.get_meta('rubric_fidelity_token_usage', None)
+                if token_usage:
+                    print(f"\n📊 Token 使用:")
+                    print(f"   {token_usage}")
+
+                # Check for errors
+                if item.is_skipped:
+                    skip_reason, node = item.get_skip_info()
+                    print(f"\n⚠️  被跳过: {skip_reason} (at {node})")
+
+                error = item.get_meta('rubric_fidelity_error', None)
+                if error:
+                    print(f"\n❌ 错误: {error}")
+
+            # Print summary statistics
             print("\n" + "="*100)
-            print(" " * 35 + "LLM 调用详细信息")
+            print(" " * 40 + "统计汇总")
             print("="*100)
 
-            all_meta = test_rubric_item.get_all_meta()
-            if 'rubric_fidelity_raw_response' in all_meta:
-                response_len = len(all_meta['rubric_fidelity_raw_response'])
-                print(f"响应长度: {response_len} 字符")
+            passed_count = sum(1 for _, item in all_rubric_items
+                             if item.get_meta('rubric_fidelity_pass', False))
+            failed_count = len(all_rubric_items) - passed_count
 
-            if 'rubric_fidelity_finish_reason' in all_meta:
-                finish_reason = all_meta['rubric_fidelity_finish_reason']
-                print(f"Finish reason: {finish_reason}")
-                if finish_reason == 'length':
-                    print("⚠️  响应因 max_tokens 限制被截断！")
-
-            if 'rubric_fidelity_token_usage' in all_meta:
-                usage = all_meta['rubric_fidelity_token_usage']
-                print(f"Token usage: {usage}")
-
-            if test_rubric_item.is_skipped:
-                reason, node = test_rubric_item.get_skip_info()
-                print(f"Rubric 被 skip: {reason} (at {node})")
-
-            if 'rubric_fidelity_error' in all_meta:
-                print(f"错误信息: {all_meta['rubric_fidelity_error']}")
-
-            print("\n" + "="*100)
-            print(" " * 40 + "解析后的结果")
-            print("="*100)
-
-            # Print all three stored fields separately
-            pass_flag = test_rubric_item.get_meta('rubric_fidelity_pass', None)
-            judgment = test_rubric_item.get_meta('rubric_fidelity_judgment', {})
-            reason = test_rubric_item.get_meta('rubric_fidelity_reason', '')
-
-            print(f"通过检查: {pass_flag}")
-            print(f"完整判断结果: {judgment}")
-            print(f"判断原因: {reason}")
+            print(f"\n总计: {len(all_rubric_items)} 个 Rubric Items")
+            print(f"  ✅ 通过: {passed_count} 个 ({passed_count/len(all_rubric_items)*100:.1f}%)")
+            print(f"  ❌ 不通过: {failed_count} 个 ({failed_count/len(all_rubric_items)*100:.1f}%)")
 
             print("\n" + "="*100)
 
