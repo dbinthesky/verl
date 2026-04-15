@@ -25,6 +25,7 @@ __all__ = [
     'RubricQualityCheckNode',
     'RubricRigidityCheckNode',
     'RubricFidelityCheckNode',
+    'RubricLogicalEntailmentCheckNode',
 ]
 
 
@@ -1072,4 +1073,174 @@ Rubric 绝不是阅读理解的"得分点"，而是用于评价复杂任务执�
 
         except Exception as e:
             raise ValueError(f"Failed to parse LLM response: {e}")
+
+
+class RubricLogicalEntailmentCheckNode(RubricQualityCheckNode):
+    """Check logical entailment of rubric justification (Pass 2: Contextual Entailment).
+
+    This node validates whether the justification steps can logically derive the
+    binary_statement from the task_description, without hallucination or logical gaps.
+
+    Key validations:
+    1. Premise Fabrication (前提伪造): All data/terms in justification must exist in task context
+    2. Logical断裂 (逻辑断裂): Conclusion must necessarily and uniquely follow from context
+
+    Processing:
+        - Input: Single RubricItem
+        - Retrieves task_description from context or parent
+        - Checks if justification steps are grounded and logically sound
+        - Uses strong reasoning LLM to judge natural language inference (NLI)
+
+    Example:
+        config = NodeConfig(name="entailment_check", node_type=NodeType.LLM_JUDGE)
+        node = RubricLogicalEntailmentCheckNode(config, agent)
+        await node.process_one(rubric_item, context)
+
+        # Check results
+        if rubric_item.get_meta('rubric_entailment_pass'):
+            print("✅ Logical entailment valid")
+        else:
+            print(f"❌ Logic error: {rubric_item.get_meta('rubric_entailment_reason')}")
+    """
+
+    def __init__(self, config: NodeConfig, agent: 'Agent'):
+        """Initialize logical entailment check node.
+
+        Args:
+            config: Node configuration
+            agent: LLM agent for validation (strong reasoning model recommended)
+        """
+        super().__init__(config, agent, judge_dimension_name="entailment")
+
+    def _build_prompt(
+        self,
+        rubric_item: RubricItem,
+        context: Dict[str, Any]
+    ) -> str:
+        """Build prompt for LLM to check logical entailment.
+
+        Args:
+            rubric_item: The rubric item being validated
+            context: Execution context (used to retrieve task_description)
+
+        Returns:
+            Prompt string for LLM
+
+        Raises:
+            ValueError: If task_description is missing
+        """
+        binary_statement = rubric_item.binary_statement
+        justification = rubric_item.justification  # List[str]
+
+        # Get task_description from context or traverse to root
+        task_description = context.get('task_description', '')
+        if not task_description:
+            # Traverse up to root (AgenticTaskSample) to get task_description
+            root = rubric_item
+            while root.get_parent() is not None:
+                root = root.get_parent()
+            if hasattr(root, 'task_description'):
+                task_description = root.task_description
+
+        if not task_description:
+            raise ValueError("task_description not found in context or data hierarchy")
+
+        # Format justification steps
+        if isinstance(justification, list):
+            justification_text = "\n".join([f"{i+1}. {step}" for i, step in enumerate(justification)])
+        else:
+            justification_text = str(justification)
+
+        prompt = f"""# 任务目标
+
+【背景描述】
+之前我们尝试通过从一篇原始的预训练语料去逆向构造一道高难度的 Agentic 任务和对应的 Rubric，当前你的核心任务是判定 Rubric 考点是否符合要求。最常见的两种问题一个是考点编造，并没有借鉴专家思路（预训练文档反映）；另一个问题则是模式不匹配，生搬硬套，因为构造的任务与原始文章的动机、背景可能都不完全一致，原文的策略也不一定在合成任务上适合或必要。
+
+现在你是一个冷酷的"逻辑防伪审计员"。请验证 Rubric 和构造 Rubric 的【推演步骤】是否完全真实可靠，逻辑闭环。
+
+# 输入
+【任务描述】：{task_description}
+
+【判定考点 / Rubric】：{binary_statement}
+
+【推演步骤】：
+{justification_text}
+
+# 审计规则
+请严格核对【推演步骤】中的每一步是否构成严密的逻辑闭环：
+1. **逻辑断裂**：整个推理逻辑只从【任务描述】出发，逻辑严密且闭环，不存在推理幻觉。
+
+# 输出格式 (JSON)
+请直接输出 JSON，不要附加任何废话：
+```json
+{{
+  "reason": "如果 pass 为 false，指出是第几步发生了无中生有或逻辑断裂；如果为 true，说明推演逻辑严密闭环。",
+  "pass": true/false
+}}
+```
+"""
+        return prompt
+
+    def _parse_llm_response(self, response_text: str) -> Dict[str, Any]:
+        """Parse LLM response to extract entailment judgment.
+
+        Expected JSON format from LLM:
+        {
+          "reason": str,
+          "pass": bool
+        }
+
+        Converts to standard format:
+        {
+          "pass": bool,
+          "reason": str
+        }
+
+        Args:
+            response_text: Raw LLM response
+
+        Returns:
+            Parsed judgment dict with keys:
+                - pass (bool): True if logical entailment is valid
+                - reason (str): Explanation
+
+        Raises:
+            ValueError: If parsing fails
+        """
+        try:
+            # Extract JSON from response
+            json_pattern = r'```json\s*(.*?)\s*```'
+            match = re.search(json_pattern, response_text, re.DOTALL)
+
+            if match:
+                json_str = match.group(1)
+            else:
+                # Try to find bare JSON object
+                json_pattern2 = r'\{[^}]*"pass"[^}]*\}'
+                match2 = re.search(json_pattern2, response_text, re.DOTALL)
+                if match2:
+                    json_str = match2.group(0)
+                else:
+                    raise ValueError("No JSON found in response")
+
+            data = json.loads(json_str)
+
+            # Validate required fields
+            if "pass" not in data:
+                raise ValueError("Missing 'pass' field in response")
+            if "reason" not in data:
+                raise ValueError("Missing 'reason' field in response")
+
+            # Extract values
+            pass_flag = bool(data["pass"])
+            reason = str(data["reason"])
+
+            return {
+                "pass": pass_flag,
+                "reason": reason,
+            }
+
+        except Exception as e:
+            raise ValueError(f"Failed to parse LLM response: {e}")
+
 

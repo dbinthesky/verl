@@ -31,6 +31,7 @@ from .validator import (
     RubricQualityCheckNode,
     RubricRigidityCheckNode,
     RubricFidelityCheckNode,
+    RubricLogicalEntailmentCheckNode,
 )
 from .pipeline import AgenticTaskPipeline
 
@@ -50,6 +51,7 @@ __all__ = [
     'RubricQualityCheckNode',
     'RubricRigidityCheckNode',
     'RubricFidelityCheckNode',
+    'RubricLogicalEntailmentCheckNode',
 
     # Pipeline
     'AgenticTaskPipeline',

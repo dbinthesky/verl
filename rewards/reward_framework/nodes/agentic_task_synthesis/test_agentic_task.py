@@ -1913,6 +1913,278 @@ class TestRubricFidelityCheck(unittest.TestCase):
         asyncio.run(run())
 
 
+class TestRubricLogicalEntailmentCheck(unittest.TestCase):
+    """测试 RubricLogicalEntailmentCheckNode（逻辑闭环检查）"""
+
+    # Test configuration
+    TEST_MODEL = "gpt-oss-120b"
+    TEST_BASE_URL = "http://10.102.215.37:28000/v1"
+    TEST_API_KEY = "dummy-key"
+
+    def setUp(self):
+        """Set up agent and nodes."""
+        self.agent_config = AgentConfig(
+            model=self.TEST_MODEL,
+            base_url=self.TEST_BASE_URL,
+            api_key=self.TEST_API_KEY,
+            temperature=0.7,
+            max_tokens=4096,
+            reasoning_effort="high"
+        )
+        self.agent = Agent(self.agent_config)
+
+    def test_entailment_check_prompt(self):
+        """测试逻辑闭环检查的 Prompt 生成（不调用 LLM，只打印 prompt）"""
+        async def run():
+            print("\n" + "="*100)
+            print(" " * 30 + "RUBRIC LOGICAL ENTAILMENT CHECK - PROMPT ONLY")
+            print("="*100)
+
+            # Parse and expand sample to get rubric items
+            sample = AgenticTaskSample(
+                sample_idx=0,
+                raw_response=SAMPLE_LLM_RESPONSE
+            )
+
+            parser = AgenticTaskParserNode(
+                NodeConfig(name="parser", node_type=NodeType.PARSER)
+            )
+            await parser.process_one(sample, create_simple_context([]))
+
+            category_expander = RubricCategoryExpanderNode(
+                NodeConfig(name="category_expander", node_type=NodeType.EXPANDER)
+            )
+            await category_expander.process_one(sample, create_simple_context([]))
+
+            # Expand items for all categories
+            categories = sample.get_children(RubricCategory)
+            item_expander = RubricItemExpanderNode(
+                NodeConfig(name="item_expander", node_type=NodeType.EXPANDER)
+            )
+            context = create_simple_context([])
+            await asyncio.gather(*[item_expander.process_one(cat, context) for cat in categories])
+
+            # Get first rubric item for testing
+            test_rubric_item = None
+            for cat in categories:
+                items = cat.get_children(RubricItem)
+                if items:
+                    test_rubric_item = items[0]
+                    break
+
+            if not test_rubric_item:
+                print("❌ No rubric items found for testing")
+                return
+
+            print(f"\n📊 测试 Rubric 条目:")
+            print(f"   名称: {test_rubric_item.rubric_name}")
+            print(f"   二元判断: {test_rubric_item.binary_statement}")
+            print(f"   推演步骤数量: {len(test_rubric_item.justification)}")
+            print(f"\n   推演步骤:")
+            for i, step in enumerate(test_rubric_item.justification, 1):
+                print(f"     {i}. {step}")
+
+            # Create entailment check node
+            from reward_framework.nodes.agentic_task_synthesis.validator import RubricLogicalEntailmentCheckNode
+
+            entailment_checker = RubricLogicalEntailmentCheckNode(
+                NodeConfig(
+                    name="entailment_check",
+                    node_type=NodeType.LLM_JUDGE,
+                    skip_on_failure=False
+                ),
+                agent=None  # We won't call LLM
+            )
+
+            # Build and print prompt
+            prompt = entailment_checker._build_prompt(
+                test_rubric_item,
+                {'task_description': sample.task_description}
+            )
+
+            print("\n" + "="*100)
+            print(" " * 40 + "生成的 PROMPT")
+            print("="*100)
+            print(prompt)
+            print("="*100)
+
+            print("\n✅ Prompt 生成测试完成!")
+            print("   请检查 prompt 格式是否正确，是否包含任务上下文、需推导结论、推演步骤三部分。")
+            print("="*100)
+
+        asyncio.run(run())
+
+    def test_entailment_check_with_llm(self):
+        """测试逻辑闭环检查（完整流程，调用 LLM，并发处理所有 rubric items）"""
+        async def run():
+            print("\n" + "="*100)
+            print(" " * 30 + "RUBRIC LOGICAL ENTAILMENT CHECK - WITH LLM")
+            print("="*100)
+
+            # Parse and expand sample to get rubric items
+            sample = AgenticTaskSample(
+                sample_idx=0,
+                raw_response=SAMPLE_LLM_RESPONSE
+            )
+
+            parser = AgenticTaskParserNode(
+                NodeConfig(name="parser", node_type=NodeType.PARSER)
+            )
+            await parser.process_one(sample, create_simple_context([]))
+
+            category_expander = RubricCategoryExpanderNode(
+                NodeConfig(name="category_expander", node_type=NodeType.EXPANDER)
+            )
+            await category_expander.process_one(sample, create_simple_context([]))
+
+            # Expand items for all categories
+            categories = sample.get_children(RubricCategory)
+            item_expander = RubricItemExpanderNode(
+                NodeConfig(name="item_expander", node_type=NodeType.EXPANDER)
+            )
+            context = create_simple_context([])
+            await asyncio.gather(*[item_expander.process_one(cat, context) for cat in categories])
+
+            print(f"\n📊 Sample 信息:")
+            print(f"   Categories: {len(categories)}")
+            total_items = 0
+            for i, cat in enumerate(categories, 1):
+                items = cat.get_children(RubricItem)
+                total_items += len(items)
+                print(f"   {i}. {cat.category_name}: {len(items)} items")
+
+            # Create entailment check node
+            from reward_framework.nodes.agentic_task_synthesis.validator import RubricLogicalEntailmentCheckNode
+
+            entailment_checker = RubricLogicalEntailmentCheckNode(
+                NodeConfig(
+                    name="entailment_check",
+                    node_type=NodeType.LLM_JUDGE,
+                    skip_on_failure=False
+                ),
+                agent=self.agent
+            )
+
+            # Collect all rubric items for concurrent processing
+            all_rubric_items = []
+            for cat in categories:
+                items = cat.get_children(RubricItem)
+                for item in items:
+                    all_rubric_items.append((cat, item))
+
+            print(f"\n🔄 并发处理 {len(all_rubric_items)} 个 rubric items...")
+            print("="*100)
+
+            # Build context with task_description
+            check_context = {
+                'task_description': sample.task_description
+            }
+
+            # Concurrent processing
+            await asyncio.gather(*[
+                entailment_checker.process_one(item, check_context)
+                for cat, item in all_rubric_items
+            ])
+
+            # Print results in order
+            print("\n" + "="*100)
+            print(" " * 35 + "逻辑闭环检查结果")
+            print("="*100)
+
+            # Statistics
+            total_checked = 0
+            total_passed = 0
+            total_failed = 0
+            total_skipped = 0
+
+            for cat_idx, cat in enumerate(categories, 1):
+                items = cat.get_children(RubricItem)
+                print(f"\n[Category {cat_idx}] {cat.category_name}")
+                print("-" * 100)
+
+                for item_idx, item in enumerate(items, 1):
+                    total_checked += 1
+
+                    if item.is_skipped:
+                        total_skipped += 1
+                        reason, node = item.get_skip_info()
+                        print(f"  [{item_idx}] {item.rubric_name}")
+                        print(f"       ⚠️  SKIPPED: {reason}")
+                        continue
+
+                    # Get check result
+                    entailment_pass = item.get_meta('rubric_entailment_pass', None)
+                    entailment_reason = item.get_meta('rubric_entailment_reason', '')
+
+                    if entailment_pass is None:
+                        print(f"  [{item_idx}] {item.rubric_name}")
+                        print(f"       ❓ NO RESULT")
+
+                        # Check for error
+                        error = item.get_meta('rubric_entailment_error', None)
+                        if error:
+                            print(f"       错误: {error}")
+                        continue
+
+                    if entailment_pass:
+                        total_passed += 1
+                        status = "✅ PASS"
+                    else:
+                        total_failed += 1
+                        status = "❌ FAIL"
+
+                    print(f"  [{item_idx}] {item.rubric_name}")
+                    print(f"       {status}")
+                    print(f"       理由: {entailment_reason}")
+
+                    # Print detailed information
+                    print(f"\n       --- 详细信息 ---")
+
+                    # Binary statement
+                    print(f"       二元判断: {item.binary_statement}")
+
+                    # Justification steps
+                    print(f"       推演步骤:")
+                    for step_idx, step in enumerate(item.justification, 1):
+                        print(f"         {step_idx}. {step}")
+
+                    # LLM raw response
+                    raw_response = item.get_meta('rubric_entailment_raw_response', None)
+                    if raw_response:
+                        print(f"\n       LLM 原始响应:")
+                        print(f"       {raw_response}")
+
+                    # Token usage
+                    token_usage = item.get_meta('rubric_entailment_token_usage', None)
+                    if token_usage:
+                        print(f"\n       Token 使用: {token_usage}")
+
+                    # Finish reason
+                    finish_reason = item.get_meta('rubric_entailment_finish_reason', None)
+                    if finish_reason:
+                        print(f"       完成原因: {finish_reason}")
+
+                    print(f"       --- 详细信息结束 ---\n")
+
+            # Summary statistics
+            print("\n" + "="*100)
+            print(" " * 40 + "统计摘要")
+            print("="*100)
+            print(f"  总检查数: {total_checked}")
+            print(f"  ✅ 通过: {total_passed} ({total_passed/total_checked*100:.1f}%)")
+            print(f"  ❌ 失败: {total_failed} ({total_failed/total_checked*100:.1f}%)")
+            if total_skipped > 0:
+                print(f"  ⚠️  跳过: {total_skipped} ({total_skipped/total_checked*100:.1f}%)")
+            print("="*100)
+
+            await self.agent.close()
+
+            print("\n✅ 测试完成!")
+            print("="*100)
+
+        asyncio.run(run())
+
+
 def suite():
     """Create test suite."""
     suite = unittest.TestSuite()
@@ -1923,6 +2195,7 @@ def suite():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCategoryClassificationCheck))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRubricRigidityCheck))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRubricFidelityCheck))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRubricLogicalEntailmentCheck))
     return suite
 
 
